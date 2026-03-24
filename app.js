@@ -35,7 +35,7 @@ const ZIP_COMMUNITY = {
 const VALID_ZIPS = Object.keys(ZIP_COMMUNITY);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const pct = (v,t) => t===0?0:Math.round((v/t)*100);
+
 const repLevel = pts => pts>=100?{label:"Community Pillar",icon:"🌳",color:"#1a6b3c"}:pts>=50?{label:"Active Neighbor",icon:"🤝",color:"#1a5c8a"}:pts>=20?{label:"Engaged Resident",icon:"📣",color:"#5b3a8c"}:{label:"New Resident",icon:"🌱",color:"#888"};
 const s = (styles) => Object.assign({},styles); // passthrough for readability
 
