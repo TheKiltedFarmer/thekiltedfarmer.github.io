@@ -1,4 +1,19 @@
-const {useState,useEffect,useRef,createElement:h,Fragment} = React;
+const {useState,useEffect,useRef,createElement:h,Fragment,Component} = React;
+
+// ── Global error boundary ─────────────────────────────────────────────────────
+class ErrorBoundary extends Component {
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(err){return{err};}
+  render(){
+    if(this.state.err) return h('div',{style:{padding:32,textAlign:'center',fontFamily:"'Lora',serif"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},"⚠️"),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#1a1a2e',marginBottom:8}},"Something went wrong"),
+      h('div',{style:{fontSize:14,color:'#888',marginBottom:20}},this.state.err.message||'An unexpected error occurred.'),
+      h('button',{onClick:()=>window.location.reload(),style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'12px 24px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,cursor:'pointer'}},"Reload App")
+    );
+    return this.props.children;
+  }
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zhnilrohxoixsgmdyqiw.supabase.co";
@@ -48,7 +63,7 @@ const SEED_BILLS = [
     sponsor:"DPW Director Jason Blossom",
     summary:"Authorizes up to $27,125 to contract Jesse Brigham Construction for emergency sewer line repairs on First Street, following inspection revealing critical infrastructure failures. Funds drawn from existing Village infrastructure reserve — no new taxes required.",
     full_text:"The Village Council of Concord hereby authorizes the Department of Public Works to enter into a contract with Jesse Brigham Construction for repair and replacement of the deteriorated sewer line on First Street. Total contract value not to exceed $27,125. Funds to be drawn from the Village infrastructure reserve account. Source: Village of Concord Council Meeting Minutes, January 14, 2025.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"JACKSON-2025-03",level:"city",jurisdiction:"City of Jackson",
@@ -57,7 +72,7 @@ const SEED_BILLS = [
     sponsor:"Ward 3 Councilmember Angelita Gunn",
     summary:"Proposes amending Jackson's zoning code to permit backyard chickens and beehives in residential zones, and establishes a community Adopt-A-Hive program to support local pollinators and food security.",
     full_text:"Chapter 42 of the Jackson City Code would be amended to permit up to 6 hens (no roosters) and up to 2 registered beehives on residential lots of 5,000 sq ft or more. An Adopt-A-Hive registry would be maintained by the City. Source: City of Jackson Planning Commission agenda, February 2025.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"SUMMIT-2025-01",level:"township",jurisdiction:"Summit Township",
@@ -66,7 +81,7 @@ const SEED_BILLS = [
     sponsor:"Summit Township Board",
     summary:"A voter-approved 10-year, 0.5 mill property tax increase to fund local road repairs and maintenance in Summit Township. Estimated to raise approximately $446,893 in its first year. Approved by voters in November 2025.",
     full_text:"Shall the Township of Summit, Jackson County, Michigan, impose an increase of up to 0.5 mill ($0.50 per $1,000 of taxable value) in the tax limitation imposed under Article IX, Sec. 6 of the Michigan Constitution and levy it for ten (10) years, 2025 through 2034 inclusive, for the purpose of improving and maintaining local roads in Summit Township, raising an estimated $446,893 in 2025? Source: Jackson County Election Candidates & Proposals, November 2025.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"MI-HB-2025-FARM",level:"state",jurisdiction:"State of Michigan",
@@ -75,7 +90,7 @@ const SEED_BILLS = [
     sponsor:"Michigan Legislature — Agriculture Committee",
     summary:"Proposed legislation that would exempt small-scale farmers earning under $50,000 annually from state licensing requirements when selling directly to consumers, and would explicitly legalize community food exchanges and gifting programs.",
     full_text:"Under this proposed legislation, a producer of agricultural products with gross annual revenues under $50,000 shall be exempt from licensing and inspection requirements when selling or gifting agricultural products directly to the end consumer at the point of production or at a farmers market. Community food gifting programs would be explicitly legalized. Note: This bill is in active development — verify current status with your state representative.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"MI-HB-5529-2026",level:"state",jurisdiction:"State of Michigan",
@@ -84,7 +99,7 @@ const SEED_BILLS = [
     sponsor:"Rep. Aragona (R), House Committee on Regulatory Reform",
     summary:"A package of four bills that would prohibit local governments from requiring minimum lot sizes greater than 1,500 sq ft for new residential construction where public water and sewer are available. Currently state law allows minimums up to 12,000 sq ft. This would be one of the most significant zoning changes in Michigan history, directly affecting every township and village's ability to control local development.",
     full_text:"House Bills 5529-5532 would pre-empt certain local zoning ordinances by prohibiting local units of government — including counties with zoning authority — from requiring minimum lot sizes greater than 1,500 square feet for new residential construction, provided the proposed dwelling has access to public water and sewer services. The Michigan Association of Counties has not yet taken a formal position. Testimony ongoing before the House Committee on Regulatory Reform as of February 2026. Source: Michigan Association of Counties Legislative Update, February 20, 2026.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"MI-SB-2025-COTTAGE",level:"state",jurisdiction:"State of Michigan",
@@ -93,7 +108,7 @@ const SEED_BILLS = [
     sponsor:"Rep. Gregory Alexander (R-Carsonville)",
     summary:"Expands Michigan's cottage food law to allow home-based food producers to sell products online, by mail order, and through third-party delivery platforms. Also allows cottage food operations to register with MSU's Product Center for business support.",
     full_text:"This legislation expands the Michigan Cottage Food Law to permit internet and mail-order sales and delivery through third-party food delivery platforms. Cottage food operations may also register with Michigan State University's Product Center. The bill passed with strong bipartisan support and was signed by Governor Whitmer in 2025. Source: Michigan Governor's Office press release, 2025; wzzm13.com.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"MI-HB-4961-2025",level:"state",jurisdiction:"State of Michigan",
@@ -102,7 +117,7 @@ const SEED_BILLS = [
     sponsor:"Michigan Legislature",
     summary:"All Michigan workers now earn one hour of paid sick leave for every 30 hours worked. Employees at companies with 10+ employees can accrue up to 72 hours of paid leave annually. Smaller business employees accrue 40 hours paid plus 32 hours unpaid. The first expansion of sick leave rights since 2003.",
     full_text:"The Michigan Earned Sick Time Act took effect February 21, 2025. Employees at larger businesses (10+ employees) may accrue at least 72 hours of paid sick leave annually. Employees at smaller businesses accrue a minimum of 40 hours paid and 32 hours unpaid sick leave. Leave can be used for any reason related to physical or mental health. Source: Michigan Legislature; gandernewsroom.com, January 8, 2025.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"FED-HR1-2025-SNAP",level:"federal",jurisdiction:"Federal — United States",
@@ -111,7 +126,7 @@ const SEED_BILLS = [
     sponsor:"119th Congress — Republican Majority",
     summary:"The federal reconciliation bill (HR-1) enacted stricter work requirements for SNAP (food stamps) recipients and updated commodity support programs for agricultural producers. SNAP recipients aged 18-55 without dependents must now meet expanded work requirements. Affects an estimated 215,000+ Michigan residents who rely on food assistance.",
     full_text:"H.R.1 (P.L.119-21), enacted in 2025, included several provisions traditionally addressed through Farm Bill reauthorization: updated and expanded commodity support programs for agricultural producers, and enacted reforms to the Supplemental Nutrition Assistance Program (SNAP) including stricter work requirements. The bill expanded work requirements for able-bodied adults without dependents. Source: National Association of Counties; Congress.gov P.L.119-21.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"FED-FARMBILL-2026",level:"federal",jurisdiction:"Federal — United States",
@@ -120,7 +135,7 @@ const SEED_BILLS = [
     sponsor:"House Agriculture Committee (Bipartisan — 34-17 vote)",
     summary:"The 2026 Farm Bill reauthorizes federal agricultural, nutrition, rural development, and conservation programs. Key provisions include $350M/year for rural broadband, reauthorization of rural water and wastewater infrastructure grants, rural childcare initiatives, and expanded SNAP employment training. The bill restricts USDA from funding solar on prime farmland. Senate version timeline unclear.",
     full_text:"The Farm, Food, and National Security Act of 2026 (H.R. 7567) passed the House Agriculture Committee on March 5, 2026 with a bipartisan 34-17 vote after a 20+ hour markup. The 2018 Farm Bill is currently extended through September 30, 2026. Key rural provisions: $350M/year for rural broadband; reauthorizes Water, Waste Disposal, and Wastewater Facility Grants at $15M/year; new rural childcare initiative; expands Commodity Supplemental Food Program for rural communities. Source: National Association of Counties, February 2026; NADO.org.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
   {
     id:"FED-HR7530-2026",level:"federal",jurisdiction:"Federal — United States",
@@ -129,7 +144,7 @@ const SEED_BILLS = [
     sponsor:"Rep. Davis (R-NC) and Rep. Johnson (R-SD)",
     summary:"Would provide additional federal assistance to rural water, wastewater, and waste disposal systems under the Consolidated Farm and Rural Development Act. Directly relevant to communities like Concord and other rural Jackson County townships that rely on aging water infrastructure.",
     full_text:"H.R. 7530, introduced February 12, 2026, amends the Consolidated Farm and Rural Development Act to provide additional assistance to rural water, wastewater, and waste disposal systems. Referred to the House Committee on Agriculture. Source: Congress.gov, 119th Congress, H.R. 7530.",
-    votes_yes:0,votes_no:0,votes_abstain:0
+    votes_yes:0,votes_no:0,votes_abstain:0,created_at:"2025-01-01"
   },
 ];
 
@@ -439,7 +454,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
           h('div',{style:{flex:1}},
             h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
               h('span',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},c.display_name),
-              h('span',{style:{fontSize:11,color:'#bbb'}},new Date(c.created_at).toLocaleDateString())
+              h('span',{style:{fontSize:11,color:'#bbb'}},c.created_at ? new Date(c.created_at).toLocaleDateString() : '')
             ),
             h('div',{style:{fontSize:13,lineHeight:1.65,color:'#333'}},c.content)
           )
@@ -606,7 +621,7 @@ function ProjectCard({project,user,onRepGain}) {
         h(Tag,{bg:project.status==='forwarded'?'#eef7f1':'#fffbea',color:project.status==='forwarded'?'#1a6b3c':'#8a6000'},project.status==='forwarded'?"✅ Forwarded":"⏳ Gathering Support")
       ),
       h('h3',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e',margin:'0 0 6px',lineHeight:1.3}},project.title),
-      h('div',{style:{fontSize:12,color:'#aaa',marginBottom:10}},"Proposed by ",h('strong',{style:{color:'#5b3a8c'}},project.proposer_name)," · ",new Date(project.created_at).toLocaleDateString()),
+      h('div',{style:{fontSize:12,color:'#aaa',marginBottom:10}},"Proposed by ",h('strong',{style:{color:'#5b3a8c'}},project.proposer_name)," · ",project.created_at ? new Date(project.created_at).toLocaleDateString() : ''),
       h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,lineHeight:1.7,color:'#444',margin:'0 0 14px'}},project.description),
       h('div',{style:{marginBottom:14}},
         h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:6}},
@@ -666,7 +681,7 @@ function ProjectCard({project,user,onRepGain}) {
         comments.map((c,i)=>h('div',{key:i,style:{display:'flex',gap:10,marginBottom:12,paddingBottom:12,borderBottom:'1px solid #f0ece4'}},
           h('div',{style:{width:36,height:36,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,flexShrink:0}},(c.display_name||'?')[0].toUpperCase()),
           h('div',null,
-            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif",marginBottom:3}},c.display_name," ",h('span',{style:{color:'#bbb',fontWeight:400,fontSize:11}},new Date(c.created_at).toLocaleDateString())),
+            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif",marginBottom:3}},c.display_name," ",h('span',{style:{color:'#bbb',fontWeight:400,fontSize:11}},c.created_at ? new Date(c.created_at).toLocaleDateString() : '')),
             h('div',{style:{fontSize:13,lineHeight:1.65,color:'#333'}},c.content)
           )
         ))
@@ -930,7 +945,7 @@ function AdminPanel({bills,setBills,onToast}) {
   const [saving,setSaving]=useState(false);
   const [deleting,setDeleting]=useState(null);
 
-  const EMPTY = {id:'',level:'city',jurisdiction:'City of Jackson',title:'',status:'',introduced:'',sponsor:'',summary:'',full_text:'',votes_yes:0,votes_no:0,votes_abstain:0};
+  const EMPTY = {id:'',level:'city',jurisdiction:'City of Jackson',title:'',status:'',introduced:'',sponsor:'',summary:'',full_text:'',votes_yes:0,votes_no:0,votes_abstain:0,created_at:'2025-01-01'};
   const [form,setForm]=useState(EMPTY);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
   const [sourceUrl,setSourceUrl]=useState('');
@@ -1212,7 +1227,7 @@ function App() {
   };
 
   const loadBills=async()=>{
-    const {data,error}=await sb.from('bills').select('*').order('created_at');
+    const {data,error}=await sb.from('bills').select('*').order('id');
     if(data&&data.length){
       setBills(data);
     } else {
@@ -1412,4 +1427,6 @@ function App() {
 }
 
 // Mount
-ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+ReactDOM.createRoot(document.getElementById('root')).render(
+  h(ErrorBoundary,null,h(App))
+);
