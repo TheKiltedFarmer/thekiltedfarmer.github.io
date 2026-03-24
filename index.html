@@ -498,6 +498,244 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
   );
 }
 
+// ── Community Bill Submission System ─────────────────────────────────────────
+function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
+  const [open, setOpen] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [fetching, setFetching] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState('');
+  const [form, setForm] = useState({title:'',level:'city',jurisdiction:'City of Jackson',status:'',introduced:'',sponsor:'',summary:'',full_text:''});
+  const [saving, setSaving] = useState(false);
+  const isTrusted = (user?.reputation||0) >= 50;
+  const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
+
+  const fetchFromUrl = async() => {
+    if(!sourceUrl.trim()){setFetchMsg('Please enter a URL first.');return;}
+    setFetching(true);setFetchMsg('Fetching page...');
+    try{
+      const proxy='https://api.allorigins.win/get?url='+encodeURIComponent(sourceUrl);
+      const res=await fetch(proxy);
+      const json=await res.json();
+      const raw=json.contents||'';
+      const text=raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+                    .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000);
+      if(!text||text.length<100){setFetchMsg('Could not read that page. Fill in the form manually.');setFetching(false);return;}
+      setFetchMsg('AI is reading the document...');
+      const aiRes=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',max_tokens:1000,
+          system:'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
+          messages:[{role:'user',content:'Extract bill info from this page (source: '+sourceUrl+'):\n\n'+text}]
+        })
+      });
+      const aiJson=await aiRes.json();
+      const aiRaw=aiJson.content?.find(b=>b.type==='text')?.text||'{}';
+      const extracted=JSON.parse(aiRaw.replace(/```json|```/g,'').trim());
+      setForm(f=>({...f,
+        title:extracted.title||f.title,
+        level:extracted.level||f.level,
+        jurisdiction:extracted.jurisdiction||f.jurisdiction,
+        status:extracted.status||f.status,
+        introduced:extracted.introduced||f.introduced,
+        sponsor:extracted.sponsor||f.sponsor,
+        summary:extracted.summary||f.summary,
+        full_text:(extracted.full_text||f.full_text)+'\n\nSource: '+sourceUrl,
+      }));
+      setFetchMsg('✅ Fields filled in! Review carefully before submitting.');
+    }catch(e){
+      setFetchMsg('Could not fetch that page. Fill in the form manually.');
+    }
+    setFetching(false);
+  };
+
+  // Check for duplicate
+  const duplicate = bills.find(b=>
+    b.title&&form.title&&b.title.toLowerCase().trim()===form.title.toLowerCase().trim()
+  );
+
+  const submit = async() => {
+    if(!form.title.trim()||!form.summary.trim()){onToast('Title and summary are required.');return;}
+    if(duplicate){onToast('This bill already exists in the system!');return;}
+    setSaving(true);
+    const submission = {
+      ...form,
+      votes_yes:0,votes_no:0,votes_abstain:0,
+      submitted_by_id: user.id,
+      submitted_by_name: user.display_name||user.email?.split('@')[0]||'Resident',
+      cosign_count: 1,
+      cosigners: JSON.stringify([user.id]),
+      source_url: sourceUrl||null,
+      pending: true,
+      created_at: new Date().toISOString(),
+    };
+    const {error} = await sb.from('pending_bills').insert(submission);
+    if(!error){
+      onToast('Bill submitted! It will go live once verified by the community.');
+      if(onSubmitted) onSubmitted(submission);
+      setOpen(false);
+      setForm({title:'',level:'city',jurisdiction:'City of Jackson',status:'',introduced:'',sponsor:'',summary:'',full_text:''});
+      setSourceUrl('');setFetchMsg('');
+    } else {
+      onToast('Submitted locally - admin will review. Thank you!');
+      setOpen(false);
+    }
+    setSaving(false);
+  };
+
+  if(!user) return null;
+
+  const JURISDICTIONS = ['Village of Concord','City of Jackson','Summit Township','Columbia Township','Napoleon Township','Grass Lake Township','Spring Arbor Township','Leoni Township','Blackman Township','Rives Township','Henrietta Township','Waterloo Township','Norvell Township','Hanover Township','Springport Township','Jackson County','State of Michigan','Federal'];
+  const inp = (label,key,ph,type='text',rows=0) => h('div',{style:{marginBottom:10}},
+    h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},label),
+    rows>0
+      ? h('textarea',{value:form[key],onChange:set(key),placeholder:ph,rows,style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical'}})
+      : h('input',{value:form[key],onChange:set(key),placeholder:ph,type,style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box'}})
+  );
+
+  return h('div',{style:{marginBottom:16}},
+    !open
+      ? h('button',{
+          onClick:()=>setOpen(true),
+          style:{width:'100%',background:'#fff',border:'2px dashed #c0b89a',borderRadius:10,padding:'14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#8a6000',cursor:'pointer'}
+        },'+ Submit a Bill from Your Community')
+      : h('div',{style:{background:'#fff',border:'2px solid #1a1a2e',borderRadius:12,padding:20,marginBottom:4}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'📋 Submit a Community Bill'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:16,lineHeight:1.6}},
+            'Paste a link to meeting minutes, an agenda, or any government page. The AI will read it and fill in the details. You review, then submit for community verification.',
+            isTrusted
+              ? h('span',{style:{color:'#1a6b3c',fontWeight:600}}, ' As a trusted resident, your submissions need only 1 co-signer.')
+              : h('span',null, ' Submissions need 3 co-signers to go live.')
+          ),
+
+          // URL fetch box
+          h('div',{style:{background:'#1a1a2e',borderRadius:8,padding:14,marginBottom:16}},
+            h('div',{style:{fontSize:12,color:'#f0c040',fontWeight:700,marginBottom:8}},'🔗 Import from a Government Website or Document'),
+            h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+              h('input',{
+                value:sourceUrl,onChange:e=>setSourceUrl(e.target.value),
+                onKeyDown:e=>e.key==='Enter'&&fetchFromUrl(),
+                placeholder:'Paste URL to agenda, minutes, ordinance page...',
+                style:{flex:1,minWidth:180,border:'1px solid #444',borderRadius:5,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}
+              }),
+              h('button',{onClick:fetchFromUrl,disabled:fetching,
+                style:{background:fetching?'#555':'#f0c040',color:'#1a1a2e',border:'none',padding:'9px 16px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:13,cursor:'pointer'}
+              },fetching?'Reading...':'Auto-Fill ->')
+            ),
+            fetchMsg&&h('div',{style:{marginTop:8,fontSize:12,color:fetchMsg.startsWith('✅')?'#6bcf8a':'#f0c040'}},fetchMsg)
+          ),
+
+          // Duplicate warning
+          duplicate&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:7,padding:'10px 14px',marginBottom:12,fontSize:13,color:'#8a6000'}},
+            '⚠️ A bill called "',h('strong',null,duplicate.title),'" already exists in the system. Check the Bills tab before submitting.'
+          ),
+
+          // Form fields
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 12px'}},
+            h('div',null,
+              h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Level'),
+              h('select',{value:form.level,onChange:set('level'),style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,marginBottom:10}},
+                ['village','city','township','county','state','federal'].map(l=>h('option',{key:l,value:l},l))
+              )
+            ),
+            h('div',null,
+              h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Jurisdiction'),
+              h('select',{value:form.jurisdiction,onChange:set('jurisdiction'),style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,marginBottom:10}},
+                JURISDICTIONS.map(j=>h('option',{key:j,value:j},j))
+              )
+            )
+          ),
+          inp('Bill / Proposal Title *','title','e.g. Main Street Sidewalk Repair Ordinance'),
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 12px'}},
+            h('div',null,inp('Status','status','e.g. Council Vote Pending, Passed')),
+            h('div',null,inp('Date Introduced','introduced','e.g. March 2025'))
+          ),
+          inp('Sponsor / Author','sponsor','e.g. Councilmember Jane Smith'),
+          inp('Plain-Language Summary *','summary','What does this bill do? Write 2-3 sentences any resident can understand.','text',3),
+          inp('Source / Full Text','full_text','Paste relevant text from the document, or describe where to find it. Always include your source.','text',3),
+
+          h('div',{style:{background:'#e8f5ee',border:'1px solid #c8e8d4',borderRadius:7,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#1a6b3c',lineHeight:1.6}},
+            '✅ By submitting, you confirm this is real, publicly-documented legislation. Inaccurate submissions may result in a reduction of your community reputation.'
+          ),
+
+          h('div',{style:{display:'flex',gap:10}},
+            h('button',{onClick:submit,disabled:saving||!!duplicate,
+              style:{flex:1,background:saving||duplicate?'#ccc':'#1a6b3c',color:'#fff',border:'none',padding:'12px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}
+            },saving?'Submitting...':'Submit for Community Verification ->'),
+            h('button',{onClick:()=>{setOpen(false);setFetchMsg('');setSourceUrl('');},
+              style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'12px 16px',borderRadius:7,fontSize:13,cursor:'pointer'}
+            },'Cancel')
+          )
+        )
+  );
+}
+
+function PendingBillCard({bill, user, onCosign, onToast}) {
+  const cosigners = (() => { try { return JSON.parse(bill.cosigners||'[]'); } catch(e) { return []; } })();
+  const isTrusted = (user?.reputation||0) >= 50;
+  const threshold = bill.is_trusted_submission ? 2 : 4; // trusted=needs 2 total, regular=needs 4
+  const needed = Math.max(0, threshold - cosigners.length);
+  const alreadySigned = user && cosigners.includes(user.id);
+  const isSubmitter = user && bill.submitted_by_id === user.id;
+  const pct = Math.min(100, Math.round((cosigners.length/threshold)*100));
+
+  const cosign = async() => {
+    if(alreadySigned){onToast('You already co-signed this bill.');return;}
+    if(isSubmitter){onToast('You cannot co-sign your own submission.');return;}
+    const newCosigners = [...cosigners, user.id];
+    const nowLive = newCosigners.length >= threshold;
+    await sb.from('pending_bills').update({
+      cosign_count: newCosigners.length,
+      cosigners: JSON.stringify(newCosigners),
+      pending: !nowLive,
+    }).eq('id', bill.id);
+    if(nowLive) {
+      // Move to live bills table
+      const {cosigners:_c, cosign_count:_n, pending:_p, submitted_by_id:_s, submitted_by_name:_sn, source_url:_u, is_trusted_submission:_t, ...billData} = bill;
+      billData.id = billData.id || (bill.jurisdiction.split(' ')[0].toUpperCase()+'_COMMUNITY_'+Date.now());
+      await sb.from('bills').insert({...billData, votes_yes:0, votes_no:0, votes_abstain:0});
+      onToast('🎉 Bill verified by the community and is now live for voting!');
+    } else {
+      onToast('Co-signed! '+(needed-1)+' more needed to go live.');
+    }
+    if(onCosign) onCosign();
+  };
+
+  return h('div',{style:{background:'#fff',border:'2px solid #f0c040',borderRadius:10,marginBottom:12,padding:'14px 16px',opacity:0.95}},
+    h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}},
+      h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:20,textTransform:'uppercase',letterSpacing:1}},'⏳ Pending Verification'),
+      h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'3px 8px',borderRadius:20}},bill.level),
+      h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'3px 8px',borderRadius:20}},bill.jurisdiction)
+    ),
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},bill.title),
+    h('div',{style:{fontSize:12,color:'#aaa',marginBottom:8}},'Submitted by ',h('strong',{style:{color:'#5b3a8c'}},bill.submitted_by_name||'Community Member')),
+    h('p',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.65,color:'#555',marginBottom:12}},bill.summary),
+
+    // Co-sign progress bar
+    h('div',{style:{marginBottom:10}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
+        h('span',{style:{fontSize:12,fontWeight:700,color:'#8a6000'}},'Community Verification'),
+        h('span',{style:{fontSize:12,color:needed===0?'#1a6b3c':'#8a6000',fontWeight:700}},cosigners.length+'/'+threshold+' co-signers'+(needed===0?' ✅':''))
+      ),
+      h('div',{style:{height:8,background:'#eee',borderRadius:4,overflow:'hidden'}},
+        h('div',{style:{width:pct+'%',height:'100%',background:pct>=100?'#1a6b3c':'#f0c040',transition:'width .4s'}})
+      ),
+      needed>0&&h('div',{style:{fontSize:11,color:'#aaa',marginTop:3}},needed+' more verified resident'+(needed===1?'':' ')+'needed to go live')
+    ),
+
+    bill.source_url&&h('div',{style:{fontSize:12,marginBottom:10}},
+      h('a',{href:bill.source_url,target:'_blank',style:{color:'#1a5c8a',textDecoration:'none'}},'📎 View Source Document')
+    ),
+
+    user&&!alreadySigned&&!isSubmitter&&h('button',{onClick:cosign,
+      style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'9px 18px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}
+    },'✅ I Can Verify This - Co-Sign'),
+    alreadySigned&&h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:600}},'✅ You have co-signed this bill'),
+    isSubmitter&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic'}},'You submitted this bill')
+  );
+}
+
 // ── Rep Tracker ───────────────────────────────────────────────────────────────
 function RepTracker({bills}) {
   const [filter,setFilter]=useState('all');
@@ -958,6 +1196,72 @@ function AuthScreen({onAuth}) {
   );
 }
 
+// ── Admin Pending Review Queue ─────────────────────────────────────────────────
+function PendingReviewQueue({onToast, setBills}) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false})
+      .then(({data})=>{ if(data) setPending(data); setLoading(false); });
+  },[]);
+
+  const approve = async(bill) => {
+    const {cosigners:_c,cosign_count:_n,pending:_p,submitted_by_id:_s,submitted_by_name:_sn,source_url:_u,is_trusted_submission:_t,...billData} = bill;
+    const id = bill.jurisdiction.split(' ')[0].toUpperCase().slice(0,8)+'_COM_'+Date.now();
+    const {error} = await sb.from('bills').insert({...billData, id, votes_yes:0,votes_no:0,votes_abstain:0,created_at:new Date().toISOString()});
+    if(!error){
+      await sb.from('pending_bills').update({pending:false}).eq('id',bill.id);
+      setPending(prev=>prev.filter(b=>b.id!==bill.id));
+      setBills(prev=>[{...billData,id,votes_yes:0,votes_no:0,votes_abstain:0},...prev]);
+      onToast('Bill approved and is now live!');
+    } else onToast('Error: '+error.message);
+  };
+
+  const reject = async(bill) => {
+    if(!window.confirm('Reject and remove "'+bill.title+'"?')) return;
+    await sb.from('pending_bills').update({pending:false}).eq('id',bill.id);
+    setPending(prev=>prev.filter(b=>b.id!==bill.id));
+    onToast('Submission rejected and removed.');
+  };
+
+  if(loading) return null;
+  if(!pending.length) return null;
+
+  return h('div',{style:{background:'#fff8e7',border:'2px solid #f0c040',borderRadius:10,padding:18,marginBottom:20}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},
+      '⏳ Community Submissions Awaiting Review ('+pending.length+')'
+    ),
+    h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:14}},
+      'These were submitted by residents. Approve to make live, or reject to remove.'
+    ),
+    pending.map(bill=>{
+      const cosigners = (()=>{try{return JSON.parse(bill.cosigners||'[]');}catch(e){return [];}})();
+      return h('div',{key:bill.id,style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:10}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8}},
+          h('div',{style:{flex:1}},
+            h('div',{style:{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}},
+              h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,textTransform:'uppercase'}},bill.level),
+              h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.jurisdiction),
+              h('span',{style:{background:'#e8f2fa',color:'#1a5c8a',fontSize:10,padding:'2px 8px',borderRadius:20}},cosigners.length+' co-signer'+(cosigners.length===1?'':'s'))
+            ),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:3}},bill.title),
+            h('div',{style:{fontSize:12,color:'#aaa',marginBottom:6}},'Submitted by '+bill.submitted_by_name),
+            h('div',{style:{fontSize:12,color:'#555',lineHeight:1.5}},bill.summary),
+            bill.source_url&&h('div',{style:{marginTop:6}},
+              h('a',{href:bill.source_url,target:'_blank',style:{fontSize:11,color:'#1a5c8a'}},'View source ->')
+            )
+          ),
+          h('div',{style:{display:'flex',flexDirection:'column',gap:8,flexShrink:0}},
+            h('button',{onClick:()=>approve(bill),style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'8px 16px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'✅ Approve'),
+            h('button',{onClick:()=>reject(bill),style:{background:'#c0392b',color:'#fff',border:'none',padding:'8px 16px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'❌ Reject')
+          )
+        )
+      );
+    })
+  );
+}
+
 // ── Admin Panel ───────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = "PeoplesVoice2025!";
 const LEVELS = ['village','city','township','state','federal','county'];
@@ -1125,6 +1429,9 @@ function AdminPanel({bills,setBills,onToast}) {
       )
     ),
 
+    // Pending community submissions review queue
+    h(PendingReviewQueue,{onToast,setBills}),
+
     h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 16px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#8a6000',lineHeight:1.7}},
       "⚠️ ",h('strong',null,"Admin tips:")," Only add bills with verified, publicly-sourced information. Include the source in the Full Text field. Bills you add go live immediately for all users. Deleting a bill also removes all votes and comments on it - use carefully."
     ),
@@ -1238,6 +1545,7 @@ function App() {
   const [rep,setRep]=useState(0);
   const [mainTab,setMainTab]=useState('bills');
   const [bills,setBills]=useState([]);
+  const [pendingBills,setPendingBills]=useState([]);
   const [projects,setProjects]=useState([]);
   const [billFilter,setBillFilter]=useState('all');
   const [userVotes,setUserVotes]=useState({});
@@ -1264,6 +1572,7 @@ function App() {
       }
       await loadBills();
       await loadProjects();
+      await loadPendingBills();
     }catch(e){
       console.error('initApp error:',e);
       setBills(SEED_BILLS);
@@ -1281,6 +1590,10 @@ function App() {
       // No bills in DB yet - show seed bills locally, they'll be added via Admin panel
       setBills(SEED_BILLS);
     }
+  };
+  const loadPendingBills=async()=>{
+    const {data}=await sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false});
+    if(data) setPendingBills(data);
   };
   const loadProjects=async()=>{const {data}=await sb.from('projects').select('*').order('created_at',{ascending:false});if(data)setProjects(data);};
   const loadUserVotes=async(uid)=>{const {data}=await sb.from('user_votes').select('*').eq('user_id',uid);if(data){const v={};data.forEach(d=>{v[d.bill_id]={choice:d.choice,anonymous:d.anonymous};});setUserVotes(v);}};
@@ -1420,7 +1733,22 @@ function App() {
           h('div',{style:{marginLeft:'auto',fontSize:12,color:'#aaa'}},filteredBills.length+" bill"+(filteredBills.length!==1?'s':''))
         ),
         filteredBills.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No bills found for this filter."),
-        filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep}))
+        filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep})),
+
+        // Pending community submissions
+        pendingBills.length>0&&h('div',{style:{marginTop:24}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},'⏳ Pending Community Submissions'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:14}},'These bills were submitted by verified residents and are awaiting community co-signers to go live.'),
+          pendingBills.map((bill,i)=>h(PendingBillCard,{key:bill.id||i,bill,user:{...user,reputation:rep},onCosign:loadPendingBills,onToast:setToast}))
+        ),
+
+        // Community submit panel
+        h(CommunitySubmitPanel,{
+          user:{...user,reputation:rep},
+          bills,
+          onToast:setToast,
+          onSubmitted:b=>{setPendingBills(prev=>[b,...prev]);}
+        })
       ),
 
       // Projects tab
