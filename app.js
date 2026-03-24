@@ -1212,11 +1212,13 @@ function App() {
   };
 
   const loadBills=async()=>{
-    // Always upsert seed bills to ensure clean accurate data
-    await sb.from('bills').upsert(SEED_BILLS,{onConflict:'id',ignoreDuplicates:false});
-    const {data}=await sb.from('bills').select('*').order('created_at');
-    if(data&&data.length) setBills(data);
-    else setBills(SEED_BILLS);
+    const {data,error}=await sb.from('bills').select('*').order('created_at');
+    if(data&&data.length){
+      setBills(data);
+    } else {
+      // No bills in DB yet — show seed bills locally, they'll be added via Admin panel
+      setBills(SEED_BILLS);
+    }
   };
   const loadProjects=async()=>{const {data}=await sb.from('projects').select('*').order('created_at',{ascending:false});if(data)setProjects(data);};
   const loadUserVotes=async(uid)=>{const {data}=await sb.from('user_votes').select('*').eq('user_id',uid);if(data){const v={};data.forEach(d=>{v[d.bill_id]={choice:d.choice,anonymous:d.anonymous};});setUserVotes(v);}};
