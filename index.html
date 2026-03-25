@@ -1772,7 +1772,7 @@ function App() {
       ),
       // Tabs
       h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 16px',display:'flex'}},
-        [['bills','🗳 Bills'],['projects','🌱 Projects'],['reps','🏛 Reps'],['admin','⚙️ Admin']].map(([t,l])=>
+        [['bills','🗳 Bills'],['projects','🌱 Community'],['reps','🏛 Reps'],['admin','⚙️ Admin']].map(([t,l])=>
           h('button',{key:t,onClick:()=>setMainTab(t),style:{background:'transparent',border:'none',borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',padding:'11px 14px',fontFamily:"'Playfair Display',serif",fontWeight:mainTab===t?700:400,fontSize:13,color:mainTab===t?'#f0c040':'#8899aa'}},l)
         )
       )
