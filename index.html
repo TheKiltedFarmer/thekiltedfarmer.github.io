@@ -53,6 +53,7 @@ class ErrorBoundary extends Component {
 const SUPA_URL = "https://zhnilrohxoixsgmdyqiw.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE";
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
 const SITE_URL = "https://thekiltedfarmer.github.io";
 const REP_TO_PROPOSE = 50;
 
@@ -270,7 +271,7 @@ function AIBreakdown({bill}) {
     // For admin-added bills: generate live AI analysis
     setLoading(true);
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+      const res=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           model:'claude-sonnet-4-20250514',max_tokens:900,
@@ -381,7 +382,7 @@ function AIChat({bill}) {
 
     try {
       const history = messages.map(m=>({role:m.role,content:m.content}));
-      const res = await fetch('https://api.anthropic.com/v1/messages',{
+      const res = await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           model:'claude-sonnet-4-20250514',
@@ -768,7 +769,7 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
                     .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000);
       if(!text||text.length<100){setFetchMsg('Could not read that page. Fill in the form manually.');setFetching(false);return;}
       setFetchMsg('AI is reading the document...');
-      const aiRes=await fetch('https://api.anthropic.com/v1/messages',{
+      const aiRes=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           model:'claude-sonnet-4-20250514',max_tokens:1000,
@@ -1798,7 +1799,7 @@ function AdminPanel({bills,setBills,onToast}) {
                     .slice(0,6000);
       if(!text||text.length<100){setFetchMsg('Could not read that page. Try pasting the text manually.');setFetching(false);return;}
       setFetchMsg('Analyzing with AI...');
-      const aiRes=await fetch('https://api.anthropic.com/v1/messages',{
+      const aiRes=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           model:'claude-sonnet-4-20250514',max_tokens:1000,
