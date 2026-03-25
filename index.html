@@ -370,25 +370,47 @@ function ShareButtons({bill,choice}) {
 }
 
 // ── Email Rep Buttons ─────────────────────────────────────────────────────────
-function EmailRepButtons({bill,choice}) {
+function EmailRepButtons({bill,choice,user}) {
+  const [contactCount,setContactCount]=useState(null);
+  useEffect(()=>{
+    sb.from('rep_contacts').select('*',{count:'exact',head:true}).eq('bill_id',bill.id)
+      .then(({count})=>{ if(count!==null) setContactCount(count); });
+  },[bill.id]);
+
+  const logContact=async(repName)=>{
+    await sb.from('rep_contacts').insert({
+      bill_id:bill.id,bill_title:bill.title,
+      user_id:user?.id||null,rep_name:repName,
+      contacted_at:new Date().toISOString()
+    });
+    setContactCount(c=>(c||0)+1);
+  };
+
   const relevant = REPS.filter(r=>r.votes[bill.id]||r.jurisdiction===bill.jurisdiction).slice(0,3);
   if(!relevant.length) return h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginTop:6}},"No rep contact info on file for this bill yet.");
-  return h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}},
-    relevant.map(rep=>{
-      const subject = encodeURIComponent("Re: "+bill.title+" - Constituent Input");
-      const body = encodeURIComponent(
-        "Dear "+rep.name+",\n\n"+
-        "As a constituent, I am writing regarding:\n"+bill.title+" ("+bill.id+")\n\n"+
-        bill.summary+"\n\n"+
-        "The People's Voice community platform shows "+bill.votes_yes+" residents support this measure vs "+bill.votes_no+" opposed.\n\n"+
-        "I personally voted "+choice.toUpperCase()+" on this bill and wanted to share my perspective directly.\n\n"+
-        "[Add your personal message here]\n\n"+
-        "Respectfully,\n[Your name]\nDistrict resident\nSent via The People's Voice - "+SITE_URL
-      );
-      return h('a',{key:rep.id,href:`mailto:${rep.contact}?subject=${subject}&body=${body}`,style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:5,padding:'7px 12px',fontSize:12,color:'#8a6000',textDecoration:'none',fontFamily:"'Playfair Display',serif",fontWeight:700,display:'inline-flex',alignItems:'center',gap:4}},
-        "✉️ Email "+rep.name.split(" ").pop()
-      );
-    })
+  return h('div',null,
+    contactCount>0&&h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:600,marginBottom:6}},
+      '📬 '+contactCount+' resident'+(contactCount===1?'':'s')+' have emailed their rep about this bill'
+    ),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:4}},
+      relevant.map(rep=>{
+        const subject = encodeURIComponent("Re: "+bill.title+" - Constituent Input");
+        const body = encodeURIComponent(
+          "Dear "+rep.name+",\n\n"+
+          "As a constituent, I am writing regarding:\n"+bill.title+" ("+bill.id+")\n\n"+
+          bill.summary+"\n\n"+
+          "The People's Voice community platform shows "+bill.votes_yes+" residents support this measure vs "+bill.votes_no+" opposed.\n\n"+
+          "I personally voted "+choice.toUpperCase()+" on this bill and wanted to share my perspective directly.\n\n"+
+          "[Add your personal message here]\n\n"+
+          "Respectfully,\n[Your name]\nDistrict resident\nSent via The People's Voice - "+SITE_URL
+        );
+        return h('a',{key:rep.id,
+          href:`mailto:${rep.contact}?subject=${subject}&body=${body}`,
+          onClick:()=>logContact(rep.name),
+          style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:5,padding:'7px 12px',fontSize:12,color:'#8a6000',textDecoration:'none',fontFamily:"'Playfair Display',serif",fontWeight:700,display:'inline-flex',alignItems:'center',gap:4}
+        },"✉️ Email "+rep.name.split(" ").pop());
+      })
+    )
   );
 }
 
@@ -508,7 +530,17 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
             },"📎 View Full Legislation")
           : bill.full_text&&bill.full_text.includes('http')
             ? h('span',{style:{fontSize:11,color:'#aaa',fontStyle:'italic'}},"Source in bill text below")
-            : null
+            : null,
+        h('button',{
+          onClick:()=>{
+            const url=window.location.origin+window.location.pathname+'#bill/'+bill.id;
+            navigator.clipboard&&navigator.clipboard.writeText(url);
+            if(navigator.share) navigator.share({title:bill.title,url});
+            else { navigator.clipboard&&navigator.clipboard.writeText(url); }
+          },
+          style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,color:'#8899aa',textDecoration:'none',
+            background:'transparent',border:'1px solid #e5dece',borderRadius:5,padding:'4px 10px',fontFamily:"'Lora',serif",cursor:'pointer'}
+        },"🔗 Share")
       ),
       h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,lineHeight:1.7,color:'#444',margin:'0 0 14px'}},bill.summary),
 
@@ -1079,6 +1111,212 @@ function ProposeModal({onClose,onSubmit}) {
   );
 }
 
+// ── Onboarding Tour ───────────────────────────────────────────────────────────
+const TOUR_STEPS = [
+  {
+    icon:'🗳',
+    title:"Vote on Real Legislation",
+    body:"Every bill here is real — pulled from actual council meetings, the Michigan Legislature, and Congress. Your vote is unofficial but it's recorded, tallied, and shown to your representatives.",
+    tip:"Tap any bill to expand it and cast your vote."
+  },
+  {
+    icon:'⚖️',
+    title:"AI Breaks It Down — Fairly",
+    body:"Each bill comes with a plain-language AI analysis that tells you exactly who benefits and who pays. No spin, no party line — just the facts so you can decide for yourself.",
+    tip:"Look for '⚡ Get AI Analysis' inside any bill."
+  },
+  {
+    icon:'📍',
+    title:"Your ZIP Code, Your Bills",
+    body:"Search by any Jackson County ZIP code to see legislation specific to your community — your village, township, or city — plus state and federal bills that affect everyone.",
+    tip:"Use the ZIP search bar at the top of the Bills tab."
+  },
+  {
+    icon:'🏛',
+    title:"Hold Representatives Accountable",
+    body:"The Reps tab shows how your elected officials voted compared to how the community voted. You can email them directly from any bill with your vote attached.",
+    tip:"Your community's votes create real pressure on officials."
+  },
+  {
+    icon:'🌱',
+    title:"Build Something Together",
+    body:"The Community tab lets you propose local projects, pledge your time, skills, or resources, and forward community-backed ideas directly to officials as a formal letter.",
+    tip:"Earn 50 reputation points to propose your own project."
+  },
+  {
+    icon:'📋',
+    title:"Keep It Accurate Together",
+    body:"If a bill's status changes or a new proposal comes up, any verified resident can submit an update with a source link. Co-signers verify it, then it goes live for everyone.",
+    tip:"Look for '+ Submit a Bill from Your Community' at the bottom of the Bills tab."
+  },
+];
+
+function OnboardingTour({onDone, displayName}) {
+  const [step, setStep] = useState(0);
+  const current = TOUR_STEPS[step];
+  const isLast = step === TOUR_STEPS.length - 1;
+
+  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:16}},
+    h('div',{style:{background:'#fff',borderRadius:16,width:440,maxWidth:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)',overflow:'hidden'}},
+      // Progress bar
+      h('div',{style:{height:4,background:'#eee'}},
+        h('div',{style:{height:'100%',background:'#f0c040',width:((step+1)/TOUR_STEPS.length*100)+'%',transition:'width .3s'}})
+      ),
+      h('div',{style:{padding:'28px 28px 24px'}},
+        // Step counter
+        h('div',{style:{fontSize:11,color:'#aaa',textTransform:'uppercase',letterSpacing:2,marginBottom:16}},
+          'Step '+(step+1)+' of '+TOUR_STEPS.length
+        ),
+        // Icon + title
+        h('div',{style:{fontSize:48,marginBottom:12,lineHeight:1}},current.icon),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:'#1a1a2e',marginBottom:12,lineHeight:1.2}},
+          step===0 ? 'Welcome'+(displayName?', '+displayName.split(' ')[0]:'')+' 👋' : current.title
+        ),
+        h('p',{style:{fontFamily:"'Lora',serif",fontSize:15,color:'#444',lineHeight:1.8,marginBottom:16}},current.body),
+        // Tip box
+        h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#8a6000',fontFamily:"'Lora',serif",lineHeight:1.6}},
+          h('strong',null,'💡 Tip: '),current.tip
+        ),
+        // Navigation
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24}},
+          step>0
+            ? h('button',{onClick:()=>setStep(s=>s-1),style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'10px 18px',borderRadius:7,fontSize:14,cursor:'pointer'}},'<- Back')
+            : h('button',{onClick:onDone,style:{background:'transparent',border:'none',color:'#bbb',fontSize:13,cursor:'pointer'}},'Skip tour'),
+          h('button',{onClick:()=>isLast?onDone():setStep(s=>s+1),
+            style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'12px 24px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}
+          },isLast?'Start Voting! 🗳':'Next ->')
+        )
+      )
+    )
+  );
+}
+
+// ── Profile Page ──────────────────────────────────────────────────────────────
+function ProfilePage({user, profile, rep, bills, userVotes, onClose}) {
+  const repInfo = repLevel(rep);
+  const votedBills = bills.filter(b=>userVotes[b.id]);
+  const displayName = profile?.display_name||user.email?.split('@')[0]||'Resident';
+  const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Recently';
+
+  const voteBreakdown = votedBills.reduce((acc,b)=>{
+    const v = userVotes[b.id];
+    if(v) acc[v.choice] = (acc[v.choice]||0)+1;
+    return acc;
+  },{});
+
+  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'flex-start',justifyContent:'center',zIndex:9000,padding:16,overflowY:'auto'}},
+    h('div',{style:{background:'#f4f1ea',borderRadius:14,width:500,maxWidth:'100%',marginTop:20,boxShadow:'0 30px 60px rgba(0,0,0,.3)'}},
+      // Header
+      h('div',{style:{background:'#1a1a2e',borderRadius:'14px 14px 0 0',padding:'24px 24px 20px',position:'relative'}},
+        h('button',{onClick:onClose,style:{position:'absolute',top:16,right:16,background:'transparent',border:'none',color:'#8899aa',fontSize:20,cursor:'pointer',lineHeight:1}},'x'),
+        h('div',{style:{display:'flex',gap:16,alignItems:'center'}},
+          h('div',{style:{width:60,height:60,borderRadius:'50%',background:'#f0c040',color:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24}},
+            displayName[0].toUpperCase()
+          ),
+          h('div',null,
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040'}},displayName),
+            h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'Member since '+joinDate),
+            profile?.full_address&&h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'📍 '+profile.full_address),
+            h('div',{style:{fontSize:11,color:'#5b9a6c',marginTop:4,fontWeight:600}},'✅ Self-Attested Resident')
+          )
+        )
+      ),
+
+      h('div',{style:{padding:20}},
+        // Reputation
+        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14,display:'flex',gap:14,alignItems:'center'}},
+          h('div',{style:{fontSize:36}},repInfo.icon),
+          h('div',{style:{flex:1}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#1a1a2e'}},rep+' Reputation Points'),
+            h('div',{style:{fontWeight:700,color:repInfo.color,fontSize:14,marginBottom:4}},repInfo.label),
+            h('div',{style:{height:8,background:'#eee',borderRadius:4,overflow:'hidden'}},
+              h('div',{style:{width:Math.min(100,(rep/100*100))+'%',height:'100%',background:repInfo.color,borderRadius:4}})
+            ),
+            h('div',{style:{fontSize:11,color:'#aaa',marginTop:4}},
+              rep<50?'Earn '+(50-rep)+' more rep to propose projects and get trusted-resident status':'✓ Trusted Resident — can propose projects and submissions'
+            )
+          )
+        ),
+
+        // Voting stats
+        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:12}},'🗳 Your Voting Record'),
+          votedBills.length===0
+            ? h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13}},'No votes cast yet. Head to the Bills tab to get started.')
+            : h('div',null,
+                h('div',{style:{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}},
+                  h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
+                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#1a6b3c'}},voteBreakdown.yes||0),
+                    h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700}},'Supported')
+                  ),
+                  h('div',{style:{background:'#fdf0ef',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
+                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#c0392b'}},voteBreakdown.no||0),
+                    h('div',{style:{fontSize:11,color:'#c0392b',fontWeight:700}},'Opposed')
+                  ),
+                  h('div',{style:{background:'#f5f5f5',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
+                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#888'}},voteBreakdown.abstain||0),
+                    h('div',{style:{fontSize:11,color:'#888',fontWeight:700}},'Abstained')
+                  )
+                ),
+                votedBills.map(b=>{
+                  const v=userVotes[b.id];
+                  const emoji=v?.choice==='yes'?'✅':v?.choice==='no'?'❌':'⬜';
+                  return h('div',{key:b.id,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #f0ece4',fontSize:13}},
+                    h('div',{style:{flex:1,color:'#333',fontFamily:"'Lora',serif",lineHeight:1.4}},b.title),
+                    h('div',{style:{display:'flex',gap:8,alignItems:'center',flexShrink:0,marginLeft:10}},
+                      h('span',null,emoji),
+                      v?.anonymous&&h('span',{style:{fontSize:10,color:'#bbb'}},'🔒')
+                    )
+                  );
+                })
+              )
+        ),
+
+        // Rep earning guide
+        h('div',{style:{background:'#fff',borderRadius:10,padding:16}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:10}},'Earn More Reputation'),
+          [['🗳 Vote on a bill','+5 rep'],['💬 Post a comment','+10 rep'],['🤲 Pledge to a project','+15 rep'],['🌱 Propose a project','Need 50 rep'],['✅ Submit a bill','Builds community trust']].map(([a,b])=>
+            h('div',{key:a,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f5f5f5',fontSize:13}},
+              h('span',{style:{color:'#555'}},a),
+              h('span',{style:{color:'#1a6b3c',fontWeight:700}},b)
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+// ── Rep Contact Tracker ───────────────────────────────────────────────────────
+function RepContactTracker({bill, user}) {
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(()=>{
+    sb.from('rep_contacts').select('count').eq('bill_id',bill.id)
+      .then(({count})=>{ if(count!==null) setContacts(count); });
+  },[bill.id]);
+
+  const logContact = async(repName) => {
+    setLoading(true);
+    await sb.from('rep_contacts').insert({
+      bill_id:bill.id, bill_title:bill.title,
+      user_id:user?.id||null, rep_name:repName,
+      contacted_at:new Date().toISOString()
+    });
+    setContacts(c=>c+1);
+    setLoading(false);
+  };
+
+  if(!contacts&&contacts!==0) return null;
+
+  return contacts>0
+    ? h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:600,marginTop:4}},
+        '📬 '+contacts+' resident'+(contacts===1?'':'s')+' have contacted their rep about this bill'
+      )
+    : null;
+}
+
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen({onAuth}) {
   const [mode,setMode]=useState('login');
@@ -1636,6 +1874,8 @@ function App() {
   const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
   const [showAdmin,setShowAdmin]=useState(false);
+  const [showOnboarding,setShowOnboarding]=useState(false);
+  const [showProfile,setShowProfile]=useState(false);
 
   useEffect(()=>{initApp();},[]);
 
@@ -1681,7 +1921,11 @@ function App() {
   const loadProjects=async()=>{const {data}=await sb.from('projects').select('*').order('created_at',{ascending:false});if(data)setProjects(data);};
   const loadUserVotes=async(uid)=>{const {data}=await sb.from('user_votes').select('*').eq('user_id',uid);if(data){const v={};data.forEach(d=>{v[d.bill_id]={choice:d.choice,anonymous:d.anonymous};});setUserVotes(v);}};
 
-  const handleAuth=(authUser,prof)=>{setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);};
+  const handleAuth=(authUser,prof)=>{
+    setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);
+    // Show onboarding for brand new users (reputation is 0 and no votes)
+    if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
+  };
   const handleVoteCast=(billId,choice,anon)=>{setUserVotes(prev=>({...prev,[billId]:{choice,anonymous:anon}}));setBills(prev=>prev.map(b=>b.id!==billId?b:{...b,['votes_'+choice]:b['votes_'+choice]+1}));};
   const gainRep=pts=>{setRep(r=>r+pts);if(user)setUser(u=>({...u,reputation:(u.reputation||0)+pts}));};
   const handlePropose=async(data)=>{
@@ -1730,6 +1974,8 @@ function App() {
   return h('div',{style:{minHeight:'100vh',background:'#f4f1ea'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     showPropose&&h(ProposeModal,{onClose:()=>setShowPropose(false),onSubmit:handlePropose}),
+    showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0]}),
+    showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false)}),
 
     // Header
     h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
@@ -1758,7 +2004,9 @@ function App() {
                 ? "📍 Self-Attested · "+profile.zip
                 : "✓ Verified · ZIP "+(profile?.zip||'')
             ),
-            h('button',{onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif'"}},"\ud83d\udeaa Sign out")
+            h('button',{onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif"}},"\uD83D\uDEAA Sign out"),
+            h('button',{onClick:()=>setShowProfile(true),style:{background:'transparent',border:'none',color:'#f0c040',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif",display:'block'}},"👤 My Profile"),
+            h('button',{onClick:()=>setShowOnboarding(true),style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif",display:'block'}},"❓ How it works")
           )
         )
       ),
