@@ -351,6 +351,134 @@ function AIBreakdown({bill}) {
 }
 
 // ── Social Share ──────────────────────────────────────────────────────────────
+// ── AI Chat ───────────────────────────────────────────────────────────────────
+function AIChat({bill}) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const bottomRef = useRef(null);
+
+  const SUGGESTIONS = [
+    'Who does this affect most in Jackson County?',
+    'What would happen if this fails?',
+    'Are there similar laws elsewhere in Michigan?',
+    'What are the arguments for and against?',
+    'How would this affect small farmers / renters / seniors?',
+  ];
+
+  useEffect(()=>{
+    if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:'smooth'});
+  },[messages]);
+
+  const send = async(text) => {
+    const q = (text||input).trim();
+    if(!q||loading) return;
+    setInput('');
+    const userMsg = {role:'user',content:q};
+    setMessages(prev=>[...prev,userMsg]);
+    setLoading(true);
+
+    try {
+      const history = messages.map(m=>({role:m.role,content:m.content}));
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:600,
+          system:`You are a neutral, nonpartisan civic assistant helping residents of Jackson County, Michigan understand local legislation. You answer questions about this specific bill clearly and fairly, presenting multiple perspectives where relevant. Never tell someone how to vote. Always be honest about uncertainty. Keep answers concise — 2-4 paragraphs max.
+
+Bill: ${bill.title}
+Jurisdiction: ${bill.jurisdiction}
+Status: ${bill.status}
+Summary: ${bill.summary}
+Full text: ${bill.full_text||bill.summary}`,
+          messages:[...history,userMsg]
+        })
+      });
+      const json = await res.json();
+      const reply = json.content?.find(b=>b.type==='text')?.text||'I was unable to generate a response. Please try again.';
+      setMessages(prev=>[...prev,{role:'assistant',content:reply}]);
+    } catch(e) {
+      setMessages(prev=>[...prev,{role:'assistant',content:'Something went wrong. Please try again.'}]);
+    }
+    setLoading(false);
+  };
+
+  if(!open) return h('button',{
+    onClick:()=>setOpen(true),
+    style:{width:'100%',background:'#f0ebf8',border:'1px solid #c8b8e8',borderRadius:8,padding:'12px 16px',
+      fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#5b3a8c',cursor:'pointer',
+      display:'flex',alignItems:'center',gap:8,justifyContent:'center',marginTop:12}
+  },'💬 Discuss This Bill with AI');
+
+  return h('div',{style:{marginTop:12,border:'1px solid #c8b8e8',borderRadius:10,overflow:'hidden'}},
+    // Header
+    h('div',{style:{background:'#5b3a8c',padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,color:'#fff',fontSize:14}},
+        '💬 Ask About This Bill'
+      ),
+      h('div',{style:{display:'flex',gap:10,alignItems:'center'}},
+        h('div',{style:{fontSize:11,color:'rgba(255,255,255,.6)'}},
+          'Neutral AI — no political opinion'
+        ),
+        h('button',{onClick:()=>setOpen(false),style:{background:'transparent',border:'none',color:'rgba(255,255,255,.6)',cursor:'pointer',fontSize:16,lineHeight:1}},'x')
+      )
+    ),
+
+    // Suggestions (show when no messages yet)
+    messages.length===0&&h('div',{style:{background:'#f9f5ff',padding:'12px 14px',borderBottom:'1px solid #e8dff8'}},
+      h('div',{style:{fontSize:11,color:'#8a6aac',fontWeight:600,marginBottom:8,textTransform:'uppercase',letterSpacing:1}},'Suggested questions:'),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+        SUGGESTIONS.map((s,i)=>h('button',{key:i,onClick:()=>send(s),
+          style:{background:'#fff',border:'1px solid #c8b8e8',borderRadius:20,padding:'5px 11px',fontSize:12,
+            color:'#5b3a8c',cursor:'pointer',fontFamily:"'Lora',serif",lineHeight:1.4,textAlign:'left'}
+        },s))
+      )
+    ),
+
+    // Messages
+    h('div',{style:{background:'#fff',maxHeight:320,overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}},
+      messages.map((m,i)=>h('div',{key:i,style:{display:'flex',gap:10,alignItems:'flex-start',flexDirection:m.role==='user'?'row-reverse':'row'}},
+        h('div',{style:{
+          width:30,height:30,borderRadius:'50%',flexShrink:0,
+          background:m.role==='user'?'#1a1a2e':'#5b3a8c',
+          color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700
+        }},m.role==='user'?'You':'AI'),
+        h('div',{style:{
+          background:m.role==='user'?'#f0f4ff':'#f9f5ff',
+          border:'1px solid '+(m.role==='user'?'#c8d4f8':'#e0d0f8'),
+          borderRadius:8,padding:'10px 13px',fontSize:13,
+          fontFamily:"'Lora',serif",lineHeight:1.7,color:'#333',
+          maxWidth:'80%'
+        }},m.content)
+      )),
+      loading&&h('div',{style:{display:'flex',gap:10,alignItems:'center'}},
+        h('div',{style:{width:30,height:30,borderRadius:'50%',background:'#5b3a8c',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700}},'AI'),
+        h('div',{style:{background:'#f9f5ff',border:'1px solid #e0d0f8',borderRadius:8,padding:'10px 13px',fontSize:13,color:'#aaa',fontStyle:'italic'}},'Thinking...')
+      ),
+      h('div',{ref:bottomRef})
+    ),
+
+    // Input
+    h('div',{style:{background:'#f9f5ff',borderTop:'1px solid #e8dff8',padding:'10px 12px',display:'flex',gap:8}},
+      h('input',{
+        value:input,onChange:e=>setInput(e.target.value),
+        onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&send(),
+        placeholder:'Ask anything about this bill...',
+        style:{flex:1,border:'1px solid #c8b8e8',borderRadius:6,padding:'9px 12px',fontSize:13,
+          fontFamily:"'Lora',serif",background:'#fff',boxSizing:'border-box'}
+      }),
+      h('button',{onClick:()=>send(),disabled:!input.trim()||loading,
+        style:{background:input.trim()&&!loading?'#5b3a8c':'#ddd',color:input.trim()&&!loading?'#fff':'#aaa',
+          border:'none',borderRadius:6,padding:'9px 16px',fontFamily:"'Playfair Display',serif",
+          fontWeight:700,fontSize:13,cursor:input.trim()&&!loading?'pointer':'default'}
+      },'Send')
+    ),
+    h('div',{style:{background:'#f9f5ff',paddingBottom:8,textAlign:'center',fontSize:10,color:'#c8b8e8'}},'Neutral · Nonpartisan · No political opinion expressed')
+  );
+}
+
 function ShareButtons({bill,choice}) {
   const emoji = choice==='yes'?'✅':choice==='no'?'❌':'⬜';
   const text = `${emoji} I voted ${choice.toUpperCase()} on "${bill.title}" via The People's Voice - a nonpartisan civic platform. See the community results: ${SITE_URL}`;
@@ -593,7 +721,10 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
       h('div',{style:{display:'flex',borderBottom:'2px solid #e5dece',marginBottom:16}},
         ['ai','forum'].map(t=>h('button',{key:t,onClick:()=>setTab(t),style:{background:'transparent',border:'none',borderBottom:tab===t?'2px solid #1a1a2e':'none',marginBottom:-2,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:tab===t?700:400,fontSize:14,color:tab===t?'#1a1a2e':'#aaa'}},t==='ai'?"🤖 AI Analysis":"💬 Discussion"))
       ),
-      tab==='ai'&&h(AIBreakdown,{bill}),
+      tab==='ai'&&h(Fragment,null,
+        h(AIBreakdown,{bill}),
+        h(AIChat,{bill})
+      ),
       tab==='forum'&&h('div',null,
         user?h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
           h('textarea',{value:commentText,onChange:e=>setCommentText(e.target.value),placeholder:"Share your perspective with your community...",rows:3,style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,resize:'vertical',boxSizing:'border-box'}}),
@@ -1192,11 +1323,14 @@ function OnboardingTour({onDone, displayName}) {
 }
 
 // ── Profile Page ──────────────────────────────────────────────────────────────
-function ProfilePage({user, profile, rep, bills, userVotes, onClose}) {
+function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUpdate}) {
   const repInfo = repLevel(rep);
   const votedBills = bills.filter(b=>userVotes[b.id]);
   const displayName = profile?.display_name||user.email?.split('@')[0]||'Resident';
   const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Recently';
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url||null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
 
   const voteBreakdown = votedBills.reduce((acc,b)=>{
     const v = userVotes[b.id];
@@ -1204,20 +1338,55 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose}) {
     return acc;
   },{});
 
+  const handleAvatarUpload = async(e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(file.size > 2*1024*1024) { alert('Image must be under 2MB'); return; }
+    setUploading(true);
+    try {
+      // Convert to base64 data URL for simple storage
+      const reader = new FileReader();
+      reader.onload = async(ev) => {
+        const dataUrl = ev.target.result;
+        // Store in profiles table
+        await sb.from('profiles').update({avatar_url:dataUrl}).eq('id',user.id);
+        setAvatarUrl(dataUrl);
+        if(onProfileUpdate) onProfileUpdate({avatar_url:dataUrl});
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch(e) {
+      setUploading(false);
+      alert('Upload failed. Try a smaller image.');
+    }
+  };
+
   return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'flex-start',justifyContent:'center',zIndex:9000,padding:16,overflowY:'auto'}},
     h('div',{style:{background:'#f4f1ea',borderRadius:14,width:500,maxWidth:'100%',marginTop:20,boxShadow:'0 30px 60px rgba(0,0,0,.3)'}},
       // Header
       h('div',{style:{background:'#1a1a2e',borderRadius:'14px 14px 0 0',padding:'24px 24px 20px',position:'relative'}},
         h('button',{onClick:onClose,style:{position:'absolute',top:16,right:16,background:'transparent',border:'none',color:'#8899aa',fontSize:20,cursor:'pointer',lineHeight:1}},'x'),
         h('div',{style:{display:'flex',gap:16,alignItems:'center'}},
-          h('div',{style:{width:60,height:60,borderRadius:'50%',background:'#f0c040',color:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24}},
-            displayName[0].toUpperCase()
+          // Avatar with upload
+          h('div',{style:{position:'relative',flexShrink:0}},
+            avatarUrl
+              ? h('img',{src:avatarUrl,alt:'Profile',style:{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'3px solid #f0c040'}})
+              : h('div',{style:{width:64,height:64,borderRadius:'50%',background:'#f0c040',color:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:26,border:'3px solid #f0c040'}},
+                  displayName[0].toUpperCase()
+                ),
+            h('button',{
+              onClick:()=>fileRef.current&&fileRef.current.click(),
+              title:'Change profile photo',
+              style:{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:'50%',background:'#f0c040',border:'2px solid #1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:11,lineHeight:1}
+            }, uploading?'..':'📷'),
+            h('input',{ref:fileRef,type:'file',accept:'image/*',onChange:handleAvatarUpload,style:{display:'none'}})
           ),
           h('div',null,
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040'}},displayName),
             h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'Member since '+joinDate),
             profile?.full_address&&h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'📍 '+profile.full_address),
-            h('div',{style:{fontSize:11,color:'#5b9a6c',marginTop:4,fontWeight:600}},'✅ Self-Attested Resident')
+            h('div',{style:{fontSize:11,color:'#5b9a6c',marginTop:4,fontWeight:600}},'✅ Self-Attested Resident'),
+            h('div',{style:{fontSize:10,color:'#556677',marginTop:2}},'Tap 📷 to add a profile photo')
           )
         )
       ),
@@ -1975,7 +2144,7 @@ function App() {
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     showPropose&&h(ProposeModal,{onClose:()=>setShowPropose(false),onSubmit:handlePropose}),
     showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0]}),
-    showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false)}),
+    showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates}))}),
 
     // Header
     h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
