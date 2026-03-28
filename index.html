@@ -247,25 +247,171 @@ const ANALYSES = {
 
 // ── Representatives - Verified from official sources, March 2026 ──────────────
 // Sources: cityofjackson.org, villageofconcord.com, house.mi.gov, mijackson.org
-const REPS = [
-  // City of Jackson
-  {id:"r1",name:"Daniel Mahoney",title:"Mayor",body:"City of Jackson",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"DM",contact:"mayor@cityofjackson.org",website:"cityofjackson.org/291/Mayors-Office",votes:{}},
-  {id:"r2",name:"Arlene Robinson",title:"Ward 1 Council Member",body:"Jackson City Council",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"AR",contact:"citycouncil@cityofjackson.org",website:"cityofjackson.org",votes:{}},
-  {id:"r3",name:"Freddie Dancy",title:"Ward 2 Council Member",body:"Jackson City Council",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"FD",contact:"citycouncil@cityofjackson.org",website:"cityofjackson.org",votes:{}},
-  {id:"r4",name:"Angelita Gunn",title:"Ward 3 Council Member",body:"Jackson City Council",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"AG",contact:"citycouncil@cityofjackson.org",website:"cityofjackson.org",votes:{"JACKSON-2025-03":{vote:"yes",note:"Sponsored and voted yes - source: City of Jackson Planning Commission records."}}},
-  {id:"r5",name:"Conner Wood",title:"Ward 4 Council Member",body:"Jackson City Council",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"CW",contact:"citycouncil@cityofjackson.org",website:"cityofjackson.org",votes:{}},
-  {id:"r6",name:"Shalanda Hunt",title:"Ward 5 Council Member",body:"Jackson City Council",jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"SH",contact:"citycouncil@cityofjackson.org",website:"cityofjackson.org",votes:{}},
+// ── ZIP to Rep mapping ────────────────────────────────────────────────────────
+// Maps ZIP codes to which rep IDs are relevant for that community
+const ZIP_REPS = {
+  // City of Jackson ZIPs - all wards + state + county
+  "49201":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
+  "49202":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
+  "49203":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
+  "49204":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
   // Village of Concord
-  {id:"r7",name:"J. Bush",title:"Council Member",body:"Village of Concord Council",jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"JB",contact:"clerk@villageofconcord.com",website:"villageofconcord.com",votes:{"CONCORD-2025-01":{vote:"yes",note:"Motioned to approve Jesse Brigham Construction contract - source: Village Council Meeting Minutes, Jan 14, 2025."}}},
-  {id:"r8",name:"K. George",title:"Council Member",body:"Village of Concord Council",jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"KG",contact:"clerk@villageofconcord.com",website:"villageofconcord.com",votes:{"CONCORD-2025-01":{vote:"yes",note:"Seconded motion to approve sewer contract - source: Village Council Meeting Minutes, Jan 14, 2025."}}},
-  {id:"r9",name:"A. Meeks",title:"Council Member",body:"Village of Concord Council",jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"AM",contact:"clerk@villageofconcord.com",website:"villageofconcord.com",votes:{}},
-  {id:"r10",name:"T. Thurman",title:"Council Member",body:"Village of Concord Council",jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"TT",contact:"clerk@villageofconcord.com",website:"villageofconcord.com",votes:{}},
-  // State Representatives
-  {id:"r11",name:"Kathy Schmaltz",title:"State Representative, District 46",body:"Michigan House of Representatives",jurisdiction:"State of Michigan",party:"Republican",photo:"KS",contact:"KathySchmaltz@house.mi.gov",website:"house.mi.gov",votes:{}},
-  {id:"r12",name:"Carrie Rheingans",title:"State Representative, District 47",body:"Michigan House of Representatives",jurisdiction:"State of Michigan",party:"Democrat",photo:"CR",contact:"CarrieRheingans@house.mi.gov",website:"house.mi.gov",votes:{}},
-  {id:"r13",name:"Sue Shink",title:"State Senator",body:"Michigan Senate",jurisdiction:"State of Michigan",party:"Democrat",photo:"SS",contact:"senshink@senate.michigan.gov",website:"senate.michigan.gov",votes:{}},
-  // Jackson County
-  {id:"r14",name:"Jackson County Board",title:"Board of Commissioners (9 members)",body:"Jackson County Board of Commissioners",jurisdiction:"Jackson County",party:"Nonpartisan",photo:"JC",contact:"commissioners@co.jackson.mi.us",website:"co.jackson.mi.us/365/Jackson-County-Commissioners",votes:{}},
+  "49237":["r8","r9","r10","r11","r11","r13","r14"],
+  // Brooklyn / Columbia Township - Rep 47 district
+  "49230":["r12","r13","r14"],
+  // Grass Lake - split between Dist 46 and 47
+  "49240":["r11","r12","r13","r14"],
+  // Napoleon Township - Rep 47
+  "49261":["r12","r13","r14"],
+  // Spring Arbor Township - Rep 46
+  "49283":["r11","r13","r14"],
+  // Summit Township - split 46/47
+  "49285":["r11","r12","r13","r14"],
+  // Blackman Township - Rep 46
+  "49201":["r11","r13","r14"],
+  // Default all county ZIPs get state + county reps
+};
+
+const REPS = [
+  // ── City of Jackson ───────────────────────────────────────────────────────
+  {
+    id:"r1",name:"Daniel Mahoney",title:"Mayor",body:"City of Jackson",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"DM",
+    contact:"mayor@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/291/Mayors-Office",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    votes:{}
+  },
+  {
+    id:"r2",name:"Arlene Robinson",title:"Ward 1 Council Member",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"AR",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/498/Ward-1",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"South side of Jackson. Re-elected Nov 2025.",
+    votes:{}
+  },
+  {
+    id:"r3",name:"Freddie Dancy",title:"Ward 2 Council Member & Vice Mayor",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"FD",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/499/Ward-2",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"Southeast side of Jackson. Term ends 2028.",
+    votes:{}
+  },
+  {
+    id:"r4",name:"Angelita Gunn",title:"Ward 3 Council Member",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"AG",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/500/Ward-3",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"Northeast Jackson. Re-elected Nov 2025.",
+    votes:{"JACKSON-2025-03":{vote:"yes",note:"Sponsored Urban Agriculture Ordinance - source: City of Jackson Planning Commission records."}}
+  },
+  {
+    id:"r5",name:"Conner Wood",title:"Ward 4 Council Member",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"CW",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/504/Ward-4",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"Northwest side of Jackson. Term ends 2028.",
+    votes:{}
+  },
+  {
+    id:"r6",name:"Shalanda Hunt",title:"Ward 5 Council Member",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"SH",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/511/Ward-5",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"West Downtown Jackson. Won Nov 2025.",
+    votes:{}
+  },
+  {
+    id:"r7_ward6",name:"Will Forgrave",title:"Ward 6 Council Member",body:"Jackson City Council",
+    jurisdiction:"City of Jackson",party:"Nonpartisan",photo:"WF",
+    contact:"citycouncil@cityofjackson.org",phone:"517-768-6060",
+    website:"cityofjackson.org/512/Ward-6",
+    address:"161 W. Michigan Ave, Jackson MI 49201",
+    notes:"Southwest corner of Jackson. Term ends 2028.",
+    votes:{}
+  },
+  // ── Village of Concord ────────────────────────────────────────────────────
+  {
+    id:"r8",name:"J. Bush",title:"Council Member",body:"Village of Concord Council",
+    jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"JB",
+    contact:"clerk@villageofconcord.com",phone:"517-524-8538",
+    website:"villageofconcord.com",
+    address:"116 North Main St, Concord MI 49237",
+    votes:{"CONCORD-2025-01":{vote:"yes",note:"Motioned to approve Jesse Brigham Construction contract - source: Village Council Meeting Minutes, Jan 14, 2025."}}
+  },
+  {
+    id:"r9",name:"K. George",title:"Council Member",body:"Village of Concord Council",
+    jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"KG",
+    contact:"clerk@villageofconcord.com",phone:"517-524-8538",
+    website:"villageofconcord.com",
+    address:"116 North Main St, Concord MI 49237",
+    votes:{"CONCORD-2025-01":{vote:"yes",note:"Seconded motion - source: Village Council Meeting Minutes, Jan 14, 2025."}}
+  },
+  {
+    id:"r10",name:"A. Meeks",title:"Council Member",body:"Village of Concord Council",
+    jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"AM",
+    contact:"clerk@villageofconcord.com",phone:"517-524-8538",
+    website:"villageofconcord.com",
+    address:"116 North Main St, Concord MI 49237",
+    votes:{}
+  },
+  {
+    id:"r11_concord",name:"T. Thurman",title:"Council Member",body:"Village of Concord Council",
+    jurisdiction:"Village of Concord",party:"Nonpartisan",photo:"TT",
+    contact:"clerk@villageofconcord.com",phone:"517-524-8538",
+    website:"villageofconcord.com",
+    address:"116 North Main St, Concord MI 49237",
+    votes:{}
+  },
+  // ── State Representatives ─────────────────────────────────────────────────
+  {
+    id:"r11",name:"Kathy Schmaltz",title:"State Representative, District 46",
+    body:"Michigan House of Representatives",
+    jurisdiction:"State of Michigan",party:"Republican",photo:"KS",
+    contact:"KathySchmaltz@house.mi.gov",phone:"517-373-1798",
+    website:"gophouse.org/member/RepKathySchmaltz/about",
+    address:"N-895 House Office Building, P.O. Box 30014, Lansing MI 48909",
+    notes:"Covers City of Jackson, Blackman & Leoni townships, parts of Grass Lake & Summit townships in Jackson County.",
+    votes:{}
+  },
+  {
+    id:"r12",name:"Carrie Rheingans",title:"State Representative, District 47",
+    body:"Michigan House of Representatives",
+    jurisdiction:"State of Michigan",party:"Democrat",photo:"CR",
+    contact:"CarrieRheingans@house.mi.gov",phone:"517-373-8835",
+    website:"housedems.com/carrie-rheingans",
+    address:"N-896 House Office Building, P.O. Box 30014, Lansing MI 48909",
+    notes:"Covers Columbia, Napoleon, Norvell townships and parts of Grass Lake & Summit in Jackson County.",
+    votes:{}
+  },
+  {
+    id:"r13",name:"Sue Shink",title:"State Senator, District 14",
+    body:"Michigan Senate",
+    jurisdiction:"State of Michigan",party:"Democrat",photo:"SS",
+    contact:"SenSShink@senate.michigan.gov",phone:"517-373-2426",
+    website:"senatedems.com/shink",
+    address:"Suite 4200, Binsfeld Office Building, P.O. Box 30036, Lansing MI 48909",
+    notes:"Covers all of Jackson County plus parts of Washtenaw County.",
+    votes:{}
+  },
+  // ── Jackson County Board ──────────────────────────────────────────────────
+  {
+    id:"r14",name:"Jackson County Board of Commissioners",
+    title:"Board of Commissioners (9 members)",
+    body:"Jackson County Board of Commissioners",
+    jurisdiction:"Jackson County",party:"Nonpartisan",photo:"JC",
+    contact:"commissioners@co.jackson.mi.us",phone:"517-788-4540",
+    website:"co.jackson.mi.us/365/Jackson-County-Commissioners",
+    address:"120 W. Michigan Ave, Jackson MI 49201",
+    notes:"9-member board governing all of Jackson County.",
+    votes:{}
+  },
 ];
 
 // ── UI Components ─────────────────────────────────────────────────────────────
@@ -1012,79 +1158,137 @@ function PendingBillCard({bill, user, onCosign, onToast}) {
 }
 
 // ── Rep Tracker ───────────────────────────────────────────────────────────────
-function RepTracker({bills}) {
+function RepTracker({bills, userZip}) {
   const [filter,setFilter]=useState('all');
   const [selected,setSelected]=useState(null);
-  const filtered=filter==='all'?REPS:REPS.filter(r=>r.jurisdiction===filter);
+  const [zipInput,setZipInput]=useState(userZip||'');
+  const [activeZip,setActiveZip]=useState(userZip||'');
+
+  const getRepsForZip=(zip)=>{
+    if(!zip) return REPS;
+    const ids=ZIP_REPS[zip];
+    if(!ids) return REPS.filter(r=>r.jurisdiction==='State of Michigan'||r.jurisdiction==='Jackson County');
+    return REPS.filter(r=>ids.includes(r.id));
+  };
+
+  const baseReps = activeZip ? getRepsForZip(activeZip) : REPS;
+  const filtered = filter==='all' ? baseReps : baseReps.filter(r=>r.jurisdiction===filter);
 
   const getAlignment=rep=>{
     const b=bills.filter(b=>rep.votes[b.id]&&rep.votes[b.id].vote!=='not-recorded');
-    if(!b.length)return null;
+    if(!b.length) return null;
     const aligned=b.filter(b=>{const cw=b.votes_yes>b.votes_no?'yes':'no';return rep.votes[b.id].vote===cw;}).length;
     return Math.round(aligned/b.length*100);
   };
   const voteColor=v=>v==='yes'?'#1a6b3c':v==='no'?'#c0392b':'#888';
   const voteBg=v=>v==='yes'?'#eef7f1':v==='no'?'#fdf0ef':'#f5f5f5';
-  const voteLabel=v=>v==='yes'?'✅ Yes':v==='no'?'❌ No':v==='abstain'?'⬜ Abstain':'- Not Recorded';
+  const voteLabel=v=>v==='yes'?'Yes':v==='no'?'No':v==='abstain'?'Abstain':'Not Recorded';
 
   return h('div',null,
-    h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 14px',marginBottom:16,display:'flex',gap:10,alignItems:'flex-start'}},
-      h('span',{style:{fontSize:20,flexShrink:0}},"⚖️"),
+    h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 14px',marginBottom:14,display:'flex',gap:10,alignItems:'flex-start'}},
+      h('span',{style:{fontSize:20,flexShrink:0}},'\u2696\uFE0F'),
       h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7}},
-        h('strong',{style:{color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},"Accountability Tracker")," - How your elected representatives voted vs. how the community voted. Sourced from public meeting minutes. ",h('em',null,"This platform takes no political position.")
+        h('strong',{style:{color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},'Accountability Tracker'),
+        ' - How your elected representatives voted vs. how the community voted. Sourced from public meeting minutes. ',
+        h('em',null,'This platform takes no political position.')
       )
     ),
-    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}},
-      [['all','All'],['City of Jackson','🏙 Jackson City'],['Village of Concord','🏘 Concord'],['State of Michigan','🏛 State MI'],['Jackson County','🏛 County']].map(([v,l])=>
-        h('button',{key:v,onClick:()=>setFilter(v),style:{background:filter===v?'#1a1a2e':'#fff',color:filter===v?'#f0c040':'#555',border:'1px solid '+(filter===v?'#1a1a2e':'#ddd'),padding:'7px 14px',borderRadius:20,fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:filter===v?700:400}},l)
+    h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'14px 16px',marginBottom:14}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:8}},'Find Your Representatives by ZIP Code'),
+      h('div',{style:{display:'flex',gap:8}},
+        h('input',{value:zipInput,onChange:e=>setZipInput(e.target.value),
+          onKeyDown:e=>e.key==='Enter'&&setActiveZip(zipInput),
+          placeholder:'e.g. 49237, 49201, 49230...',
+          style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'9px 12px',fontSize:14,fontFamily:"'Lora',serif"}
+        }),
+        h('button',{onClick:()=>setActiveZip(zipInput),
+          style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'9px 18px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}
+        },'Find'),
+        activeZip&&h('button',{onClick:()=>{setActiveZip('');setZipInput('');},
+          style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'9px 12px',borderRadius:6,cursor:'pointer',fontSize:13}
+        },'Clear')
+      ),
+      activeZip&&h('div',{style:{marginTop:8,fontSize:12,color:'#1a6b3c',fontWeight:600}},
+        'Showing '+filtered.length+' representatives for ZIP '+activeZip
       )
+    ),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}},
+      [['all','All'],['City of Jackson','Jackson City'],['Village of Concord','Concord'],['State of Michigan','State MI'],['Jackson County','County']].map(([v,l])=>
+        h('button',{key:v,onClick:()=>setFilter(v),
+          style:{background:filter===v?'#1a1a2e':'#fff',color:filter===v?'#f0c040':'#555',
+            border:'1px solid '+(filter===v?'#1a1a2e':'#ddd'),padding:'7px 14px',borderRadius:20,
+            fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:filter===v?700:400,cursor:'pointer'}
+        },l)
+      )
+    ),
+    filtered.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},
+      'No representatives found for that ZIP. Try 49201, 49237, or 49230.'
     ),
     filtered.map(rep=>{
       const alignment=getAlignment(rep);
       const repBills=bills.filter(b=>rep.votes[b.id]);
       const isOpen=selected===rep.id;
+      const partyColor=rep.party==='Republican'?'#c0392b':rep.party==='Democrat'?'#1a5c8a':'#888';
       return h('div',{key:rep.id,style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,marginBottom:12,overflow:'hidden',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}},
         h('div',{style:{padding:'14px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}},
-          h('div',{style:{width:44,height:44,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontFamily:"'Playfair Display',serif",fontSize:13,flexShrink:0}},rep.photo),
+          h('div',{style:{width:46,height:46,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontFamily:"'Playfair Display',serif",fontSize:13,flexShrink:0}},rep.photo),
           h('div',{style:{flex:1,minWidth:120}},
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#1a1a2e'}},rep.name),
-            h('div',{style:{fontSize:11,color:'#888'}},rep.title+" · "+rep.body),
-            h('div',{style:{fontSize:11,color:'#aaa'}},rep.party)
+            h('div',{style:{fontSize:12,color:'#555',marginTop:1}},rep.title),
+            h('div',{style:{fontSize:11,color:'#888'}},rep.body),
+            rep.party!=='Nonpartisan'&&h('span',{style:{fontSize:10,fontWeight:700,color:partyColor,textTransform:'uppercase',letterSpacing:1}},rep.party)
           ),
-          alignment!==null?h('div',{style:{textAlign:'center',minWidth:70}},
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:alignment>=70?'#1a6b3c':alignment>=40?'#8a6000':'#c0392b'}},alignment+"%"),
-            h('div',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1}},"With People"),
-            h('div',{style:{height:5,background:'#eee',borderRadius:3,marginTop:3,overflow:'hidden'}},
-              h('div',{style:{width:alignment+'%',height:'100%',background:alignment>=70?'#1a6b3c':alignment>=40?'#f0c040':'#c0392b',borderRadius:3}})
-            )
-          ):h('div',{style:{fontSize:12,color:'#bbb',fontStyle:'italic'}},"No data"),
-          h('button',{onClick:()=>setSelected(isOpen?null:rep.id),style:{background:'transparent',border:'1px solid #e0e0e0',borderRadius:6,padding:'7px 12px',fontFamily:"'Playfair Display',serif",fontSize:12,color:'#555'}},isOpen?"▲ Close":"▼ Votes")
+          alignment!==null
+            ? h('div',{style:{textAlign:'center',minWidth:70}},
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:alignment>=70?'#1a6b3c':alignment>=40?'#8a6000':'#c0392b'}},alignment+'%'),
+                h('div',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1}},'With People'),
+                h('div',{style:{height:5,background:'#eee',borderRadius:3,marginTop:3,overflow:'hidden'}},
+                  h('div',{style:{width:alignment+'%',height:'100%',background:alignment>=70?'#1a6b3c':alignment>=40?'#f0c040':'#c0392b',borderRadius:3}})
+                )
+              )
+            : h('div',{style:{fontSize:11,color:'#bbb',fontStyle:'italic'}},'No votes recorded'),
+          h('button',{onClick:()=>setSelected(isOpen?null:rep.id),
+            style:{background:'transparent',border:'1px solid #e0e0e0',borderRadius:6,padding:'7px 12px',fontFamily:"'Playfair Display',serif",fontSize:12,color:'#555',cursor:'pointer'}
+          },isOpen?'Close':'Details')
         ),
-        isOpen&&h('div',{style:{borderTop:'1px solid #f0ece4',padding:'14px 16px',background:'#faf8f3'}},
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:12}},"Official Votes vs. Community Sentiment"),
-          repBills.length===0&&h('div',{style:{color:'#bbb',fontStyle:'italic',fontSize:13}},"No recorded votes yet."),
+        isOpen&&h('div',{style:{borderTop:'1px solid #f0ece4',padding:'16px',background:'#faf8f3'}},
+          h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:14}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:8}},'Contact Information'),
+            h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}},
+                h('a',{href:'mailto:'+rep.contact,
+                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#1a1a2e',color:'#f0c040',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
+                },'Email '+rep.name.split(' ')[0]),
+                rep.phone&&h('a',{href:'tel:'+rep.phone.replace(/\D/g,''),
+                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#e8f2fa',color:'#1a5c8a',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
+                },rep.phone),
+                h('a',{href:'https://'+rep.website,target:'_blank',
+                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#f5f5f5',color:'#555',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontSize:13}
+                },'Website')
+              ),
+              rep.address&&h('div',{style:{fontSize:12,color:'#888'}},'Address: '+rep.address),
+              rep.notes&&h('div',{style:{fontSize:12,color:'#5b3a8c',fontStyle:'italic'}},rep.notes)
+            )
+          ),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:10}},'Official Votes vs. Community'),
+          repBills.length===0&&h('div',{style:{color:'#bbb',fontStyle:'italic',fontSize:13}},'No recorded votes yet.'),
           repBills.map(b=>{
             const rv=rep.votes[b.id];
             const total=b.votes_yes+b.votes_no+b.votes_abstain;
             const cw=b.votes_yes>b.votes_no?'yes':'no';
             const aligned=rv.vote!=='not-recorded'&&rv.vote===cw;
             const misaligned=rv.vote!=='not-recorded'&&rv.vote!==cw;
-            return h('div',{key:b.id,style:{marginBottom:14,paddingBottom:14,borderBottom:'1px solid #eee'}},
+            return h('div',{key:b.id,style:{marginBottom:12,paddingBottom:12,borderBottom:'1px solid #eee'}},
               h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:6}},b.title),
               h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:5}},
-                h('div',{style:{background:voteBg(rv.vote),color:voteColor(rv.vote),fontWeight:700,fontSize:12,padding:'4px 10px',borderRadius:20}},"Rep: "+voteLabel(rv.vote)),
-                h('div',{style:{background:'#f0f0f0',color:'#555',fontSize:12,padding:'4px 10px',borderRadius:20}},"Community: "+pct(b.votes_yes,total)+"% Support"),
-                aligned&&h('div',{style:{background:'#eef7f1',color:'#1a6b3c',fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20}},"✅ Aligned"),
-                misaligned&&h('div',{style:{background:'#fdf0ef',color:'#c0392b',fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20}},"⚠️ Against community")
+                h('div',{style:{background:voteBg(rv.vote),color:voteColor(rv.vote),fontWeight:700,fontSize:12,padding:'4px 10px',borderRadius:20}},'Rep: '+voteLabel(rv.vote)),
+                h('div',{style:{background:'#f0f0f0',color:'#555',fontSize:12,padding:'4px 10px',borderRadius:20}},'Community: '+pct(b.votes_yes,total)+'% Support'),
+                aligned&&h('div',{style:{background:'#eef7f1',color:'#1a6b3c',fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20}},'Aligned'),
+                misaligned&&h('div',{style:{background:'#fdf0ef',color:'#c0392b',fontSize:12,fontWeight:700,padding:'4px 10px',borderRadius:20}},'Against community')
               ),
-              rv.note&&h('div',{style:{fontSize:12,color:'#888',fontStyle:'italic'}},"📋 "+rv.note)
+              rv.note&&h('div',{style:{fontSize:12,color:'#888',fontStyle:'italic'}},'Source: '+rv.note)
             );
-          }),
-          h('div',{style:{display:'flex',gap:10,marginTop:8}},
-            h('a',{href:'mailto:'+rep.contact,style:{fontSize:12,color:'#1a5c8a',textDecoration:'none'}},"✉️ Contact "+rep.name.split(' ')[0]),
-            h('span',{style:{color:'#ddd'}},"·"),
-            h('a',{href:'https://'+rep.website,target:'_blank',style:{fontSize:12,color:'#1a5c8a',textDecoration:'none'}},"🌐 Website")
-          )
+          })
         )
       );
     })
@@ -2758,7 +2962,7 @@ function App() {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:3}},"Representative Accountability"),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888'}},"How your elected officials voted - compared to how you voted.")
         ),
-        h(RepTracker,{bills})
+        h(RepTracker,{bills,userZip:profile?.zip})
       ),
 
       // Admin tab
