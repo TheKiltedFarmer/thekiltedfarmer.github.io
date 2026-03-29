@@ -948,90 +948,45 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
   const isTrusted = (user?.reputation||0) >= 50;
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
 
- const fetchFromUrl = async () => {
-  if (!sourceUrl.trim()) {
-    setFetchMsg('Please enter a URL first.');
-    return;
-  }
-
-  setFetching(true);
-  setFetchMsg('Fetching page...');
-
-  try {
-    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(sourceUrl);
-    const res = await fetch(proxy);
-    const json = await res.json();
-
-    const raw = json.contents || '';
-
-    const text = raw
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 6000);
-
-    if (!text || text.length < 100) {
-      setFetchMsg('Could not read that page. Fill in the form manually.');
-      setFetching(false);
-      return;
+  const fetchFromUrl = async() => {
+    if(!sourceUrl.trim()){setFetchMsg('Please enter a URL first.');return;}
+    setFetching(true);setFetchMsg('Fetching page...');
+    try{
+      const proxy='https://api.allorigins.win/get?url='+encodeURIComponent(sourceUrl);
+      const res=await fetch(proxy);
+      const json=await res.json();
+      const raw=json.contents||'';
+      const text=raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+                    .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000);
+      if(!text||text.length<100){setFetchMsg('Could not read that page. Fill in the form manually.');setFetching(false);return;}
+      setFetchMsg('AI is reading the document...');
+      const aiRes=await fetch(AI_PROXY,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',max_tokens:1000,
+          system:'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
+          messages:[{role:'user',content:'Extract bill info from this page (source: '+sourceUrl+'):\n\n'+text}]
+        })
+      });
+      const aiJson=await aiRes.json();
+      const aiRaw=aiJson.content?.find(b=>b.type==='text')?.text||'{}';
+      const extracted=JSON.parse(aiRaw.replace(/```json|```/g,'').trim());
+      setForm(f=>({...f,
+        title:extracted.title||f.title,
+        level:extracted.level||f.level,
+        jurisdiction:extracted.jurisdiction||f.jurisdiction,
+        status:extracted.status||f.status,
+        introduced:extracted.introduced||f.introduced,
+        sponsor:extracted.sponsor||f.sponsor,
+        summary:extracted.summary||f.summary,
+        full_text:(extracted.full_text||f.full_text)+'\n\nSource: '+sourceUrl,
+      }));
+      setFetchMsg('✅ Fields filled in! Review carefully before submitting.');
+    }catch(e){
+      setFetchMsg('Could not fetch that page. Fill in the form manually.');
     }
-
-    setFetchMsg('AI is reading the document...');
-
-    const aiRes = await fetch(AI_PROXY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system:
-          'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
-        messages: [
-          {
-            role: 'user',
-            content:
-              'Extract bill info from this page (source: ' +
-              sourceUrl +
-              '):\n\n' +
-              text,
-          },
-        ],
-      }),
-    });
-
-    const aiJson = await aiRes.json();
-    const aiRaw =
-      aiJson.content?.find((b) => b.type === 'text')?.text || '{}';
-
-    const extracted = JSON.parse(
-      aiRaw.replace(/```json|```/g, '').trim()
-    );
-
-    // ✅ THIS WAS THE BROKEN PART — NOW FIXED
-    setForm((f) => ({
-      ...f,
-      title: extracted.title || f.title,
-      level: extracted.level || f.level,
-      jurisdiction: extracted.jurisdiction || f.jurisdiction,
-      status: extracted.status || f.status,
-      introduced: extracted.introduced || f.introduced,
-      sponsor: extracted.sponsor || f.sponsor,
-      summary: extracted.summary || f.summary,
-      full_text:
-        (extracted.full_text || f.full_text) +
-        '\n\nSource: ' +
-        sourceUrl,
-    }));
-
-    setFetchMsg('✅ Fields filled in! Review carefully before submitting.');
-  } catch (e) {
-    setFetchMsg('Could not fetch that page. Fill in the form manually.');
-  }
-
-  setFetching(false);
-};
+    setFetching(false);
   };
 
   // Check for duplicate
@@ -2070,139 +2025,6 @@ function CommunityHub({user, profile}) {
 }
 
 // ── Rep Contact Tracker ───────────────────────────────────────────────────────
-
-  const repInfo = repLevel(rep);
-  const votedBills = bills.filter(b=>userVotes[b.id]);
-  const displayName = profile?.display_name||user.email?.split('@')[0]||'Resident';
-  const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Recently';
-  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url||null);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef(null);
-
-  const voteBreakdown = votedBills.reduce((acc,b)=>{
-    const v = userVotes[b.id];
-    if(v) acc[v.choice] = (acc[v.choice]||0)+1;
-    return acc;
-  },{});
-
-  const handleAvatarUpload = async(e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    if(file.size > 2*1024*1024) { alert('Image must be under 2MB'); return; }
-    setUploading(true);
-    try {
-      // Convert to base64 data URL for simple storage
-      const reader = new FileReader();
-      reader.onload = async(ev) => {
-        const dataUrl = ev.target.result;
-        // Store in profiles table
-        await sb.from('profiles').update({avatar_url:dataUrl}).eq('id',user.id);
-        setAvatarUrl(dataUrl);
-        if(onProfileUpdate) onProfileUpdate({avatar_url:dataUrl});
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch(e) {
-      setUploading(false);
-      alert('Upload failed. Try a smaller image.');
-    }
-  };
-
-  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'flex-start',justifyContent:'center',zIndex:9000,padding:16,overflowY:'auto'}},
-    h('div',{style:{background:'#f4f1ea',borderRadius:14,width:500,maxWidth:'100%',marginTop:20,boxShadow:'0 30px 60px rgba(0,0,0,.3)'}},
-      // Header
-      h('div',{style:{background:'#1a1a2e',borderRadius:'14px 14px 0 0',padding:'24px 24px 20px',position:'relative'}},
-        h('button',{onClick:onClose,style:{position:'absolute',top:16,right:16,background:'transparent',border:'none',color:'#8899aa',fontSize:20,cursor:'pointer',lineHeight:1}},'x'),
-        h('div',{style:{display:'flex',gap:16,alignItems:'center'}},
-          // Avatar with upload
-          h('div',{style:{position:'relative',flexShrink:0}},
-            avatarUrl
-              ? h('img',{src:avatarUrl,alt:'Profile',style:{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'3px solid #f0c040'}})
-              : h('div',{style:{width:64,height:64,borderRadius:'50%',background:'#f0c040',color:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:26,border:'3px solid #f0c040'}},
-                  displayName[0].toUpperCase()
-                ),
-            h('button',{
-              onClick:()=>fileRef.current&&fileRef.current.click(),
-              title:'Change profile photo',
-              style:{position:'absolute',bottom:0,right:0,width:22,height:22,borderRadius:'50%',background:'#f0c040',border:'2px solid #1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:11,lineHeight:1}
-            }, uploading?'..':'📷'),
-            h('input',{ref:fileRef,type:'file',accept:'image/*',onChange:handleAvatarUpload,style:{display:'none'}})
-          ),
-          h('div',null,
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040'}},displayName),
-            h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'Member since '+joinDate),
-            profile?.full_address&&h('div',{style:{fontSize:12,color:'#8899aa',marginTop:2}},'📍 '+profile.full_address),
-            h('div',{style:{fontSize:11,color:'#5b9a6c',marginTop:4,fontWeight:600}},'✅ Self-Attested Resident'),
-            h('div',{style:{fontSize:10,color:'#556677',marginTop:2}},'Tap 📷 to add a profile photo')
-          )
-        )
-      ),
-
-      h('div',{style:{padding:20}},
-        // Reputation
-        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14,display:'flex',gap:14,alignItems:'center'}},
-          h('div',{style:{fontSize:36}},repInfo.icon),
-          h('div',{style:{flex:1}},
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#1a1a2e'}},rep+' Reputation Points'),
-            h('div',{style:{fontWeight:700,color:repInfo.color,fontSize:14,marginBottom:4}},repInfo.label),
-            h('div',{style:{height:8,background:'#eee',borderRadius:4,overflow:'hidden'}},
-              h('div',{style:{width:Math.min(100,(rep/100*100))+'%',height:'100%',background:repInfo.color,borderRadius:4}})
-            ),
-            h('div',{style:{fontSize:11,color:'#aaa',marginTop:4}},
-              rep<50?'Earn '+(50-rep)+' more rep to propose projects and get trusted-resident status':'✓ Trusted Resident — can propose projects and submissions'
-            )
-          )
-        ),
-
-        // Voting stats
-        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:12}},'🗳 Your Voting Record'),
-          votedBills.length===0
-            ? h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13}},'No votes cast yet. Head to the Bills tab to get started.')
-            : h('div',null,
-                h('div',{style:{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}},
-                  h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
-                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#1a6b3c'}},voteBreakdown.yes||0),
-                    h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700}},'Supported')
-                  ),
-                  h('div',{style:{background:'#fdf0ef',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
-                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#c0392b'}},voteBreakdown.no||0),
-                    h('div',{style:{fontSize:11,color:'#c0392b',fontWeight:700}},'Opposed')
-                  ),
-                  h('div',{style:{background:'#f5f5f5',borderRadius:8,padding:'10px 16px',textAlign:'center',flex:1}},
-                    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#888'}},voteBreakdown.abstain||0),
-                    h('div',{style:{fontSize:11,color:'#888',fontWeight:700}},'Abstained')
-                  )
-                ),
-                votedBills.map(b=>{
-                  const v=userVotes[b.id];
-                  const emoji=v?.choice==='yes'?'✅':v?.choice==='no'?'❌':'⬜';
-                  return h('div',{key:b.id,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #f0ece4',fontSize:13}},
-                    h('div',{style:{flex:1,color:'#333',fontFamily:"'Lora',serif",lineHeight:1.4}},b.title),
-                    h('div',{style:{display:'flex',gap:8,alignItems:'center',flexShrink:0,marginLeft:10}},
-                      h('span',null,emoji),
-                      v?.anonymous&&h('span',{style:{fontSize:10,color:'#bbb'}},'🔒')
-                    )
-                  );
-                })
-              )
-        ),
-
-        // Rep earning guide
-        h('div',{style:{background:'#fff',borderRadius:10,padding:16}},
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:10}},'Earn More Reputation'),
-          [['🗳 Vote on a bill','+5 rep'],['💬 Post a comment','+10 rep'],['🤲 Pledge to a project','+15 rep'],['🌱 Propose a project','Need 50 rep'],['✅ Submit a bill','Builds community trust']].map(([a,b])=>
-            h('div',{key:a,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f5f5f5',fontSize:13}},
-              h('span',{style:{color:'#555'}},a),
-              h('span',{style:{color:'#1a6b3c',fontWeight:700}},b)
-            )
-          )
-        )
-      )
-    )
-  );
-}
-
 // ── Rep Contact Tracker ───────────────────────────────────────────────────────
 function RepContactTracker({bill, user}) {
   const [contacts, setContacts] = useState([]);
