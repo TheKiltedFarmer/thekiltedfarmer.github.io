@@ -3482,11 +3482,7 @@ function App() {
 
   const [memberCount,setMemberCount]=useState(null);
 
-  useEffect(()=>{
-    // Load member count
-    sb.from('profiles').select('id',{count:'exact',head:true})
-      .then(({count})=>{ if(count!==null) setMemberCount(count); });
-  },[]);
+  useEffect(()=>{initApp();},[]);
 
   const initApp=async()=>{
     // Hard timeout - if Supabase hangs, show app with local data after 5s
@@ -3511,6 +3507,9 @@ function App() {
     }finally{
       clearTimeout(timeout);
       setLoading(false);
+      // Load member count after app is ready
+      sb.from('profiles').select('id',{count:'exact',head:true})
+        .then(({count})=>{ if(count!==null) setMemberCount(count); });
     }
   };
 
