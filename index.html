@@ -839,8 +839,43 @@ function EmailRepButtons({bill,choice,user}) {
     setContactCount(c=>(c||0)+1);
   };
 
-  const relevant = REPS.filter(r=>r.votes[bill.id]||r.jurisdiction===bill.jurisdiction).slice(0,3);
+  // Match reps to bills by level — this is the key fix
+  const getRelevantReps = ()=>{
+    const level = bill.level||'';
+    const juris = (bill.jurisdiction||'').toLowerCase();
+
+    if(level==='federal') {
+      // Federal bills — show both state reps + state senator (they vote on federal too)
+      return REPS.filter(r=>
+        r.jurisdiction==='State of Michigan' || r.jurisdiction==='Jackson County'
+      ).slice(0,4);
+    }
+    if(level==='state') {
+      // State bills — show state reps + senator
+      return REPS.filter(r=>r.jurisdiction==='State of Michigan');
+    }
+    if(level==='county') {
+      return REPS.filter(r=>r.jurisdiction==='Jackson County');
+    }
+    if(level==='city'||juris.includes('jackson')) {
+      return REPS.filter(r=>r.body==='Jackson City Council'||r.id==='r1').slice(0,4);
+    }
+    if(level==='village'||juris.includes('concord')) {
+      return REPS.filter(r=>r.body==='Village of Concord Council');
+    }
+    if(level==='township') {
+      return REPS.filter(r=>r.jurisdiction==='Jackson County'||r.jurisdiction==='State of Michigan').slice(0,3);
+    }
+    // Fallback — anyone who has voted on this bill or jurisdiction match
+    const byVote = REPS.filter(r=>r.votes[bill.id]);
+    if(byVote.length) return byVote;
+    return REPS.filter(r=>r.jurisdiction==='State of Michigan');
+  };
+
+  const relevant = getRelevantReps().slice(0,4);
+
   if(!relevant.length) return h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginTop:6}},"No rep contact info on file for this bill yet.");
+
   return h('div',null,
     contactCount>0&&h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:600,marginBottom:6}},
       '📬 '+contactCount+' resident'+(contactCount===1?'':'s')+' have emailed their rep about this bill'
@@ -860,8 +895,10 @@ function EmailRepButtons({bill,choice,user}) {
         return h('a',{key:rep.id,
           href:`mailto:${rep.contact}?subject=${subject}&body=${body}`,
           onClick:()=>logContact(rep.name),
-          style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:5,padding:'7px 12px',fontSize:12,color:'#8a6000',textDecoration:'none',fontFamily:"'Playfair Display',serif",fontWeight:700,display:'inline-flex',alignItems:'center',gap:4}
-        },"✉️ Email "+rep.name.split(" ").pop());
+          style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:5,padding:'7px 12px',
+            fontSize:12,color:'#8a6000',textDecoration:'none',fontFamily:"'Playfair Display',serif",
+            fontWeight:700,display:'inline-flex',alignItems:'center',gap:4}
+        },"✉️ "+rep.name.split(" ").slice(-1)[0]+" ("+rep.title.split(",")[0]+")");
       })
     )
   );
@@ -2274,7 +2311,7 @@ function RepContactTracker({bill, user}) {
 }
 
 // ── Auth Screen ───────────────────────────────────────────────────────────────
-function AuthScreen({onAuth}) {
+function AuthScreen({onAuth, onGuest}) {
   const [mode,setMode]=useState('login');
   const [email,setEmail]=useState('');
   const [pass,setPass]=useState('');
@@ -2361,6 +2398,13 @@ function AuthScreen({onAuth}) {
           h('div',{style:{marginTop:8,paddingTop:8,borderTop:'1px solid #e5dece',fontSize:11,color:'#aaa',lineHeight:1.6}},
             "⚖️ Nonpartisan · Independent · Not affiliated with any government or party.",h('br'),
             h('strong',null,"Your votes are unofficial - but your voice is real.")
+          ),
+          // Guest mode
+          onGuest&&h('div',{style:{marginTop:12,paddingTop:12,borderTop:'1px solid #e5dece',textAlign:'center'}},
+            h('button',{onClick:onGuest,
+              style:{background:'transparent',border:'none',color:'#aaa',fontSize:12,
+                cursor:'pointer',fontFamily:"'Lora',serif",textDecoration:'underline'}
+            },'👁 Browse as guest — view bills without an account')
           )
         )
       ),
@@ -3599,6 +3643,7 @@ function App() {
   const [showAdmin,setShowAdmin]=useState(false);
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [showProfile,setShowProfile]=useState(false);
+  const [guestMode,setGuestMode]=useState(false);
 
   const [memberCount,setMemberCount]=useState(null);
 
@@ -3669,7 +3714,7 @@ function App() {
   const [keywordSearch,setKeywordSearch]=useState('');
 
   if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
-  if(!user)return h(AuthScreen,{onAuth:handleAuth});
+  if(!user&&!guestMode)return h(AuthScreen,{onAuth:handleAuth,onGuest:()=>setGuestMode(true)});
 
   const repInfo=repLevel(rep);
   const canPropose=rep>=REP_TO_PROPOSE;
@@ -3708,7 +3753,7 @@ function App() {
 
   const filteredBills = getFilteredBills();
   const totalVotes=bills.reduce((a,b)=>a+b.votes_yes+b.votes_no+b.votes_abstain,0);
-  const displayName=profile?.display_name||user.email.split('@')[0];
+  const displayName=profile?.display_name||(user?.email?.split('@')[0])||'Guest';
 
   return h('div',{style:{minHeight:'100vh',background:'#f4f1ea'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
@@ -3716,6 +3761,17 @@ function App() {
     showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0]}),
     showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates}))}),
     h(FeedbackButton,{user}),
+
+    // Guest mode banner
+    guestMode&&h('div',{style:{background:'#f0c040',padding:'10px 16px',textAlign:'center',display:'flex',gap:12,alignItems:'center',justifyContent:'center',flexWrap:'wrap'}},
+      h('span',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e'}},
+        '👁 You are browsing as a guest — votes, comments and community features require an account.'
+      ),
+      h('button',{onClick:()=>setGuestMode(false),
+        style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'6px 16px',borderRadius:6,
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}
+      },'Sign Up / Sign In')
+    ),
 
     // Header
     h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
