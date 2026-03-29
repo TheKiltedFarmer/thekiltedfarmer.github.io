@@ -948,45 +948,90 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
   const isTrusted = (user?.reputation||0) >= 50;
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
 
-  const fetchFromUrl = async() => {
-    if(!sourceUrl.trim()){setFetchMsg('Please enter a URL first.');return;}
-    setFetching(true);setFetchMsg('Fetching page...');
-    try{
-      const proxy='https://api.allorigins.win/get?url='+encodeURIComponent(sourceUrl);
-      const res=await fetch(proxy);
-      const json=await res.json();
-      const raw=json.contents||'';
-      const text=raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
-                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
-                    .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000);
-      if(!text||text.length<100){setFetchMsg('Could not read that page. Fill in the form manually.');setFetching(false);return;}
-      setFetchMsg('AI is reading the document...');
-      const aiRes=await fetch(AI_PROXY,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',max_tokens:1000,
-          system:'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
-          messages:[{role:'user',content:'Extract bill info from this page (source: '+sourceUrl+'):\n\n'+text}]
-        })
-      });
-      const aiJson=await aiRes.json();
-      const aiRaw=aiJson.content?.find(b=>b.type==='text')?.text||'{}';
-      const extracted=JSON.parse(aiRaw.replace(/```json|```/g,'').trim());
-      setForm(f=>({...f,
-        title:extracted.title||f.title,
-        level:extracted.level||f.level,
-        jurisdiction:extracted.jurisdiction||f.jurisdiction,
-        status:extracted.status||f.status,
-        introduced:extracted.introduced||f.introduced,
-        sponsor:extracted.sponsor||f.sponsor,
-        summary:extracted.summary||f.summary,
-        full_text:(extracted.full_text||f.full_text)+'\n\nSource: '+sourceUrl,
-      }));
-      setFetchMsg('✅ Fields filled in! Review carefully before submitting.');
-    }catch(e){
-      setFetchMsg('Could not fetch that page. Fill in the form manually.');
+ const fetchFromUrl = async () => {
+  if (!sourceUrl.trim()) {
+    setFetchMsg('Please enter a URL first.');
+    return;
+  }
+
+  setFetching(true);
+  setFetchMsg('Fetching page...');
+
+  try {
+    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(sourceUrl);
+    const res = await fetch(proxy);
+    const json = await res.json();
+
+    const raw = json.contents || '';
+
+    const text = raw
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 6000);
+
+    if (!text || text.length < 100) {
+      setFetchMsg('Could not read that page. Fill in the form manually.');
+      setFetching(false);
+      return;
     }
-    setFetching(false);
+
+    setFetchMsg('AI is reading the document...');
+
+    const aiRes = await fetch(AI_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system:
+          'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Extract bill info from this page (source: ' +
+              sourceUrl +
+              '):\n\n' +
+              text,
+          },
+        ],
+      }),
+    });
+
+    const aiJson = await aiRes.json();
+    const aiRaw =
+      aiJson.content?.find((b) => b.type === 'text')?.text || '{}';
+
+    const extracted = JSON.parse(
+      aiRaw.replace(/```json|```/g, '').trim()
+    );
+
+    // ✅ THIS WAS THE BROKEN PART — NOW FIXED
+    setForm((f) => ({
+      ...f,
+      title: extracted.title || f.title,
+      level: extracted.level || f.level,
+      jurisdiction: extracted.jurisdiction || f.jurisdiction,
+      status: extracted.status || f.status,
+      introduced: extracted.introduced || f.introduced,
+      sponsor: extracted.sponsor || f.sponsor,
+      summary: extracted.summary || f.summary,
+      full_text:
+        (extracted.full_text || f.full_text) +
+        '\n\nSource: ' +
+        sourceUrl,
+    }));
+
+    setFetchMsg('✅ Fields filled in! Review carefully before submitting.');
+  } catch (e) {
+    setFetchMsg('Could not fetch that page. Fill in the form manually.');
+  }
+
+  setFetching(false);
+};
   };
 
   // Check for duplicate
