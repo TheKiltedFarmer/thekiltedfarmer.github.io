@@ -1089,6 +1089,72 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
   );
 }
 
+// ── Nominate a Bill (lightweight) ────────────────────────────────────────────
+function NominateBillPanel({user, onToast}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({title:'', url:'', note:''});
+  const [saving, setSaving] = useState(false);
+  const set = k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+
+  const submit = async()=>{
+    if(!form.title.trim()) { onToast('Please enter the bill name.'); return; }
+    setSaving(true);
+    await sb.from('bill_nominations').insert({
+      title: form.title.trim(),
+      source_url: form.url.trim()||null,
+      note: form.note.trim()||null,
+      submitted_by_id: user.id,
+      submitted_by_name: user.display_name||user.email?.split('@')[0]||'Resident',
+      created_at: new Date().toISOString()
+    });
+    onToast('📬 Bill nominated! Justin will review and add it to the platform.');
+    setForm({title:'',url:'',note:''});
+    setOpen(false);
+    setSaving(false);
+  };
+
+  return h('div',{style:{background:'#fff',border:'2px solid #1a5c8a',borderRadius:10,padding:18,marginTop:20,marginBottom:8}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:open?12:0}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e'}},'💡 Nominate a Bill to Track'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',marginTop:2}},'Heard about legislation that should be on here? Nominate it in 30 seconds — Justin reviews and adds it.')
+      ),
+      h('button',{onClick:()=>setOpen(!open),
+        style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'9px 18px',borderRadius:7,
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}
+      },open?'Cancel':'+ Nominate')
+    ),
+    open&&h('div',{style:{marginTop:12}},
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Bill Name / Title *'),
+        h('input',{value:form.title,onChange:set('title'),
+          placeholder:'e.g. "Make Billionaires Pay Their Fair Share Act" or "Michigan Clean Water Bill"',
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 12px',fontSize:14,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+      ),
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Source Link (optional but helpful)'),
+        h('input',{value:form.url,onChange:set('url'),
+          placeholder:'congress.gov, legislature.mi.gov, news article, etc.',
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 12px',fontSize:14,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+      ),
+      h('div',{style:{marginBottom:14}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Why does this matter to Jackson County? (optional)'),
+        h('textarea',{value:form.note,onChange:set('note'),rows:2,
+          placeholder:'Briefly explain why this legislation is relevant to our community...',
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 12px',fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
+      ),
+      h('div',{style:{background:'#e8f2fa',borderRadius:7,padding:'10px 12px',marginBottom:12,fontSize:12,color:'#1a5c8a',lineHeight:1.6}},
+        '📬 Your nomination goes directly to Justin. He reviews it and — if it\'s a real bill affecting Jackson County residents — adds it to the platform so everyone can vote on it.'
+      ),
+      h('button',{onClick:submit,disabled:saving||!form.title.trim(),
+        style:{background:saving||!form.title.trim()?'#ccc':'#1a5c8a',color:'#fff',border:'none',
+          padding:'11px 24px',borderRadius:7,fontFamily:"'Playfair Display',serif",
+          fontWeight:700,fontSize:14,cursor:'pointer',width:'100%'}
+      },saving?'Submitting...':'Submit Nomination')
+    )
+  );
+}
+
 // ── Community Bill Submission System ─────────────────────────────────────────
 function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
   const [open, setOpen] = useState(false);
@@ -3183,6 +3249,59 @@ function OfficialManager({onToast}) {
                 style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}              },'🏛 Grant Badge')            : h('button',{onClick:()=>revokeOfficial(r),
                 style:{background:'transparent',border:'1px solid #ddd',color:'#c0392b',padding:'7px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}              },'Remove')        ))      )    )  );}
 
+function NominationsInbox({onToast}) {
+  const [nominations, setNominations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(()=>{
+    sb.from('bill_nominations').select('*').order('created_at',{ascending:false})
+      .then(({data})=>{ setNominations(data||[]); setLoading(false); });
+  },[]);
+
+  const dismiss = async(id)=>{
+    await sb.from('bill_nominations').delete().eq('id',id);
+    setNominations(prev=>prev.filter(n=>n.id!==id));
+    onToast('Nomination dismissed.');
+  };
+
+  const unread = nominations.length;
+
+  return h('div',{style:{background:'#f0f8ff',border:'1px solid #c8d8f0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:open?14:0,cursor:'pointer'},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '💡 Bill Nominations',
+        unread>0&&h('span',{style:{background:'#1a5c8a',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},unread)
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open&&h('div',null,
+      loading&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+      !loading&&nominations.length===0&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa',fontStyle:'italic'}},'No nominations yet.'),
+      nominations.map(n=>h('div',{key:n.id,
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:8}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},n.title),
+        n.note&&h('div',{style:{fontSize:13,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6,marginBottom:6}},n.note),
+        h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:8}},
+          h('span',{style:{fontSize:12,color:'#888'}},'From: '+n.submitted_by_name),
+          h('span',{style:{fontSize:11,color:'#bbb'}},new Date(n.created_at).toLocaleDateString()),
+          n.source_url&&h('a',{href:n.source_url,target:'_blank',
+            style:{fontSize:12,color:'#1a5c8a',textDecoration:'none'}},'📎 Source link')
+        ),
+        h('div',{style:{display:'flex',gap:8}},
+          n.source_url&&h('a',{href:n.source_url,target:'_blank',
+            style:{background:'#1a5c8a',color:'#fff',textDecoration:'none',padding:'6px 14px',borderRadius:5,
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}
+          },'View & Add to App'),
+          h('button',{onClick:()=>dismiss(n.id),
+            style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}
+          },'Dismiss')
+        )
+      ))
+    )
+  );
+}
+
 // ── Admin Panel ───────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = "PeoplesVoice2025!";
 const LEVELS = ['village','city','township','state','federal','county'];
@@ -3353,6 +3472,7 @@ function AdminPanel({bills,setBills,onToast}) {
     // Pending community submissions review queue
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
+    h(NominationsInbox,{onToast}),
     h(FeedbackInbox,{onToast}),
     h(OfficialManager,{onToast}),
 
@@ -3705,7 +3825,10 @@ function App() {
           pendingBills.map((bill,i)=>h(PendingBillCard,{key:bill.id||i,bill,user:{...user,reputation:rep},onCosign:loadPendingBills,onToast:setToast}))
         ),
 
-        // Community submit panel
+        // Nominate a bill (lightweight)
+        h(NominateBillPanel,{user:{...user,reputation:rep},onToast:setToast}),
+
+        // Community submit panel (full)
         h(CommunitySubmitPanel,{
           user:{...user,reputation:rep},
           bills,
