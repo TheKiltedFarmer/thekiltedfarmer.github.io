@@ -433,6 +433,157 @@ function Btn({onClick,bg,color,border,children,style,disabled}) {
   return h('button',{onClick,disabled,style:Object.assign({background:bg||'#1a1a2e',color:color||'#f0c040',border:border||'none',padding:'9px 18px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13},style)},children);
 }
 
+
+// ── Bill Status Badge ─────────────────────────────────────────────────────────
+function getStatusBadge(status) {
+  if(!status) return {label:'Unknown', bg:'#f0f0f0', color:'#888', icon:'⬜'};
+  const s = status.toLowerCase();
+  if(s.includes('signed') || s.includes('enacted') || s.includes('passed') && s.includes('law'))
+    return {label:'Signed into Law', bg:'#eef7f1', color:'#1a6b3c', icon:'✅'};
+  if(s.includes('passed') && (s.includes('senate') || s.includes('house') || s.includes('committee') || s.includes('ballot')))
+    return {label:'Passed', bg:'#e8f2fa', color:'#1a5c8a', icon:'🗳'};
+  if(s.includes('failed') || s.includes('rejected') || s.includes('vetoed'))
+    return {label:'Failed / Vetoed', bg:'#fdf0ef', color:'#c0392b', icon:'❌'};
+  if(s.includes('withdrawn') || s.includes('tabled'))
+    return {label:'Withdrawn', bg:'#f5f5f5', color:'#888', icon:'🚫'};
+  if(s.includes('debate') || s.includes('senate') || s.includes('active') || s.includes('consideration') || s.includes('committee'))
+    return {label:'Active / In Progress', bg:'#fff8e7', color:'#8a6000', icon:'⚡'};
+  if(s.includes('pending') || s.includes('review') || s.includes('introduced'))
+    return {label:'Pending', bg:'#f5f0fb', color:'#5b3a8c', icon:'⏳'};
+  if(s.includes('executive') || s.includes('order') || s.includes('effect'))
+    return {label:'In Effect', bg:'#eef7f1', color:'#1a6b3c', icon:'📋'};
+  return {label:'Active', bg:'#fff8e7', color:'#8a6000', icon:'⚡'};
+}
+
+function StatusBadge({status}) {
+  const b = getStatusBadge(status);
+  return h('span',{
+    title: status,
+    style:{display:'inline-flex',alignItems:'center',gap:4,background:b.bg,color:b.color,
+      fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:20,
+      textTransform:'uppercase',letterSpacing:.5,fontFamily:"'Lora',serif",whiteSpace:'nowrap'}
+  }, b.icon+' '+b.label);
+}
+
+// ── Bill Change Log ───────────────────────────────────────────────────────────
+function BillChangeLog({bill}) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({status:'',note:'',source:''});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(()=>{
+    sb.from('bill_changelog').select('*').eq('bill_id',bill.id).order('created_at',{ascending:false})
+      .then(({data})=>{ setLogs(data||[]); setLoading(false); });
+  },[bill.id]);
+
+  const addEntry = async()=>{
+    if(!form.status.trim()) return;
+    setSaving(true);
+    const entry = {
+      bill_id: bill.id,
+      bill_title: bill.title,
+      status: form.status.trim(),
+      note: form.note.trim(),
+      source_url: form.source.trim()||null,
+      created_at: new Date().toISOString()
+    };
+    const {data,error} = await sb.from('bill_changelog').insert(entry).select().single();
+    if(!error) {
+      setLogs(prev=>[data||entry,...prev]);
+      setForm({status:'',note:'',source:''});
+      setShowAdd(false);
+    }
+    setSaving(false);
+  };
+
+  const statusIcon = (s)=>{
+    const sl = (s||'').toLowerCase();
+    if(sl.includes('signed')||sl.includes('law')||sl.includes('enacted')) return '✅';
+    if(sl.includes('passed')) return '🗳';
+    if(sl.includes('failed')||sl.includes('veto')) return '❌';
+    if(sl.includes('introduced')) return '📋';
+    if(sl.includes('debate')||sl.includes('senate')||sl.includes('committee')) return '⚡';
+    if(sl.includes('amended')) return '✏️';
+    return '📌';
+  };
+
+  return h('div',{style:{marginTop:10}},
+    h('button',{
+      onClick:()=>setOpen(!open),
+      style:{width:'100%',background:'#f5f3ee',border:'1px solid #e5dece',borderRadius:7,
+        padding:'10px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+        color:'#1a1a2e',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}
+    },
+      h('span',null,'📋 Bill History '+(logs.length>0?'('+logs.length+')':'')),
+      h('span',{style:{fontSize:11,color:'#aaa'}},open?'▲':'▼')
+    ),
+    open&&h('div',{style:{border:'1px solid #e5dece',borderTop:'none',borderRadius:'0 0 7px 7px',background:'#fff',padding:14}},
+      // Seed with current status as first entry if no logs
+      logs.length===0&&!loading&&h('div',null,
+        h('div',{style:{background:'#f5f3ee',borderRadius:7,padding:'10px 12px',marginBottom:10,display:'flex',gap:10,alignItems:'flex-start'}},
+          h('div',{style:{fontSize:18,flexShrink:0}},'📋'),
+          h('div',null,
+            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e'}},bill.status),
+            h('div',{style:{fontSize:11,color:'#aaa',marginTop:2}},'Current status · Introduced '+bill.introduced),
+            bill.sponsor&&h('div',{style:{fontSize:11,color:'#888',marginTop:1}},'Sponsor: '+bill.sponsor)
+          )
+        ),
+        h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',textAlign:'center',marginBottom:8}},'No status changes logged yet.')
+      ),
+      logs.map((log,i)=>h('div',{key:log.id||i,style:{display:'flex',gap:10,marginBottom:12,alignItems:'flex-start'}},
+        h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}},
+          h('div',{style:{width:32,height:32,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',
+            display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},
+            statusIcon(log.status)
+          ),
+          i<logs.length-1&&h('div',{style:{width:2,height:20,background:'#e5dece',margin:'4px auto'}})
+        ),
+        h('div',{style:{flex:1,paddingTop:4}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e'}},log.status),
+          log.note&&h('div',{style:{fontSize:12,color:'#555',marginTop:3,lineHeight:1.6,fontFamily:"'Lora',serif"}},log.note),
+          h('div',{style:{display:'flex',gap:10,marginTop:4,flexWrap:'wrap',alignItems:'center'}},
+            h('span',{style:{fontSize:11,color:'#bbb'}},new Date(log.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})),
+            log.source_url&&h('a',{href:log.source_url,target:'_blank',
+              style:{fontSize:11,color:'#1a5c8a',textDecoration:'none'}
+            },'📎 Source')
+          )
+        )
+      )),
+
+      // Add entry form
+      showAdd
+        ? h('div',{style:{background:'#f9f8f5',borderRadius:7,padding:12,marginTop:8,border:'1px solid #e5dece'}},
+            h('div',{style:{fontSize:12,color:'#888',fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:8}},'Add Status Update'),
+            h('input',{value:form.status,onChange:e=>setForm(f=>({...f,status:e.target.value})),
+              placeholder:'New status (e.g. "Passed Senate 52-48")',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',marginBottom:6,fontFamily:"'Lora',serif"}}),
+            h('textarea',{value:form.note,onChange:e=>setForm(f=>({...f,note:e.target.value})),
+              placeholder:'What changed? Any context worth knowing...',rows:2,
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',marginBottom:6,resize:'vertical',fontFamily:"'Lora',serif"}}),
+            h('input',{value:form.source,onChange:e=>setForm(f=>({...f,source:e.target.value})),
+              placeholder:'Source URL (optional)',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',marginBottom:8,fontFamily:"'Lora',serif"}}),
+            h('div',{style:{display:'flex',gap:8}},
+              h('button',{onClick:addEntry,disabled:saving||!form.status.trim(),
+                style:{background:saving||!form.status.trim()?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',
+                  padding:'8px 16px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}
+              },saving?'Saving...':'Add Update'),
+              h('button',{onClick:()=>setShowAdd(false),
+                style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'8px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}
+              },'Cancel')
+            )
+          )
+        : h('button',{onClick:()=>setShowAdd(true),
+            style:{width:'100%',marginTop:8,background:'transparent',border:'1px dashed #ddd',
+              color:'#aaa',padding:'8px',borderRadius:5,fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}
+          },'+ Log a status update')
+    )
+  );
+}
+
 // ── AI Breakdown ──────────────────────────────────────────────────────────────
 function AIBreakdown({bill}) {
   const [data,setData]=useState(null);
@@ -838,7 +989,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
       h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}},
         h(Tag,{bg:meta.bg,color:meta.color},meta.icon+" "+meta.label),
         h(Tag,{bg:'#f5f5f5',color:'#555'},bill.jurisdiction),
-        h(Tag,{bg:'#fffbea',color:'#8a6000'},bill.status)
+        h(StatusBadge,{status:bill.status})
       ),
       h('h3',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e',margin:'0 0 6px',lineHeight:1.3}},bill.title),
       h('div',{style:{fontSize:12,color:'#aaa',marginBottom:8}},"Introduced "+bill.introduced+" · "+bill.sponsor),
@@ -916,6 +1067,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
       tab==='ai'&&h(Fragment,null,
         h(AIBreakdown,{bill}),
         h(BillSections,{bill,user,onRepGain}),
+        h(BillChangeLog,{bill}),
         h(AIChat,{bill})
       ),
       tab==='forum'&&h('div',null,
@@ -3328,7 +3480,13 @@ function App() {
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [showProfile,setShowProfile]=useState(false);
 
-  useEffect(()=>{initApp();},[]);
+  const [memberCount,setMemberCount]=useState(null);
+
+  useEffect(()=>{
+    // Load member count
+    sb.from('profiles').select('id',{count:'exact',head:true})
+      .then(({count})=>{ if(count!==null) setMemberCount(count); });
+  },[]);
 
   const initApp=async()=>{
     // Hard timeout - if Supabase hangs, show app with local data after 5s
@@ -3389,6 +3547,7 @@ function App() {
 
   // ZIP search - must be declared before any conditional returns (Rules of Hooks)
   const [zipSearch,setZipSearch]=useState('');
+  const [keywordSearch,setKeywordSearch]=useState('');
 
   if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
   if(!user)return h(AuthScreen,{onAuth:handleAuth});
@@ -3400,20 +3559,30 @@ function App() {
 
   const getFilteredBills = () => {
     let filtered = bills;
-    // If searching by ZIP, show bills relevant to that community + state + federal
+    // ZIP filter
     if(zipSearch.trim().length===5 && searchedCommunity) {
       const communityLower = searchedCommunity.toLowerCase();
       filtered = bills.filter(b => {
         if(b.level==='federal'||b.level==='state') return true;
         const jurisLower = (b.jurisdiction||'').toLowerCase();
-        // Match by jurisdiction name containing community name
         if(jurisLower.includes(communityLower)) return true;
-        // Match by level filter
         if(billFilter!=='all' && b.level===billFilter) return true;
         return false;
       });
     } else if(billFilter!=='all') {
       filtered = bills.filter(b=>b.level===billFilter);
+    }
+    // Keyword search
+    if(keywordSearch.trim().length>1) {
+      const kw = keywordSearch.trim().toLowerCase();
+      filtered = filtered.filter(b=>
+        (b.title||'').toLowerCase().includes(kw) ||
+        (b.summary||'').toLowerCase().includes(kw) ||
+        (b.sponsor||'').toLowerCase().includes(kw) ||
+        (b.jurisdiction||'').toLowerCase().includes(kw) ||
+        (b.full_text||'').toLowerCase().includes(kw) ||
+        (b.status||'').toLowerCase().includes(kw)
+      );
     }
     return filtered;
   };
@@ -3465,7 +3634,7 @@ function App() {
       // Stats bar
       h('div',{style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'7px 16px',display:'flex',gap:20,flexWrap:'wrap'}},
-          [["Bills",bills.length],["Votes",totalVotes.toLocaleString()],["Projects",projects.length],["Your Rep",rep+" pts"]].map(([l,v])=>
+          [[bills.length,"Bills"],[totalVotes.toLocaleString(),"Votes"],[projects.length,"Projects"],[memberCount!==null?memberCount:'...','Members'],[rep+" pts","Your Rep"]].map(([v,l])=>
             h('div',{key:l},h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:900,color:'#f0c040'}},v),h('div',{style:{fontSize:10,color:'#8899aa',textTransform:'uppercase',letterSpacing:1}},l))
           )
         )
@@ -3484,26 +3653,38 @@ function App() {
       // Bills tab
       mainTab==='bills'&&h(Fragment,null,
 
-        // ZIP Search bar
+        // Search bars
         h('div',{style:{background:'#1a1a2e',borderRadius:10,padding:'14px 16px',marginBottom:14}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#f0c040',marginBottom:8}},
-            "🔍 Search Bills by ZIP Code"
+            "🔍 Search Bills"
           ),
-          h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}},
+          h('div',{style:{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}},
+            h('input',{
+              value:keywordSearch,
+              onChange:e=>setKeywordSearch(e.target.value),
+              placeholder:'Search by keyword — "Medicaid", "roads", "SNAP"...',
+              style:{flex:2,minWidth:180,border:'1px solid #444',borderRadius:6,padding:'10px 13px',fontSize:14,background:'#23233a',color:'#fff',boxSizing:'border-box'}
+            }),
             h('input',{
               value:zipSearch,
               onChange:e=>{setZipSearch(e.target.value);if(e.target.value.trim().length===5)setBillFilter('all');},
-              placeholder:'Enter any ZIP code (e.g. 49237, 49230, 49240...)',
+              placeholder:'...or filter by ZIP',
               maxLength:5,
-              style:{flex:1,minWidth:180,border:'1px solid #444',borderRadius:6,padding:'10px 13px',fontSize:14,background:'#23233a',color:'#fff',boxSizing:'border-box'}
+              style:{flex:1,minWidth:120,border:'1px solid #444',borderRadius:6,padding:'10px 13px',fontSize:14,background:'#23233a',color:'#fff',boxSizing:'border-box'}
             }),
-            zipSearch.trim()&&h('button',{onClick:()=>setZipSearch(''),style:{background:'transparent',border:'1px solid #556677',color:'#8899aa',borderRadius:5,padding:'9px 12px',fontSize:12}},"✕ Clear")
+            (zipSearch.trim()||keywordSearch.trim())&&h('button',{
+              onClick:()=>{setZipSearch('');setKeywordSearch('');},
+              style:{background:'transparent',border:'1px solid #556677',color:'#8899aa',borderRadius:5,padding:'9px 12px',fontSize:12,whiteSpace:'nowrap'}
+            },"✕ Clear")
           ),
-          searchedCommunity&&h('div',{style:{marginTop:8,fontSize:13,color:'#6bcf8a',fontFamily:"'Lora',serif"}},
+          searchedCommunity&&h('div',{style:{marginTop:4,fontSize:13,color:'#6bcf8a',fontFamily:"'Lora',serif"}},
             "📍 Showing bills for: ",h('strong',null,searchedCommunity)," + all State & Federal bills"
           ),
-          zipSearch.trim().length===5&&!searchedCommunity&&h('div',{style:{marginTop:8,fontSize:13,color:'#e74c3c',fontFamily:"'Lora',serif"}},
+          zipSearch.trim().length===5&&!searchedCommunity&&h('div',{style:{marginTop:4,fontSize:13,color:'#e74c3c',fontFamily:"'Lora',serif"}},
             "ZIP code not found. Showing all bills."
+          ),
+          keywordSearch.trim().length>1&&h('div',{style:{marginTop:4,fontSize:13,color:'#6bcf8a',fontFamily:"'Lora',serif"}},
+            "🔎 "+filteredBills.length+" result"+(filteredBills.length!==1?'s':'')+" for \""+keywordSearch.trim()+"\""
           )
         ),
 
