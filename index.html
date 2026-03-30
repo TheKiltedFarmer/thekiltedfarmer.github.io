@@ -72,6 +72,98 @@ const VALID_ZIPS = Object.keys(ZIP_COMMUNITY);
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const pct = (v,t) => t===0?0:Math.round((v/t)*100);
 const repLevel = pts => pts>=100?{label:"Community Pillar",icon:"🌳",color:"#1a6b3c"}:pts>=50?{label:"Active Neighbor",icon:"🤝",color:"#1a5c8a"}:pts>=20?{label:"Engaged Resident",icon:"📣",color:"#5b3a8c"}:{label:"New Resident",icon:"🌱",color:"#888"};
+
+// ── Badge Definitions ─────────────────────────────────────────────────────────
+const BADGES = {
+  // Participation — auto-awarded
+  first_vote:       {id:'first_vote',       icon:'🗳',  label:'First Vote',         desc:'Cast your first vote on a bill',              color:'#1a6b3c', bg:'#eef7f1'},
+  five_votes:       {id:'five_votes',        icon:'📊',  label:'Poll Watcher',       desc:'Voted on 5 or more bills',                    color:'#1a5c8a', bg:'#e8f2fa'},
+  ten_votes:        {id:'ten_votes',         icon:'⚖️',  label:'Ballot Regular',     desc:'Voted on 10 or more bills',                   color:'#5b3a8c', bg:'#f0ebf8'},
+  twenty_five_votes:{id:'twenty_five_votes', icon:'🏛',  label:'Seasoned Voter',     desc:'Voted on 25 or more bills',                   color:'#1a1a2e', bg:'#e8e8f5'},
+  first_comment:    {id:'first_comment',     icon:'💬',  label:'Speaks Up',          desc:'Posted your first comment',                   color:'#8a6000', bg:'#fff8e7'},
+  ten_comments:     {id:'ten_comments',      icon:'📣',  label:'Community Voice',    desc:'Posted 10 or more comments',                  color:'#c0392b', bg:'#fdf0ef'},
+  first_pledge:     {id:'first_pledge',      icon:'🤝',  label:'Team Player',        desc:'Pledged to a community project',              color:'#1a5c8a', bg:'#e8f2fa'},
+  idea_submitted:   {id:'idea_submitted',    icon:'💡',  label:'Idea Maker',         desc:'Submitted a community idea',                  color:'#8a6000', bg:'#fff8e7'},
+  idea_forwarded:   {id:'idea_forwarded',    icon:'🚀',  label:'Change Maker',       desc:'Your idea reached 10 upvotes and was forwarded to officials', color:'#1a6b3c', bg:'#eef7f1'},
+  bill_submitted:   {id:'bill_submitted',    icon:'📋',  label:'Civic Contributor',  desc:'Submitted a community bill for review',       color:'#5b3a8c', bg:'#f0ebf8'},
+  bill_cosigned:    {id:'bill_cosigned',     icon:'✍️',  label:'Co-Signer',          desc:'Co-signed a community bill submission',       color:'#1a5c8a', bg:'#e8f2fa'},
+  invited_friend:   {id:'invited_friend',    icon:'🔗',  label:'Community Connector',desc:'Invited a neighbor who joined the platform',  color:'#1a6b3c', bg:'#eef7f1'},
+  // Reputation milestones
+  rep_20:           {id:'rep_20',            icon:'📣',  label:'Engaged Resident',   desc:'Earned 20 reputation points',                 color:'#5b3a8c', bg:'#f0ebf8'},
+  rep_50:           {id:'rep_50',            icon:'⭐',  label:'Trusted Voice',      desc:'Earned 50 reputation points — trusted resident',color:'#1a5c8a',bg:'#e8f2fa'},
+  rep_100:          {id:'rep_100',           icon:'🌳',  label:'Civic Pillar',        desc:'Earned 100 reputation points',               color:'#1a6b3c', bg:'#eef7f1'},
+  rep_200:          {id:'rep_200',           icon:'🏆',  label:'Civic Champion',     desc:'Earned 200 reputation points — true community leader', color:'#8a6000', bg:'#fff8e7'},
+  // Special / rare
+  founding_member:  {id:'founding_member',   icon:'🌾',  label:'Founding Member',    desc:'Among the first 25 members of The People\'s Voice', color:'#8a6000', bg:'#fff8e7'},
+  verified_official:{id:'verified_official', icon:'🏛',  label:'Verified Official',  desc:'Verified public official',                    color:'#1a5c8a', bg:'#e8f2fa'},
+  // ZIP / community identity
+  zip_49201:        {id:'zip_49201',         icon:'📍',  label:'Jackson Resident',   desc:'Verified resident of City of Jackson (49201-49204)', color:'#1a1a2e', bg:'#f0f0f8'},
+  zip_49237:        {id:'zip_49237',         icon:'📍',  label:'Concord Neighbor',   desc:'Verified resident of Concord (49237)',         color:'#1a6b3c', bg:'#eef7f1'},
+  zip_49230:        {id:'zip_49230',         icon:'📍',  label:'Brooklyn Resident',  desc:'Verified resident of Brooklyn area (49230)',   color:'#5b3a8c', bg:'#f0ebf8'},
+  zip_49285:        {id:'zip_49285',         icon:'📍',  label:'Summit Neighbor',    desc:'Verified resident of Summit Township (49285)', color:'#1a5c8a', bg:'#e8f2fa'},
+  zip_other:        {id:'zip_other',         icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
+};
+
+// Determine which badges a profile has earned based on their data
+const computeBadges = (profile, voteCounts, commentCount) => {
+  const earned = new Set(profile?.badges||[]);
+  const rep = profile?.reputation||0;
+  const zip = profile?.zip||'';
+  const votes = voteCounts||0;
+  const comments = commentCount||0;
+
+  // Reputation milestones
+  if(rep>=20)  earned.add('rep_20');
+  if(rep>=50)  earned.add('rep_50');
+  if(rep>=100) earned.add('rep_100');
+  if(rep>=200) earned.add('rep_200');
+
+  // ZIP identity
+  if(['49201','49202','49203','49204'].includes(zip)) earned.add('zip_49201');
+  else if(zip==='49237') earned.add('zip_49237');
+  else if(zip==='49230') earned.add('zip_49230');
+  else if(zip==='49285') earned.add('zip_49285');
+  else if(zip&&zip.startsWith('49')) earned.add('zip_other');
+
+  // Official
+  if(profile?.is_official) earned.add('verified_official');
+
+  return Array.from(earned).filter(id=>BADGES[id]);
+};
+
+// Award a new badge if not already earned
+const awardBadge = async(userId, badgeId, currentBadges)=>{
+  if(!userId||!badgeId) return currentBadges;
+  const existing = currentBadges||[];
+  if(existing.includes(badgeId)) return existing;
+  const updated = [...existing, badgeId];
+  await sb.from('profiles').update({badges:updated}).eq('id',userId);
+  return updated;
+};
+
+// Small inline badge chip
+function BadgeChip({badgeId, tiny}) {
+  const b = BADGES[badgeId];
+  if(!b) return null;
+  return h('span',{
+    title:b.label+': '+b.desc,
+    style:{display:'inline-flex',alignItems:'center',gap:tiny?2:3,background:b.bg,color:b.color,
+      fontSize:tiny?9:10,fontWeight:700,padding:tiny?'1px 5px':'2px 8px',
+      borderRadius:20,letterSpacing:.3,fontFamily:"'Lora',serif",
+      whiteSpace:'nowrap',border:'1px solid '+b.color+'33',cursor:'default'}
+  },b.icon+(tiny?'':' '+b.label));
+}
+
+// Row of badges (max N shown)
+function BadgeRow({badges, max, tiny}) {
+  if(!badges||!badges.length) return null;
+  const show = badges.slice(0,max||5);
+  const extra = badges.length-(max||5);
+  return h('div',{style:{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}},
+    show.map(id=>h(BadgeChip,{key:id,badgeId:id,tiny})),
+    extra>0&&h('span',{style:{fontSize:10,color:'#aaa',fontFamily:"'Lora',serif"}},'+'+extra+' more')
+  );
+}
 const s = (styles) => Object.assign({},styles); // passthrough for readability
 
 const LEVEL_META = {
@@ -948,7 +1040,8 @@ function CommentItem({comment:c, user, billId, onEdited}) {
           h('span',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},
             c.anonymous?'Anonymous':c.display_name
           ),
-          c.is_official&&h(OfficialBadge,{title:c.official_title,small:true})
+          c.is_official&&h(OfficialBadge,{title:c.official_title,small:true}),
+          c.badges&&c.badges.length>0&&h(BadgeRow,{badges:c.badges.slice(0,2),tiny:true})
         ),
         h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
           h('span',{style:{fontSize:11,color:'#bbb'}},c.created_at?new Date(c.created_at).toLocaleDateString():''),
@@ -1003,7 +1096,11 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
     if(!error){
       await sb.from('bills').update({['votes_'+choice]:bill['votes_'+choice]+1}).eq('id',bill.id);
       await sb.from('profiles').update({reputation:(user.reputation||0)+5}).eq('id',user.id);
-      onVoteCast(bill.id,choice,anon);onRepGain(5);setToast("Vote recorded! +5 reputation");
+      onVoteCast(bill.id,choice,anon);
+      const totalVotes = Object.keys(userVotes||{}).length+1;
+      const badge = totalVotes===1?'first_vote':totalVotes===5?'five_votes':totalVotes===10?'ten_votes':totalVotes===25?'twenty_five_votes':null;
+      onRepGain(5,badge);
+      setToast("Vote recorded! +5 reputation"+(badge?' 🏅 Badge earned!':''));
     } else setToast("You've already voted on this bill.");
     setSaving(false);setPending(null);
   };
@@ -1011,12 +1108,14 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
   const postComment=async()=>{
     if(!commentText.trim()||!user)return;
     const name=commentAnon?'Anonymous':(user.display_name||user.email.split('@')[0]);
-    const {error}=await sb.from('bill_comments').insert({bill_id:bill.id,user_id:user.id,display_name:name,content:commentText.trim(),anonymous:commentAnon});
+    const {error}=await sb.from('bill_comments').insert({bill_id:bill.id,user_id:user.id,display_name:name,content:commentText.trim(),anonymous:commentAnon,badges:user.badges||[]});
     if(!error){
-      setComments(prev=>[{id:Date.now(),display_name:name,content:commentText.trim(),created_at:new Date().toISOString(),anonymous:commentAnon},...prev]);
+      setComments(prev=>[{id:Date.now(),display_name:name,content:commentText.trim(),created_at:new Date().toISOString(),anonymous:commentAnon,badges:user.badges||[]},...prev]);
       setCommentText('');
       await sb.from('profiles').update({reputation:(user.reputation||0)+10}).eq('id',user.id);
-      onRepGain(10);setToast("+10 reputation for commenting!");
+      const commentBadge = (user.badges||[]).includes('first_comment')?null:'first_comment';
+      onRepGain(10,commentBadge);
+      setToast("+10 reputation for commenting!"+(commentBadge?' 🏅 First comment badge earned!':''));
     }
   };
 
@@ -2065,8 +2164,53 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
               )
         ),
 
+        // Badge showcase
+        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:12}},
+            '🏅 Your Badges'
+          ),
+          (()=>{
+            const earned = computeBadges(profile, Object.keys(userVotes).length, votedBills.length);
+            const allBadgeIds = Object.keys(BADGES);
+            const notEarned = allBadgeIds.filter(id=>!earned.includes(id)&&!id.startsWith('zip_')&&id!=='verified_official'&&id!=='founding_member');
+            return h('div',null,
+              earned.length===0&&h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13,marginBottom:12}},'Start voting and participating to earn your first badge!'),
+              earned.length>0&&h('div',{style:{marginBottom:16}},
+                h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:8}},'Earned ('+earned.length+')'),
+                h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+                  earned.map(id=>h('div',{key:id,title:BADGES[id]?.desc,
+                    style:{display:'inline-flex',alignItems:'center',gap:4,background:BADGES[id]?.bg,
+                      color:BADGES[id]?.color,border:'1px solid '+(BADGES[id]?.color||'#ddd')+'44',
+                      borderRadius:8,padding:'6px 10px',cursor:'default'}},
+                    h('span',{style:{fontSize:16}},BADGES[id]?.icon),
+                    h('div',null,
+                      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:11,color:BADGES[id]?.color}},BADGES[id]?.label),
+                      h('div',{style:{fontSize:10,color:'#aaa',lineHeight:1.3}},BADGES[id]?.desc)
+                    )
+                  ))
+                )
+              ),
+              notEarned.length>0&&h('div',null,
+                h('div',{style:{fontSize:11,color:'#bbb',textTransform:'uppercase',letterSpacing:1,marginBottom:8}},'Still to earn'),
+                h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+                  notEarned.slice(0,8).map(id=>h('div',{key:id,title:BADGES[id]?.desc,
+                    style:{display:'inline-flex',alignItems:'center',gap:4,background:'#f5f5f5',
+                      color:'#bbb',border:'1px solid #eee',borderRadius:8,padding:'6px 10px',
+                      cursor:'default',opacity:.7}},
+                    h('span',{style:{fontSize:14,filter:'grayscale(1)'}},BADGES[id]?.icon),
+                    h('div',null,
+                      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:11,color:'#bbb'}},BADGES[id]?.label),
+                      h('div',{style:{fontSize:10,color:'#ccc',lineHeight:1.3}},BADGES[id]?.desc)
+                    )
+                  ))
+                )
+              )
+            );
+          })()
+        ),
+
         // Rep earning guide
-        h('div',{style:{background:'#fff',borderRadius:10,padding:16}},
+        h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:10}},'Earn More Reputation'),
           [['🗳 Vote on a bill','+5 rep'],['💬 Post a comment','+10 rep'],['🤲 Pledge to a project','+15 rep'],['🌱 Propose a project','Need 50 rep'],['✅ Submit a bill','Builds trust']].map(([a,b])=>
             h('div',{key:a,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f5f5f5',fontSize:13}},
@@ -2270,7 +2414,8 @@ function CommunityHub({user, profile}) {
                 h('span',{style:{fontSize:10,color:repI.color,fontWeight:600}},repI.label),
                 n.zip&&h('span',{style:{fontSize:10,color:'#bbb'}},'· '+n.zip)
               ),
-              n.official_title&&h('div',{style:{fontSize:10,color:'#1a5c8a',marginTop:3,fontWeight:600}},n.official_title)
+              n.official_title&&h('div',{style:{fontSize:10,color:'#1a5c8a',marginTop:3,fontWeight:600}},n.official_title),
+              n.badges&&n.badges.length>0&&h('div',{style:{marginTop:4}},h(BadgeRow,{badges:computeBadges(n).slice(0,3),tiny:true}))
             )
           );
         })
@@ -3696,11 +3841,51 @@ function App() {
 
   const handleAuth=(authUser,prof)=>{
     setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);
-    // Show onboarding for brand new users (reputation is 0 and no votes)
+    // Show onboarding for brand new users
     if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
+    // Auto-award ZIP and rep badges on login
+    setTimeout(async()=>{
+      const zip = prof?.zip||'';
+      const curBadges = prof?.badges||[];
+      let badges = [...curBadges];
+      // ZIP badge
+      const zipBadge = ['49201','49202','49203','49204'].includes(zip)?'zip_49201':
+        zip==='49237'?'zip_49237':zip==='49230'?'zip_49230':zip==='49285'?'zip_49285':
+        (zip&&zip.startsWith('49'))?'zip_other':null;
+      if(zipBadge&&!badges.includes(zipBadge)) badges=await awardBadge(authUser.id,zipBadge,badges);
+      // New member badge = first_vote precursor — give them 'new resident' baseline
+      // Rep milestones from existing rep
+      const r = prof?.reputation||0;
+      if(r>=20&&!badges.includes('rep_20')) badges=await awardBadge(authUser.id,'rep_20',badges);
+      if(r>=50&&!badges.includes('rep_50')) badges=await awardBadge(authUser.id,'rep_50',badges);
+      if(r>=100&&!badges.includes('rep_100')) badges=await awardBadge(authUser.id,'rep_100',badges);
+      if(r>=200&&!badges.includes('rep_200')) badges=await awardBadge(authUser.id,'rep_200',badges);
+      if(prof?.is_official&&!badges.includes('verified_official')) badges=await awardBadge(authUser.id,'verified_official',badges);
+      if(badges.length!==curBadges.length) setProfile(p=>({...p,badges}));
+    },1000);
   };
   const handleVoteCast=(billId,choice,anon)=>{setUserVotes(prev=>({...prev,[billId]:{choice,anonymous:anon}}));setBills(prev=>prev.map(b=>b.id!==billId?b:{...b,['votes_'+choice]:b['votes_'+choice]+1}));};
-  const gainRep=pts=>{setRep(r=>r+pts);if(user)setUser(u=>({...u,reputation:(u.reputation||0)+pts}));};
+  const gainRep=async(pts, badgeToAward)=>{
+    const newRep = rep+pts;
+    setRep(newRep);
+    if(user) setUser(u=>({...u,reputation:(u.reputation||0)+pts}));
+    // Auto-award rep milestone badges
+    const currentBadges = profile?.badges||[];
+    let badges = [...currentBadges];
+    if(badgeToAward && !badges.includes(badgeToAward)) {
+      badges = await awardBadge(user?.id, badgeToAward, badges);
+      setProfile(p=>({...p,badges}));
+    }
+    // Rep milestones
+    const milestones = [[20,'rep_20'],[50,'rep_50'],[100,'rep_100'],[200,'rep_200']];
+    for(const [threshold, bId] of milestones) {
+      if(newRep>=threshold && !badges.includes(bId)) {
+        badges = await awardBadge(user?.id, bId, badges);
+        setProfile(p=>({...p,badges}));
+        setToast('🏅 New badge earned: '+BADGES[bId].label+'!');
+      }
+    }
+  };
   const handlePropose=async(data)=>{
     if(!user)return;
     const name=profile?.display_name||user.email.split('@')[0];
