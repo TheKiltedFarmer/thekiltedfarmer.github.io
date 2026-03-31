@@ -3214,6 +3214,12 @@ function AuthScreen({onAuth, onGuest}) {
   const nextStep=()=>{
     if(step===1){
       if(!email.trim()){setError('Email is required.');return;}
+      // Validate email format before proceeding
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if(!emailRegex.test(email.trim())){
+        setError('Please enter a valid email address (e.g. name@gmail.com). If you\'re opening this from Facebook Messenger, try copying the link and opening it in Safari or Chrome instead.');
+        return;
+      }
       if(pass.length<6){setError('Password must be at least 6 characters.');return;}
       setError('');setStep(2);
     }
@@ -3229,7 +3235,14 @@ function AuthScreen({onAuth, onGuest}) {
       email,password:pass,
       options:{data:{display_name:displayName,zip}}
     });
-    if(err){setError(err.message);setLoading(false);return;}
+    if(err){
+      let msg=err.message||'Something went wrong. Please try again.';
+      if(msg.includes('invalid format')||msg.includes('invalid email')) msg='Please enter a valid email address (e.g. name@gmail.com). If you opened this from Facebook Messenger, try copying thepeoplesvoices.org and opening it directly in Safari or Chrome.';
+      else if(msg.includes('already registered')||msg.includes('already exists')) msg='An account with this email already exists. Try signing in instead.';
+      else if(msg.includes('password')) msg='Password must be at least 6 characters.';
+      else if(msg.includes('rate limit')) msg='Too many attempts — please wait a minute and try again.';
+      setError(msg);setLoading(false);return;
+    }
     if(data.user){
       await sb.from('profiles').upsert({
         id:data.user.id,email,display_name:displayName,
@@ -4209,6 +4222,215 @@ function NominationsInbox({onToast}) {
   );
 }
 
+// ── User Manager (Admin) ───────────────────────────────────────────────────────
+function UserManager({onToast}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [editing, setEditing] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const searchUsers = async()=>{
+    if(!search.trim()) return;
+    setLoading(true); setSelected(null);
+    const {data} = await sb.from('profiles')
+      .select('*')
+      .or(`email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`)
+      .limit(10);
+    setResults(data||[]);
+    setLoading(false);
+  };
+
+  const selectUser = (u)=>{
+    setSelected(u);
+    setEditing({
+      display_name: u.display_name||'',
+      zip: u.zip||'',
+      reputation: u.reputation||0,
+      is_admin: u.is_admin||false,
+      show_in_directory: u.show_in_directory!==false,
+    });
+  };
+
+  const saveUser = async()=>{
+    if(!selected) return;
+    setSaving(true);
+    const updates = {
+      display_name: editing.display_name.trim()||selected.display_name,
+      zip: editing.zip.trim(),
+      reputation: Math.max(0,Math.min(9999,parseInt(editing.reputation)||0)),
+      is_admin: editing.is_admin,
+      show_in_directory: editing.show_in_directory,
+    };
+    const {error} = await sb.from('profiles').update(updates).eq('id',selected.id);
+    if(!error) {
+      onToast('✅ User updated successfully.');
+      setSelected({...selected,...updates});
+      setResults(prev=>prev.map(u=>u.id===selected.id?{...u,...updates}:u));
+    } else {
+      onToast('❌ Error: '+error.message);
+    }
+    setSaving(false);
+  };
+
+  const confirmEmail = async()=>{
+    // Confirm email via profiles update (marks as verified)
+    const {error} = await sb.from('profiles').update({email_confirmed:true}).eq('id',selected.id);
+    if(!error) onToast('✅ Profile marked as verified. Note: to fully confirm auth email, use Supabase Dashboard > Auth > Users.');
+    else onToast('Tip: Go to Supabase Dashboard > Authentication > Users > find user > click "Send confirmation email" or manually confirm.');
+  };
+
+  const resetReputation = async()=>{
+    if(!window.confirm('Reset '+selected.display_name+'\'s reputation to 0?')) return;
+    const {error} = await sb.from('profiles').update({reputation:0,badges:[]}).eq('id',selected.id);
+    if(!error) { onToast('Reputation reset to 0.'); setEditing(e=>({...e,reputation:0})); }
+  };
+
+  const field = (label, key, type='text')=>h('div',{style:{marginBottom:10}},
+    h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},label),
+    type==='checkbox'
+      ? h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:!!editing[key],
+            onChange:e=>setEditing(v=>({...v,[key]:e.target.checked})),
+            style:{width:16,height:16,cursor:'pointer'}}),
+          h('span',{style:{fontSize:13,color:'#333',fontFamily:"'Lora',serif"}},editing[key]?'Yes':'No')
+        )
+      : h('input',{type,value:editing[key]??'',
+          onChange:e=>setEditing(v=>({...v,[key]:type==='number'?e.target.value:e.target.value})),
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',
+            fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+  );
+
+  return h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?14:0},
+      onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '👥 User Manager'
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+
+    open&&h('div',null,
+      // Search
+      h('div',{style:{display:'flex',gap:8,marginBottom:12}},
+        h('input',{value:search,onChange:e=>setSearch(e.target.value),
+          onKeyDown:e=>e.key==='Enter'&&searchUsers(),
+          placeholder:'Search by email or display name...',
+          style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'9px 12px',fontSize:13,fontFamily:"'Lora',serif"}}),
+        h('button',{onClick:searchUsers,disabled:loading||!search.trim(),
+          style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'9px 18px',borderRadius:6,
+            fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}
+        },loading?'Searching...':'Search')
+      ),
+
+      // Results list
+      results.length>0&&h('div',{style:{marginBottom:12}},
+        h('div',{style:{fontSize:11,color:'#888',marginBottom:6,textTransform:'uppercase',letterSpacing:1}},results.length+' result'+(results.length!==1?'s':'')+' — click to manage'),
+        results.map(u=>h('div',{key:u.id,
+          onClick:()=>selectUser(u),
+          style:{background:selected?.id===u.id?'#1a1a2e':'#fff',
+            color:selected?.id===u.id?'#f0c040':'#333',
+            border:'1px solid '+(selected?.id===u.id?'#1a1a2e':'#ddd'),
+            borderRadius:7,padding:'10px 12px',marginBottom:6,cursor:'pointer',
+            display:'flex',justifyContent:'space-between',alignItems:'center'}},
+          h('div',null,
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}},
+              u.display_name||'(no name)'
+            ),
+            h('div',{style:{fontSize:11,color:selected?.id===u.id?'#aab':'#888',marginTop:2}},
+              u.email+' · ZIP: '+(u.zip||'none')+' · '+u.reputation+' rep'+(u.is_admin?' · 🔐 Admin':'')
+            )
+          ),
+          h('span',{style:{fontSize:11,color:selected?.id===u.id?'#f0c040':'#aaa'}},
+            selected?.id===u.id?'Selected ▶':'Edit →'
+          )
+        ))
+      ),
+
+      results.length===0&&search.trim()&&!loading&&
+        h('div',{style:{fontSize:13,color:'#888',fontStyle:'italic',marginBottom:12}},'No users found for "'+search+'"'),
+
+      // Edit panel
+      selected&&h('div',{style:{background:'#fff',border:'2px solid #1a5c8a',borderRadius:8,padding:16}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:4}},
+          'Editing: '+(selected.display_name||selected.email)
+        ),
+        h('div',{style:{fontSize:11,color:'#aaa',marginBottom:14,fontFamily:"'Lora',serif"}},
+          'User ID: '+selected.id
+        ),
+
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}},
+          h('div',null, field('Display Name','display_name')),
+          h('div',null, field('ZIP Code','zip')),
+          h('div',null, field('Reputation (0–9999)','reputation','number')),
+          h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Is Admin'),
+            h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:8}},
+              h('input',{type:'checkbox',checked:!!editing.is_admin,
+                onChange:e=>setEditing(v=>({...v,is_admin:e.target.checked})),
+                style:{width:16,height:16,cursor:'pointer'}}),
+              h('span',{style:{fontSize:13,color:'#333',fontFamily:"'Lora',serif"}},editing.is_admin?'Yes — Admin access':'No — Regular user')
+            )
+          ),
+          h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Show in Directory'),
+            h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:8}},
+              h('input',{type:'checkbox',checked:!!editing.show_in_directory,
+                onChange:e=>setEditing(v=>({...v,show_in_directory:e.target.checked})),
+                style:{width:16,height:16,cursor:'pointer'}}),
+              h('span',{style:{fontSize:13,color:'#333',fontFamily:"'Lora',serif"}},editing.show_in_directory?'Visible':'Hidden')
+            )
+          )
+        ),
+
+        // Quick action buttons
+        h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'10px 12px',marginBottom:12}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:8}},'Quick Actions'),
+          h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+            h('button',{onClick:confirmEmail,
+              style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,
+                fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}
+            },'✉️ Email Confirmation Help'),
+            h('button',{onClick:resetReputation,
+              style:{background:'#c0392b',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,
+                fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}
+            },'🔄 Reset Reputation'),
+            h('button',{
+              onClick:()=>{
+                const info = 'User: '+(selected.display_name||'N/A')+'\nEmail: '+selected.email+'\nID: '+selected.id+'\nZIP: '+(selected.zip||'none')+'\nRep: '+selected.reputation+'\nAdmin: '+(selected.is_admin?'Yes':'No')+'\nJoined: '+new Date(selected.created_at).toLocaleDateString();
+                navigator.clipboard&&navigator.clipboard.writeText(info);
+                onToast('User info copied to clipboard');
+              },
+              style:{background:'#555',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,
+                fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}
+            },'📋 Copy User Info')
+          )
+        ),
+
+        h('div',{style:{background:'#fff8e7',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:11,color:'#8a6000',lineHeight:1.6}},
+          '⚠️ To fully confirm a user\'s email (fix login issues), go to ',
+          h('strong',null,'Supabase Dashboard → Authentication → Users'),
+          ' → find the user → click the menu → "Send confirmation email" or delete and re-invite.'
+        ),
+
+        h('div',{style:{display:'flex',gap:10}},
+          h('button',{onClick:saveUser,disabled:saving,
+            style:{flex:1,background:saving?'#ccc':'#1a6b3c',color:'#fff',border:'none',
+              padding:'11px',borderRadius:7,fontFamily:"'Playfair Display',serif",
+              fontWeight:900,fontSize:14,cursor:'pointer'}
+          },saving?'Saving...':'Save Changes'),
+          h('button',{onClick:()=>setSelected(null),
+            style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',
+              padding:'11px 18px',borderRadius:7,fontSize:13,cursor:'pointer'}
+          },'Cancel')
+        )
+      )
+    )
+  );
+}
+
 // ── Admin Panel ───────────────────────────────────────────────────────────────
 const LEVELS = ['village','city','township','state','federal','county'];
 const JURISDICTIONS = [
@@ -4379,6 +4601,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     ),
 
     // Pending community submissions review queue
+    h(UserManager,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
     h(NominationsInbox,{onToast}),
