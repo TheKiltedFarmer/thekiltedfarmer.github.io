@@ -1266,6 +1266,476 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
   );
 }
 
+// ── News Tab ──────────────────────────────────────────────────────────────────
+
+// Credible source allowlist — domains only
+const CREDIBLE_DOMAINS = new Set([
+  // Wire services
+  'apnews.com','reuters.com','npr.org','pbs.org','bbc.com','bbc.co.uk','apnews.com',
+  // Michigan outlets
+  'mlive.com','bridgemi.com','michiganradio.org','detroitnews.com','freep.com',
+  'secondwavemedia.com','michigandaily.com','wkar.org','wdet.org','wxyz.com',
+  'clickondetroit.com','woodtv.com','wzzm13.com','wilx.com','wlns.com',
+  'jacksoncitizen.com','citpat.com','thejacksonsun.com',
+  // National papers / news
+  'nytimes.com','washingtonpost.com','wsj.com','usatoday.com','thehill.com',
+  'politico.com','axios.com','theatlantic.com','time.com','newsweek.com',
+  'cbsnews.com','abcnews.go.com','nbcnews.com','msnbc.com','foxnews.com',
+  'cnn.com','apnews.com','propublica.org','theintercept.com','vox.com',
+  'bloomberg.com','economist.com','guardian.com','theguardian.com',
+  // Government / official
+  'congress.gov','senate.gov','house.gov','michigan.gov','whitehouse.gov',
+  'federalregister.gov','govinfo.gov','cityofjackson.org','co.jackson.mi.us',
+  'cityofconcord.org','villageofconcord.org',
+  // Nonpartisan / fact check
+  'factcheck.org','politifact.com','snopes.com','ballotpedia.org','opensecrets.org',
+]);
+
+const NEWS_CATEGORIES = ['Local','Michigan','Federal','International'];
+
+function getDomain(url) {
+  try { return new URL(url).hostname.replace('www.',''); } catch(e) { return ''; }
+}
+
+function isCredibleSource(url) {
+  const domain = getDomain(url);
+  if(!domain) return false;
+  if(CREDIBLE_DOMAINS.has(domain)) return true;
+  // Check parent domain
+  const parts = domain.split('.');
+  if(parts.length>2) {
+    const parent = parts.slice(-2).join('.');
+    if(CREDIBLE_DOMAINS.has(parent)) return true;
+  }
+  return false;
+}
+
+function SourceBadge({url}) {
+  const domain = getDomain(url);
+  const credible = isCredibleSource(url);
+  return h('span',{
+    title: credible?'Verified credible source':'Source credibility unverified',
+    style:{display:'inline-flex',alignItems:'center',gap:3,
+      background:credible?'#eef7f1':'#fff8e7',
+      color:credible?'#1a6b3c':'#8a6000',
+      border:'1px solid '+(credible?'#1a6b3c44':'#f0c04044'),
+      borderRadius:20,padding:'2px 8px',fontSize:10,fontWeight:700,
+      fontFamily:"'Lora',serif",whiteSpace:'nowrap'}
+  }, credible?'✓ '+domain:'⚠ '+domain);
+}
+
+// AI neutralize a news story via Cloudflare Worker
+async function neutralizeStory(title, url, summary, category) {
+  const prompt = `You are a nonpartisan news editor for a local civic platform serving Jackson County, Michigan.
+
+A community member submitted this news story:
+Title: "${title}"
+Category: ${category}
+Source: ${url}
+Summary/context: "${summary}"
+
+Your job:
+1. Write a NEUTRAL HEADLINE (under 12 words) — no partisan framing, no loaded language
+2. Write a NEUTRAL SUMMARY (2-3 sentences) — factual only, cite key numbers/dates if provided, explain why this matters to Jackson County residents specifically
+3. Write a LOCAL RELEVANCE note (1 sentence) — how does this concretely affect Jackson County people?
+4. Assign a BIAS CHECK: was the original submission left-leaning, right-leaning, or neutral?
+
+Respond ONLY in this exact JSON format:
+{
+  "neutral_headline": "...",
+  "neutral_summary": "...",
+  "local_relevance": "...",
+  "original_bias": "left-leaning" | "right-leaning" | "neutral",
+  "category": "${category}"
+}`;
+
+  try {
+    const res = await fetch(AI_PROXY, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:600,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data = await res.json();
+    const text = (data.content?.[0]?.text||'').trim();
+    const clean = text.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    return null;
+  }
+}
+
+function NewsStoryCard({story, user, rep}) {
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+  const [showComments, setShowComments] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [upvoted, setUpvoted] = useState(false);
+  const [upvotes, setUpvotes] = useState(story.upvotes||0);
+
+  const bias = story.original_bias;
+  const biasColor = bias==='left-leaning'?'#1a5c8a':bias==='right-leaning'?'#c0392b':'#1a6b3c';
+  const biasLabel = bias==='left-leaning'?'⬅ Left-leaning framing detected':bias==='right-leaning'?'➡ Right-leaning framing detected':'✓ Neutral framing';
+
+  const loadComments = async()=>{
+    setLoadingComments(true);
+    const {data} = await sb.from('news_comments').select('*')
+      .eq('story_id',story.id).order('created_at',{ascending:true});
+    setComments(data||[]);
+    setLoadingComments(false);
+  };
+
+  const toggleComments = ()=>{
+    if(!showComments) loadComments();
+    setShowComments(!showComments);
+  };
+
+  const postComment = async()=>{
+    if(!commentText.trim()||!user) return;
+    setPosting(true);
+    const name = user.display_name||user.email?.split('@')[0]||'Resident';
+    const {data} = await sb.from('news_comments').insert({
+      story_id:story.id,
+      user_id:user.id,
+      display_name:name,
+      content:commentText.trim(),
+      created_at:new Date().toISOString()
+    }).select().single();
+    if(data) setComments(prev=>[...prev,data]);
+    setCommentText('');
+    setPosting(false);
+  };
+
+  const upvote = async()=>{
+    if(!user||upvoted) return;
+    setUpvoted(true);
+    setUpvotes(u=>u+1);
+    await sb.from('news_stories').update({upvotes:upvotes+1}).eq('id',story.id);
+  };
+
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,marginBottom:12,overflow:'hidden',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}},
+
+    // Category stripe
+    h('div',{style:{height:3,background:
+      story.category==='Local'?'#1a6b3c':
+      story.category==='Michigan'?'#1a5c8a':
+      story.category==='Federal'?'#5b3a8c':'#8a6000'
+    }}),
+
+    h('div',{style:{padding:'14px 16px'}},
+
+      // Header row
+      h('div',{style:{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8,flexWrap:'wrap'}},
+        h('span',{style:{background:
+          story.category==='Local'?'#eef7f1':
+          story.category==='Michigan'?'#e8f2fa':
+          story.category==='Federal'?'#f0ebf8':'#fff8e7',
+          color:story.category==='Local'?'#1a6b3c':
+          story.category==='Michigan'?'#1a5c8a':
+          story.category==='Federal'?'#5b3a8c':'#8a6000',
+          fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,
+          textTransform:'uppercase',letterSpacing:1,fontFamily:"'Lora',serif"
+        }},story.category),
+        h(SourceBadge,{url:story.source_url}),
+        h('span',{style:{fontSize:10,color:'#bbb',marginLeft:'auto'}},
+          new Date(story.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+        )
+      ),
+
+      // Neutral headline
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,
+        color:'#1a1a2e',marginBottom:8,lineHeight:1.4}},
+        story.neutral_headline
+      ),
+
+      // Neutral summary
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.7,marginBottom:8}},
+        story.neutral_summary
+      ),
+
+      // Local relevance
+      h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 12px',marginBottom:10,
+        fontSize:12,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6}},
+        h('span',{style:{fontWeight:700,color:'#1a1a2e'}},'📍 Jackson County: '),
+        story.local_relevance
+      ),
+
+      // Bias badge + original submission
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:10}},
+        h('span',{style:{fontSize:10,fontWeight:700,color:biasColor,
+          background:biasColor+'15',border:'1px solid '+biasColor+'33',
+          borderRadius:20,padding:'2px 8px',fontFamily:"'Lora',serif"}},
+          biasLabel
+        ),
+        story.original_title&&story.original_title!==story.neutral_headline&&
+          h('span',{style:{fontSize:10,color:'#aaa',fontFamily:"'Lora',serif",fontStyle:'italic'}},
+            'Original: "'+story.original_title.slice(0,60)+(story.original_title.length>60?'...':'')+'"'
+          )
+      ),
+
+      // Action row
+      h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+        h('a',{href:story.source_url,target:'_blank',
+          style:{display:'inline-flex',alignItems:'center',gap:4,background:'#1a1a2e',color:'#f0c040',
+            textDecoration:'none',padding:'6px 12px',borderRadius:6,
+            fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}
+        },'📎 Read Source'),
+        h('button',{onClick:upvote,disabled:upvoted||!user,
+          style:{display:'inline-flex',alignItems:'center',gap:4,
+            background:upvoted?'#eef7f1':'#f5f5f5',
+            color:upvoted?'#1a6b3c':'#888',
+            border:'1px solid '+(upvoted?'#1a6b3c44':'#ddd'),
+            padding:'6px 12px',borderRadius:6,fontSize:12,cursor:user&&!upvoted?'pointer':'default',
+            fontFamily:"'Lora',serif",fontWeight:upvoted?700:400}
+        },'👍 '+upvotes),
+        h('button',{onClick:toggleComments,
+          style:{display:'inline-flex',alignItems:'center',gap:4,background:'#f5f5f5',
+            color:'#555',border:'1px solid #ddd',padding:'6px 12px',borderRadius:6,
+            fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}
+        },'💬 Discuss'+(story.comment_count>0?' ('+story.comment_count+')':'')),
+        h('span',{style:{fontSize:11,color:'#bbb',marginLeft:'auto'}},
+          'Submitted by '+story.submitted_by_name
+        )
+      )
+    ),
+
+    // Comments section
+    showComments&&h('div',{style:{borderTop:'1px solid #f0ece4',padding:'12px 16px',background:'#faf8f5'}},
+      loadingComments&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic'}},'Loading comments...'),
+      comments.length===0&&!loadingComments&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginBottom:10}},'No comments yet. Start the discussion.'),
+      comments.map((c,i)=>h('div',{key:c.id||i,style:{marginBottom:10,paddingBottom:10,borderBottom:i<comments.length-1?'1px solid #f0ece4':'none'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+          h('span',{style:{fontWeight:700,fontSize:12,color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},c.display_name),
+          h('span',{style:{fontSize:10,color:'#bbb'}},new Date(c.created_at).toLocaleDateString())
+        ),
+        h('div',{style:{fontSize:13,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6}},c.content)
+      )),
+      user&&h('div',{style:{display:'flex',gap:8,marginTop:8}},
+        h('input',{value:commentText,onChange:e=>setCommentText(e.target.value),
+          onKeyDown:e=>e.key==='Enter'&&postComment(),
+          placeholder:'Add to the discussion...',
+          style:{flex:1,border:'1px solid #ddd',borderRadius:20,padding:'8px 14px',
+            fontSize:13,fontFamily:"'Lora',serif"}}),
+        h('button',{onClick:postComment,disabled:!commentText.trim()||posting,
+          style:{background:commentText.trim()&&!posting?'#1a1a2e':'#ddd',
+            color:commentText.trim()&&!posting?'#f0c040':'#aaa',
+            border:'none',borderRadius:20,padding:'8px 16px',
+            fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+            cursor:commentText.trim()&&!posting?'pointer':'default'}
+        },'Post')
+      ),
+      !user&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic'}},'Sign in to join the discussion.')
+    )
+  );
+}
+
+function NewsTab({user, rep, profile}) {
+  const [stories, setStories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [catFilter, setCatFilter] = useState('all');
+
+  // Submit form state
+  const [url, setUrl] = useState('');
+  const [originalTitle, setOriginalTitle] = useState('');
+  const [userContext, setUserContext] = useState('');
+  const [category, setCategory] = useState('Federal');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState('');
+  const [urlError, setUrlError] = useState('');
+
+  const isTrusted = (rep||0) >= 50;
+
+  useEffect(()=>{
+    loadStories();
+  },[catFilter]);
+
+  const loadStories = async()=>{
+    setLoading(true);
+    let q = sb.from('news_stories').select('*').eq('approved',true).order('created_at',{ascending:false}).limit(20);
+    if(catFilter!=='all') q = q.eq('category',catFilter);
+    const {data} = await q;
+    setStories(data||[]);
+    setLoading(false);
+  };
+
+  const checkUrl = (u)=>{
+    setUrl(u);
+    if(u.length>10) {
+      if(!isCredibleSource(u)) {
+        setUrlError('⚠️ This source ('+getDomain(u)+') is not on our verified credible sources list. Please use AP News, Reuters, NPR, MLive, Bridge Michigan, or other established news outlets.');
+      } else {
+        setUrlError('');
+      }
+    } else setUrlError('');
+  };
+
+  const submitStory = async()=>{
+    if(!url.trim()||!originalTitle.trim()) { setSubmitMsg('Please enter a URL and headline.'); return; }
+    if(!isCredibleSource(url)) { setSubmitMsg('Please use a credible news source.'); return; }
+    setSubmitting(true);
+    setSubmitMsg('🤖 AI is reading and neutralizing this story...');
+
+    const result = await neutralizeStory(originalTitle, url, userContext, category);
+    if(!result) {
+      setSubmitMsg('❌ AI analysis failed. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitMsg('✅ Neutralized! Publishing to the news feed...');
+
+    const {data,error} = await sb.from('news_stories').insert({
+      source_url: url.trim(),
+      original_title: originalTitle.trim(),
+      neutral_headline: result.neutral_headline,
+      neutral_summary: result.neutral_summary,
+      local_relevance: result.local_relevance,
+      original_bias: result.original_bias,
+      category: result.category||category,
+      submitted_by_id: user.id,
+      submitted_by_name: profile?.display_name||user.email?.split('@')[0]||'Resident',
+      upvotes: 0,
+      comment_count: 0,
+      approved: true,
+      created_at: new Date().toISOString()
+    }).select().single();
+
+    if(!error&&data) {
+      setStories(prev=>[data,...prev]);
+      setUrl(''); setOriginalTitle(''); setUserContext(''); setSubmitMsg('');
+      setShowSubmit(false);
+    } else {
+      setSubmitMsg('❌ Error saving: '+(error?.message||'unknown'));
+    }
+    setSubmitting(false);
+  };
+
+  const filtered = catFilter==='all'?stories:stories.filter(s=>s.category===catFilter);
+
+  return h('div',null,
+    // Header
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:10}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},
+          '📰 Current Events'
+        ),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
+          'Community-submitted news — AI-neutralized, source-verified, locally contextualized.'
+        )
+      ),
+      isTrusted
+        ? h('button',{onClick:()=>setShowSubmit(!showSubmit),
+            style:{background:showSubmit?'#f5f5f5':'#1a1a2e',color:showSubmit?'#888':'#f0c040',
+              border:showSubmit?'1px solid #ddd':'none',padding:'10px 18px',borderRadius:7,
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}
+          },showSubmit?'Cancel':'+ Submit Story')
+        : h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:7,padding:'8px 12px',fontSize:12,color:'#888'}},
+            '⭐ Need 50 rep to submit stories'
+          )
+    ),
+
+    // Submit form
+    showSubmit&&isTrusted&&h('div',{style:{background:'#fff',border:'2px solid #1a5c8a',borderRadius:10,padding:18,marginBottom:16}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},'Submit a News Story'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',marginBottom:16,lineHeight:1.6}},
+        'The AI will automatically read your submission and rewrite it in neutral, factual language before it goes live. All sources must be from verified credible outlets.'
+      ),
+
+      // Source URL
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Source URL *'),
+        h('input',{value:url,onChange:e=>checkUrl(e.target.value),
+          placeholder:'https://apnews.com/article/...',
+          style:{width:'100%',border:'1px solid '+(urlError?'#e74c3c':'#ddd'),borderRadius:6,
+            padding:'9px 11px',fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}}),
+        urlError&&h('div',{style:{fontSize:11,color:'#e74c3c',marginTop:4,lineHeight:1.5}},urlError),
+        !urlError&&url&&isCredibleSource(url)&&h('div',{style:{fontSize:11,color:'#1a6b3c',marginTop:4}},
+          '✓ Credible source verified: '+getDomain(url)
+        )
+      ),
+
+      // Original headline
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Original Headline *'),
+        h('input',{value:originalTitle,onChange:e=>setOriginalTitle(e.target.value),
+          placeholder:'Paste the original article headline exactly as written',
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,
+            padding:'9px 11px',fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+      ),
+
+      // Category
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Category'),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          NEWS_CATEGORIES.map(c=>h('button',{key:c,onClick:()=>setCategory(c),
+            style:{background:category===c?'#1a1a2e':'#f5f5f5',color:category===c?'#f0c040':'#555',
+              border:'1px solid '+(category===c?'#1a1a2e':'#ddd'),padding:'5px 12px',
+              borderRadius:20,fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}
+          },c))
+        )
+      ),
+
+      // Why it matters
+      h('div',{style:{marginBottom:14}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Why does this matter to Jackson County? (optional)'),
+        h('textarea',{value:userContext,onChange:e=>setUserContext(e.target.value),rows:2,
+          placeholder:'Add context about local impact — the AI will use this to write the local relevance note...',
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+            fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
+      ),
+
+      // Credible sources note
+      h('div',{style:{background:'#e8f2fa',borderRadius:7,padding:'10px 12px',marginBottom:14,fontSize:11,color:'#1a5c8a',lineHeight:1.6}},
+        h('strong',null,'✓ Accepted sources include: '),'AP News, Reuters, NPR, MLive, Bridge Michigan, Detroit Free Press, Michigan Radio, Washington Post, NY Times, The Hill, Politico, and other established news outlets. Blogs, social media, and sites without named authors are not accepted.'
+      ),
+
+      submitMsg&&h('div',{style:{padding:'10px 12px',borderRadius:6,marginBottom:10,fontSize:13,
+        background:submitMsg.startsWith('❌')?'#fdf0ef':submitMsg.startsWith('✅')?'#eef7f1':'#fff8e7',
+        color:submitMsg.startsWith('❌')?'#c0392b':submitMsg.startsWith('✅')?'#1a6b3c':'#8a6000',
+        fontFamily:"'Lora',serif",lineHeight:1.5}},submitMsg),
+
+      h('button',{onClick:submitStory,
+        disabled:submitting||!url.trim()||!originalTitle.trim()||!!urlError,
+        style:{width:'100%',background:submitting||!url.trim()||!originalTitle.trim()||urlError?'#ccc':'#1a5c8a',
+          color:'#fff',border:'none',padding:'12px',borderRadius:7,
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}
+      },submitting?'🤖 AI Neutralizing...':'Submit & Neutralize →')
+    ),
+
+    // Category filter
+    h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:14,alignItems:'center'}},
+      h('span',{style:{fontSize:12,color:'#aaa'}},'Filter:'),
+      [['all','All'],['Local','📍 Local'],['Michigan','🏛 Michigan'],['Federal','🇺🇸 Federal'],['International','🌍 International']].map(([v,l])=>
+        h('button',{key:v,onClick:()=>setCatFilter(v),
+          style:{background:catFilter===v?'#1a1a2e':'#fff',color:catFilter===v?'#f0c040':'#555',
+            border:'1px solid '+(catFilter===v?'#1a1a2e':'#ddd'),padding:'5px 12px',
+            borderRadius:20,fontFamily:"'Playfair Display',serif",fontSize:12,
+            fontWeight:catFilter===v?700:400,cursor:'pointer'}
+        },l)
+      ),
+      h('span',{style:{marginLeft:'auto',fontSize:12,color:'#aaa'}},filtered.length+' '+(filtered.length===1?'story':'stories'))
+    ),
+
+    // Stories
+    loading&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},'Loading news...'),
+    !loading&&filtered.length===0&&h('div',{style:{textAlign:'center',padding:40,background:'#fff',borderRadius:10,border:'1px solid #e5dece'}},
+      h('div',{style:{fontSize:40,marginBottom:12}},'📰'),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:'#1a1a2e',marginBottom:8}},'No stories yet.'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',lineHeight:1.7}},
+        isTrusted
+          ? 'Be the first to submit a story. Use the "+ Submit Story" button above.'
+          : 'Stories will appear here as trusted residents submit them. Earn 50 reputation to submit.'
+      )
+    ),
+    filtered.map(s=>h(NewsStoryCard,{key:s.id,story:s,user,rep}))
+  );
+}
+
 // ── Community Feed ────────────────────────────────────────────────────────────
 const FEED_ICONS = {
   vote:       {icon:'🗳', color:'#1a6b3c', bg:'#eef7f1', label:'voted on'},
@@ -4315,7 +4785,7 @@ function App() {
       ),
       // Tabs
       h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 16px',display:'flex'}},
-        [['feed','📡 Feed'],['bills','🗳 Bills'],['projects','🌱 Community'],['connect','🤝 Connect'],['resources','📚 Resources'],['ideas','💡 Ideas'],['reps','🏛 Reps'],...(isAdmin?[['admin','⚙️ Admin']]:[])].map(([t,l])=>
+        [['feed','📡 Feed'],['bills','🗳 Bills'],['news','📰 News'],['projects','🌱 Community'],['connect','🤝 Connect'],['resources','📚 Resources'],['ideas','💡 Ideas'],['reps','🏛 Reps'],...(isAdmin?[['admin','⚙️ Admin']]:[])].map(([t,l])=>
           h('button',{key:t,onClick:()=>setMainTab(t),style:{background:'transparent',border:'none',borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',padding:'11px 14px',fontFamily:"'Playfair Display',serif",fontWeight:mainTab===t?700:400,fontSize:13,color:mainTab===t?'#f0c040':'#8899aa'}},l)
         )
       )
@@ -4327,6 +4797,8 @@ function App() {
       // Bills tab
       // Feed tab — community activity stream
       mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode}),
+
+      mainTab==='news'&&h(NewsTab,{user,rep,profile}),
 
       mainTab==='bills'&&h(Fragment,null,
 
