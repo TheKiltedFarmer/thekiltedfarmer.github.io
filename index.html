@@ -54,7 +54,7 @@ const SUPA_URL = "https://zhnilrohxoixsgmdyqiw.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE";
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
-const SITE_URL = "https://thekiltedfarmer.github.io";
+const SITE_URL = "https://thepeoplesvoices.org";
 const REP_TO_PROPOSE = 50;
 
 // ── ZIP Codes ─────────────────────────────────────────────────────────────────
@@ -1221,6 +1221,247 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
           onEdited:(updated)=>setComments(prev=>prev.map((x,j)=>j===i?{...x,content:updated}:x))
         }))
       )
+    )
+  );
+}
+
+// ── Community Feed ────────────────────────────────────────────────────────────
+const FEED_ICONS = {
+  vote:       {icon:'🗳', color:'#1a6b3c', bg:'#eef7f1', label:'voted on'},
+  comment:    {icon:'💬', color:'#1a5c8a', bg:'#e8f2fa', label:'commented on'},
+  join:       {icon:'🌱', color:'#5b3a8c', bg:'#f0ebf8', label:'joined the community'},
+  badge:      {icon:'🏅', color:'#8a6000', bg:'#fff8e7', label:'earned a badge'},
+  idea:       {icon:'💡', color:'#8a6000', bg:'#fff8e7', label:'submitted an idea'},
+  idea_up:    {icon:'👍', color:'#1a6b3c', bg:'#eef7f1', label:'upvoted an idea'},
+  resource:   {icon:'📚', color:'#1a5c8a', bg:'#e8f2fa', label:'added a resource'},
+  project:    {icon:'🤝', color:'#5b3a8c', bg:'#f0ebf8', label:'pledged to'},
+  bill:       {icon:'📋', color:'#1a1a2e', bg:'#f0f0f8', label:'submitted a bill'},
+  chat:       {icon:'💬', color:'#5b3a8c', bg:'#f0ebf8', label:'said in community chat'},
+  nomination: {icon:'📬', color:'#1a5c8a', bg:'#e8f2fa', label:'nominated a bill'},
+};
+
+function CommunityFeed({user, profile, bills, guestMode}) {
+  const [feed, setFeed] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [memberCount, setMemberCount] = useState(null);
+  const [totalVotes, setTotalVotes] = useState(null);
+
+  useEffect(()=>{
+    loadFeed();
+    // Load summary stats
+    sb.from('profiles').select('id',{count:'exact',head:true}).then(({count})=>setMemberCount(count));
+    sb.from('user_votes').select('id',{count:'exact',head:true}).then(({count})=>setTotalVotes(count));
+  },[]);
+
+  const loadFeed = async()=>{
+    try {
+      // Pull recent activity from multiple tables in parallel
+      const [votesRes, commentsRes, profilesRes, ideasRes, chatRes, nominationsRes] = await Promise.all([
+        sb.from('user_votes').select('id,user_id,bill_id,choice,anonymous,created_at').order('created_at',{ascending:false}).limit(15),
+        sb.from('bill_comments').select('id,user_id,display_name,bill_id,content,anonymous,created_at').order('created_at',{ascending:false}).limit(10),
+        sb.from('profiles').select('id,display_name,zip,reputation,badges,created_at').order('created_at',{ascending:false}).limit(8),
+        sb.from('community_ideas').select('id,title,submitted_by_name,upvotes,created_at').order('created_at',{ascending:false}).limit(8),
+        sb.from('community_chat').select('id,display_name,content,room_id,created_at').eq('room_id','general').order('created_at',{ascending:false}).limit(6),
+        sb.from('bill_nominations').select('id,title,submitted_by_name,created_at').order('created_at',{ascending:false}).limit(5),
+      ]);
+
+      const items = [];
+
+      // Votes
+      (votesRes.data||[]).forEach(v=>{
+        const bill = bills.find(b=>b.id===v.bill_id);
+        items.push({
+          id:'vote-'+v.id, type:'vote', ts:v.created_at,
+          name: v.anonymous?'An anonymous resident':'A verified resident',
+          detail: bill?.title||v.bill_id,
+          sub: v.choice==='yes'?'✅ Supported':v.choice==='no'?'❌ Opposed':'⬜ Abstained',
+          billId: v.bill_id
+        });
+      });
+
+      // Comments
+      (commentsRes.data||[]).forEach(c=>{
+        const bill = bills.find(b=>b.id===c.bill_id);
+        items.push({
+          id:'comment-'+c.id, type:'comment', ts:c.created_at,
+          name: c.anonymous?'An anonymous resident':(c.display_name||'A resident'),
+          detail: bill?.title||c.bill_id,
+          sub: '"'+(c.content||'').slice(0,80)+(c.content?.length>80?'...':'')+'"',
+        });
+      });
+
+      // New members (joined in last 30 days)
+      const cutoff = new Date(Date.now()-30*24*60*60*1000).toISOString();
+      (profilesRes.data||[]).filter(p=>p.created_at>cutoff).forEach(p=>{
+        items.push({
+          id:'join-'+p.id, type:'join', ts:p.created_at,
+          name: p.display_name||'A new neighbor',
+          detail: p.zip?'from '+p.zip:'',
+          sub: null
+        });
+        // Badge events — show newest badge earned
+        if(p.badges&&p.badges.length>0) {
+          const latestBadge = p.badges[p.badges.length-1];
+          if(BADGES[latestBadge]) {
+            items.push({
+              id:'badge-'+p.id+'-'+latestBadge, type:'badge', ts:p.created_at,
+              name: p.display_name||'A resident',
+              detail: BADGES[latestBadge].label,
+              sub: BADGES[latestBadge].desc,
+              badgeId: latestBadge
+            });
+          }
+        }
+      });
+
+      // Ideas
+      (ideasRes.data||[]).forEach(i=>{
+        items.push({
+          id:'idea-'+i.id, type:'idea', ts:i.created_at,
+          name: i.submitted_by_name||'A resident',
+          detail: i.title,
+          sub: i.upvotes>1?i.upvotes+' upvotes':null
+        });
+      });
+
+      // Chat messages
+      (chatRes.data||[]).forEach(m=>{
+        items.push({
+          id:'chat-'+m.id, type:'chat', ts:m.created_at,
+          name: m.display_name||'A resident',
+          detail: '"'+(m.content||'').slice(0,100)+(m.content?.length>100?'...':'')+'"',
+          sub: 'in #general'
+        });
+      });
+
+      // Nominations
+      (nominationsRes.data||[]).forEach(n=>{
+        items.push({
+          id:'nom-'+n.id, type:'nomination', ts:n.created_at,
+          name: n.submitted_by_name||'A resident',
+          detail: n.title,
+          sub: 'Pending admin review'
+        });
+      });
+
+      // Sort all by timestamp, newest first
+      items.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+      setFeed(items.slice(0,40));
+    } catch(e) {
+      console.error('Feed load error:', e);
+    }
+    setLoading(false);
+  };
+
+  const timeAgo = (ts)=>{
+    const diff = Date.now()-new Date(ts);
+    const m = Math.floor(diff/60000);
+    const h = Math.floor(diff/3600000);
+    const d = Math.floor(diff/86400000);
+    if(m<2) return 'just now';
+    if(m<60) return m+'m ago';
+    if(h<24) return h+'h ago';
+    return d+'d ago';
+  };
+
+  return h('div',null,
+    // Hero stats bar
+    h('div',{style:{background:'#1a1a2e',borderRadius:12,padding:'20px 24px',marginBottom:20,display:'flex',gap:0,flexWrap:'wrap'}},
+      [
+        [memberCount!==null?memberCount:'...','Verified Members','🌱'],
+        [totalVotes!==null?totalVotes:'...','Votes Cast','🗳'],
+        [bills.length,'Bills Tracked','📋'],
+        ['Jackson Co.','Michigan','📍'],
+      ].map(([v,l,icon],i)=>h('div',{key:l,style:{flex:1,minWidth:120,textAlign:'center',padding:'8px 0',
+        borderRight:i<3?'1px solid rgba(255,255,255,.1)':'none'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:24,color:'#f0c040'}},icon+' '+v),
+        h('div',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,marginTop:2}},l)
+      ))
+    ),
+
+    // Welcome message
+    h('div',{style:{background:'#fff',borderRadius:10,padding:'16px 20px',marginBottom:16,
+      borderLeft:'4px solid #f0c040'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},
+        '👋 Welcome to The People\'s Voice'
+      ),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7}},
+        'A free, nonpartisan civic platform for Jackson County residents. Vote on real legislation, connect with neighbors, hold your representatives accountable, and build the community you want to live in.',
+        guestMode&&h('span',null,' ',h('strong',{style:{color:'#1a5c8a',cursor:'pointer',textDecoration:'underline'},
+          onClick:()=>window.scrollTo(0,0)},'Sign up to participate →'))
+      )
+    ),
+
+    // Feed
+    h('div',{style:{background:'#fff',borderRadius:10,overflow:'hidden',border:'1px solid #e5dece'}},
+      h('div',{style:{background:'#1a1a2e',padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,color:'#f0c040',fontSize:15}},'📡 Community Activity'),
+        h('div',{style:{fontSize:11,color:'#8899aa'}},'Live feed · updates as residents engage')
+      ),
+      loading&&h('div',{style:{padding:40,textAlign:'center',color:'#aaa',fontStyle:'italic'}},
+        h('div',{className:'spin',style:{marginBottom:12}}),
+        'Loading community activity...'
+      ),
+      !loading&&feed.length===0&&h('div',{style:{padding:40,textAlign:'center'}},
+        h('div',{style:{fontSize:48,marginBottom:12}},'🌱'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:18,color:'#1a1a2e',marginBottom:8}},
+          'Be the first to make a move.'
+        ),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',lineHeight:1.7,maxWidth:380,margin:'0 auto'}},
+          'This feed shows real community activity as it happens. Cast a vote on a bill, post a comment, share an idea — and watch this space come alive.'
+        )
+      ),
+      h('div',{style:{padding:'8px 0'}},
+        feed.map((item,i)=>{
+          const meta = FEED_ICONS[item.type]||FEED_ICONS.vote;
+          return h('div',{key:item.id,
+            style:{display:'flex',gap:12,padding:'12px 16px',
+              borderBottom:i<feed.length-1?'1px solid #f5f3ee':'none',
+              background:i%2===0?'#fff':'#faf8f5',
+              animation:'fadeIn .3s ease'}},
+            // Icon
+            h('div',{style:{width:36,height:36,borderRadius:'50%',background:meta.bg,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:16,flexShrink:0,border:'1px solid '+meta.color+'22'}},
+              item.badgeId?BADGES[item.badgeId]?.icon:meta.icon
+            ),
+            // Content
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontSize:13,color:'#1a1a2e',lineHeight:1.5,marginBottom:2}},
+                h('strong',{style:{color:meta.color}},item.name),
+                ' ',
+                h('span',{style:{color:'#888'}},meta.label),
+                item.detail&&h('span',null,' ',
+                  h('span',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,color:'#1a1a2e',
+                    fontSize:12,display:'inline'}},
+                    item.detail.length>60?item.detail.slice(0,60)+'...':item.detail
+                  )
+                )
+              ),
+              item.sub&&h('div',{style:{fontSize:12,color:'#888',fontFamily:"'Lora',serif",
+                fontStyle:item.type==='chat'||item.type==='comment'?'italic':'normal',
+                marginTop:2,lineHeight:1.4}},item.sub)
+            ),
+            // Timestamp
+            h('div',{style:{fontSize:11,color:'#bbb',flexShrink:0,marginTop:2}},timeAgo(item.ts))
+          );
+        })
+      )
+    ),
+
+    // CTA for guests
+    guestMode&&h('div',{style:{background:'#1a1a2e',borderRadius:10,padding:'20px 24px',marginTop:16,textAlign:'center'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#f0c040',marginBottom:8}},
+        'Ready to add your voice?'
+      ),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#8899aa',marginBottom:14,lineHeight:1.7}},
+        'Signing up takes 2 minutes. No ads. No spam. Just your community.'
+      ),
+      h('button',{
+        onClick:()=>{ window.scrollTo(0,0); },
+        style:{background:'#f0c040',color:'#1a1a2e',border:'none',padding:'12px 28px',
+          borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}
+      },'Join The People\'s Voice →')
     )
   );
 }
@@ -3776,7 +4017,7 @@ function App() {
   const [user,setUser]=useState(null);
   const [profile,setProfile]=useState(null);
   const [rep,setRep]=useState(0);
-  const [mainTab,setMainTab]=useState('bills');
+  const [mainTab,setMainTab]=useState('feed');
   const [bills,setBills]=useState([]);
   const [pendingBills,setPendingBills]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -4001,7 +4242,7 @@ function App() {
       ),
       // Tabs
       h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 16px',display:'flex'}},
-        [['bills','🗳 Bills'],['projects','🌱 Community'],['connect','🤝 Connect'],['resources','📚 Resources'],['ideas','💡 Ideas'],['reps','🏛 Reps'],['admin','⚙️ Admin']].map(([t,l])=>
+        [['feed','📡 Feed'],['bills','🗳 Bills'],['projects','🌱 Community'],['connect','🤝 Connect'],['resources','📚 Resources'],['ideas','💡 Ideas'],['reps','🏛 Reps'],['admin','⚙️ Admin']].map(([t,l])=>
           h('button',{key:t,onClick:()=>setMainTab(t),style:{background:'transparent',border:'none',borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',padding:'11px 14px',fontFamily:"'Playfair Display',serif",fontWeight:mainTab===t?700:400,fontSize:13,color:mainTab===t?'#f0c040':'#8899aa'}},l)
         )
       )
@@ -4011,6 +4252,9 @@ function App() {
     h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px'}},
 
       // Bills tab
+      // Feed tab — community activity stream
+      mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode}),
+
       mainTab==='bills'&&h(Fragment,null,
 
         // Search bars
