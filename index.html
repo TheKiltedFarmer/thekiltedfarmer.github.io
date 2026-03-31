@@ -59,13 +59,19 @@ const REP_TO_PROPOSE = 50;
 
 // ── ZIP Codes ─────────────────────────────────────────────────────────────────
 const ZIP_COMMUNITY = {
+  // Jackson City
   "49201":"Jackson","49202":"Jackson","49203":"Jackson","49204":"Jackson",
-  "49237":"Concord","49230":"Brooklyn","49234":"Clarklake","49240":"Grass Lake",
-  "49241":"Hanover","49246":"Horton","49254":"Michigan Center","49259":"Munith",
-  "49261":"Napoleon","49263":"Norvell","49269":"Parma","49272":"Pleasant Lake",
-  "49277":"Rives Junction","49283":"Spring Arbor","49284":"Springport",
-  "49285":"Summit Township","49224":"Albion area","49233":"Cement City",
-  "49251":"Leslie area","49264":"Onondaga area","48827":"Eaton Rapids area",
+  // Jackson County townships and villages
+  "49230":"Brooklyn","49233":"Cement City","49234":"Clark Lake",
+  "49237":"Concord","49240":"Grass Lake","49241":"Hanover",
+  "49245":"Homer","49246":"Horton","49249":"Lake Columbia",
+  "49250":"Litchfield","49251":"Leslie area","49252":"Morenci area",
+  "49254":"Michigan Center","49259":"Munith","49261":"Napoleon",
+  "49263":"Norvell","49264":"Onondaga area","49269":"Parma",
+  "49272":"Pleasant Lake","49277":"Rives Junction","49283":"Spring Arbor",
+  "49284":"Springport","49285":"Summit Township",
+  // Adjacent areas that cross county lines
+  "49224":"Albion area","48827":"Eaton Rapids area","48158":"Manchester area",
 };
 const VALID_ZIPS = Object.keys(ZIP_COMMUNITY);
 
@@ -3215,6 +3221,7 @@ function AuthScreen({onAuth, onGuest}) {
 
   const handleSignup=async()=>{
     if(!zip.trim()){setError('ZIP code is required.');return;}
+    if(!zipValid){setError('Sorry — The People\'s Voice is currently only open to Jackson County and surrounding area residents. Your ZIP code ('+zip.trim()+') is not in our service area.');return;}
     if(!attested){setError('Please confirm the attestation to continue.');return;}
     setLoading(true);setError('');
     const displayName=name||email.split('@')[0];
@@ -3327,8 +3334,16 @@ function AuthScreen({onAuth, onGuest}) {
           h('input',{value:zip,onChange:e=>setZip(e.target.value),placeholder:'ZIP code * (e.g. 49237)',maxLength:5,
             style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',fontSize:14,boxSizing:'border-box'}})
         ),
-        community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4}},"✓ "+community+" — welcome to The People's Voice!"),
-        zip.trim().length===5&&!zipValid&&h('div',{style:{fontSize:12,color:'#e07000',marginBottom:8,paddingLeft:4}},"⚠️ ZIP not in our coverage area. You can still register."),
+        community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},"✓ "+community+" — welcome to The People's Voice!"),
+        zip.trim().length===5&&!zipValid&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:8,fontSize:13,color:'#c0392b',lineHeight:1.6}},
+          h('strong',null,"❌ ZIP code not in our service area. "),
+          "The People's Voice is currently open to Jackson County and surrounding area residents only.",
+          h('br'),
+          h('span',{style:{color:'#555',fontSize:12}},"You can still ",
+            h('button',{onClick:onGuest,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',padding:0,fontFamily:"'Lora',serif",fontWeight:700}},"browse as a guest"),
+            " to view bills and community activity without an account."
+          )
+        ),
         h('div',{style:{background:'#fff8e7',border:'2px solid #f0c040',borderRadius:10,padding:18,marginBottom:16}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#8a6000',marginBottom:10}},"⚖️ Resident Attestation"),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.8,marginBottom:14}},
@@ -3356,7 +3371,7 @@ function AuthScreen({onAuth, onGuest}) {
         error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
         h('div',{style:{display:'flex',gap:10}},
           h('button',{onClick:()=>{setStep(1);setError('');},style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'12px 16px',borderRadius:7,fontSize:14}},"← Back"),
-          h('button',{onClick:handleSignup,disabled:loading||!attested,style:{flex:1,background:loading||!attested?'#ccc':'#1a6b3c',color:'#fff',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
+          h('button',{onClick:handleSignup,disabled:loading||!attested||(zip.trim().length===5&&!zipValid),style:{flex:1,background:loading||!attested||(zip.trim().length===5&&!zipValid)?'#ccc':'#1a6b3c',color:'#fff',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
             loading?h(Spinner):'Create My Account ✓'
           )
         )
@@ -4674,49 +4689,47 @@ function App() {
 
     // Header
     h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
-      h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}},
+      h('div',{style:{maxWidth:900,margin:'0 auto',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}},
         h('div',null,
-          h('div',{style:{fontSize:10,color:'#8899aa',letterSpacing:3,textTransform:'uppercase',marginBottom:2}},"Civic Engagement Platform"),
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
+          h('div',{style:{fontSize:9,color:'#8899aa',letterSpacing:2,textTransform:'uppercase',marginBottom:1}},"Civic Engagement Platform"),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
         ),
-        h('div',{style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
-          h('div',{style:{background:'rgba(255,255,255,.07)',border:'1px solid rgba(255,255,255,.1)',borderRadius:8,padding:'7px 12px',textAlign:'center'}},
-            h('div',{style:{fontSize:10,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,marginBottom:2}},"Reputation"),
-            h('div',{style:{display:'flex',alignItems:'center',gap:5}},
-              h('span',{style:{fontSize:16}},repInfo.icon),
-              h('div',null,
-                h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14}},rep+" pts"),
-                h('div',{style:{color:repInfo.color,fontSize:10,fontWeight:600}},repInfo.label)
-              )
-            ),
-            !canPropose&&h('div',{style:{fontSize:10,color:'#8899aa',marginTop:2}},REP_TO_PROPOSE-rep+" more to propose"),
-            canPropose&&h('div',{style:{fontSize:10,color:'#f0c040',marginTop:2}},"✓ Can propose")
-          ),
+        h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
           h('div',{style:{textAlign:'right'}},
-            h('div',{style:{color:'#fff',fontSize:12,fontFamily:"'Playfair Display',serif"}},displayName),
-            h('div',{style:{color:'#f0c040',fontSize:10}},
-              profile?.street_address
-                ? "📍 Self-Attested · "+profile.zip
-                : "✓ Verified · ZIP "+(profile?.zip||'')
-            ),
-            h('button',{onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif"}},"\uD83D\uDEAA Sign out"),
-            h('button',{onClick:()=>setShowProfile(true),style:{background:'transparent',border:'none',color:'#f0c040',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif",display:'block'}},"👤 My Profile"),
-            h('button',{onClick:()=>setShowOnboarding(true),style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',marginTop:2,fontFamily:"'Lora',serif",display:'block'}},"❓ How it works")
+            h('div',{style:{color:'#fff',fontSize:12,fontFamily:"'Playfair Display',serif",fontWeight:700}},displayName),
+            h('div',{style:{color:'#f0c040',fontSize:10,marginBottom:2}},rep+' pts · '+repInfo.label),
+            h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end'}},
+              h('button',{onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDEAA Sign out"),
+              h('button',{onClick:()=>setShowProfile(true),style:{background:'transparent',border:'none',color:'#f0c040',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDC64 Profile"),
+              h('button',{onClick:()=>setShowOnboarding(true),style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\u2753 Help")
+            )
           )
         )
       ),
-      // Stats bar
-      h('div',{style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)'}},
-        h('div',{style:{maxWidth:900,margin:'0 auto',padding:'7px 16px',display:'flex',gap:20,flexWrap:'wrap'}},
-          [[bills.length,"Bills"],[totalVotes.toLocaleString(),"Votes"],[projects.length,"Projects"],[memberCount!==null?memberCount:'...','Members'],[rep+" pts","Your Rep"]].map(([v,l])=>
-            h('div',{key:l},h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:900,color:'#f0c040'}},v),h('div',{style:{fontSize:10,color:'#8899aa',textTransform:'uppercase',letterSpacing:1}},l))
+      // Stats bar — horizontally scrollable on mobile
+      h('div',{style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
+        h('div',{style:{maxWidth:900,margin:'0 auto',padding:'6px 14px',display:'flex',gap:16,flexWrap:'nowrap',minWidth:'max-content'}},
+          [[bills.length,"Bills"],[totalVotes.toLocaleString(),"Votes"],[projects.length,"Projects"],[memberCount!==null?memberCount:'...',"Members"],[rep+" pts","Your Rep"]].map(([v,l])=>
+            h('div',{key:l,style:{flexShrink:0}},
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:900,color:'#f0c040'}},v),
+              h('div',{style:{fontSize:9,color:'#8899aa',textTransform:'uppercase',letterSpacing:1}},l)
+            )
           )
         )
       ),
-      // Tabs
-      h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 16px',display:'flex'}},
-        [['feed','📡 Feed'],['bills','🗳 Bills'],['news','📰 News'],['projects','🌱 Community'],['connect','🤝 Connect'],['resources','📚 Resources'],['ideas','💡 Ideas'],['reps','🏛 Reps'],...(isAdmin?[['admin','⚙️ Admin']]:[])].map(([t,l])=>
-          h('button',{key:t,onClick:()=>setMainTab(t),style:{background:'transparent',border:'none',borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',padding:'11px 14px',fontFamily:"'Playfair Display',serif",fontWeight:mainTab===t?700:400,fontSize:13,color:mainTab===t?'#f0c040':'#8899aa'}},l)
+      // Tabs — horizontally scrollable on mobile
+      h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
+        h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
+          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
+            h('button',{key:t,onClick:()=>setMainTab(t),
+              style:{background:'transparent',border:'none',
+                borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
+                padding:'10px 12px',fontFamily:"'Playfair Display',serif",
+                fontWeight:mainTab===t?700:400,fontSize:12,
+                color:mainTab===t?'#f0c040':'#8899aa',
+                whiteSpace:'nowrap',flexShrink:0,cursor:'pointer'}
+            },l)
+          )
         )
       )
     ),
