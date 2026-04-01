@@ -3142,8 +3142,10 @@ function CommunityHub({user, profile}) {
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [neighbors, setNeighbors] = useState([]);
+  const [connections, setConnections] = useState(new Set()); // IDs of people user follows
   const [loadingNeighbors, setLoadingNeighbors] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
+  const [neighborFilter, setNeighborFilter] = useState('all'); // 'all' | 'neighbors'
   const bottomRef = useRef(null);
   const pollRef = useRef(null);
 
@@ -3152,11 +3154,25 @@ function CommunityHub({user, profile}) {
 
   // Load neighbors
   useEffect(()=>{
-    sb.from('profiles').select('id,display_name,zip,reputation,avatar_url,tagline,bio,is_official,official_title,created_at,badges,show_in_directory')
-      .or('show_in_directory.is.null,show_in_directory.eq.true')
-      .order('reputation',{ascending:false}).limit(50)
-      .then(({data})=>{ setNeighbors(data||[]); setLoadingNeighbors(false); });
+    sb.from('profiles').select('id,display_name,zip,reputation,avatar_url,tagline,bio,is_official,official_title,created_at,badges,show_in_directory').or('show_in_directory.is.null,show_in_directory.eq.true').order('reputation',{ascending:false}).limit(50).then(({data})=>{ setNeighbors(data||[]); setLoadingNeighbors(false); });
+    // Load existing connections
+    if(user?.id) {
+      sb.from('neighbor_connections').select('neighbor_id').eq('user_id',user.id)
+        .then(({data})=>{ setConnections(new Set((data||[]).map(r=>r.neighbor_id))); });
+    }
   },[]);
+
+  const toggleConnection = async(neighborId)=>{
+    if(!user) return;
+    const isConnected = connections.has(neighborId);
+    if(isConnected) {
+      await sb.from('neighbor_connections').delete().eq('user_id',user.id).eq('neighbor_id',neighborId);
+      setConnections(prev=>{ const n=new Set(prev); n.delete(neighborId); return n; });
+    } else {
+      await sb.from('neighbor_connections').insert({user_id:user.id,neighbor_id:neighborId,created_at:new Date().toISOString()});
+      setConnections(prev=>new Set([...prev,neighborId]));
+    }
+  };
 
   // Load + poll messages
   const loadMessages = async(room)=>{
@@ -3283,21 +3299,38 @@ function CommunityHub({user, profile}) {
 
     // ── Neighbor Directory ───────────────────────────────────────────────────
     activeTab==='neighbors'&&h('div',null,
-      h('div',{style:{fontSize:13,color:'#888',fontFamily:"'Lora',serif",marginBottom:12}},
-        'Showing '+neighbors.length+' verified Jackson County residents.'+(userZip?' Your neighbors in '+userZip+' are listed first.':'')
+      h('div',{style:{display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap'}},
+        h('div',{style:{fontSize:13,color:'#888',fontFamily:"'Lora',serif",flex:1}},
+          neighborFilter==='neighbors'
+            ? connections.size+' neighbor'+(connections.size!==1?'s':'')+' added'
+            : 'Showing '+neighbors.length+' verified residents'+(userZip?' · Your ZIP first':'')
+        ),
+        h('button',{onClick:()=>setNeighborFilter('all'),
+          style:{background:neighborFilter==='all'?'#1a1a2e':'#fff',color:neighborFilter==='all'?'#f0c040':'#555',
+            border:'1px solid '+(neighborFilter==='all'?'#1a1a2e':'#ddd'),padding:'5px 12px',
+            borderRadius:20,fontSize:11,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:neighborFilter==='all'?700:400}
+        },'\uD83C\uDF0D All Members'),
+        h('button',{onClick:()=>setNeighborFilter('neighbors'),
+          style:{background:neighborFilter==='neighbors'?'#1a1a2e':'#fff',color:neighborFilter==='neighbors'?'#f0c040':'#555',
+            border:'1px solid '+(neighborFilter==='neighbors'?'#1a1a2e':'#ddd'),padding:'5px 12px',
+            borderRadius:20,fontSize:11,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:neighborFilter==='neighbors'?700:400}
+        },'\uD83E\uDD1D My Neighbors'+(connections.size>0?' ('+connections.size+')':''))
       ),
       loadingNeighbors&&h('div',{style:{textAlign:'center',padding:30,color:'#aaa',fontStyle:'italic'}},'Loading neighbors...'),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10}},
-        // Sort — put same ZIP first
-        [...neighbors].sort((a,b)=>{
-          if(userZip&&a.zip===userZip&&b.zip!==userZip) return -1;
-          if(userZip&&b.zip===userZip&&a.zip!==userZip) return 1;
-          return (b.reputation||0)-(a.reputation||0);
-        }).map(n=>{
+        [...neighbors]
+          .filter(n=>neighborFilter==='neighbors'?connections.has(n.id)||n.id===user?.id:true)
+          .sort((a,b)=>{
+            if(userZip&&a.zip===userZip&&b.zip!==userZip) return -1;
+            if(userZip&&b.zip===userZip&&a.zip!==userZip) return 1;
+            return (b.reputation||0)-(a.reputation||0);
+          }).map(n=>{
           const name = n.display_name||'Resident';
           const repI = repLevel(n.reputation||0);
           const isMe = n.id===user?.id;
-          return h('div',{key:n.id,style:{background:'#fff',border:'1px solid '+(isMe?'#f0c040':'#e5dece'),
+          const isConnected = connections.has(n.id);
+          return h('div',{key:n.id,style:{background:'#fff',
+            border:'2px solid '+(isMe?'#f0c040':isConnected?'#1a6b3c':'#e5dece'),
             borderRadius:10,padding:'12px 14px',display:'flex',gap:10,alignItems:'flex-start'}},
             h('div',{style:{width:40,height:40,borderRadius:'50%',background:n.is_official?'#1a5c8a':'#1a1a2e',
               color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
@@ -3316,10 +3349,22 @@ function CommunityHub({user, profile}) {
                 n.zip&&h('span',{style:{fontSize:10,color:'#bbb'}},'· '+n.zip)
               ),
               n.official_title&&h('div',{style:{fontSize:10,color:'#1a5c8a',marginTop:3,fontWeight:600}},n.official_title),
-              n.badges&&n.badges.length>0&&h('div',{style:{marginTop:4}},h(BadgeRow,{badges:computeBadges(n).slice(0,3),tiny:true}))
+              n.badges&&n.badges.length>0&&h('div',{style:{marginTop:4}},h(BadgeRow,{badges:computeBadges(n).slice(0,3),tiny:true})),
+              !isMe&&user&&h('button',{onClick:()=>toggleConnection(n.id),
+                style:{marginTop:8,width:'100%',background:isConnected?'#eef7f1':'#f5f3ee',
+                  color:isConnected?'#1a6b3c':'#555',
+                  border:'1px solid '+(isConnected?'#1a6b3c44':'#ddd'),
+                  borderRadius:6,padding:'5px 8px',fontSize:11,cursor:'pointer',
+                  fontFamily:"'Playfair Display',serif",fontWeight:700}
+              },isConnected?'\u2713 Neighbor \u2014 Remove':'+ Add Neighbor')
             )
           );
         })
+      ),
+      neighborFilter==='neighbors'&&connections.size===0&&!loadingNeighbors&&h('div',{style:{textAlign:'center',padding:30,color:'#aaa',gridColumn:'1/-1'}},
+        h('div',{style:{fontSize:32,marginBottom:8}},'\uD83E\uDD1D'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'No neighbors added yet'),
+        h('div',{style:{fontSize:13,fontFamily:"'Lora',serif",color:'#888'}},"Switch to All Members and tap + Add Neighbor on anyone you know.")
       )
     )
   );
