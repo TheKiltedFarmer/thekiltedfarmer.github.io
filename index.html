@@ -3197,16 +3197,17 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
   },[messages]);
 
   const loadConversations = async()=>{
-    // Get all unique people we've had DMs with
-    const {data:sent} = await sb.from('direct_messages').select('recipient_id,recipient_name').eq('sender_id',user.id).order('created_at',{ascending:false});
-    const {data:recv} = await sb.from('direct_messages').select('sender_id,sender_name,read').eq('recipient_id',user.id).order('created_at',{ascending:false});
-    const people = new Map();
-    (sent||[]).forEach(m=>{ if(!people.has(m.recipient_id)) people.set(m.recipient_id,{userId:m.recipient_id,displayName:m.recipient_name,unread:0}); });
-    (recv||[]).forEach(m=>{ 
-      if(!people.has(m.sender_id)) people.set(m.sender_id,{userId:m.sender_id,displayName:m.sender_name,unread:0});
-      if(!m.read) people.get(m.sender_id).unread = (people.get(m.sender_id).unread||0)+1;
-    });
-    setConversations(Array.from(people.values()));
+    try {
+      const {data:sent} = await sb.from('direct_messages').select('recipient_id,recipient_name').eq('sender_id',user.id).order('created_at',{ascending:false});
+      const {data:recv} = await sb.from('direct_messages').select('sender_id,sender_name,read').eq('recipient_id',user.id).order('created_at',{ascending:false});
+      const people = new Map();
+      (sent||[]).forEach(m=>{ if(!people.has(m.recipient_id)) people.set(m.recipient_id,{userId:m.recipient_id,displayName:m.recipient_name,unread:0}); });
+      (recv||[]).forEach(m=>{ 
+        if(!people.has(m.sender_id)) people.set(m.sender_id,{userId:m.sender_id,displayName:m.sender_name,unread:0});
+        if(!m.read) people.get(m.sender_id).unread = (people.get(m.sender_id).unread||0)+1;
+      });
+      setConversations(Array.from(people.values()));
+    } catch(e) { /* table not yet created */ }
   };
 
   const loadMessages = async(otherId)=>{
@@ -3424,10 +3425,12 @@ function CommunityHub({user, profile}) {
     if(user?.id) {
       sb.from('neighbor_connections').select('neighbor_id').eq('user_id',user.id)
         .then(({data})=>{ setConnections(new Set((data||[]).map(r=>r.neighbor_id))); });
-      // Load unread DM count
-      sb.from('direct_messages').select('id',{count:'exact',head:true})
-        .eq('recipient_id',user.id).eq('read',false)
-        .then(({count})=>setUnreadDms(count||0));
+      // Load unread DM count — wrapped in try-catch in case table doesn't exist yet
+      try {
+        sb.from('direct_messages').select('id',{count:'exact',head:true})
+          .eq('recipient_id',user.id).eq('read',false)
+          .then(({count,error})=>{ if(!error) setUnreadDms(count||0); });
+      } catch(e) { /* direct_messages table not yet created */ }
     }
   },[]);
 
