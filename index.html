@@ -2616,7 +2616,7 @@ function OnboardingTour({onDone, displayName}) {
 }
 
 // ── Profile Page (Editable) ───────────────────────────────────────────────────
-function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUpdate}) {
+function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUpdate, onToast}) {
   const repInfo = repLevel(rep);
   const votedBills = bills.filter(b=>userVotes[b.id]);
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url||null);
@@ -2908,6 +2908,15 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
           )
         ),
 
+        // Official Badge Request
+        !profile?.is_official&&h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginTop:14,border:'1px solid #e5dece'}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🏛 Are You a Public Official?'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7,marginBottom:12}},
+            'If you are an elected or appointed public official in Jackson County, you can request a Verified Official badge. Your profile will show an official designation and your comments will be highlighted.'
+          ),
+          h(OfficialBadgeRequest,{user,profile,onToast})
+        ),
+
         // Privacy & account settings
         h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginTop:14}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:12}},'🔒 Privacy & Account'),
@@ -2960,6 +2969,157 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
           )
         )
       )
+    )
+  );
+}
+
+// ── Official Badge Request ────────────────────────────────────────────────────
+function OfficialBadgeRequest({user, profile, onToast}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const submit = async()=>{
+    if(!title.trim()) return;
+    setSubmitting(true);
+    const {error} = await sb.from('official_badge_requests').insert({
+      user_id: user.id,
+      display_name: profile?.display_name||user.email?.split('@')[0]||'Resident',
+      email: user.email||'',
+      zip: profile?.zip||'',
+      title: title.trim(),
+      message: body.trim()||null,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    });
+    if(!error) {
+      setSubmitted(true);
+      onToast('✅ Request submitted! Justin will review your application.');
+    } else {
+      onToast('❌ Error submitting request — please try again.');
+    }
+    setSubmitting(false);
+  };
+
+  if(submitted||profile?.is_official) return null;
+
+  return h('div',null,
+    !open
+      ? h('button',{onClick:()=>setOpen(true),
+          style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'10px 20px',
+            borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,
+            fontSize:13,cursor:'pointer',width:'100%'}
+        },'🏛 Request Verified Official Badge')
+      : h('div',{style:{background:'#f0ebf8',border:'1px solid #c8b8e8',borderRadius:8,padding:14,marginTop:8}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:10}},
+            'Official Badge Application'
+          ),
+          h('div',{style:{marginBottom:10}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Your Official Title *'),
+            h('input',{value:title,onChange:e=>setTitle(e.target.value),
+              placeholder:'e.g. "Jackson City Council Member, Ward 3" or "Village of Concord Trustee"',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+          ),
+          h('div',{style:{marginBottom:12}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Additional Information (optional)'),
+            h('textarea',{value:body,onChange:e=>setBody(e.target.value),rows:2,
+              placeholder:'Any additional context — official website, contact info, etc.',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
+          ),
+          h('div',{style:{fontSize:11,color:'#888',fontFamily:"'Lora',serif",lineHeight:1.5,marginBottom:12}},
+            '⚖️ Your request will be reviewed by the platform admin. Verified officials have their comments highlighted and receive an official badge on their profile.'
+          ),
+          h('div',{style:{display:'flex',gap:8}},
+            h('button',{onClick:submit,disabled:submitting||!title.trim(),
+              style:{flex:1,background:submitting||!title.trim()?'#ccc':'#5b3a8c',
+                color:'#fff',border:'none',padding:'10px',borderRadius:7,
+                fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}
+            },submitting?'Submitting...':'Submit Application'),
+            h('button',{onClick:()=>setOpen(false),
+              style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',
+                padding:'10px 16px',borderRadius:7,fontSize:13,cursor:'pointer'}
+            },'Cancel')
+          )
+        )
+  );
+}
+
+// Admin inbox for official badge requests
+function OfficialBadgeInbox({onToast}) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(()=>{
+    sb.from('official_badge_requests').select('*')
+      .eq('status','pending').order('created_at',{ascending:false})
+      .then(({data})=>{ setRequests(data||[]); setLoading(false); });
+  },[]);
+
+  const approve = async(req)=>{
+    // Grant the badge
+    await sb.from('profiles').update({
+      is_official: true,
+      official_title: req.title
+    }).eq('id',req.user_id);
+    // Mark request as approved
+    await sb.from('official_badge_requests').update({status:'approved'}).eq('id',req.id);
+    setRequests(prev=>prev.filter(r=>r.id!==req.id));
+    onToast('✅ Official badge granted to '+req.display_name+'!');
+  };
+
+  const deny = async(req)=>{
+    await sb.from('official_badge_requests').update({status:'denied'}).eq('id',req.id);
+    setRequests(prev=>prev.filter(r=>r.id!==req.id));
+    onToast('Request from '+req.display_name+' denied.');
+  };
+
+  const count = requests.length;
+
+  return h('div',{style:{background:'#f0ebf8',border:'1px solid #c8b8e8',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?14:0},
+      onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '🏛 Official Badge Requests',
+        count>0&&h('span',{style:{background:'#5b3a8c',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},count)
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open&&h('div',null,
+      loading&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+      !loading&&requests.length===0&&h('div',{style:{textAlign:'center',padding:16,color:'#aaa',fontStyle:'italic'}},'No pending badge requests.'),
+      requests.map(req=>h('div',{key:req.id,
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:8}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:2}},
+          req.display_name
+        ),
+        h('div',{style:{fontSize:12,color:'#1a5c8a',fontWeight:700,marginBottom:4}},
+          '🏛 '+req.title
+        ),
+        h('div',{style:{display:'flex',gap:8,fontSize:11,color:'#888',marginBottom:req.message?6:10,flexWrap:'wrap'}},
+          h('span',null,'📧 '+req.email),
+          h('span',null,'📍 ZIP: '+req.zip),
+          h('span',null,'🕐 '+new Date(req.created_at).toLocaleDateString())
+        ),
+        req.message&&h('div',{style:{fontSize:12,color:'#555',fontFamily:"'Lora',serif",
+          lineHeight:1.6,fontStyle:'italic',marginBottom:8,padding:'6px 10px',
+          background:'#f5f3ee',borderRadius:5}},'"'+req.message+'"'),
+        h('div',{style:{display:'flex',gap:8}},
+          h('button',{onClick:()=>approve(req),
+            style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'7px 16px',
+              borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,
+              fontSize:12,cursor:'pointer'}
+          },'✅ Approve & Grant Badge'),
+          h('button',{onClick:()=>deny(req),
+            style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',
+              padding:'7px 12px',borderRadius:6,fontSize:12,cursor:'pointer'}
+          },'Deny')
+        )
+      ))
     )
   );
 }
@@ -4618,6 +4778,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
 
     // Pending community submissions review queue
     h(UserManager,{onToast}),
+    h(OfficialBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
     h(NominationsInbox,{onToast}),
@@ -4911,7 +5072,7 @@ function App() {
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     showPropose&&h(ProposeModal,{onClose:()=>setShowPropose(false),onSubmit:handlePropose}),
     showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0]}),
-    showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates}))}),
+    showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates})),onToast:setToast}),
     h(FeedbackButton,{user}),
     showPrivacy&&h(PrivacyModal,{onClose:()=>setShowPrivacy(false)}),
 
