@@ -4253,24 +4253,31 @@ function OfficialManager({onToast}) {
   },[]);
 
   const searchUsers = async()=>{
-    if(!search.trim()) return;
     setSearching(true);
     try {
-      // Search by display_name OR email
-      const q = search.trim();
-      const {data:byName} = await sb.from('profiles')
-        .select('id,display_name,email,is_official,official_title,zip')
-        .ilike('display_name','%'+q+'%').limit(10);
-      const {data:byEmail} = await sb.from('profiles')
-        .select('id,display_name,email,is_official,official_title,zip')
-        .ilike('email','%'+q+'%').limit(5);
-      const all = [...(byName||[]),...(byEmail||[])];
-      const seen = new Set();
-      const deduped = all.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true; });
-      setResults(deduped);
-      if(deduped.length===0) onToast('No users found. Try their email address.');
+      let query = sb.from('profiles')
+        .select('id,display_name,email,is_official,official_title,zip,reputation,is_admin,created_at')
+        .order('created_at',{ascending:false})
+        .limit(25);
+      if(search.trim()) {
+        const q = search.trim();
+        const {data:byName} = await sb.from('profiles')
+          .select('id,display_name,email,is_official,official_title,zip,reputation,is_admin,created_at')
+          .ilike('display_name','%'+q+'%').limit(15);
+        const {data:byEmail} = await sb.from('profiles')
+          .select('id,display_name,email,is_official,official_title,zip,reputation,is_admin,created_at')
+          .ilike('email','%'+q+'%').limit(15);
+        const all = [...(byName||[]),...(byEmail||[])];
+        const seen = new Set();
+        const deduped = all.filter(r=>{ if(seen.has(r.id)) return false; seen.add(r.id); return true; });
+        setResults(deduped);
+        if(deduped.length===0) onToast('No users found. Try their email address.');
+      } else {
+        const {data} = await query;
+        setResults(data||[]);
+      }
     } catch(e) {
-      onToast('Search failed. Check Supabase column exists.');
+      onToast('Search failed: '+e.message);
     }
     setSearching(false);
   };
@@ -4329,7 +4336,7 @@ function OfficialManager({onToast}) {
         h('div',{style:{display:'flex',gap:8,marginBottom:10}},
           h('input',{value:search,onChange:e=>setSearch(e.target.value),
             onKeyDown:e=>e.key==='Enter'&&searchUsers(),
-            placeholder:'Name or email...',
+            placeholder:'Name or email — or leave blank to show all...',
             style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'8px 11px',fontSize:13}}),
           h('button',{onClick:searchUsers,disabled:searching,
             style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'8px 16px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}          },searching?'...':'Search')        ),
@@ -4409,13 +4416,20 @@ function UserManager({onToast}) {
   const [saving, setSaving] = useState(false);
 
   const searchUsers = async()=>{
-    if(!search.trim()) return;
     setLoading(true); setSelected(null);
-    const {data} = await sb.from('profiles')
-      .select('*')
-      .or(`email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`)
-      .limit(10);
-    setResults(data||[]);
+    if(search.trim()) {
+      const {data} = await sb.from('profiles')
+        .select('*')
+        .or(`email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`)
+        .limit(15);
+      setResults(data||[]);
+    } else {
+      const {data} = await sb.from('profiles')
+        .select('*')
+        .order('created_at',{ascending:false})
+        .limit(25);
+      setResults(data||[]);
+    }
     setLoading(false);
   };
 
@@ -4493,7 +4507,7 @@ function UserManager({onToast}) {
       h('div',{style:{display:'flex',gap:8,marginBottom:12}},
         h('input',{value:search,onChange:e=>setSearch(e.target.value),
           onKeyDown:e=>e.key==='Enter'&&searchUsers(),
-          placeholder:'Search by email or display name...',
+          placeholder:'Search by email or name — or leave blank to show all...',
           style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'9px 12px',fontSize:13,fontFamily:"'Lora',serif"}}),
         h('button',{onClick:searchUsers,disabled:loading||!search.trim(),
           style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'9px 18px',borderRadius:6,
