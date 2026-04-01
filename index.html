@@ -3265,6 +3265,12 @@ function CommunityHub({user, profile}) {
                 h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:3,flexDirection:isMe?'row-reverse':'row'}},
                   h('span',{style:{fontSize:11,fontWeight:700,color:isMe?'#1a5c8a':'#1a1a2e'}},isMe?'You':m.display_name),
                   m.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'OFFICIAL'),
+                  !isMe&&m.user_id&&user&&h('button',{
+                    onClick:()=>toggleConnection(m.user_id),
+                    title:connections.has(m.user_id)?'Remove neighbor':'Add as neighbor',
+                    style:{background:'none',border:'none',cursor:'pointer',fontSize:10,
+                      color:connections.has(m.user_id)?'#1a6b3c':'#bbb',padding:'0 2px',lineHeight:1}
+                  },connections.has(m.user_id)?'\u2713 Neighbor':'+ Add'),
                   h('span',{style:{fontSize:10,color:'#bbb'}},m.created_at?new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'')
                 ),
                 h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
