@@ -2972,8 +2972,7 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
                 style:{opacity:0,width:0,height:0}}),
               h('span',{style:{position:'absolute',inset:0,background:profile?.show_in_directory!==false?'#1a6b3c':'#ccc',
                 borderRadius:24,transition:'.3s',cursor:'pointer',
-                '::before':{position:'absolute',content:'""',height:18,width:18,left:3,bottom:3,
-                  background:'white',borderRadius:'50%',transition:'.3s'}}})
+                }})
             )
           ),
 
@@ -5361,8 +5360,7 @@ function NotificationPreferences({user, profile, onClose, onToast}) {
       h('input',{type:'checkbox',checked:prefs?.[pkey]||false,onChange:()=>toggle(pkey),style:{opacity:0,width:0,height:0}}),
       h('span',{style:{position:'absolute',cursor:'pointer',top:0,left:0,right:0,bottom:0,
         background:prefs?.[pkey]?'#1a6b3c':'#ccc',borderRadius:22,transition:'.3s',
-        '::before':{content:'""',position:'absolute',height:16,width:16,left:3,bottom:3,
-          background:'white',borderRadius:'50%',transition:'.3s'}}})
+        }})
     )
   );
 
