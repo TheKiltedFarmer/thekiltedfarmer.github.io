@@ -5301,7 +5301,7 @@ function NotificationPreferences({user, profile, onClose, onToast}) {
   useEffect(()=>{
     // Load existing prefs
     sb.from('notification_prefs').select('*').eq('user_id',user.id).single()
-      .then(({data})=>{
+      .then(({data,error})=>{
         setPrefs(data || {
           user_id: user.id,
           notify_dm: true,
@@ -5314,6 +5314,11 @@ function NotificationPreferences({user, profile, onClose, onToast}) {
           push_enabled: false,
         });
         setPushEnabled(data?.push_enabled||false);
+      }).catch(()=>{
+        // notification_prefs table not yet created — use defaults
+        setPrefs({user_id:user.id,notify_dm:true,notify_new_bill:true,notify_bill_vote:false,
+          notify_comment_reply:true,notify_badge:true,notify_idea_update:false,
+          notify_system:true,push_enabled:false});
       });
     // Check push permission
     if('Notification' in window) setPushStatus(Notification.permission);
@@ -5336,9 +5341,11 @@ function NotificationPreferences({user, profile, onClose, onToast}) {
     if(!prefs) return;
     setSaving(true);
     const payload = {...prefs,push_enabled:pushEnabled,user_id:user.id};
-    const {error} = await sb.from('notification_prefs').upsert(payload);
-    if(!error) onToast('✅ Notification preferences saved!');
-    else onToast('❌ Error saving preferences.');
+    try {
+      const {error} = await sb.from('notification_prefs').upsert(payload);
+      if(!error) onToast('✅ Notification preferences saved!');
+      else onToast('❌ Error saving — run the notifications SQL in Supabase first.');
+    } catch(e) { onToast('❌ Table missing — run the notifications SQL in Supabase.'); }
     setSaving(false);
     onClose();
   };
@@ -5495,17 +5502,18 @@ function App() {
   const loadUserVotes=async(uid)=>{const {data}=await sb.from('user_votes').select('*').eq('user_id',uid);if(data){const v={};data.forEach(d=>{v[d.bill_id]={choice:d.choice,anonymous:d.anonymous};});setUserVotes(v);}};
 
   const loadNotifications=async(uid)=>{
-    const {data} = await sb.from('notifications').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(30);
-    if(data){
-      setNotifications(data);
-      setUnreadNotifCount(data.filter(n=>!n.read).length);
-    }
+    try {
+      const {data,error} = await sb.from('notifications').select('*').eq('user_id',uid).order('created_at',{ascending:false}).limit(30);
+      if(!error&&data){ setNotifications(data); setUnreadNotifCount(data.filter(n=>!n.read).length); }
+    } catch(e) { /* notifications table not yet created */ }
   };
 
   const markNotifsRead=async(uid)=>{
-    setUnreadNotifCount(0);
-    setNotifications(prev=>prev.map(n=>({...n,read:true})));
-    await sb.from('notifications').update({read:true}).eq('user_id',uid).eq('read',false);
+    try {
+      setUnreadNotifCount(0);
+      setNotifications(prev=>prev.map(n=>({...n,read:true})));
+      await sb.from('notifications').update({read:true}).eq('user_id',uid).eq('read',false);
+    } catch(e) { /* notifications table not yet created */ }
   };
 
   const handleAuth=(authUser,prof)=>{
