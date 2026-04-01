@@ -1709,8 +1709,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}) {
   useEffect(()=>{
     loadFeed();
     // Load summary stats
-    sb.from('profiles').select('id',{count:'exact',head:true}).then(({count})=>setMemberCount(count));
-    sb.from('user_votes').select('id',{count:'exact',head:true}).then(({count})=>setTotalVotes(count));
+    sb.from('profiles').select('id',{count:'exact',head:true}).then(({count,error})=>{ if(!error) setMemberCount(count); }).catch(()=>{});
+    sb.from('user_votes').select('id',{count:'exact',head:true}).then(({count,error})=>{ if(!error) setTotalVotes(count); }).catch(()=>{});
   },[]);
 
   const loadFeed = async()=>{
@@ -5481,7 +5481,7 @@ function App() {
       setLoading(false);
       // Load member count after app is ready
       sb.from('profiles').select('id',{count:'exact',head:true})
-        .then(({count})=>{ if(count!==null) setMemberCount(count); });
+        .then(({count,error})=>{ if(!error&&count!==null) setMemberCount(count); }).catch(()=>{});
     }
   };
 
