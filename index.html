@@ -3159,6 +3159,234 @@ function OfficialBadgeInbox({onToast}) {
   );
 }
 
+// ── Direct Messages ────────────────────────────────────────────────────────────
+function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
+  const [thread, setThread] = useState(initThread||null); // {userId, displayName}
+  const [conversations, setConversations] = useState([]); // list of people you've messaged
+  const [messages, setMessages] = useState([]);
+  const [msgText, setMsgText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [showNewDm, setShowNewDm] = useState(false);
+  const [search, setSearch] = useState('');
+  const bottomRef = useRef(null);
+  const pollRef = useRef(null);
+
+  const myName = profile?.display_name||user?.email?.split('@')[0]||'Resident';
+
+  useEffect(()=>{
+    loadConversations();
+    return ()=>{ if(pollRef.current) clearInterval(pollRef.current); };
+  },[]);
+
+  useEffect(()=>{
+    if(initThread) { setThread(initThread); if(onClearThread) onClearThread(); }
+  },[initThread]);
+
+  useEffect(()=>{
+    if(thread) {
+      loadMessages(thread.userId);
+      if(pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(()=>loadMessages(thread.userId), 5000);
+    }
+    return ()=>{ if(pollRef.current) clearInterval(pollRef.current); };
+  },[thread]);
+
+  useEffect(()=>{
+    if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:'smooth'});
+  },[messages]);
+
+  const loadConversations = async()=>{
+    // Get all unique people we've had DMs with
+    const {data:sent} = await sb.from('direct_messages').select('recipient_id,recipient_name').eq('sender_id',user.id).order('created_at',{ascending:false});
+    const {data:recv} = await sb.from('direct_messages').select('sender_id,sender_name,read').eq('recipient_id',user.id).order('created_at',{ascending:false});
+    const people = new Map();
+    (sent||[]).forEach(m=>{ if(!people.has(m.recipient_id)) people.set(m.recipient_id,{userId:m.recipient_id,displayName:m.recipient_name,unread:0}); });
+    (recv||[]).forEach(m=>{ 
+      if(!people.has(m.sender_id)) people.set(m.sender_id,{userId:m.sender_id,displayName:m.sender_name,unread:0});
+      if(!m.read) people.get(m.sender_id).unread = (people.get(m.sender_id).unread||0)+1;
+    });
+    setConversations(Array.from(people.values()));
+  };
+
+  const loadMessages = async(otherId)=>{
+    setLoadingMsgs(true);
+    const {data} = await sb.from('direct_messages')
+      .select('*')
+      .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${user.id})`)
+      .order('created_at',{ascending:true}).limit(60);
+    setMessages(data||[]);
+    // Mark received messages as read
+    await sb.from('direct_messages').update({read:true}).eq('recipient_id',user.id).eq('sender_id',otherId).eq('read',false);
+    setLoadingMsgs(false);
+  };
+
+  const sendMessage = async()=>{
+    if(!msgText.trim()||!thread||sending) return;
+    setSending(true);
+    const {data,error} = await sb.from('direct_messages').insert({
+      sender_id: user.id,
+      sender_name: myName,
+      recipient_id: thread.userId,
+      recipient_name: thread.displayName,
+      content: msgText.trim(),
+      read: false,
+      created_at: new Date().toISOString()
+    }).select().single();
+    if(data) setMessages(prev=>[...prev,data]);
+    setMsgText('');
+    setSending(false);
+    // Make sure conversation shows in list
+    setConversations(prev=>{
+      if(prev.find(c=>c.userId===thread.userId)) return prev;
+      return [{userId:thread.userId,displayName:thread.displayName,unread:0},...prev];
+    });
+  };
+
+  const openThread = (userId, displayName)=>{
+    setThread({userId,displayName});
+    setShowNewDm(false);
+    setSearch('');
+    // Update unread count
+    setConversations(prev=>prev.map(c=>c.userId===userId?{...c,unread:0}:c));
+  };
+
+  const filteredNeighbors = neighbors.filter(n=>
+    n.id!==user?.id &&
+    (n.display_name||'').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return h('div',{style:{display:'flex',gap:0,background:'#fff',borderRadius:10,overflow:'hidden',border:'1px solid #e5dece',minHeight:480}},
+
+    // Left — conversation list
+    h('div',{style:{width:220,borderRight:'1px solid #e5dece',display:'flex',flexDirection:'column',flexShrink:0}},
+      h('div',{style:{padding:'12px 14px',borderBottom:'1px solid #e5dece',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#1a1a2e'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#f0c040'}},'Direct Messages'),
+        h('button',{onClick:()=>setShowNewDm(!showNewDm),
+          style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:5,
+            padding:'4px 8px',fontSize:11,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}
+        },'+ New')
+      ),
+      // New DM — search neighbors
+      showNewDm&&h('div',{style:{padding:'10px 12px',borderBottom:'1px solid #e5dece',background:'#f5f3ee'}},
+        h('input',{value:search,onChange:e=>setSearch(e.target.value),
+          placeholder:'Search members...',autoFocus:true,
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'6px 8px',
+            fontSize:12,boxSizing:'border-box',fontFamily:"'Lora',serif"}}),
+        h('div',{style:{maxHeight:160,overflowY:'auto',marginTop:6}},
+          filteredNeighbors.slice(0,10).map(n=>
+            h('div',{key:n.id,onClick:()=>openThread(n.id,n.display_name||n.email?.split('@')[0]||'Resident'),
+              style:{padding:'7px 8px',cursor:'pointer',borderRadius:5,fontSize:12,
+                fontFamily:"'Lora',serif",color:'#333',
+                display:'flex',alignItems:'center',gap:8}},
+              h('div',{style:{width:24,height:24,borderRadius:'50%',background:'#1a1a2e',
+                color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
+                fontSize:10,fontWeight:700,flexShrink:0}},
+                (n.display_name||'?')[0].toUpperCase()
+              ),
+              n.display_name||n.email?.split('@')[0]||'Resident'
+            )
+          ),
+          filteredNeighbors.length===0&&h('div',{style:{fontSize:11,color:'#aaa',padding:'6px 8px',fontStyle:'italic'}},'No members found')
+        )
+      ),
+      // Conversation list
+      h('div',{style:{flex:1,overflowY:'auto'}},
+        conversations.length===0&&!showNewDm&&h('div',{style:{padding:20,textAlign:'center',color:'#aaa',fontSize:12,fontStyle:'italic',lineHeight:1.6}},
+          'No messages yet.',h('br'),'Click + New to start a private conversation.'
+        ),
+        conversations.map(c=>
+          h('div',{key:c.userId,onClick:()=>openThread(c.userId,c.displayName),
+            style:{padding:'10px 14px',cursor:'pointer',
+              background:thread?.userId===c.userId?'#e8f2fa':'transparent',
+              borderBottom:'1px solid #f5f3ee',
+              borderLeft:thread?.userId===c.userId?'3px solid #1a5c8a':'3px solid transparent',
+              display:'flex',alignItems:'center',gap:8}},
+            h('div',{style:{width:30,height:30,borderRadius:'50%',background:'#1a1a2e',
+              color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:12,fontWeight:700,flexShrink:0}},
+              (c.displayName||'?')[0].toUpperCase()
+            ),
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+                color:'#1a1a2e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},c.displayName),
+              c.unread>0&&h('div',{style:{fontSize:10,color:'#1a5c8a',fontWeight:700}},c.unread+' unread')
+            )
+          )
+        )
+      )
+    ),
+
+    // Right — message thread
+    h('div',{style:{flex:1,display:'flex',flexDirection:'column'}},
+      !thread
+        ? h('div',{style:{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,color:'#aaa',padding:30}},
+            h('div',{style:{fontSize:40}},'✉️'),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#1a1a2e'}},'Private Messages'),
+            h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,textAlign:'center',lineHeight:1.7,color:'#888',maxWidth:280}},
+              'Select a conversation or click + New to send a private message to any Jackson County resident.'
+            )
+          )
+        : h('div',{style:{flex:1,display:'flex',flexDirection:'column'}},
+            // Thread header
+            h('div',{style:{padding:'12px 16px',borderBottom:'1px solid #e5dece',background:'#f5f3ee',
+              display:'flex',alignItems:'center',gap:10}},
+              h('div',{style:{width:32,height:32,borderRadius:'50%',background:'#1a1a2e',
+                color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
+                fontSize:14,fontWeight:700}},
+                (thread.displayName||'?')[0].toUpperCase()
+              ),
+              h('div',null,
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e'}},thread.displayName),
+                h('div',{style:{fontSize:10,color:'#aaa',fontFamily:"'Lora',serif"}},'Private · only you two can see this')
+              ),
+              h('button',{onClick:()=>setThread(null),
+                style:{marginLeft:'auto',background:'transparent',border:'none',color:'#aaa',cursor:'pointer',fontSize:16}
+              },'×')
+            ),
+            // Messages
+            h('div',{style:{flex:1,overflowY:'auto',padding:'12px 16px'}},
+              loadingMsgs&&h('div',{style:{textAlign:'center',color:'#aaa',fontSize:12,fontStyle:'italic'}},'Loading...'),
+              messages.length===0&&!loadingMsgs&&h('div',{style:{textAlign:'center',color:'#aaa',fontSize:12,fontStyle:'italic',padding:20}},
+                'No messages yet. Say hello!'
+              ),
+              messages.map((m,i)=>{
+                const isMe = m.sender_id===user.id;
+                return h('div',{key:m.id||i,style:{display:'flex',justifyContent:isMe?'flex-end':'flex-start',marginBottom:10}},
+                  h('div',{style:{maxWidth:'75%'}},
+                    !isMe&&h('div',{style:{fontSize:10,color:'#aaa',marginBottom:3,fontFamily:"'Lora',serif"}},m.sender_name),
+                    h('div',{style:{background:isMe?'#1a1a2e':'#f5f3ee',
+                      color:isMe?'#f0c040':'#333',
+                      borderRadius:isMe?'12px 12px 2px 12px':'12px 12px 12px 2px',
+                      padding:'9px 13px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6}},m.content),
+                    h('div',{style:{fontSize:10,color:'#bbb',marginTop:3,textAlign:isMe?'right':'left',fontFamily:"'Lora',serif"}},
+                      new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+                    )
+                  )
+                );
+              }),
+              h('div',{ref:bottomRef})
+            ),
+            // Input
+            h('div',{style:{padding:'10px 12px',borderTop:'1px solid #e5dece',display:'flex',gap:8,background:'#faf8f5'}},
+              h('input',{value:msgText,onChange:e=>setMsgText(e.target.value),
+                onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(),
+                placeholder:'Message '+thread.displayName+'...',
+                style:{flex:1,border:'1px solid #ddd',borderRadius:20,padding:'9px 14px',
+                  fontSize:13,fontFamily:"'Lora',serif",background:'#fff'}}),
+              h('button',{onClick:sendMessage,disabled:!msgText.trim()||sending,
+                style:{background:msgText.trim()&&!sending?'#1a1a2e':'#ddd',
+                  color:msgText.trim()&&!sending?'#f0c040':'#aaa',
+                  border:'none',borderRadius:20,padding:'9px 16px',
+                  fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+                  cursor:msgText.trim()&&!sending?'pointer':'default',whiteSpace:'nowrap'}
+              },'Send')
+            )
+          )
+    )
+  );
+}
+
 // ── Neighbor Directory + Community Chat ───────────────────────────────────────
 const CHAT_ROOMS = [
   {id:'general', label:'🏙 Jackson County', desc:'General community chat for all residents'},
@@ -3177,10 +3405,12 @@ function CommunityHub({user, profile}) {
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [neighbors, setNeighbors] = useState([]);
-  const [connections, setConnections] = useState(new Set()); // IDs of people user follows
+  const [connections, setConnections] = useState(new Set());
   const [loadingNeighbors, setLoadingNeighbors] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
-  const [neighborFilter, setNeighborFilter] = useState('all'); // 'all' | 'neighbors'
+  const [neighborFilter, setNeighborFilter] = useState('all');
+  const [dmThread, setDmThread] = useState(null); // {userId, displayName} of open DM
+  const [unreadDms, setUnreadDms] = useState(0);
   const bottomRef = useRef(null);
   const pollRef = useRef(null);
 
@@ -3194,6 +3424,10 @@ function CommunityHub({user, profile}) {
     if(user?.id) {
       sb.from('neighbor_connections').select('neighbor_id').eq('user_id',user.id)
         .then(({data})=>{ setConnections(new Set((data||[]).map(r=>r.neighbor_id))); });
+      // Load unread DM count
+      sb.from('direct_messages').select('id',{count:'exact',head:true})
+        .eq('recipient_id',user.id).eq('read',false)
+        .then(({count})=>setUnreadDms(count||0));
     }
   },[]);
 
@@ -3255,12 +3489,13 @@ function CommunityHub({user, profile}) {
 
     // Tab switcher
     h('div',{style:{display:'flex',gap:0,marginBottom:16,background:'#fff',borderRadius:10,overflow:'hidden',border:'1px solid #e5dece'}},
-      [['chat','💬 Community Chat'],['neighbors','👥 Neighbor Directory']].map(([t,l])=>
-        h('button',{key:t,onClick:()=>setActiveTab(t),
+      [['chat','💬 Community Chat'],['dm','✉️ Direct Messages'+(unreadDms>0?' ('+unreadDms+')':'')],['neighbors','👥 Neighbor Directory']].map(([t,l])=>
+        h('button',{key:t,onClick:()=>{setActiveTab(t);if(t==='dm')setUnreadDms(0);},
           style:{flex:1,padding:'12px',background:activeTab===t?'#1a1a2e':'transparent',
             color:activeTab===t?'#f0c040':'#555',border:'none',
             fontFamily:"'Playfair Display',serif",fontWeight:activeTab===t?700:400,
-            fontSize:14,cursor:'pointer'}
+            fontSize:13,cursor:'pointer',position:'relative',
+            borderRight:t!=='neighbors'?'1px solid #e5dece':'none'}
         },l)
       )
     ),
@@ -3339,6 +3574,9 @@ function CommunityHub({user, profile}) {
     ),
 
     // ── Neighbor Directory ───────────────────────────────────────────────────
+    // ── Direct Messages ───────────────────────────────────────────────────
+    activeTab==='dm'&&h(DirectMessages,{user,profile,neighbors,initThread:dmThread,onClearThread:()=>setDmThread(null)}),
+
     activeTab==='neighbors'&&h('div',null,
       h('div',{style:{display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap'}},
         h('div',{style:{fontSize:13,color:'#888',fontFamily:"'Lora',serif",flex:1}},
@@ -3391,13 +3629,20 @@ function CommunityHub({user, profile}) {
               ),
               n.official_title&&h('div',{style:{fontSize:10,color:'#1a5c8a',marginTop:3,fontWeight:600}},n.official_title),
               n.badges&&n.badges.length>0&&h('div',{style:{marginTop:4}},h(BadgeRow,{badges:computeBadges(n).slice(0,3),tiny:true})),
-              !isMe&&user&&h('button',{onClick:()=>toggleConnection(n.id),
-                style:{marginTop:8,width:'100%',background:isConnected?'#eef7f1':'#f5f3ee',
-                  color:isConnected?'#1a6b3c':'#555',
-                  border:'1px solid '+(isConnected?'#1a6b3c44':'#ddd'),
-                  borderRadius:6,padding:'5px 8px',fontSize:11,cursor:'pointer',
-                  fontFamily:"'Playfair Display',serif",fontWeight:700}
-              },isConnected?'\u2713 Neighbor \u2014 Remove':'+ Add Neighbor')
+              !isMe&&user&&h('div',{style:{display:'flex',gap:6,marginTop:8}},
+                h('button',{onClick:()=>toggleConnection(n.id),
+                  style:{flex:1,background:isConnected?'#eef7f1':'#f5f3ee',
+                    color:isConnected?'#1a6b3c':'#555',
+                    border:'1px solid '+(isConnected?'#1a6b3c44':'#ddd'),
+                    borderRadius:6,padding:'5px 8px',fontSize:11,cursor:'pointer',
+                    fontFamily:"'Playfair Display',serif",fontWeight:700}
+                },isConnected?'\u2713 Neighbor':'+ Add Neighbor'),
+                h('button',{onClick:()=>{setDmThread({userId:n.id,displayName:name});setActiveTab('dm');},
+                  style:{background:'#e8f2fa',color:'#1a5c8a',border:'1px solid #1a5c8a33',
+                    borderRadius:6,padding:'5px 8px',fontSize:11,cursor:'pointer',
+                    fontFamily:"'Playfair Display',serif",fontWeight:700}
+                },'\u2709\uFE0F Message')
+              )
             )
           );
         })
