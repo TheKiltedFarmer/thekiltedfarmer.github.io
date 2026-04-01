@@ -3244,11 +3244,17 @@ function AuthScreen({onAuth, onGuest}) {
       setError(msg);setLoading(false);return;
     }
     if(data.user){
-      await sb.from('profiles').upsert({
-        id:data.user.id,email,display_name:displayName,
-        zip,verified_method:'self-attested',reputation:0,
-        show_in_directory:true
-      });
+      // Retry profile creation up to 3 times in case of network hiccup
+      let profileCreated = false;
+      for(let i=0; i<3; i++) {
+        const {error:profErr} = await sb.from('profiles').upsert({
+          id:data.user.id,email,display_name:displayName,
+          zip,verified_method:'self-attested',reputation:0,
+          show_in_directory:true
+        });
+        if(!profErr) { profileCreated = true; break; }
+        await new Promise(r=>setTimeout(r,800));
+      }
       onAuth(data.user,{display_name:displayName,zip,reputation:0,show_in_directory:true});
     }
     setLoading(false);
@@ -3259,7 +3265,17 @@ function AuthScreen({onAuth, onGuest}) {
     const {data,error:err}=await sb.auth.signInWithPassword({email,password:pass});
     if(err){setError(err.message);setLoading(false);return;}
     if(data.user){
-      const {data:prof}=await sb.from('profiles').select('*').eq('id',data.user.id).single();
+      let {data:prof} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+      // If profile row missing (can happen with broken signups), create it now
+      if(!prof) {
+        await sb.from('profiles').upsert({
+          id:data.user.id, email:data.user.email,
+          display_name:data.user.email?.split('@')[0]||'Resident',
+          zip:'', reputation:0, verified_method:'self-attested', show_in_directory:true
+        });
+        const {data:newProf} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+        prof = newProf;
+      }
       onAuth(data.user,prof||{});
     }
     setLoading(false);
