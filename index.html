@@ -1116,7 +1116,16 @@ function CommentItem({comment:c, user, billId, onEdited}) {
 }
 
 // ── Bill Card ─────────────────────────────────────────────────────────────────
-function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
+function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighlightDone}) {
+  const cardRef = useRef(null);
+
+  useEffect(()=>{
+    if(highlighted && cardRef.current){
+      cardRef.current.scrollIntoView({behavior:'smooth',block:'center'});
+      const t = setTimeout(()=>{ if(onHighlightDone) onHighlightDone(); },2500);
+      return ()=>clearTimeout(t);
+    }
+  },[highlighted]);
   const [open,setOpen]=useState(false);
   const [tab,setTab]=useState('ai');
   const [pending,setPending]=useState(null);
@@ -1166,7 +1175,11 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain}) {
     }
   };
 
-  return h('div',{style:{background:'#fff',borderRadius:10,border:'1px solid #e5dece',marginBottom:16,overflow:'hidden',boxShadow:'0 2px 10px rgba(0,0,0,.05)'}},
+  return h('div',{ref:cardRef,style:{background:'#fff',borderRadius:10,
+    border:'2px solid '+(highlighted?'#f0c040':'#e5dece'),
+    marginBottom:16,overflow:'hidden',
+    boxShadow:highlighted?'0 0 0 4px #f0c04033':'0 2px 10px rgba(0,0,0,.05)',
+    transition:'border-color .4s ease, box-shadow .4s ease'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     h('div',{style:{borderLeft:'5px solid '+meta.color,padding:'18px 16px'}},
       h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}},
@@ -1687,7 +1700,7 @@ const FEED_ICONS = {
   nomination: {icon:'📬',  color:'#1a5c8a', bg:'#e8f2fa', label:'nominated a bill'},
 };
 
-function CommunityFeed({user, profile, bills, guestMode}) {
+function CommunityFeed({user, profile, bills, guestMode, onNavigate}) {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [memberCount, setMemberCount] = useState(null);
@@ -1861,11 +1874,30 @@ function CommunityFeed({user, profile, bills, guestMode}) {
       h('div',{style:{padding:'8px 0'}},
         feed.map((item,i)=>{
           const meta = FEED_ICONS[item.type]||FEED_ICONS.vote;
+          // Determine where clicking should navigate
+          const getNav = ()=>{
+            if(item.type==='vote'||item.type==='comment') return {tab:'bills', ctx:{billId:item.bill_id}};
+            if(item.type==='join'||item.type==='badge') return {tab:'connect', ctx:{userId:item.user_id}};
+            if(item.type==='idea'||item.type==='idea_up') return {tab:'ideas', ctx:null};
+            if(item.type==='resource') return {tab:'resources', ctx:null};
+            if(item.type==='project') return {tab:'projects', ctx:null};
+            if(item.type==='chat') return {tab:'connect', ctx:null};
+            if(item.type==='nomination') return {tab:'bills', ctx:null};
+            return null;
+          };
+          const nav = getNav();
+          const isClickable = !!nav && !!onNavigate;
           return h('div',{key:item.id,
+            onClick: isClickable ? ()=>onNavigate(nav.tab, nav.ctx) : undefined,
             style:{display:'flex',gap:12,padding:'12px 16px',
               borderBottom:i<feed.length-1?'1px solid #f5f3ee':'none',
               background:i%2===0?'#fff':'#faf8f5',
-              animation:'fadeIn .3s ease'}},
+              animation:'fadeIn .3s ease',
+              cursor:isClickable?'pointer':'default',
+              transition:'background .15s ease'},
+            onMouseEnter: isClickable ? e=>e.currentTarget.style.background='#f0f7ff' : undefined,
+            onMouseLeave: isClickable ? e=>e.currentTarget.style.background=i%2===0?'#fff':'#faf8f5' : undefined,
+          },
             // Icon
             h('div',{style:{width:36,height:36,borderRadius:'50%',background:meta.bg,
               display:'flex',alignItems:'center',justifyContent:'center',
@@ -1889,8 +1921,11 @@ function CommunityFeed({user, profile, bills, guestMode}) {
                 fontStyle:item.type==='chat'||item.type==='comment'?'italic':'normal',
                 marginTop:2,lineHeight:1.4}},item.sub)
             ),
-            // Timestamp
-            h('div',{style:{fontSize:11,color:'#bbb',flexShrink:0,marginTop:2}},timeAgo(item.ts))
+            // Timestamp + arrow hint
+            h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,flexShrink:0}},
+              h('div',{style:{fontSize:11,color:'#bbb',marginTop:2}},timeAgo(item.ts)),
+              isClickable&&h('div',{style:{fontSize:10,color:'#bbb'}},'\u2192')
+            )
           );
         })
       )
@@ -2423,7 +2458,7 @@ function ProjectCard({project,user,onRepGain}) {
     setLetter(text);setShowLetter(true);setToast("Letter generated! Project marked as forwarded.");
   };
 
-  return h('div',{style:{background:'#fff',borderRadius:10,border:'1px solid #e5dece',marginBottom:16,overflow:'hidden',boxShadow:'0 2px 10px rgba(0,0,0,.05)'}},
+  return h('div',{ref:cardRef,style:{background:'#fff',borderRadius:10,border:'2px solid '+(highlighted?'#f0c040':'#e5dece'),marginBottom:16,overflow:'hidden',boxShadow:highlighted?'0 0 0 4px #f0c04033':'0 2px 10px rgba(0,0,0,.05)',transition:'border-color .5s, box-shadow .5s'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     h('div',{style:{borderLeft:'5px solid '+catColor,padding:'18px 16px'}},
       h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}},
@@ -4962,6 +4997,7 @@ function App() {
   const [profile,setProfile]=useState(null);
   const [rep,setRep]=useState(0);
   const [mainTab,setMainTab]=useState('feed');
+  const [feedNavCtx,setFeedNavCtx]=useState(null); // context from feed click {billId, userId}
   const [bills,setBills]=useState([]);
   const [pendingBills,setPendingBills]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -5204,7 +5240,7 @@ function App() {
 
       // Bills tab
       // Feed tab — community activity stream
-      mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode}),
+      mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       mainTab==='news'&&h(NewsTab,{user,rep,profile}),
 
@@ -5254,7 +5290,7 @@ function App() {
           h('div',{style:{marginLeft:'auto',fontSize:12,color:'#aaa'}},filteredBills.length+" bill"+(filteredBills.length!==1?'s':''))
         ),
         filteredBills.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No bills found for this filter."),
-        filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep})),
+        filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep,highlighted:feedNavCtx?.billId===bill.id,onHighlightDone:()=>setFeedNavCtx(null)})),
 
         // Pending community submissions
         pendingBills.length>0&&h('div',{style:{marginTop:24}},
