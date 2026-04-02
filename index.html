@@ -1700,7 +1700,7 @@ const FEED_ICONS = {
   nomination: {icon:'📬',  color:'#1a5c8a', bg:'#e8f2fa', label:'nominated a bill'},
 };
 
-function CommunityFeed({user, profile, bills, guestMode, onNavigate}) {
+const timeAgo = (ts)=>{   const diff = Date.now()-new Date(ts);   const m = Math.floor(diff/60000);   const h = Math.floor(diff/3600000);   const d = Math.floor(diff/86400000);   if(m<2) return 'just now';   if(m<60) return m+'m ago';   if(h<24) return h+'h ago';   return d+'d ago'; };  function CommunityFeed({user, profile, bills, guestMode, onNavigate}) {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [memberCount, setMemberCount] = useState(null);
