@@ -3224,12 +3224,13 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
   const sendMessage = async()=>{
     if(!msgText.trim()||!thread||sending) return;
     setSending(true);
+    const msgContent = msgText.trim();
     const {data,error} = await sb.from('direct_messages').insert({
       sender_id: user.id,
       sender_name: myName,
       recipient_id: thread.userId,
       recipient_name: thread.displayName,
-      content: msgText.trim(),
+      content: msgContent,
       read: false,
       created_at: new Date().toISOString()
     }).select().single();
@@ -3241,6 +3242,17 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
       if(prev.find(c=>c.userId===thread.userId)) return prev;
       return [{userId:thread.userId,displayName:thread.displayName,unread:0},...prev];
     });
+    // Write a notification row for the recipient so their bell lights up
+    try {
+      await sb.from('notifications').insert({
+        user_id: thread.userId,
+        type: 'dm',
+        title: 'New message from ' + myName,
+        body: msgContent.slice(0, 120),
+        read: false,
+        created_at: new Date().toISOString()
+      });
+    } catch(e) { /* notifications table may not exist yet */ }
   };
 
   const openThread = (userId, displayName)=>{
@@ -4685,6 +4697,126 @@ function OfficialManager({onToast}) {
                 style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}              },'🏛 Grant Badge')            : h('button',{onClick:()=>revokeOfficial(r),
                 style:{background:'transparent',border:'1px solid #ddd',color:'#c0392b',padding:'7px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}              },'Remove')        ))      )    )  );}
 
+// ── New Users Inbox (Admin) ───────────────────────────────────────────────────
+function NewUsersInbox({onToast}) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  const load = async()=>{
+    setLoading(true);
+    try {
+      const {data} = await sb.from('profiles')
+        .select('id,display_name,email,zip,reputation,is_admin,is_official,created_at')
+        .order('created_at',{ascending:false})
+        .limit(30);
+      setUsers(data||[]);
+    } catch(e) { onToast('Could not load users: '+e.message); }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  // Users joined in last 7 days
+  const cutoff = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const newCount = users.filter(u=>u.created_at>=cutoff).length;
+
+  return h('div',{style:{background:'#f0fff4',border:'1px solid #a8e6c0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:open?14:0,cursor:'pointer'},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '👥 New Members',
+        newCount>0&&h('span',{style:{background:'#1a6b3c',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},newCount+' this week')
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open&&h('div',null,
+      loading&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+      !loading&&users.length===0&&h('div',{style:{fontSize:13,color:'#aaa',fontStyle:'italic',padding:12}},'No members yet.'),
+      !loading&&h('div',{style:{fontSize:11,color:'#888',marginBottom:8,textTransform:'uppercase',letterSpacing:1,fontWeight:600}},'Most recent 30 members'),
+      users.map(u=>{
+        const isNew = u.created_at>=cutoff;
+        return h('div',{key:u.id,style:{background:'#fff',border:'1px solid '+(isNew?'#a8e6c0':'#e5dece'),borderRadius:7,padding:'10px 12px',marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}},
+          h('div',null,
+            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',display:'flex',alignItems:'center',gap:6}},
+              u.display_name||'(no name)',
+              isNew&&h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10,textTransform:'uppercase'}},'New'),
+              u.is_admin&&h('span',{style:{background:'#8a6000',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Admin'),
+              u.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Official')
+            ),
+            h('div',{style:{fontSize:11,color:'#888',marginTop:2}},
+              (u.email||'no email')+' · ZIP: '+(u.zip||'—')+' · '+u.reputation+' rep'
+            ),
+            h('div',{style:{fontSize:10,color:'#bbb',marginTop:1}},'Joined '+new Date(u.created_at).toLocaleDateString())
+          )
+        );
+      }),
+      h('button',{onClick:load,style:{marginTop:8,background:'transparent',border:'1px solid #a8e6c0',color:'#1a6b3c',padding:'6px 14px',borderRadius:5,fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+        '↻ Refresh'
+      )
+    )
+  );
+}
+
+// ── Projects Manager (Admin) ──────────────────────────────────────────────────
+function ProjectsManager({onToast}) {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  const load = async()=>{
+    setLoading(true);
+    const {data} = await sb.from('projects').select('*').order('created_at',{ascending:false});
+    setProjects(data||[]);
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  const deleteProject = async(proj)=>{
+    if(!window.confirm('Remove "'+proj.title+'"? This cannot be undone.')) return;
+    setDeleting(proj.id);
+    const {error} = await sb.from('projects').delete().eq('id',proj.id);
+    if(error) onToast('Error: '+error.message);
+    else { setProjects(prev=>prev.filter(p=>p.id!==proj.id)); onToast('Project removed.'); }
+    setDeleting(null);
+  };
+
+  return h('div',{style:{background:'#fff8f0',border:'1px solid #f0c8a0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:open?14:0,cursor:'pointer'},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '🌱 Community Projects',
+        projects.length>0&&h('span',{style:{background:'#8a4000',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},projects.length)
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open&&h('div',null,
+      loading&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+      !loading&&projects.length===0&&h('div',{style:{fontSize:13,color:'#aaa',fontStyle:'italic',padding:12}},'No community projects yet.'),
+      projects.map(proj=>h('div',{key:proj.id,style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap'}},
+        h('div',{style:{flex:1,minWidth:180}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:3}},proj.title),
+          h('div',{style:{fontSize:12,color:'#888',marginBottom:3}},
+            'By '+proj.proposer_name+' · '+proj.supporter_count+' supporters · Status: '+(proj.status||'active')
+          ),
+          proj.description&&h('div',{style:{fontSize:12,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.5}},
+            proj.description.slice(0,100)+(proj.description.length>100?'...':'')
+          ),
+          h('div',{style:{fontSize:10,color:'#bbb',marginTop:3}},new Date(proj.created_at).toLocaleDateString())
+        ),
+        h('button',{
+          onClick:()=>deleteProject(proj),
+          disabled:deleting===proj.id,
+          style:{background:'#c0392b',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer',flexShrink:0}
+        },deleting===proj.id?'...':'🗑 Remove')
+      )),
+      !loading&&h('button',{onClick:load,style:{marginTop:4,background:'transparent',border:'1px solid #f0c8a0',color:'#8a4000',padding:'6px 14px',borderRadius:5,fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+        '↻ Refresh'
+      )
+    )
+  );
+}
+
 function NominationsInbox({onToast}) {
   const [nominations, setNominations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5124,6 +5256,8 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     ),
 
     // Pending community submissions review queue
+    h(NewUsersInbox,{onToast}),
+    h(ProjectsManager,{onToast}),
     h(UserManager,{onToast}),
     h(OfficialBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
@@ -5452,6 +5586,13 @@ function App() {
   const [memberCount,setMemberCount]=useState(null);
 
   useEffect(()=>{initApp();},[]);
+
+  // Poll notifications every 45s so bell updates while user is active
+  useEffect(()=>{
+    if(!user?.id) return;
+    const poll = setInterval(()=>loadNotifications(user.id), 45000);
+    return ()=>clearInterval(poll);
+  },[user?.id]);
 
   const initApp=async()=>{
     // Hard timeout - if Supabase hangs, show app with local data after 5s
