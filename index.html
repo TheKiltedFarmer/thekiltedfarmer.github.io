@@ -5056,9 +5056,14 @@ function ProjectsManager({onToast}) {
   const deleteProject = async(proj)=>{
     if(!window.confirm('Remove "'+proj.title+'"? This cannot be undone.')) return;
     setDeleting(proj.id);
-    const {error} = await sb.from('projects').delete().eq('id',proj.id);
-    if(error) onToast('Error: '+error.message);
-    else { setProjects(prev=>prev.filter(p=>p.id!==proj.id)); onToast('Project removed.'); }
+    const {error, data} = await sb.from('projects').delete().eq('id',proj.id).select();
+    if(error) {
+      onToast('❌ Delete failed: '+error.message+' (check RLS policy in Supabase)');
+      console.error('deleteProject error:', error);
+    } else {
+      setProjects(prev=>prev.filter(p=>p.id!==proj.id));
+      onToast('✅ Project removed.');
+    }
     setDeleting(null);
   };
 
