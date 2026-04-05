@@ -3315,15 +3315,23 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
               borderBottom:'1px solid #f5f3ee',
               borderLeft:thread?.userId===c.userId?'3px solid #1a5c8a':'3px solid transparent',
               display:'flex',alignItems:'center',gap:8}},
-            h('div',{style:{width:30,height:30,borderRadius:'50%',background:'#1a1a2e',
-              color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
-              fontSize:12,fontWeight:700,flexShrink:0}},
-              (c.displayName||'?')[0].toUpperCase()
+            h('div',{style:{position:'relative',flexShrink:0}},
+              h('div',{style:{width:30,height:30,borderRadius:'50%',background:'#1a1a2e',
+                color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
+                fontSize:12,fontWeight:700}},
+                (c.displayName||'?')[0].toUpperCase()
+              ),
+              c.unread>0&&h('span',{style:{
+                position:'absolute',top:-3,right:-3,
+                width:10,height:10,
+                background:'#c0392b',borderRadius:'50%',
+                border:'2px solid #fff',display:'block'
+              }})
             ),
             h('div',{style:{flex:1,minWidth:0}},
-              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:c.unread>0?700:400,fontSize:12,
                 color:'#1a1a2e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},c.displayName),
-              c.unread>0&&h('div',{style:{fontSize:10,color:'#1a5c8a',fontWeight:700}},c.unread+' unread')
+              c.unread>0&&h('div',{style:{fontSize:10,color:'#c0392b',fontWeight:700}},c.unread+' new message'+(c.unread>1?'s':''))
             )
           )
         )
