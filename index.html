@@ -5466,40 +5466,55 @@ function PulseTab({bills, user, profile}) {
   const load = async()=>{
     setLoading(true);
     try {
-      const since30 = new Date(Date.now()-30*24*60*60*1000).toISOString();
       const since7  = new Date(Date.now()-7*24*60*60*1000).toISOString();
 
-      const [
-        {count:totalVotes},
-        {count:totalMembers},
-        {count:votes7},
-        {count:members7},
-        {data:billData},
-        {data:ideaData},
-        {data:forwardedIdeas},
-      ] = await Promise.all([
+      // Run count queries and data queries separately so one failure doesn't kill all
+      const [r1,r2,r3,r4] = await Promise.all([
         sb.from('user_votes').select('id',{count:'exact',head:true}),
         sb.from('profiles').select('id',{count:'exact',head:true}),
         sb.from('user_votes').select('id',{count:'exact',head:true}).gte('created_at',since7),
         sb.from('profiles').select('id',{count:'exact',head:true}).gte('created_at',since7),
-        sb.from('bills').select('id,title,votes_yes,votes_no,votes_abstain,status,jurisdiction').order('votes_yes',{ascending:false}).order('created_at',{ascending:false}).limit(5),
-        sb.from('community_ideas').select('id,title,upvotes,status,category,created_at').order('upvotes',{ascending:false}).limit(5).catch(()=>({data:[]})),
-        sb.from('community_ideas').select('id,title,upvotes,status,target_official').eq('status','forwarded').order('upvotes',{ascending:false}).limit(10).catch(()=>({data:[]})),
       ]);
 
-      setStats({totalVotes:totalVotes||0,totalMembers:totalMembers||0,votes7:votes7||0,members7:members7||0});
+      setStats({
+        totalVotes: r1.count||0,
+        totalMembers: r2.count||0,
+        votes7: r3.count||0,
+        members7: r4.count||0,
+      });
+
+      // Bills — safe
+      const {data:billData} = await sb.from('bills')
+        .select('id,title,votes_yes,votes_no,votes_abstain,status,jurisdiction')
+        .order('votes_yes',{ascending:false}).order('created_at',{ascending:false}).limit(5);
       setTopBills(billData||[]);
-      setRecentIdeas(ideaData||[]);
-      setRepResponses(forwardedIdeas||[]);
-    } catch(e){}
+
+      // Ideas — handle missing columns gracefully
+      try {
+        const ideaResult = await sb.from('community_ideas')
+          .select('id,title,upvotes,category,created_at')
+          .order('upvotes',{ascending:false}).limit(5);
+        if(!ideaResult.error) setRecentIdeas(ideaResult.data||[]);
+      } catch(e) {}
+
+      // Forwarded ideas
+      try {
+        const fwdResult = await sb.from('community_ideas')
+          .select('id,title,upvotes,target_official')
+          .eq('forwarded',true).order('upvotes',{ascending:false}).limit(10);
+        if(!fwdResult.error) setRepResponses(fwdResult.data||[]);
+      } catch(e) {}
+
+    } catch(e){ console.error('PulseTab load error:',e); }
     setLoading(false);
   };
+  };
 
-  const pct = (yes,no,abs) => {
+  const billPct = (yes,no,abs) => {
     const t = (yes||0)+(no||0)+(abs||0);
     return t > 0 ? Math.round(((yes||0)/t)*100) : 0;
   };
-  const total = (b) => (b.votes_yes||0)+(b.votes_no||0)+(b.votes_abstain||0);
+  const billTotal = (b) => (b.votes_yes||0)+(b.votes_no||0)+(b.votes_abstain||0);
 
   if(loading) return h('div',{style:{textAlign:'center',padding:60,color:'#aaa',fontStyle:'italic'}},'Loading community pulse...');
 
@@ -5533,8 +5548,8 @@ function PulseTab({bills, user, profile}) {
         '🗳 Top Bills by Community Support'),
       topBills.length===0&&h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13}},'No bills yet.'),
       topBills.map((b,i)=>{
-        const t = total(b);
-        const p = pct(b.votes_yes,b.votes_no,b.votes_abstain);
+        const t = billTotal(b);
+        const p = billPct(b.votes_yes,b.votes_no,b.votes_abstain);
         const barColor = p>=60?'#1a6b3c':p>=40?'#f0c040':'#c0392b';
         return h('div',{key:b.id,style:{marginBottom:i<topBills.length-1?14:0}},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4,flexWrap:'wrap',gap:4}},
