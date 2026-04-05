@@ -1721,7 +1721,7 @@ const timeAgo = (ts)=>{   const diff = Date.now()-new Date(ts);   const m = Math
         sb.from('bill_comments').select('id,user_id,display_name,bill_id,content,anonymous,created_at').order('created_at',{ascending:false}).limit(10),
         sb.from('profiles').select('id,display_name,zip,reputation,badges,created_at').order('created_at',{ascending:false}).limit(8),
         sb.from('community_ideas').select('id,title,submitted_by_name,upvotes,created_at').order('created_at',{ascending:false}).limit(8),
-        sb.from('community_chat').select('id,display_name,content,room_id,created_at').eq('room_id','general').order('created_at',{ascending:false}).limit(6),
+        sb.from('community_chat').select('id,display_name,content,image_url,room_id,created_at').eq('room_id','general').order('created_at',{ascending:false}).limit(6),
         sb.from('bill_nominations').select('id,title,submitted_by_name,created_at').order('created_at',{ascending:false}).limit(5),
       ]);
 
@@ -3415,6 +3415,27 @@ const CHAT_ROOMS = [
   {id:'49285', label:'📍 49285 · Summit Twp', desc:'Summit Township area'},
 ];
 
+// ── Chat activity dot helpers (localStorage) ──────────────────────────────────
+const SEEN_KEY = r => 'chat_seen_'+r;
+const getRoomSeen = r => parseInt(localStorage.getItem(SEEN_KEY(r))||'0');
+const setRoomSeen = r => localStorage.setItem(SEEN_KEY(r), Date.now().toString());
+const checkRoomActivity = async(rooms) => {
+  const activity = {};
+  try {
+    const cutoff = new Date(Date.now() - 7*24*60*60*1000).toISOString(); // only check last 7 days
+    for(const r of rooms) {
+      const seen = getRoomSeen(r.id);
+      const seenIso = new Date(seen||0).toISOString();
+      const {count} = await sb.from('community_chat')
+        .select('id',{count:'exact',head:true})
+        .eq('room_id',r.id)
+        .gt('created_at', seen ? seenIso : cutoff);
+      activity[r.id] = (count||0) > 0;
+    }
+  } catch(e) {}
+  return activity;
+};
+
 function CommunityHub({user, profile}) {
   const [activeTab, setActiveTab] = useState('chat');
   const [activeRoom, setActiveRoom] = useState('general');
@@ -3426,9 +3447,13 @@ function CommunityHub({user, profile}) {
   const [loadingNeighbors, setLoadingNeighbors] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [neighborFilter, setNeighborFilter] = useState('all');
-  const [dmThread, setDmThread] = useState(null); // {userId, displayName} of open DM
+  const [dmThread, setDmThread] = useState(null);
   const [unreadDms, setUnreadDms] = useState(0);
+  const [roomActivity, setRoomActivity] = useState({});
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef(null);
   const bottomRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const pollRef = useRef(null);
 
   const displayName = profile?.display_name||user?.email?.split('@')[0]||'Resident';
@@ -3474,13 +3499,20 @@ function CommunityHub({user, profile}) {
   useEffect(()=>{
     setLoadingMsgs(true);
     loadMessages(activeRoom);
+    setRoomSeen(activeRoom); // mark this room as seen when we open it
     clearInterval(pollRef.current);
     pollRef.current = setInterval(()=>loadMessages(activeRoom), 5000);
     return ()=>clearInterval(pollRef.current);
   },[activeRoom]);
 
+  // Load activity dots on mount
   useEffect(()=>{
-    if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:'smooth'});
+    checkRoomActivity(CHAT_ROOMS).then(setRoomActivity);
+  },[]);
+
+  // Scroll chat to bottom inside container only
+  useEffect(()=>{
+    if(chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   },[messages]);
 
   const sendMessage = async()=>{
@@ -3501,6 +3533,36 @@ function CommunityHub({user, profile}) {
     else setMessages(prev=>[...prev,{...msg,id:Date.now()}]);
     setMsgText('');
     setSending(false);
+  };
+
+  const uploadPhoto = async(file)=>{
+    if(!file||!user) return;
+    if(file.size > 5*1024*1024) { alert('Photo must be under 5MB.'); return; }
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const path = 'chat/'+user.id+'-'+Date.now()+'.'+ext;
+      const {data:upData, error:upErr} = await sb.storage.from('chat-photos').upload(path, file, {upsert:true});
+      if(upErr) throw upErr;
+      const {data:{publicUrl}} = sb.storage.from('chat-photos').getPublicUrl(path);
+      const msg = {
+        room_id: activeRoom,
+        user_id: user.id,
+        display_name: displayName,
+        content: '[photo]',
+        image_url: publicUrl,
+        is_official: profile?.is_official||false,
+        official_title: profile?.official_title||null,
+        created_at: new Date().toISOString()
+      };
+      const {data} = await sb.from('community_chat').insert(msg).select().single();
+      if(data) setMessages(prev=>[...prev,data]);
+      else setMessages(prev=>[...prev,{...msg,id:Date.now()}]);
+    } catch(e) {
+      alert('Photo upload failed: '+e.message+'\n\nMake sure the chat-photos storage bucket exists in Supabase.');
+    }
+    setUploadingPhoto(false);
+    if(fileInputRef.current) fileInputRef.current.value='';
   };
 
   const currentRoom = CHAT_ROOMS.find(r=>r.id===activeRoom)||CHAT_ROOMS[0];
@@ -3524,11 +3586,17 @@ function CommunityHub({user, profile}) {
     activeTab==='chat'&&h('div',null,
       // Room selector
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
-        CHAT_ROOMS.map(r=>h('button',{key:r.id,onClick:()=>setActiveRoom(r.id),
+        CHAT_ROOMS.map(r=>h('button',{key:r.id,
+          onClick:()=>{setActiveRoom(r.id);setRoomActivity(prev=>({...prev,[r.id]:false}));},
           style:{background:activeRoom===r.id?'#1a1a2e':'#fff',color:activeRoom===r.id?'#f0c040':'#555',
             border:'1px solid '+(activeRoom===r.id?'#1a1a2e':'#ddd'),padding:'5px 11px',borderRadius:20,
-            fontFamily:"'Lora',serif",fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}
-        },r.label))
+            fontFamily:"'Lora',serif",fontSize:11,cursor:'pointer',whiteSpace:'nowrap',position:'relative'}},
+          r.label,
+          roomActivity[r.id]&&activeRoom!==r.id&&h('span',{style:{
+            position:'absolute',top:-3,right:-3,width:9,height:9,
+            background:'#c0392b',borderRadius:'50%',border:'2px solid #f4f1ea'
+          }})
+        ))
       ),
 
       // Chat window
@@ -3537,7 +3605,7 @@ function CommunityHub({user, profile}) {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,color:'#f0c040',fontSize:14}},currentRoom.label),
           h('div',{style:{fontSize:11,color:'#8899aa',marginTop:2}},currentRoom.desc)
         ),
-        h('div',{style:{height:320,overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}},
+        h('div',{ref:chatScrollRef,style:{height:320,overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}},
           loadingMsgs&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa',fontStyle:'italic'}},'Loading messages...'),
           !loadingMsgs&&messages.length===0&&h('div',{style:{textAlign:'center',padding:30,color:'#aaa'}},
             h('div',{style:{fontSize:32,marginBottom:8}},'💬'),
@@ -3563,10 +3631,17 @@ function CommunityHub({user, profile}) {
                   },connections.has(m.user_id)?'\u2713 Neighbor':'+ Add'),
                   h('span',{style:{fontSize:10,color:'#bbb'}},m.created_at?new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'')
                 ),
-                h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
-                  borderRadius:8,padding:'8px 11px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6,color:'#333'}},
-                  m.content
-                )
+                m.image_url
+                  ? h('div',{style:{marginTop:2}},
+                      h('img',{src:m.image_url,alt:'photo',
+                        style:{maxWidth:220,maxHeight:220,borderRadius:8,display:'block',cursor:'pointer'},
+                        onClick:()=>window.open(m.image_url,'_blank')
+                      })
+                    )
+                  : h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
+                      borderRadius:8,padding:'8px 11px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6,color:'#333'}},
+                      m.content
+                    )
               )
             );
           }),
@@ -3576,7 +3651,20 @@ function CommunityHub({user, profile}) {
           ? h('div',{style:{padding:14,background:'#faf8f3',borderTop:'1px solid #e5dece',textAlign:'center',fontSize:13,color:'#888',fontStyle:'italic'}},
               'Sign in to join the conversation'
             )
-          : h('div',{style:{padding:'10px 12px',background:'#faf8f3',borderTop:'1px solid #e5dece',display:'flex',gap:8}},
+          : h('div',{style:{padding:'10px 12px',background:'#faf8f3',borderTop:'1px solid #e5dece',display:'flex',gap:8,alignItems:'center'}},
+              // Hidden file input
+              h('input',{ref:fileInputRef,type:'file',accept:'image/*',style:{display:'none'},
+                onChange:e=>e.target.files[0]&&uploadPhoto(e.target.files[0])
+              }),
+              // Photo button
+              h('button',{
+                onClick:()=>fileInputRef.current&&fileInputRef.current.click(),
+                disabled:uploadingPhoto,
+                title:'Send a photo',
+                style:{background:'transparent',border:'1px solid #ddd',borderRadius:'50%',
+                  width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',
+                  cursor:'pointer',flexShrink:0,fontSize:16,color:uploadingPhoto?'#ccc':'#888'}
+              }, uploadingPhoto?'⏳':'📷'),
               h('input',{
                 value:msgText,onChange:e=>setMsgText(e.target.value.slice(0,1000)),
                 onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(),
