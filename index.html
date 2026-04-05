@@ -1088,6 +1088,7 @@ function CommentItem({comment:c, user, billId, onEdited}) {
             c.anonymous?'Anonymous':c.display_name
           ),
           c.is_official&&h(OfficialBadge,{title:c.official_title,small:true}),
+          c.is_press&&h(PressBadge,{outlet:c.press_outlet,small:true}),
           c.badges&&c.badges.length>0&&h(BadgeRow,{badges:c.badges.slice(0,2),tiny:true})
         ),
         h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
@@ -2952,6 +2953,23 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
           h(OfficialBadgeRequest,{user,profile,onToast})
         ),
 
+        // Press Badge Request / Active badge
+        profile?.is_press
+          ? h('div',{style:{background:'#fff8f0',border:'1px solid #f0c8a0',borderRadius:10,padding:16,marginTop:14}},
+              h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:4}},
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'📰 Verified Press'),
+                h(PressBadge,{outlet:profile.press_outlet,small:false})
+              ),
+              profile.press_beat&&h('div',{style:{fontSize:12,color:'#8a4000',fontFamily:"'Lora',serif"}},'Beat: '+profile.press_beat)
+            )
+          : !profile?.is_press&&h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginTop:14,border:'1px solid #e5dece'}},
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'📰 Are You a Local Journalist?'),
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7,marginBottom:12}},
+                'Journalists, bloggers, and newsletter writers covering Jackson County can apply for a Verified Press badge. Your news submissions will be highlighted as a local source and go live immediately.'
+              ),
+              h(PressBadgeRequest,{user,profile,onToast})
+            ),
+
         // Privacy & account settings
         h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginTop:14}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:12}},'🔒 Privacy & Account'),
@@ -3008,6 +3026,177 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
 }
 
 // ── Official Badge Request ────────────────────────────────────────────────────
+// ── Press Badge ───────────────────────────────────────────────────────────────
+function PressBadge({outlet, small}) {
+  return h('span',{
+    title:outlet||'Verified Local Press',
+    style:{
+      display:'inline-flex',alignItems:'center',gap:3,
+      background:'#8a4000',color:'#fff',
+      fontSize:small?9:10,fontWeight:700,
+      padding:small?'1px 5px':'2px 7px',
+      borderRadius:20,letterSpacing:.5,
+      marginLeft:5,verticalAlign:'middle',
+      fontFamily:"'Lora',serif",whiteSpace:'nowrap'
+    }
+  },'📰 '+(small?'Press':(outlet||'Verified Press')));
+}
+
+function PressBadgeRequest({user, profile, onToast}) {
+  const [open, setOpen] = useState(false);
+  const [outlet, setOutlet] = useState('');
+  const [beat, setBeat] = useState('');
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const submit = async()=>{
+    if(!outlet.trim()) return;
+    setSubmitting(true);
+    const {error} = await sb.from('press_badge_requests').insert({
+      user_id: user.id,
+      display_name: profile?.display_name||user.email?.split('@')[0]||'Resident',
+      email: user.email||'',
+      zip: profile?.zip||'',
+      outlet: outlet.trim(),
+      beat: beat.trim()||null,
+      message: body.trim()||null,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    });
+    if(!error) {
+      setSubmitted(true);
+      onToast('✅ Press badge request submitted! Justin will review your application.');
+    } else {
+      onToast('❌ Error submitting — please try again.');
+    }
+    setSubmitting(false);
+  };
+
+  if(submitted||profile?.is_press) return null;
+
+  return h('div',null,
+    !open
+      ? h('button',{onClick:()=>setOpen(true),
+          style:{background:'#8a4000',color:'#fff',border:'none',padding:'10px 20px',
+            borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,
+            fontSize:13,cursor:'pointer',width:'100%'}},'📰 Request Press Badge')
+      : h('div',{style:{background:'#fff8f0',border:'1px solid #f0c8a0',borderRadius:8,padding:14,marginTop:8}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},'Press Badge Application'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',lineHeight:1.5,marginBottom:12}},
+            'For journalists, bloggers, newsletter writers, and community reporters covering Jackson County. Verified press get a badge on their profile and their news submissions go live immediately.'),
+          h('div',{style:{marginBottom:10}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Publication / Outlet *'),
+            h('input',{value:outlet,onChange:e=>setOutlet(e.target.value),
+              placeholder:'e.g. Jackson Citizen Patriot, Concord Courier, my own newsletter...',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+          ),
+          h('div',{style:{marginBottom:10}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Your Beat / Coverage Area (optional)'),
+            h('input',{value:beat,onChange:e=>setBeat(e.target.value),
+              placeholder:'e.g. Local government, food & agriculture, community events...',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
+          ),
+          h('div',{style:{marginBottom:12}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Additional Info (optional)'),
+            h('textarea',{value:body,onChange:e=>setBody(e.target.value),rows:2,
+              placeholder:'Link to your work, social media, or anything else that helps verify you...',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
+          ),
+          h('div',{style:{fontSize:11,color:'#888',fontFamily:"'Lora',serif",lineHeight:1.5,marginBottom:12}},
+            '📋 Your request will be reviewed by the platform admin. Verified press have their submissions highlighted with a Local Source label.'),
+          h('div',{style:{display:'flex',gap:8}},
+            h('button',{onClick:submit,disabled:submitting||!outlet.trim(),
+              style:{flex:1,background:submitting||!outlet.trim()?'#ccc':'#8a4000',
+                color:'#fff',border:'none',padding:'10px',borderRadius:7,
+                fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+              submitting?'Submitting...':'Submit Application'),
+            h('button',{onClick:()=>setOpen(false),
+              style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',
+                padding:'10px 16px',borderRadius:7,fontSize:13,cursor:'pointer'}},'Cancel')
+          )
+        )
+  );
+}
+
+// Admin inbox for press badge requests
+function PressBadgeInbox({onToast}) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(()=>{
+    sb.from('press_badge_requests').select('*')
+      .eq('status','pending').order('created_at',{ascending:false})
+      .then(({data})=>{ setRequests(data||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  },[]);
+
+  const approve = async(req)=>{
+    await sb.from('profiles').update({is_press:true,press_outlet:req.outlet,press_beat:req.beat||null}).eq('id',req.user_id);
+    await sb.from('press_badge_requests').update({status:'approved'}).eq('id',req.id);
+    // Notify them
+    try {
+      await sb.from('notifications').insert({
+        user_id:req.user_id,type:'official',
+        title:'Your Press badge has been approved!',
+        body:'Your 📰 Press badge is now live on your profile.',
+        read:false,created_at:new Date().toISOString()
+      });
+    } catch(e){}
+    setRequests(prev=>prev.filter(r=>r.id!==req.id));
+    onToast('✅ Press badge granted to '+req.display_name+'!');
+  };
+
+  const deny = async(req)=>{
+    await sb.from('press_badge_requests').update({status:'denied'}).eq('id',req.id);
+    setRequests(prev=>prev.filter(r=>r.id!==req.id));
+    onToast('Request from '+req.display_name+' denied.');
+  };
+
+  const count = requests.length;
+
+  return h('div',{style:{background:'#fff8f0',border:'1px solid #f0c8a0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?14:0},
+      onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '📰 Press Badge Requests',
+        count>0&&h('span',{style:{background:'#8a4000',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},count)
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open&&h('div',null,
+      loading&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+      !loading&&requests.length===0&&h('div',{style:{textAlign:'center',padding:16,color:'#aaa',fontStyle:'italic'}},'No pending press badge requests.'),
+      requests.map(req=>h('div',{key:req.id,
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'12px 14px',marginBottom:8}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:2}},req.display_name),
+        h('div',{style:{fontSize:12,color:'#8a4000',fontWeight:700,marginBottom:2}},'📰 '+req.outlet),
+        req.beat&&h('div',{style:{fontSize:12,color:'#666',marginBottom:4}},'Beat: '+req.beat),
+        h('div',{style:{display:'flex',gap:8,fontSize:11,color:'#888',marginBottom:req.message?6:10,flexWrap:'wrap'}},
+          h('span',null,'📧 '+req.email),
+          h('span',null,'🕐 '+new Date(req.created_at).toLocaleDateString())
+        ),
+        req.message&&h('div',{style:{fontSize:12,color:'#555',fontFamily:"'Lora',serif",
+          lineHeight:1.6,fontStyle:'italic',marginBottom:8,padding:'6px 10px',
+          background:'#fff8f0',borderRadius:5}},'\"'+req.message+'\"'),
+        h('div',{style:{display:'flex',gap:8}},
+          h('button',{onClick:()=>approve(req),
+            style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'7px 16px',
+              borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+            '✅ Approve & Grant Badge'),
+          h('button',{onClick:()=>deny(req),
+            style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',
+              padding:'7px 12px',borderRadius:6,fontSize:12,cursor:'pointer'}},'Deny')
+        )
+      ))
+    )
+  );
+}
+
 function OfficialBadgeRequest({user, profile, onToast}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -3980,6 +4169,8 @@ function CommunityHub({user, profile}) {
       content: msgText.trim(),
       is_official: profile?.is_official||false,
       official_title: profile?.official_title||null,
+      is_press: profile?.is_press||false,
+      press_outlet: profile?.press_outlet||null,
       created_at: new Date().toISOString()
     };
     const {data} = await sb.from('community_chat').insert(msg).select().single();
@@ -4007,6 +4198,8 @@ function CommunityHub({user, profile}) {
         image_url: publicUrl,
         is_official: profile?.is_official||false,
         official_title: profile?.official_title||null,
+        is_press: profile?.is_press||false,
+        press_outlet: profile?.press_outlet||null,
         created_at: new Date().toISOString()
       };
       const {data} = await sb.from('community_chat').insert(msg).select().single();
@@ -4077,6 +4270,7 @@ function CommunityHub({user, profile}) {
                 h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:3,flexDirection:isMe?'row-reverse':'row'}},
                   h('span',{style:{fontSize:11,fontWeight:700,color:isMe?'#1a5c8a':'#1a1a2e'}},isMe?'You':m.display_name),
                   m.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'OFFICIAL'),
+                  m.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'PRESS'),
                   !isMe&&m.user_id&&user&&h('button',{
                     onClick:()=>toggleConnection(m.user_id),
                     title:connections.has(m.user_id)?'Remove neighbor':'Add as neighbor',
@@ -4185,7 +4379,8 @@ function CommunityHub({user, profile}) {
             h('div',{style:{flex:1,minWidth:0}},
               h('div',{style:{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}},
                 h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e'}},name+(isMe?' (you)':'')),
-                n.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10,whiteSpace:'nowrap'}},'OFFICIAL')
+                n.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10,whiteSpace:'nowrap'}},'OFFICIAL'),
+                n.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10,whiteSpace:'nowrap'}},'PRESS')
               ),
               n.tagline&&h('div',{style:{fontSize:11,color:'#888',fontStyle:'italic',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},n.tagline),
               h('div',{style:{display:'flex',gap:6,marginTop:4,alignItems:'center'}},
@@ -5864,7 +6059,8 @@ function NewUsersInbox({onToast}) {
               u.display_name||'(no name)',
               isNew&&h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10,textTransform:'uppercase'}},'New'),
               u.is_admin&&h('span',{style:{background:'#8a6000',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Admin'),
-              u.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Official')
+              u.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Official'),
+              u.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Press')
             ),
             h('div',{style:{fontSize:11,color:'#888',marginTop:2}},
               (u.email||'no email')+' · ZIP: '+(u.zip||'—')+' · '+u.reputation+' rep'
@@ -6389,6 +6585,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(EventsApprovalQueue,{onToast}),
     h(UserManager,{onToast}),
     h(OfficialBadgeInbox,{onToast}),
+    h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
     h(NominationsInbox,{onToast}),
