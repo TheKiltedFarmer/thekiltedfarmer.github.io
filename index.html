@@ -4923,6 +4923,300 @@ function EventsApprovalQueue({onToast}) {
   );
 }
 
+// ── Skill & Resource Exchange ─────────────────────────────────────────────────
+const EXCHANGE_CATEGORIES = ['All','Food & Produce','Tools & Equipment','Skills & Labor','Childcare','Transportation','Housing Help','Supplies','Knowledge & Tutoring','Animals & Plants','Other'];
+const EXCHANGE_CAT_COLORS = {
+  'Food & Produce':'#1a6b3c','Tools & Equipment':'#8a4000','Skills & Labor':'#1a5c8a',
+  'Childcare':'#5b3a8c','Transportation':'#2c7a6b','Housing Help':'#8a6000',
+  'Supplies':'#555','Knowledge & Tutoring':'#c0392b','Animals & Plants':'#1a6b3c','Other':'#888'
+};
+
+function ExchangeCard({item, user, onToast, onDelete, isAdmin}) {
+  const [claimed, setClaimed] = useState(item.claimed||false);
+  const [claiming, setClaiming] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const isOffer = item.listing_type==='offer';
+  const isMe = item.posted_by_id===user?.id;
+  const catColor = EXCHANGE_CAT_COLORS[item.category]||'#888';
+
+  const claim = async()=>{
+    if(!user) { onToast('Sign in to respond to listings.'); return; }
+    setClaiming(true);
+    try {
+      await sb.from('exchange_listings').update({claimed:true,claimed_by_id:user.id,claimed_at:new Date().toISOString()}).eq('id',item.id);
+      // Notify the poster
+      await sb.from('notifications').insert({
+        user_id:item.posted_by_id,type:'exchange',
+        title:(isOffer?'Someone wants your offer: ':'Someone can help with: ')+item.title,
+        body:(user.display_name||'A neighbor')+' responded to your listing.',
+        read:false,created_at:new Date().toISOString()
+      }).catch(()=>{});
+      setClaimed(true);
+      onToast('✅ '+(isOffer?"You've claimed this offer! Reach out to connect.":'Your request has been matched! They\'ll be in touch.'));
+    } catch(e) { onToast('❌ Could not update: '+e.message); }
+    setClaiming(false);
+  };
+
+  const unclaim = async()=>{
+    await sb.from('exchange_listings').update({claimed:false,claimed_by_id:null,claimed_at:null}).eq('id',item.id);
+    setClaimed(false);
+    onToast('Listing re-opened.');
+  };
+
+  return h('div',{style:{background:'#fff',border:'2px solid '+(isOffer?'#d4edda':'#d4e6f1'),
+    borderRadius:10,marginBottom:12,overflow:'hidden',opacity:claimed?0.7:1}},
+    h('div',{style:{display:'flex',gap:0}},
+      // Type stripe
+      h('div',{style:{width:6,background:isOffer?'#1a6b3c':'#1a5c8a',flexShrink:0}}),
+      h('div',{style:{flex:1,padding:'13px 14px'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap'}},
+          h('div',{style:{flex:1}},
+            h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6,alignItems:'center'}},
+              h('span',{style:{background:isOffer?'#1a6b3c':'#1a5c8a',color:'#fff',fontSize:10,fontWeight:700,
+                padding:'2px 10px',borderRadius:20,textTransform:'uppercase',letterSpacing:0.5}},
+                isOffer?'🤲 Offering':'🙏 Requesting'),
+              h('span',{style:{background:catColor,color:'#fff',fontSize:10,fontWeight:700,
+                padding:'2px 8px',borderRadius:20}},item.category),
+              claimed&&h('span',{style:{background:'#f0c040',color:'#1a1a2e',fontSize:10,fontWeight:700,
+                padding:'2px 8px',borderRadius:20}},'✓ Matched'),
+              item.zip&&h('span',{style:{background:'#f5f5f5',color:'#666',fontSize:10,
+                padding:'2px 8px',borderRadius:20}},'📍 '+item.zip)
+            ),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,
+              color:'#1a1a2e',marginBottom:4}},item.title),
+            h('div',{style:{fontSize:12,color:'#888',fontFamily:"'Lora',serif"}},
+              'Posted by '+item.posted_by_name+' · '+timeAgo(item.created_at))
+          ),
+          h('button',{onClick:()=>setExpanded(!expanded),
+            style:{background:'transparent',border:'1px solid #e5dece',color:'#888',
+              padding:'5px 10px',borderRadius:5,fontSize:12,cursor:'pointer',flexShrink:0}},
+            expanded?'Less ▲':'More ▼')
+        ),
+        // Always show short description
+        item.description&&!expanded&&h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,
+          color:'#555',lineHeight:1.6,marginTop:4}},
+          item.description.slice(0,120)+(item.description.length>120?'...':'')),
+        expanded&&h('div',{style:{marginTop:10,paddingTop:10,borderTop:'1px solid #f0ece0'}},
+          item.description&&h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',
+            lineHeight:1.7,marginBottom:12}},item.description),
+          h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}},
+            !claimed&&!isMe&&user&&h('button',{onClick:claim,disabled:claiming,
+              style:{background:isOffer?'#1a6b3c':'#1a5c8a',color:'#fff',border:'none',
+                padding:'8px 18px',borderRadius:6,fontFamily:"'Playfair Display',serif",
+                fontWeight:700,fontSize:13,cursor:'pointer'}},
+              claiming?'...':(isOffer?'🤲 I want this':'✋ I can help')),
+            claimed&&isMe&&h('button',{onClick:unclaim,
+              style:{background:'transparent',border:'1px solid #ddd',color:'#888',
+                padding:'7px 14px',borderRadius:6,fontSize:12,cursor:'pointer'}},
+              'Re-open listing'),
+            claimed&&!isMe&&h('div',{style:{fontSize:13,color:'#1a6b3c',fontWeight:700,
+              fontFamily:"'Lora',serif"}},'✓ You responded to this'),
+            isMe&&!claimed&&h('button',{onClick:()=>onDelete(item),
+              style:{marginLeft:'auto',background:'transparent',border:'1px solid #fcc',
+                color:'#c0392b',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}},
+              '🗑 Remove'),
+            isAdmin&&!isMe&&h('button',{onClick:()=>onDelete(item),
+              style:{marginLeft:'auto',background:'transparent',border:'1px solid #fcc',
+                color:'#c0392b',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}},
+              '🗑 Remove')
+          )
+        )
+      )
+    )
+  );
+}
+
+function ExchangeTab({user, profile, onToast}) {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState('all'); // all | offer | request
+  const [catFilter, setCatFilter] = useState('All');
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isAdmin = profile?.is_admin===true;
+
+  const EMPTY = {listing_type:'offer',title:'',category:'Food & Produce',description:'',zip:profile?.zip||''};
+  const [form, setForm] = useState(EMPTY);
+  const setF = k => e => setForm(f=>({...f,[k]:e.target.value}));
+
+  const load = async()=>{
+    setLoading(true);
+    try {
+      const {data} = await sb.from('exchange_listings').select('*')
+        .order('created_at',{ascending:false}).limit(60);
+      setListings(data||[]);
+    } catch(e) { /* table may not exist yet */ }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  const submit = async()=>{
+    if(!form.title.trim()||!form.description.trim()){
+      onToast('Please fill in title and description.'); return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        posted_by_id: user.id,
+        posted_by_name: profile?.display_name||user.email||'Neighbor',
+        claimed: false,
+        created_at: new Date().toISOString()
+      };
+      const {data,error} = await sb.from('exchange_listings').insert(payload).select().single();
+      if(error) throw error;
+      setListings(prev=>[data,...prev]);
+      setForm(EMPTY);
+      setShowAdd(false);
+      onToast('✅ Listing posted to the community!');
+    } catch(e) {
+      onToast('❌ Could not post. Run the exchange SQL in Supabase first.');
+    }
+    setSaving(false);
+  };
+
+  const deleteItem = async(item)=>{
+    if(!window.confirm('Remove this listing?')) return;
+    await sb.from('exchange_listings').delete().eq('id',item.id);
+    setListings(prev=>prev.filter(l=>l.id!==item.id));
+    onToast('Listing removed.');
+  };
+
+  const filtered = listings.filter(l=>{
+    if(typeFilter!=='all'&&l.listing_type!==typeFilter) return false;
+    if(catFilter!=='All'&&l.category!==catFilter) return false;
+    return true;
+  });
+
+  const offerCount = listings.filter(l=>l.listing_type==='offer'&&!l.claimed).length;
+  const requestCount = listings.filter(l=>l.listing_type==='request'&&!l.claimed).length;
+
+  return h('div',null,
+    // Header
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',
+      marginBottom:14,flexWrap:'wrap',gap:10}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,
+          color:'#1a1a2e'}},'🤲 Skill & Resource Exchange'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
+          'Give what you can. Take what you need. No money required.')
+      ),
+      user&&h('button',{onClick:()=>setShowAdd(!showAdd),
+        style:{background:showAdd?'#555':'#1a6b3c',color:'#fff',border:'none',
+          padding:'10px 18px',borderRadius:7,fontFamily:"'Playfair Display',serif",
+          fontWeight:700,fontSize:13,cursor:'pointer'}},
+        showAdd?'✕ Cancel':'+ Post a Listing')
+    ),
+
+    // Stats bar
+    h('div',{style:{background:'#f0fff4',border:'1px solid #a8e6c0',borderRadius:8,
+      padding:'10px 16px',marginBottom:14,display:'flex',gap:20,flexWrap:'wrap'}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#1a6b3c'}},offerCount),
+        h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1}},'Active Offers')
+      ),
+      h('div',{style:{width:1,background:'#a8e6c0'}}),
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#1a5c8a'}},requestCount),
+        h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1}},'Open Requests')
+      ),
+      h('div',{style:{width:1,background:'#a8e6c0'}}),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#666',lineHeight:1.5,flex:1,alignSelf:'center'}},
+        'This is a gift economy. Everything here is offered freely — no payment expected or accepted.')
+    ),
+
+    // Add listing form
+    showAdd&&h('div',{style:{background:'#1a1a2e',borderRadius:12,padding:20,marginBottom:20}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,
+        color:'#f0c040',marginBottom:14}},'Post a Listing'),
+      // Offer / Request toggle
+      h('div',{style:{display:'flex',gap:0,marginBottom:14,borderRadius:8,overflow:'hidden',border:'1px solid #444'}},
+        [['offer','🤲 I\'m Offering'],['request','🙏 I\'m Requesting']].map(([v,l])=>
+          h('button',{key:v,onClick:()=>setForm(f=>({...f,listing_type:v})),
+            style:{flex:1,padding:'10px',background:form.listing_type===v?'#f0c040':'transparent',
+              color:form.listing_type===v?'#1a1a2e':'#8899aa',border:'none',
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},l)
+        )
+      ),
+      h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},
+          form.listing_type==='offer'?'What are you offering? *':'What do you need? *'),
+        h('input',{value:form.title,onChange:setF('title'),
+          placeholder:form.listing_type==='offer'?'e.g. Fresh tomatoes, Truck for moving, Piano lessons...':'e.g. Help fixing a fence, Eggs, Ride to Jackson...',
+          style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',
+            fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+      ),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}},
+        h('div',null,
+          h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Category'),
+          h('select',{value:form.category,onChange:setF('category'),
+            style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',
+              fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}},
+            EXCHANGE_CATEGORIES.filter(c=>c!=='All').map(c=>h('option',{key:c,value:c},c))
+          )
+        ),
+        h('div',null,
+          h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Your ZIP (optional)'),
+          h('input',{value:form.zip,onChange:setF('zip'),placeholder:'e.g. 49237',maxLength:5,
+            style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',
+              fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+        )
+      ),
+      h('div',{style:{marginBottom:16}},
+        h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Details *'),
+        h('textarea',{value:form.description,onChange:setF('description'),rows:3,
+          placeholder:form.listing_type==='offer'?'Describe what you\'re offering, how much, any conditions, how to connect with you...':'Describe what you need, when, any details that help someone help you...',
+          style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',
+            fontSize:13,background:'#23233a',color:'#fff',resize:'vertical',boxSizing:'border-box'}})
+      ),
+      h('div',{style:{background:'rgba(240,192,64,0.1)',border:'1px solid rgba(240,192,64,0.3)',
+        borderRadius:7,padding:'10px 14px',marginBottom:14,fontSize:12,
+        color:'#f0c040',fontFamily:"'Lora',serif",lineHeight:1.6}},
+        '🌱 Reminder: This platform operates on the gift economy. Don\'t list anything you expect payment for — this is about neighbors helping neighbors freely.'),
+      h('button',{onClick:submit,disabled:saving||!form.title.trim()||!form.description.trim(),
+        style:{width:'100%',background:saving?'#555':'#f0c040',color:'#1a1a2e',border:'none',
+          padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",
+          fontWeight:900,fontSize:15,cursor:saving?'default':'pointer'}},
+        saving?'Posting...':'Post to Community →')
+    ),
+
+    // Filters
+    h('div',{style:{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}},
+      // Type filter
+      h('div',{style:{display:'flex',gap:0,borderRadius:7,overflow:'hidden',border:'1px solid #e5dece',flexShrink:0}},
+        [['all','All'],['offer','🤲 Offers'],['request','🙏 Requests']].map(([v,l])=>
+          h('button',{key:v,onClick:()=>setTypeFilter(v),
+            style:{padding:'6px 12px',background:typeFilter===v?'#1a1a2e':'#fff',
+              color:typeFilter===v?'#f0c040':'#555',border:'none',
+              fontFamily:"'Playfair Display',serif",fontWeight:typeFilter===v?700:400,
+              fontSize:12,cursor:'pointer'}},l)
+        )
+      )
+    ),
+    // Category chips
+    h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}},
+      EXCHANGE_CATEGORIES.map(c=>h('button',{key:c,onClick:()=>setCatFilter(c),
+        style:{background:catFilter===c?'#1a1a2e':'#fff',color:catFilter===c?'#f0c040':'#555',
+          border:'1px solid '+(catFilter===c?'#1a1a2e':'#e5dece'),padding:'4px 11px',
+          borderRadius:20,fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",
+          fontWeight:catFilter===c?700:400}},c))
+    ),
+
+    // Listings
+    loading&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},'Loading...'),
+    !loading&&filtered.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa'}},
+      h('div',{style:{fontSize:36,marginBottom:10}},'🤲'),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,
+        color:'#555',marginBottom:6}},
+        listings.length===0?'No listings yet — be the first!':'No listings match this filter.'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#aaa',lineHeight:1.6}},
+        'What do you have to offer? What do you need?')
+    ),
+    filtered.map(item=>h(ExchangeCard,{key:item.id,item,user,onToast,onDelete:deleteItem,isAdmin}))
+  );
+}
+
 function ResourcesTab({user, onToast}) {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -6664,7 +6958,7 @@ function App() {
       // Tabs — horizontally scrollable on mobile
       h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
-          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
+          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
             h('button',{key:t,onClick:()=>setMainTab(t),
               style:{background:'transparent',border:'none',
                 borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
@@ -6782,6 +7076,9 @@ function App() {
 
       // Events tab
       mainTab==='events'&&h(EventsTab,{user,profile,onToast:setToast}),
+
+      // Exchange tab
+      mainTab==='exchange'&&h(ExchangeTab,{user,profile,onToast:setToast}),
 
       // Connect tab — Chat + Neighbor Directory
       mainTab==='connect'&&h('div',null,
