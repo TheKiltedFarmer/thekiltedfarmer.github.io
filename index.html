@@ -5508,7 +5508,6 @@ function PulseTab({bills, user, profile}) {
     } catch(e){ console.error('PulseTab load error:',e); }
     setLoading(false);
   };
-  };
 
   const billPct = (yes,no,abs) => {
     const t = (yes||0)+(no||0)+(abs||0);
