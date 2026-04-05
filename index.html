@@ -5482,7 +5482,7 @@ function PulseTab({bills, user, profile}) {
         sb.from('profiles').select('id',{count:'exact',head:true}),
         sb.from('user_votes').select('id',{count:'exact',head:true}).gte('created_at',since7),
         sb.from('profiles').select('id',{count:'exact',head:true}).gte('created_at',since7),
-        sb.from('bills').select('id,title,votes_yes,votes_no,votes_abstain,status,jurisdiction').order('votes_yes',{ascending:false}).limit(5),
+        sb.from('bills').select('id,title,votes_yes,votes_no,votes_abstain,status,jurisdiction').order('votes_yes',{ascending:false}).order('created_at',{ascending:false}).limit(5),
         sb.from('community_ideas').select('id,title,upvotes,status,category,created_at').order('upvotes',{ascending:false}).limit(5).catch(()=>({data:[]})),
         sb.from('community_ideas').select('id,title,upvotes,status,target_official').eq('status','forwarded').order('upvotes',{ascending:false}).limit(10).catch(()=>({data:[]})),
       ]);
