@@ -3169,6 +3169,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
   const [showNewDm, setShowNewDm] = useState(false);
   const [search, setSearch] = useState('');
   const bottomRef = useRef(null);
+  const scrollRef = useRef(null);
   const pollRef = useRef(null);
 
   const myName = profile?.display_name||user?.email?.split('@')[0]||'Resident';
@@ -3192,7 +3193,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
   },[thread]);
 
   useEffect(()=>{
-    if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:'smooth'});
+    if(scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   },[messages]);
 
   const loadConversations = async()=>{
@@ -3357,7 +3358,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
               },'×')
             ),
             // Messages
-            h('div',{style:{flex:1,overflowY:'auto',padding:'12px 16px'}},
+            h('div',{ref:scrollRef,style:{flex:1,overflowY:'auto',padding:'12px 16px'}},
               loadingMsgs&&h('div',{style:{textAlign:'center',color:'#aaa',fontSize:12,fontStyle:'italic'}},'Loading...'),
               messages.length===0&&!loadingMsgs&&h('div',{style:{textAlign:'center',color:'#aaa',fontSize:12,fontStyle:'italic',padding:20}},
                 'No messages yet. Say hello!'
@@ -3380,19 +3381,22 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
               h('div',{ref:bottomRef})
             ),
             // Input
-            h('div',{style:{padding:'10px 12px',borderTop:'1px solid #e5dece',display:'flex',gap:8,background:'#faf8f5'}},
-              h('input',{value:msgText,onChange:e=>setMsgText(e.target.value.slice(0,1000)),
-                onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(),
+            h('div',{style:{padding:'10px 12px',borderTop:'1px solid #e5dece',display:'flex',gap:8,alignItems:'flex-end',background:'#faf8f5'}},
+              h('textarea',{value:msgText,onChange:e=>setMsgText(e.target.value.slice(0,1000)),
+                onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),sendMessage()),
                 placeholder:'Message '+thread.displayName+'...',
+                rows:3,
                 maxLength:1000,
-                style:{flex:1,border:'1px solid #ddd',borderRadius:20,padding:'9px 14px',
-                  fontSize:13,fontFamily:"'Lora',serif",background:'#fff'}}),
+                style:{flex:1,border:'1px solid #ddd',borderRadius:12,padding:'9px 14px',
+                  fontSize:13,fontFamily:"'Lora',serif",background:'#fff',
+                  resize:'none',lineHeight:1.5,boxSizing:'border-box'}}),
               h('button',{onClick:sendMessage,disabled:!msgText.trim()||sending,
                 style:{background:msgText.trim()&&!sending?'#1a1a2e':'#ddd',
                   color:msgText.trim()&&!sending?'#f0c040':'#aaa',
-                  border:'none',borderRadius:20,padding:'9px 16px',
+                  border:'none',borderRadius:12,padding:'9px 16px',
                   fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
-                  cursor:msgText.trim()&&!sending?'pointer':'default',whiteSpace:'nowrap'}
+                  cursor:msgText.trim()&&!sending?'pointer':'default',whiteSpace:'nowrap',
+                  alignSelf:'flex-end'}
               },'Send')
             )
           )
