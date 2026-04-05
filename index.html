@@ -6,6 +6,8 @@
 <title>The People's Voice</title>
 <meta name="description" content="A free, independent civic platform. Vote on real bills. Build community projects. Hold your representatives accountable."/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#f4f1ea;font-family:'Lora',serif;-webkit-text-size-adjust:100%}
@@ -5222,6 +5224,235 @@ function ExchangeCard({item, user, onToast, onDelete, isAdmin}) {
 }
 
 // ── Community Pulse Dashboard ─────────────────────────────────────────────────
+// ── ZIP Code Centroids (Jackson County) ──────────────────────────────────────
+const ZIP_COORDS = {
+  '49201':[42.2459,-84.4013],'49202':[42.2600,-84.4200],'49203':[42.2200,-84.4013],
+  '49204':[42.2459,-84.4013],'49230':[42.1084,-84.2471],'49233':[42.0056,-84.3330],
+  '49234':[42.1500,-84.3200],'49237':[42.1789,-84.6384],'49240':[42.2589,-84.1630],
+  '49241':[42.0595,-84.5530],'49245':[42.1528,-84.8094],'49246':[42.0106,-84.4319],
+  '49249':[42.1000,-84.3400],'49250':[42.0420,-84.7583],'49251':[42.4528,-84.4341],
+  '49252':[41.9584,-84.2519],'49254':[42.2400,-84.3200],'49259':[42.3862,-84.2274],
+  '49261':[42.1645,-84.3010],'49263':[42.2310,-84.0774],'49264':[42.3528,-84.4902],
+  '49269':[42.2934,-84.5830],'49272':[42.3245,-84.3608],'49277':[42.4695,-84.4580],
+  '49283':[42.1006,-84.5508],'49284':[42.3920,-84.7402],'49285':[42.2134,-84.3600],
+  '49224':[42.2495,-84.7530],'48827':[42.5078,-84.6555],'48158':[42.1517,-84.0527],
+};
+
+const MAP_LAYERS = [
+  {id:'events',   label:'📅 Events',    color:'#5b3a8c'},
+  {id:'exchange', label:'🤲 Exchange',  color:'#1a6b3c'},
+  {id:'projects', label:'🌱 Projects',  color:'#8a4000'},
+  {id:'members',  label:'👥 Members',   color:'#1a5c8a'},
+];
+
+// ── Community Map Tab ─────────────────────────────────────────────────────────
+function MapTab({user, profile}) {
+  const mapRef     = useRef(null);
+  const leafletRef = useRef(null);
+  const markersRef = useRef([]);
+  const [activeLayers, setActiveLayers] = useState(new Set(['events','exchange','projects','members']));
+  const [mapData, setMapData] = useState({events:[],exchange:[],projects:[],members:[]});
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  // Load data
+  useEffect(()=>{
+    (async()=>{
+      setLoading(true);
+      try {
+        const today = new Date().toISOString().slice(0,10);
+        const [
+          {data:events},
+          {data:exchange},
+          {data:projects},
+          {data:members},
+        ] = await Promise.all([
+          sb.from('events').select('id,title,event_date,event_time,location,category').eq('approved',true).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
+          sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).limit(40),
+          sb.from('projects').select('id,title,supporter_count,proposer_name').limit(40),
+          sb.from('profiles').select('zip').not('zip','is',null).neq('zip',''),
+        ]);
+        // Count members per ZIP
+        const membersByZip = {};
+        (members||[]).forEach(m=>{ if(m.zip) membersByZip[m.zip]=(membersByZip[m.zip]||0)+1; });
+        setMapData({
+          events:events||[],
+          exchange:exchange||[],
+          projects:projects||[],
+          members:Object.entries(membersByZip).map(([zip,count])=>({zip,count})),
+        });
+      } catch(e){}
+      setLoading(false);
+    })();
+  },[]);
+
+  // Init map
+  useEffect(()=>{
+    if(!mapRef.current||leafletRef.current) return;
+    const L = window.L;
+    if(!L) return;
+    const map = L.map(mapRef.current,{
+      center:[42.25,-84.40],
+      zoom:10,
+      zoomControl:true,
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      maxZoom:18,
+    }).addTo(map);
+    leafletRef.current = map;
+    return ()=>{ map.remove(); leafletRef.current=null; };
+  },[]);
+
+  // Draw markers whenever data or layers change
+  useEffect(()=>{
+    const L = window.L;
+    const map = leafletRef.current;
+    if(!L||!map||loading) return;
+
+    // Clear existing markers
+    markersRef.current.forEach(m=>map.removeLayer(m));
+    markersRef.current = [];
+
+    const makeIcon = (emoji, color) => L.divIcon({
+      html:`<div style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">${emoji}</div>`,
+      iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-18],className:'',
+    });
+
+    const addMarker = (lat,lng,icon,popupHtml)=>{
+      const m = L.marker([lat,lng],{icon})
+        .addTo(map)
+        .bindPopup(popupHtml,{maxWidth:220});
+      markersRef.current.push(m);
+    };
+
+    // Events
+    if(activeLayers.has('events')) {
+      mapData.events.forEach(e=>{
+        // Try to match location to a ZIP centroid, else use county center
+        const coords = [42.25,-84.40]; // fallback = Jackson center
+        const d = new Date(e.event_date+'T12:00:00');
+        const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        addMarker(coords[0]+((Math.random()-.5)*.04), coords[1]+((Math.random()-.5)*.06),
+          makeIcon('📅','#5b3a8c'),
+          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:4px;">${e.title}</div>
+           <div style="font-size:11px;color:#888;">${dateStr}${e.event_time?' · '+e.event_time:''}</div>
+           <div style="font-size:11px;color:#555;margin-top:2px;">📍 ${e.location}</div>
+           <div style="margin-top:6px;"><span style="background:#5b3a8c;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;">${e.category}</span></div>`
+        );
+      });
+    }
+
+    // Exchange listings — by ZIP
+    if(activeLayers.has('exchange')) {
+      mapData.exchange.forEach(item=>{
+        const zip = item.zip||(profile?.zip||'49201');
+        const coords = ZIP_COORDS[zip]||ZIP_COORDS['49201'];
+        const color = item.listing_type==='offer'?'#1a6b3c':'#1a5c8a';
+        addMarker(coords[0]+((Math.random()-.5)*.02), coords[1]+((Math.random()-.5)*.03),
+          makeIcon(item.listing_type==='offer'?'🤲':'🙏',color),
+          `<div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;margin-bottom:3px;">${item.listing_type==='offer'?'Offering':'Requesting'}</div>
+           <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${item.title}</div>
+           <div style="font-size:11px;color:#888;">${item.category}${zip?' · ZIP '+zip:''}</div>`
+        );
+      });
+    }
+
+    // Projects — spread around county center
+    if(activeLayers.has('projects')) {
+      mapData.projects.forEach((p,i)=>{
+        const angle = (i/Math.max(mapData.projects.length,1))*2*Math.PI;
+        const r = 0.05+Math.random()*0.08;
+        addMarker(42.25+Math.cos(angle)*r, -84.40+Math.sin(angle)*r,
+          makeIcon('🌱','#8a4000'),
+          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${p.title}</div>
+           <div style="font-size:11px;color:#888;">By ${p.proposer_name} · ${p.supporter_count||1} supporter${(p.supporter_count||1)!==1?'s':''}</div>`
+        );
+      });
+    }
+
+    // Members — heat circles by ZIP
+    if(activeLayers.has('members')) {
+      mapData.members.forEach(({zip,count})=>{
+        const coords = ZIP_COORDS[zip];
+        if(!coords) return;
+        const radius = Math.min(800+count*300, 4000);
+        const circle = L.circle(coords,{
+          radius,color:'#1a5c8a',fillColor:'#1a5c8a',
+          fillOpacity:Math.min(0.1+count*0.04,0.45),weight:1,opacity:0.4,
+        }).addTo(map)
+         .bindPopup(`<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;">${ZIP_COMMUNITY[zip]||zip}</div>
+            <div style="font-size:12px;color:#1a5c8a;font-weight:600;">👥 ${count} member${count!==1?'s':''}</div>`);
+        markersRef.current.push(circle);
+      });
+    }
+  },[mapData,activeLayers,loading]);
+
+  const toggleLayer = id => setActiveLayers(prev=>{
+    const n = new Set(prev);
+    n.has(id)?n.delete(id):n.add(id);
+    return n;
+  });
+
+  const totalPins = (activeLayers.has('events')?mapData.events.length:0)+
+    (activeLayers.has('exchange')?mapData.exchange.length:0)+
+    (activeLayers.has('projects')?mapData.projects.length:0);
+
+  return h('div',null,
+    // Header
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:8}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'🗺 Community Map'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
+          "What's happening near you in Jackson County — events, exchange listings, projects, and neighbors.")
+      )
+    ),
+
+    // Layer toggles
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}},
+      MAP_LAYERS.map(layer=>h('button',{key:layer.id,
+        onClick:()=>toggleLayer(layer.id),
+        style:{background:activeLayers.has(layer.id)?layer.color:'#fff',
+          color:activeLayers.has(layer.id)?'#fff':'#555',
+          border:'2px solid '+(activeLayers.has(layer.id)?layer.color:'#ddd'),
+          padding:'6px 14px',borderRadius:20,
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer',
+          transition:'all 0.15s'}},
+        layer.label+(activeLayers.has(layer.id)?' ✓':'')
+      )),
+      h('div',{style:{marginLeft:'auto',fontFamily:"'Lora',serif",fontSize:11,color:'#aaa',alignSelf:'center'}},
+        loading?'Loading...':totalPins+' pins on map'+(activeLayers.has('members')?' + member density':''))
+    ),
+
+    // Map container
+    h('div',{style:{borderRadius:12,overflow:'hidden',border:'2px solid #e5dece',
+      boxShadow:'0 4px 20px rgba(0,0,0,.08)',marginBottom:14,position:'relative'}},
+      h('div',{ref:mapRef,style:{height:480,width:'100%'}}),
+      loading&&h('div',{style:{position:'absolute',top:0,left:0,right:0,bottom:0,
+        background:'rgba(244,241,234,.85)',display:'flex',alignItems:'center',
+        justifyContent:'center',zIndex:1000}},
+        h('div',{style:{textAlign:'center'}},
+          h('div',{style:{fontSize:32,marginBottom:8}},'🗺'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:'#555'}},'Loading map...')
+        )
+      )
+    ),
+
+    // Legend
+    h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'12px 16px',display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,color:'#1a1a2e'}},'Legend:'),
+      [['📅','Events','#5b3a8c'],['🤲','Exchange Offers','#1a6b3c'],['🙏','Exchange Requests','#1a5c8a'],['🌱','Projects','#8a4000'],['●','Member Density','#1a5c8a']].map(([icon,label,color])=>
+        h('div',{key:label,style:{display:'flex',alignItems:'center',gap:5}},
+          h('span',{style:{fontSize:14,color}},icon),
+          h('span',{style:{fontFamily:"'Lora',serif",fontSize:11,color:'#666'}},label)
+        )
+      ),
+      h('div',{style:{marginLeft:'auto',fontFamily:"'Lora',serif",fontSize:11,color:'#aaa',lineHeight:1.5}},
+        'Map data © OpenStreetMap contributors')
+    )
+  );
+}
+
 function PulseTab({bills, user, profile}) {
   const [stats, setStats] = useState(null);
   const [topBills, setTopBills] = useState([]);
@@ -7313,7 +7544,7 @@ function App() {
       // Tabs — horizontally scrollable on mobile
       h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
-          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
+          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
             h('button',{key:t,onClick:()=>setMainTab(t),
               style:{background:'transparent',border:'none',
                 borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
@@ -7455,6 +7686,9 @@ function App() {
 
       // Exchange tab
       mainTab==='exchange'&&h(ExchangeTab,{user,profile,onToast:setToast}),
+
+      // Map tab — live community map
+      mainTab==='map'&&h(MapTab,{user,profile}),
 
       // Pulse tab — community health dashboard
       mainTab==='pulse'&&h(PulseTab,{bills,user,profile}),
