@@ -7440,7 +7440,7 @@ function App() {
   const handleSignOut=async()=>{await sb.auth.signOut();setUser(null);setProfile(null);setRep(0);setUserVotes({});};
 
   // ZIP search - must be declared before any conditional returns (Rules of Hooks)
-  const [zipSearch,setZipSearch]=useState('');
+  const [zipSearch,setZipSearch]=useState(profile?.zip||'');
   const [keywordSearch,setKeywordSearch]=useState('');
 
   if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
@@ -7454,19 +7454,32 @@ function App() {
 
   const getFilteredBills = () => {
     let filtered = bills;
-    // ZIP filter
-    if(zipSearch.trim().length===5 && searchedCommunity) {
-      const communityLower = searchedCommunity.toLowerCase();
+    const zip = zipSearch.trim();
+    const community = ZIP_COMMUNITY[zip] || null;
+
+    if(zip.length===5 && community) {
+      // ZIP matched — show federal, state, and matching local bills only
+      const communityLower = community.toLowerCase();
       filtered = bills.filter(b => {
         if(b.level==='federal'||b.level==='state') return true;
-        const jurisLower = (b.jurisdiction||'').toLowerCase();
-        if(jurisLower.includes(communityLower)) return true;
-        if(billFilter!=='all' && b.level===billFilter) return true;
-        return false;
+        return (b.jurisdiction||'').toLowerCase().includes(communityLower);
       });
+    } else if(zip.length===5 && !community) {
+      // ZIP entered but not in our map — show only federal/state
+      filtered = bills.filter(b=>b.level==='federal'||b.level==='state');
+    } else if(!zip) {
+      // No ZIP — hide local/village/city/township bills by default
+      // Users must enter their ZIP to see local legislation
+      filtered = bills.filter(b=>b.level==='federal'||b.level==='state');
     } else if(billFilter!=='all') {
       filtered = bills.filter(b=>b.level===billFilter);
     }
+
+    // Apply level filter on top if set
+    if(billFilter!=='all' && zip.length===5 && community) {
+      filtered = filtered.filter(b=>b.level===billFilter||b.level==='federal'||b.level==='state');
+    }
+
     // Keyword search
     if(keywordSearch.trim().length>1) {
       const kw = keywordSearch.trim().toLowerCase();
@@ -7629,10 +7642,13 @@ function App() {
             },"✕ Clear")
           ),
           searchedCommunity&&h('div',{style:{marginTop:4,fontSize:13,color:'#6bcf8a',fontFamily:"'Lora',serif"}},
-            "📍 Showing bills for: ",h('strong',null,searchedCommunity)," + all State & Federal bills"
+            '📍 Showing bills for: ',h('strong',null,searchedCommunity),' + all State & Federal bills'
           ),
           zipSearch.trim().length===5&&!searchedCommunity&&h('div',{style:{marginTop:4,fontSize:13,color:'#e74c3c',fontFamily:"'Lora',serif"}},
-            "ZIP code not found. Showing all bills."
+            'ZIP code not found in Jackson County. Showing Federal & State bills only.'
+          ),
+          !zipSearch.trim()&&h('div',{style:{marginTop:4,fontSize:12,color:'#8899aa',fontFamily:"'Lora',serif"}},
+            '💡 Enter your ZIP to see local legislation for your community'
           ),
           keywordSearch.trim().length>1&&h('div',{style:{marginTop:4,fontSize:13,color:'#6bcf8a',fontFamily:"'Lora',serif"}},
             "🔎 "+filteredBills.length+" result"+(filteredBills.length!==1?'s':'')+" for \""+keywordSearch.trim()+"\""
