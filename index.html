@@ -2255,6 +2255,136 @@ function PendingBillCard({bill, user, onCosign, onToast}) {
   );
 }
 
+// ── Proposals Tab ─────────────────────────────────────────────────────────────
+function ProposalsTab({user, profile, bills, onToast}) {
+  const [pending, setPending]     = useState([]);
+  const [approved, setApproved]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [view, setView]           = useState('active'); // active | approved
+  const rep = user?.reputation || profile?.reputation || 0;
+
+  const load = async()=>{
+    setLoading(true);
+    const [pendRes, approvedRes] = await Promise.all([
+      sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false}),
+      sb.from('bills').select('*').not('submitted_by_id','is',null).order('created_at',{ascending:false}).limit(30),
+    ]);
+    setPending(pendRes.data||[]);
+    setApproved(approvedRes.data||[]);
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  const totalPending   = pending.length;
+  const totalApproved  = approved.length;
+
+  return h('div',null,
+
+    // Header
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:10}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'📝 Community Proposals'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
+          'Bills and proposals submitted by Jackson County residents. Co-sign to help them go live.')
+      ),
+      user&&h('button',{onClick:()=>setShowSubmit(!showSubmit),
+        style:{background:showSubmit?'#555':'#5b3a8c',color:'#fff',border:'none',padding:'10px 18px',
+          borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+        showSubmit?'✕ Cancel':'+ Submit a Proposal')
+    ),
+
+    // Inline submit form
+    showSubmit&&h(CommunitySubmitPanel,{
+      user:{...user,reputation:rep},
+      bills,
+      onToast,
+      onSubmitted:b=>{ setPending(prev=>[b,...prev]); setShowSubmit(false); setView('active'); }
+    }),
+
+    // Stats + view toggle
+    h('div',{style:{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}},
+      h('div',{style:{display:'flex',gap:0,borderRadius:8,overflow:'hidden',border:'1px solid #e5dece'}},
+        [['active','⏳ Pending ('+totalPending+')'],['approved','✅ Community Verified ('+totalApproved+')']].map(([v,l])=>
+          h('button',{key:v,onClick:()=>setView(v),
+            style:{padding:'8px 16px',background:view===v?'#1a1a2e':'#fff',
+              color:view===v?'#f0c040':'#555',border:'none',
+              fontFamily:"'Playfair Display',serif",fontWeight:view===v?700:400,
+              fontSize:13,cursor:'pointer'}},l)
+        )
+      ),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#aaa',marginLeft:'auto'}},
+        'Co-sign pending proposals to help them reach the community vote')
+    ),
+
+    loading&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},'Loading proposals...'),
+
+    // Pending view
+    !loading&&view==='active'&&h('div',null,
+      pending.length===0&&h('div',{style:{textAlign:'center',padding:50,color:'#aaa'}},
+        h('div',{style:{fontSize:36,marginBottom:10}},'📝'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#555',marginBottom:6}},'No pending proposals'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.6}},
+          'Have a bill or local ordinance you want the community to consider?'),
+        user&&h('button',{onClick:()=>setShowSubmit(true),
+          style:{marginTop:14,background:'#5b3a8c',color:'#fff',border:'none',padding:'10px 22px',
+            borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+          '+ Submit a Proposal')
+      ),
+      pending.map((bill,i)=>h(PendingBillCard,{key:bill.id||i,bill,
+        user:{...user,reputation:rep},
+        onCosign:load,
+        onToast}))
+    ),
+
+    // Approved / community-verified view
+    !loading&&view==='approved'&&h('div',null,
+      approved.length===0&&h('div',{style:{textAlign:'center',padding:50,color:'#aaa'}},
+        h('div',{style:{fontSize:36,marginBottom:10}},'🏛'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#555',marginBottom:6}},'No community-verified bills yet'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.6}},
+          'When a pending proposal gets enough co-signers, it moves here and goes live for voting.')
+      ),
+      approved.map(bill=>{
+        const total = (bill.votes_yes||0)+(bill.votes_no||0)+(bill.votes_abstain||0);
+        const suppPct = total>0?Math.round((bill.votes_yes/total)*100):0;
+        return h('div',{key:bill.id,style:{background:'#fff',border:'2px solid #1a6b3c',borderRadius:10,
+          marginBottom:12,padding:'16px 18px'}},
+          h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}},
+            h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:10,fontWeight:700,
+              padding:'3px 10px',borderRadius:20,textTransform:'uppercase',letterSpacing:1}},
+              '✅ Community Verified'),
+            h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'3px 8px',borderRadius:20}},bill.level),
+            h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'3px 8px',borderRadius:20}},bill.jurisdiction)
+          ),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},bill.title),
+          h('div',{style:{fontSize:12,color:'#aaa',marginBottom:8}},
+            'Submitted by ',h('strong',{style:{color:'#5b3a8c'}},bill.submitted_by_name||'Community Member'),
+            ' · ',new Date(bill.created_at).toLocaleDateString()
+          ),
+          h('p',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.65,color:'#555',marginBottom:12}},bill.summary),
+          total>0&&h('div',{style:{marginBottom:8}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+              h('span',{style:{fontSize:12,color:'#555',fontWeight:600}},'Community Vote'),
+              h('span',{style:{fontSize:12,color:suppPct>=50?'#1a6b3c':'#c0392b',fontWeight:700}},suppPct+'% support · '+total+' votes')
+            ),
+            h('div',{style:{height:8,background:'#eee',borderRadius:4,overflow:'hidden'}},
+              h('div',{style:{width:suppPct+'%',height:'100%',background:suppPct>=50?'#1a6b3c':'#c0392b',borderRadius:4}})
+            )
+          ),
+          total===0&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginBottom:8}},'No votes yet — be the first to vote on the Bills tab.')
+        );
+      })
+    ),
+
+    // Nominate shortcut at bottom
+    !showSubmit&&h('div',{style:{marginTop:20}},
+      h(NominateBillPanel,{user:{...user,reputation:rep},onToast})
+    )
+  );
+}
+
 // ── Rep Tracker ───────────────────────────────────────────────────────────────
 function RepTracker({bills, userZip}) {
   const [filter,setFilter]=useState('all');
@@ -7571,7 +7701,7 @@ function App() {
       // Tabs — horizontally scrollable on mobile
       h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
-          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
+          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['proposals','📝 Proposals'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
             h('button',{key:t,onClick:()=>setMainTab(t),
               style:{background:'transparent',border:'none',
                 borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
@@ -7666,24 +7796,21 @@ function App() {
         filteredBills.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No bills found for this filter."),
         filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep,highlighted:feedNavCtx?.billId===bill.id,onHighlightDone:()=>setFeedNavCtx(null)})),
 
-        // Pending community submissions
-        pendingBills.length>0&&h('div',{style:{marginTop:24}},
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},'⏳ Pending Community Submissions'),
-          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:14}},'These bills were submitted by verified residents and are awaiting community co-signers to go live.'),
-          pendingBills.map((bill,i)=>h(PendingBillCard,{key:bill.id||i,bill,user:{...user,reputation:rep},onCosign:loadPendingBills,onToast:setToast}))
-        ),
-
-        // Nominate a bill (lightweight)
-        h(NominateBillPanel,{user:{...user,reputation:rep},onToast:setToast}),
-
-        // Community submit panel (full)
-        h(CommunitySubmitPanel,{
-          user:{...user,reputation:rep},
-          bills,
-          onToast:setToast,
-          onSubmitted:b=>{setPendingBills(prev=>[b,...prev]);}
-        })
+        // Link to proposals tab
+        h('div',{style:{textAlign:'center',marginTop:20,padding:'14px 16px',background:'#f5f0ff',borderRadius:8,border:'1px solid #c8b8e8',display:'flex',alignItems:'center',justifyContent:'center',gap:12,flexWrap:'wrap'}},
+          h('div',null,
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:2}},'📝 Have a bill to propose?'),
+            h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888'}},'Submit a community proposal, co-sign others, and track what goes live.')
+          ),
+          h('button',{onClick:()=>setMainTab('proposals'),
+            style:{background:'#5b3a8c',color:'#fff',border:'none',padding:'9px 18px',borderRadius:6,
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',flexShrink:0}},
+            'Go to Proposals →')
+        )
       ),
+
+      // Proposals tab
+      mainTab==='proposals'&&h(ProposalsTab,{user,profile,bills,onToast:setToast}),
 
       // Projects tab
       mainTab==='projects'&&h(Fragment,null,
