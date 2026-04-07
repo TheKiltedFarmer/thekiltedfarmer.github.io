@@ -350,26 +350,41 @@ const ANALYSES = {
 // ── ZIP to Rep mapping ────────────────────────────────────────────────────────
 // Maps ZIP codes to which rep IDs are relevant for that community
 const ZIP_REPS = {
-  // City of Jackson ZIPs - all wards + state + county
-  "49201":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
-  "49202":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
-  "49203":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
-  "49204":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14"],
+  // City of Jackson ZIPs - all wards + state + county + federal
+  "49201":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14","r15","r16","r17"],
+  "49202":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14","r15","r16","r17"],
+  "49203":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14","r15","r16","r17"],
+  "49204":["r1","r2","r3","r4","r5","r6","r7_ward6","r11","r12","r13","r14","r15","r16","r17"],
   // Village of Concord
-  "49237":["r8","r9","r10","r11","r11","r13","r14"],
+  "49237":["r8","r9","r10","r11_concord","r13","r14","r15","r16","r17"],
   // Brooklyn / Columbia Township - Rep 47 district
-  "49230":["r12","r13","r14"],
+  "49230":["r12","r13","r14","r15","r16","r17"],
   // Grass Lake - split between Dist 46 and 47
-  "49240":["r11","r12","r13","r14"],
+  "49240":["r11","r12","r13","r14","r15","r16","r17"],
   // Napoleon Township - Rep 47
-  "49261":["r12","r13","r14"],
+  "49261":["r12","r13","r14","r15","r16","r17"],
   // Spring Arbor Township - Rep 46
-  "49283":["r11","r13","r14"],
+  "49283":["r11","r13","r14","r15","r16","r17"],
   // Summit Township - split 46/47
-  "49285":["r11","r12","r13","r14"],
-  // Blackman Township - Rep 46
-  "49201":["r11","r13","r14"],
-  // Default all county ZIPs get state + county reps
+  "49285":["r11","r12","r13","r14","r15","r16","r17"],
+  // All remaining county ZIPs get state + county + federal
+  "49233":["r13","r14","r15","r16","r17"],
+  "49234":["r13","r14","r15","r16","r17"],
+  "49241":["r11","r13","r14","r15","r16","r17"],
+  "49245":["r11","r13","r14","r15","r16","r17"],
+  "49246":["r11","r13","r14","r15","r16","r17"],
+  "49249":["r11","r13","r14","r15","r16","r17"],
+  "49250":["r11","r13","r14","r15","r16","r17"],
+  "49251":["r13","r14","r15","r16","r17"],
+  "49252":["r13","r14","r15","r16","r17"],
+  "49254":["r11","r13","r14","r15","r16","r17"],
+  "49259":["r13","r14","r15","r16","r17"],
+  "49263":["r12","r13","r14","r15","r16","r17"],
+  "49264":["r13","r14","r15","r16","r17"],
+  "49269":["r11","r13","r14","r15","r16","r17"],
+  "49272":["r13","r14","r15","r16","r17"],
+  "49277":["r13","r14","r15","r16","r17"],
+  "49284":["r13","r14","r15","r16","r17"],
 };
 
 const REPS = [
@@ -510,6 +525,40 @@ const REPS = [
     website:"co.jackson.mi.us/365/Jackson-County-Commissioners",
     address:"120 W. Michigan Ave, Jackson MI 49201",
     notes:"9-member board governing all of Jackson County.",
+    votes:{}
+  },
+  // ── U.S. House of Representatives ────────────────────────────────────────
+  {
+    id:"r15",name:"Tim Walberg",title:"U.S. Representative, District 5 (MI-05)",
+    body:"U.S. House of Representatives",
+    jurisdiction:"Federal",party:"Republican",photo:"TW",
+    contact:"walberg.house.gov/contact",phone:"517-780-9075",
+    website:"walberg.house.gov",
+    address:"401 W. Michigan Ave, Jackson MI 49201",
+    addressDC:"2266 Rayburn HOB, Washington DC 20515",
+    phoneDC:"202-225-6276",
+    notes:"Covers all of Jackson County. Chair, House Education & Workforce Committee. Dean of Michigan Congressional Delegation.",
+    votes:{}
+  },
+  // ── U.S. Senate ───────────────────────────────────────────────────────────
+  {
+    id:"r16",name:"Gary Peters",title:"U.S. Senator, Michigan",
+    body:"U.S. Senate",
+    jurisdiction:"Federal",party:"Democrat",photo:"GP",
+    contact:"senator@peters.senate.gov",phone:"202-224-6221",
+    website:"peters.senate.gov",
+    address:"724 Hart Senate Office Building, Washington DC 20510",
+    notes:"Senior Senator for Michigan. Term ends January 2027.",
+    votes:{}
+  },
+  {
+    id:"r17",name:"Elissa Slotkin",title:"U.S. Senator, Michigan",
+    body:"U.S. Senate",
+    jurisdiction:"Federal",party:"Democrat",photo:"ES",
+    contact:"senator@slotkin.senate.gov",phone:"202-224-4822",
+    website:"slotkin.senate.gov",
+    address:"825B Hart Senate Office Building, Washington DC 20510",
+    notes:"Junior Senator for Michigan. Elected November 2024, succeeded Debbie Stabenow. Term ends 2031.",
     votes:{}
   },
 ];
@@ -2461,7 +2510,7 @@ function RepTracker({bills, userZip}) {
       )
     ),
     h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}},
-      [['all','All'],['City of Jackson','Jackson City'],['Village of Concord','Concord'],['State of Michigan','State MI'],['Jackson County','County']].map(([v,l])=>
+      [['all','All'],['City of Jackson','Jackson City'],['Village of Concord','Concord'],['State of Michigan','State MI'],['Jackson County','County'],['Federal','🇺🇸 Federal']].map(([v,l])=>
         h('button',{key:v,onClick:()=>setFilter(v),
           style:{background:filter===v?'#1a1a2e':'#fff',color:filter===v?'#f0c040':'#555',
             border:'1px solid '+(filter===v?'#1a1a2e':'#ddd'),padding:'7px 14px',borderRadius:20,
@@ -2504,17 +2553,30 @@ function RepTracker({bills, userZip}) {
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:8}},'Contact Information'),
             h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
               h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}},
-                h('a',{href:'mailto:'+rep.contact,
-                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#1a1a2e',color:'#f0c040',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
-                },'Email '+rep.name.split(' ')[0]),
+                rep.jurisdiction==='Federal'
+                  ? h('a',{href:'https://'+rep.website+'/contact',target:'_blank',
+                      style:{display:'inline-flex',alignItems:'center',gap:6,background:'#1a1a2e',color:'#f0c040',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
+                    },'Contact '+rep.name.split(' ')[0])
+                  : h('a',{href:'mailto:'+rep.contact,
+                      style:{display:'inline-flex',alignItems:'center',gap:6,background:'#1a1a2e',color:'#f0c040',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
+                    },'Email '+rep.name.split(' ')[0]),
                 rep.phone&&h('a',{href:'tel:'+rep.phone.replace(/\D/g,''),
                   style:{display:'inline-flex',alignItems:'center',gap:6,background:'#e8f2fa',color:'#1a5c8a',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}
-                },rep.phone),
+                },rep.phoneDC?'DC: '+rep.phone:rep.phone),
                 h('a',{href:'https://'+rep.website,target:'_blank',
                   style:{display:'inline-flex',alignItems:'center',gap:6,background:'#f5f5f5',color:'#555',textDecoration:'none',padding:'8px 14px',borderRadius:6,fontSize:13}
                 },'Website')
               ),
-              rep.address&&h('div',{style:{fontSize:12,color:'#888'}},'Address: '+rep.address),
+              rep.jurisdiction==='Federal'&&rep.phoneDC&&h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:4}},
+                h('a',{href:'tel:'+rep.phoneDC.replace(/\D/g,''),
+                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#f5f0ff',color:'#5b3a8c',textDecoration:'none',padding:'6px 12px',borderRadius:6,fontSize:12}
+                },'Local (Jackson): '+rep.phone),
+                h('a',{href:'tel:'+rep.phoneDC.replace(/\D/g,''),
+                  style:{display:'inline-flex',alignItems:'center',gap:6,background:'#f5f5f5',color:'#555',textDecoration:'none',padding:'6px 12px',borderRadius:6,fontSize:12}
+                },'DC Office: '+rep.phoneDC)
+              ),
+              rep.address&&h('div',{style:{fontSize:12,color:'#888'}},(rep.jurisdiction==='Federal'?'DC Office: ':'')+rep.address),
+              rep.addressDC&&h('div',{style:{fontSize:12,color:'#888'}},'Washington DC: '+rep.addressDC),
               rep.notes&&h('div',{style:{fontSize:12,color:'#5b3a8c',fontStyle:'italic'}},rep.notes)
             )
           ),
@@ -4833,8 +4895,10 @@ function AuthScreen({onAuth, onGuest}) {
           show_in_directory:true
         });
         if(!profErr) { profileCreated = true; break; }
+        console.warn('Profile upsert attempt '+(i+1)+' failed:',profErr.message);
         await new Promise(r=>setTimeout(r,800));
       }
+      if(!profileCreated) console.error('All profile upsert attempts failed — trigger should handle it');
       onAuth(data.user,{display_name:displayName,zip,reputation:0,show_in_directory:true});
     }
     setLoading(false);
@@ -5339,7 +5403,7 @@ function EventsTab({user, profile, onToast}) {
   const [saving, setSaving] = useState(false);
   const isAdmin = profile?.is_admin===true;
 
-  const EMPTY_FORM = {title:'',event_date:'',event_time:'',location:'',category:'Farmers Market',description:'',link:''};
+  const EMPTY_FORM = {title:'',event_date:'',event_time:'',location:'',zip:'',category:'Farmers Market',description:'',link:''};
   const [form, setForm] = useState(EMPTY_FORM);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
 
@@ -5437,11 +5501,15 @@ function EventsTab({user, profile, onToast}) {
           h('input',{type:'time',value:form.event_time,onChange:set('event_time'),style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
         )
       ),
-      // Row 3: Location + Category
-      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}},
+      // Row 3: Location + ZIP + Category
+      h('div',{style:{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12,marginBottom:12}},
         h('div',null,
           h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Location / Address *'),
           h('input',{value:form.location,onChange:set('location'),placeholder:'e.g. Concord Village Park',style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+        ),
+        h('div',null,
+          h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'ZIP Code'),
+          h('input',{value:form.zip,onChange:set('zip'),placeholder:'49237',maxLength:5,style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
         ),
         h('div',null,
           h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Category'),
@@ -5695,7 +5763,7 @@ function MapTab({user, profile}) {
           {data:projects},
           {data:members},
         ] = await Promise.all([
-          sb.from('events').select('id,title,event_date,event_time,location,category').eq('approved',true).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
+          sb.from('events').select('id,title,event_date,event_time,location,zip,category').eq('approved',true).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
           sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).limit(40),
           sb.from('projects').select('id,title,supporter_count,proposer_name').limit(40),
           sb.from('profiles').select('zip').not('zip','is',null).neq('zip',''),
@@ -5737,6 +5805,7 @@ function MapTab({user, profile}) {
     const L = window.L;
     const map = leafletRef.current;
     if(!L||!map||loading) return;
+    (async()=>{
 
     // Clear existing markers
     markersRef.current.forEach(m=>map.removeLayer(m));
@@ -5754,21 +5823,60 @@ function MapTab({user, profile}) {
       markersRef.current.push(m);
     };
 
-    // Events
+    // Events — smart location matching
     if(activeLayers.has('events')) {
-      mapData.events.forEach(e=>{
-        // Try to match location to a ZIP centroid, else use county center
-        const coords = [42.25,-84.40]; // fallback = Jackson center
+      // Build location lookup from known Jackson County places
+      const PLACE_COORDS = {
+        'concord': [42.1789,-84.6384], 'village of concord': [42.1789,-84.6384],
+        'jackson': [42.2459,-84.4013], 'city of jackson': [42.2459,-84.4013],
+        'brooklyn': [42.1084,-84.2471], 'napoleon': [42.1645,-84.3010],
+        'grass lake': [42.2589,-84.1630], 'michigan center': [42.2400,-84.3200],
+        'summit': [42.2134,-84.3600], 'summit township': [42.2134,-84.3600],
+        'spring arbor': [42.1006,-84.5508], 'springport': [42.3920,-84.7402],
+        'leslie': [42.4528,-84.4341], 'parma': [42.2934,-84.5830],
+        'hanover': [42.0595,-84.5530], 'homer': [42.1528,-84.8094],
+        'litchfield': [42.0420,-84.7583], 'albion': [42.2495,-84.7530],
+        'manchester': [42.1517,-84.0527], 'cement city': [42.0056,-84.3330],
+        'clark lake': [42.1500,-84.3200], 'horton': [42.0106,-84.4319],
+        'munith': [42.3862,-84.2274], 'norvell': [42.2310,-84.0774],
+        'onondaga': [42.3528,-84.4902], 'pleasant lake': [42.3245,-84.3608],
+        'rives junction': [42.4695,-84.4580], 'lake columbia': [42.1000,-84.3400],
+      };
+
+      const getEventCoords = async(e) => {
+        // 0. Use stored ZIP field if available
+        if(e.zip && ZIP_COORDS[e.zip]) return ZIP_COORDS[e.zip];
+        const loc = (e.location||'').toLowerCase();
+        // 1. Check for ZIP in location string
+        const zipMatch = loc.match(/\b(4920[0-9]|4923[0-9]|4924[0-9]|4925[0-9]|4926[0-9]|4827[0-9]|48158|48827)\b/);
+        if(zipMatch && ZIP_COORDS[zipMatch[1]]) return ZIP_COORDS[zipMatch[1]];
+        // 2. Match known place names
+        for(const [place, coords] of Object.entries(PLACE_COORDS)) {
+          if(loc.includes(place)) return coords;
+        }
+        // 3. Try Nominatim geocoding for specific addresses
+        try {
+          const q = encodeURIComponent((e.location||'')+', Jackson County, Michigan');
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`);
+          const data = await res.json();
+          if(data&&data[0]) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        } catch(err) {}
+        // 4. Fallback — random scatter around Jackson center
+        return [42.25+((Math.random()-.5)*.12), -84.40+((Math.random()-.5)*.15)];
+      };
+
+      for(const e of mapData.events) {
+        const coords = await getEventCoords(e);
         const d = new Date(e.event_date+'T12:00:00');
         const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-        addMarker(coords[0]+((Math.random()-.5)*.04), coords[1]+((Math.random()-.5)*.06),
+        addMarker(coords[0], coords[1],
           makeIcon('📅','#5b3a8c'),
           `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:4px;">${e.title}</div>
            <div style="font-size:11px;color:#888;">${dateStr}${e.event_time?' · '+e.event_time:''}</div>
            <div style="font-size:11px;color:#555;margin-top:2px;">📍 ${e.location}</div>
            <div style="margin-top:6px;"><span style="background:#5b3a8c;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;">${e.category}</span></div>`
         );
-      });
+      }
     }
 
     // Exchange listings — by ZIP
@@ -5814,6 +5922,8 @@ function MapTab({user, profile}) {
         markersRef.current.push(circle);
       });
     }
+
+    })(); // end async IIFE
   },[mapData,activeLayers,loading]);
 
   const toggleLayer = id => setActiveLayers(prev=>{
@@ -5920,7 +6030,7 @@ function PulseTab({bills, user, profile}) {
       // Ideas — handle missing columns gracefully
       try {
         const ideaResult = await sb.from('community_ideas')
-          .select('id,title,upvotes,category,created_at')
+          .select('id,title,upvotes,category,forwarded,created_at')
           .order('upvotes',{ascending:false}).limit(5);
         if(!ideaResult.error) setRecentIdeas(ideaResult.data||[]);
       } catch(e) {}
@@ -6010,7 +6120,7 @@ function PulseTab({bills, user, profile}) {
           h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
             h('span',{style:{background:'#f0c040',color:'#1a1a2e',fontSize:11,fontWeight:700,padding:'1px 7px',borderRadius:20}},idea.upvotes+' votes'),
             h('span',{style:{fontSize:10,color:'#888'}},idea.category),
-            idea.status==='forwarded'&&h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'FORWARDED')
+            idea.forwarded===true&&h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'FORWARDED')
           )
         ))
       ),
@@ -6263,7 +6373,7 @@ function ResourcesTab({user, onToast}) {
     const {error} = await sb.from('community_resources').insert({
       ...form,
       submitted_by_id:user.id,
-      submitted_by_name:user.display_name||user.email?.split('@')[0],
+      submitted_by_name:profile?.display_name||user?.email?.split('@')[0]||'Neighbor',
       approved:false,
       created_at:new Date().toISOString()
     });
