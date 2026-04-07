@@ -1881,7 +1881,7 @@ const timeAgo = (ts)=>{   const diff = Date.now()-new Date(ts);   const m = Math
           const getNav = ()=>{
             if(item.type==='vote'||item.type==='comment') return {tab:'bills', ctx:{billId:item.bill_id}};
             if(item.type==='join'||item.type==='badge') return {tab:'connect', ctx:{userId:item.user_id}};
-            if(item.type==='idea'||item.type==='idea_up') return {tab:'ideas', ctx:null};
+            if(item.type==='idea'||item.type==='idea_up') return {tab:'proposals', ctx:null};
             if(item.type==='resource') return {tab:'resources', ctx:null};
             if(item.type==='project') return {tab:'projects', ctx:null};
             if(item.type==='chat') return {tab:'connect', ctx:null};
@@ -2262,6 +2262,7 @@ function ProposalsTab({user, profile, bills, onToast}) {
   const [loading, setLoading]     = useState(true);
   const [showSubmit, setShowSubmit] = useState(false);
   const [view, setView]           = useState('active'); // active | approved
+  const [section, setSection]     = useState('proposals'); // proposals | ideas
   const rep = user?.reputation || profile?.reputation || 0;
 
   const load = async()=>{
@@ -2285,17 +2286,33 @@ function ProposalsTab({user, profile, bills, onToast}) {
     // Header
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:10}},
       h('div',null,
-        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'📝 Community Proposals'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'📝 Civic Voice'),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
-          'Bills and proposals submitted by Jackson County residents. Co-sign to help them go live.')
+          section==='proposals'
+            ? 'Community-submitted bills and proposals. Co-sign to help them go live for voting.'
+            : 'Lightweight ideas for your community. Upvote the best ones to send to your reps.')
       ),
-      user&&h('button',{onClick:()=>setShowSubmit(!showSubmit),
+      user&&section==='proposals'&&h('button',{onClick:()=>setShowSubmit(!showSubmit),
         style:{background:showSubmit?'#555':'#5b3a8c',color:'#fff',border:'none',padding:'10px 18px',
           borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
         showSubmit?'✕ Cancel':'+ Submit a Proposal')
     ),
 
-    // Inline submit form
+    // Section switcher
+    h('div',{style:{display:'flex',gap:0,marginBottom:16,background:'#fff',borderRadius:10,
+      overflow:'hidden',border:'1px solid #e5dece'}},
+      [['proposals','📝 Proposals'],['ideas','💡 Ideas']].map(([s,l])=>
+        h('button',{key:s,onClick:()=>{setSection(s);setShowSubmit(false);},
+          style:{flex:1,padding:'12px',background:section===s?'#1a1a2e':'transparent',
+            color:section===s?'#f0c040':'#555',border:'none',
+            fontFamily:"'Playfair Display',serif",fontWeight:section===s?700:400,
+            fontSize:13,cursor:'pointer',
+            borderRight:s==='proposals'?'1px solid #e5dece':'none'}},l)
+      )
+    ),
+
+    // ── Proposals section ──────────────────────────────────────────────────────
+    section==='proposals'&&h('div',null,
     showSubmit&&h(CommunitySubmitPanel,{
       user:{...user,reputation:rep},
       bills,
@@ -2378,10 +2395,13 @@ function ProposalsTab({user, profile, bills, onToast}) {
       })
     ),
 
-    // Nominate shortcut at bottom
-    !showSubmit&&h('div',{style:{marginTop:20}},
+    // Nominate shortcut at bottom of proposals
+    section==='proposals'&&!showSubmit&&h('div',{style:{marginTop:20}},
       h(NominateBillPanel,{user:{...user,reputation:rep},onToast})
-    )
+    )),
+
+    // ── Ideas section ──────────────────────────────────────────────────────────
+    section==='ideas'&&h(IdeasTab,{user,profile,rep,onToast})
   );
 }
 
@@ -7701,7 +7721,7 @@ function App() {
       // Tabs — horizontally scrollable on mobile
       h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
-          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['proposals','📝 Proposals'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['ideas','\uD83D\uDCA1 Ideas'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
+          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['proposals','📝 Civic Voice'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
             h('button',{key:t,onClick:()=>setMainTab(t),
               style:{background:'transparent',border:'none',
                 borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
@@ -7861,9 +7881,6 @@ function App() {
 
       // Resources tab
       mainTab==='resources'&&h(ResourcesTab,{user:{...user,reputation:rep},onToast:setToast}),
-
-      // Ideas tab
-      mainTab==='ideas'&&h(IdeasTab,{user:{...user,reputation:rep},profile,rep,onToast:setToast}),
 
       // Reps tab
       mainTab==='reps'&&h(Fragment,null,
