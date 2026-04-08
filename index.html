@@ -2788,42 +2788,74 @@ function ProposeModal({onClose,onSubmit}) {
 // ── Onboarding Tour ───────────────────────────────────────────────────────────
 const TOUR_STEPS = [
   {
+    icon:'👋',
+    title:"Welcome to The People's Voice",
+    body:"This is a free, nonpartisan civic platform built for Jackson County residents. Everything here is real — real bills, real representatives, real neighbors. No ads, no algorithms, no party spin.",
+    tip:"Your voice matters. Let's show you around."
+  },
+  {
     icon:'🗳',
     title:"Vote on Real Legislation",
-    body:"Every bill here is real — pulled from actual council meetings, the Michigan Legislature, and Congress. Your vote is unofficial but it's recorded, tallied, and shown to your representatives.",
-    tip:"Tap any bill to expand it and cast your vote."
-  },
-  {
-    icon:'⚖️',
-    title:"AI Breaks It Down — Fairly",
-    body:"Each bill comes with a plain-language AI analysis that tells you exactly who benefits and who pays. No spin, no party line — just the facts so you can decide for yourself.",
-    tip:"Look for '⚡ Get AI Analysis' inside any bill."
-  },
-  {
-    icon:'📍',
-    title:"Your ZIP Code, Your Bills",
-    body:"Search by any Jackson County ZIP code to see legislation specific to your community — your village, township, or city — plus state and federal bills that affect everyone.",
-    tip:"Use the ZIP search bar at the top of the Bills tab."
+    body:"Every bill here is pulled from actual council meetings, the Michigan Legislature, and Congress. Cast your vote, read plain-English AI analysis, and see exactly how your community feels — then compare it to how your representatives actually voted.",
+    tip:"Tap any bill to expand it and cast your vote. Enter your ZIP to see local bills too."
   },
   {
     icon:'🏛',
-    title:"Hold Representatives Accountable",
-    body:"The Reps tab shows how your elected officials voted compared to how the community voted. You can email them directly from any bill with your vote attached.",
-    tip:"Your community's votes create real pressure on officials."
+    title:"Your Reps — All the Way Up",
+    body:"The Reps tab shows everyone from your village council to your U.S. Senators. Search by ZIP to see your full stack of representatives, their contact info, and how their votes line up with your community's.",
+    tip:"You can email or contact any rep directly from the platform — even your federal reps."
+  },
+  {
+    icon:'📝',
+    title:"Civic Voice — Proposals & Ideas",
+    body:"Have a bill you want the community to vote on? Submit it. Have a lighter idea — a new park bench, a community fridge, a crosswalk? Post it and let neighbors upvote it. When ideas get enough support, forward them straight to officials as a formal letter.",
+    tip:"Find this under the 'Civic Voice' tab. Ideas need upvotes; proposals need co-signers."
   },
   {
     icon:'🌱',
-    title:"Build Something Together",
-    body:"The Community tab lets you propose local projects, pledge your time, skills, or resources, and forward community-backed ideas directly to officials as a formal letter.",
-    tip:"Earn 50 reputation points to propose your own project."
+    title:"Community Projects",
+    body:"Bigger than an idea, more tangible than a vote — Community Projects let you propose something real, gather pledges of time, skills, and resources from neighbors, and build a community-backed case that officials can't ignore.",
+    tip:"Earn 50 reputation points to propose a project. Pledge on others to build rep."
   },
   {
-    icon:'📋',
-    title:"Keep It Accurate Together",
-    body:"If a bill's status changes or a new proposal comes up, any verified resident can submit an update with a source link. Co-signers verify it, then it goes live for everyone.",
-    tip:"Look for '+ Submit a Bill from Your Community' at the bottom of the Bills tab."
+    icon:'📅',
+    title:"Events — RSVP & Share",
+    body:"See what's happening across Jackson County — farmers markets, town halls, volunteer days, candidate forums. RSVP so neighbors know you're coming, and share events to spread the word.",
+    tip:"Going, Maybe, or Can't Go — your RSVP shows up on the event for everyone to see."
+  },
+  {
+    icon:'🤲',
+    title:"Exchange — Give & Receive Freely",
+    body:"The Exchange tab is a gift economy marketplace. Offer something you have — skills, tools, produce, time. Request something you need. No money changes hands. Just neighbors helping neighbors.",
+    tip:"Find it under the Exchange tab. Everything here is freely given."
+  },
+  {
+    icon:'🗺',
+    title:"Live Community Map",
+    body:"See your community on a map — upcoming events, exchange offers, active projects, and member density by neighborhood. Everything is pinned to real locations across Jackson County.",
+    tip:"Toggle layers on and off using the buttons above the map."
+  },
+  {
+    icon:'🤝',
+    title:"Connect With Your Neighbors",
+    body:"Chat in community rooms by ZIP code, send direct messages, join or create groups around shared interests, and browse the Neighbor Directory to find people with skills you need — or who need what you offer.",
+    tip:"Your profile is your contributor card — fill in your skills and what you freely offer."
+  },
+  {
+    icon:'👤',
+    title:"Your Profile — Make It Yours",
+    body:"Your profile isn't just a name — it's your Contributor Card. Add your bio, tagline, skills, what you freely offer, causes you care about, and a favorite quote. Click any neighbor's name to see theirs.",
+    tip:"Hit 'Profile' in the top right to edit. Other residents can see and share your card."
+  },
+  {
+    icon:'🌟',
+    title:"Build Reputation, Earn Your Voice",
+    body:"Everything you do earns reputation points — voting (+5), commenting (+10), pledging on projects (+15). At 50 pts you can propose projects. At 100 pts you become a Community Pillar. Reputation is how this community recognizes real contributors.",
+    tip:"Your rep level shows on your profile and next to your name in the community."
   },
 ];
+
+
 
 function OnboardingTour({onDone, displayName}) {
   const [step, setStep] = useState(0);
@@ -2844,7 +2876,7 @@ function OnboardingTour({onDone, displayName}) {
         // Icon + title
         h('div',{style:{fontSize:48,marginBottom:12,lineHeight:1}},current.icon),
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:'#1a1a2e',marginBottom:12,lineHeight:1.2}},
-          step===0 ? 'Welcome'+(displayName?', '+displayName.split(' ')[0]:'')+' 👋' : current.title
+          step===0 ? 'Welcome'+(displayName?', '+displayName.split(' ')[0]:'')+' to The People\'s Voice' : current.title
         ),
         h('p',{style:{fontFamily:"'Lora',serif",fontSize:15,color:'#444',lineHeight:1.8,marginBottom:16}},current.body),
         // Tip box
@@ -2858,7 +2890,7 @@ function OnboardingTour({onDone, displayName}) {
             : h('button',{onClick:onDone,style:{background:'transparent',border:'none',color:'#bbb',fontSize:13,cursor:'pointer'}},'Skip tour'),
           h('button',{onClick:()=>isLast?onDone():setStep(s=>s+1),
             style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'12px 24px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}
-          },isLast?'Start Voting! 🗳':'Next ->')
+          },isLast?"Let's Go! 🌱":'Next ->')
         )
       )
     )
@@ -8222,10 +8254,11 @@ function App() {
 
       // Projects tab
       mainTab==='projects'&&h(Fragment,null,
-        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:10}},
+        // Header
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:10}},
           h('div',null,
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},"Community Projects"),
-            h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},"Propose. Pledge. Build. Forward to power.")
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},"🌱 Community Projects"),
+            h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},"Neighbors proposing real change — together.")
           ),
           canPropose?h('button',{onClick:()=>setShowPropose(true),style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'10px 18px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}},"+  Propose a Project"):
           h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:7,padding:'10px 14px',fontSize:12,color:'#888',textAlign:'center'}},
@@ -8233,16 +8266,40 @@ function App() {
             "Earn ",h('strong',null,REP_TO_PROPOSE-rep+" more rep")," to propose",h('br'),h('span',{style:{fontSize:11}},"Vote (+5) · Comment (+10) · Pledge (+15)")
           )
         ),
-        h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}},
-          h('span',{style:{fontSize:12,color:'#888',fontStyle:'italic'}},"Earn rep:"),
-          [["🗳 Vote","+5"],["💬 Comment","+10"],["🤲 Pledge","+15"],["🌱 Propose","50 req"]].map(([l,v])=>
-            h('div',{key:l,style:{display:'flex',alignItems:'center',gap:4}},
-              h('span',{style:{fontSize:12,color:'#555'}},l),
-              h('span',{style:{background:'#f0c040',color:'#1a1a2e',fontSize:11,fontWeight:700,padding:'2px 7px',borderRadius:20}},v)
+
+        // Explainer panel
+        h('div',{style:{background:'#1a1a2e',borderRadius:12,padding:'18px 20px',marginBottom:16}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#f0c040',marginBottom:14}},'How Community Projects Work'),
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}},
+            [
+              ['📝','Propose','A verified resident with 50+ rep submits a project idea — anything from a community garden to a neighborhood trail to a tool library.'],
+              ['🤝','Gather Support','Neighbors pledge their time, skills, or resources. The more support a project gets, the stronger the case for action.'],
+              ['📨','Forward to Officials','When a project reaches its support threshold, you can send a formal letter directly to your elected representatives — right from this page.'],
+              ['🏛','Hold Them Accountable','Officials receive the letter with your community\'s name attached. Their response (or silence) becomes part of the public record.'],
+            ].map(([icon,title,desc])=>
+              h('div',{key:title,style:{background:'rgba(255,255,255,.06)',borderRadius:8,padding:'12px 14px'}},
+                h('div',{style:{fontSize:22,marginBottom:6}},icon),
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#f0c040',marginBottom:4}},title),
+                h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#8899aa',lineHeight:1.6}},desc)
+              )
+            )
+          ),
+          h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.08)',display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}},
+            h('span',{style:{fontSize:12,color:'#556677',fontFamily:"'Lora',serif"}},'Earn rep by participating:'),
+            [["🗳 Vote","+5"],["💬 Comment","+10"],["🤲 Pledge","+15"],["🌱 Propose","50 req"]].map(([l,v])=>
+              h('div',{key:l,style:{display:'flex',alignItems:'center',gap:4}},
+                h('span',{style:{fontSize:12,color:'#8899aa'}},l),
+                h('span',{style:{background:'#f0c040',color:'#1a1a2e',fontSize:11,fontWeight:700,padding:'2px 7px',borderRadius:20}},v)
+              )
             )
           )
         ),
-        projects.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No projects yet. Be the first to propose one!"),
+
+        projects.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa'}},
+          h('div',{style:{fontSize:36,marginBottom:10}},'🌱'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#555',marginBottom:6}},'No projects yet'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.6}},'Be the first to propose something your community needs.')
+        ),
         projects.map(proj=>h(ProjectCard,{key:proj.id,project:proj,user:{...user,reputation:rep},onRepGain:gainRep}))
       ),
 
