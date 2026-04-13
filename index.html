@@ -1611,6 +1611,58 @@ function NewsStoryCard({story, user}) {
   );
 }
 
+
+// ── RSS Auto-Fetch ────────────────────────────────────────────────────────────
+const RSS_FEEDS = [
+  {name:'MLive Jackson',   url:'https://www.mlive.com/jackson/rss.xml',  category:'Local'},
+  {name:'Bridge Michigan', url:'https://bridgemi.com/feed',               category:'Michigan'},
+  {name:'Michigan Radio',  url:'https://www.michiganradio.org/rss.xml',  category:'Michigan'},
+  {name:'AP News',         url:'https://apnews.com/rss/apf-topnews',     category:'Federal'},
+];
+async function fetchAndPublishRss(user, existingStories, onProgress) {
+  const proxy = 'https://api.allorigins.win/get?url=';
+  let added=0, skipped=0;
+  const existingUrls = new Set((existingStories||[]).map(s=>s.source_url));
+  for(const feed of RSS_FEEDS) {
+    try{
+      onProgress('\uD83D\uDCE1 Fetching '+feed.name+'...');
+      const res = await fetch(proxy+encodeURIComponent(feed.url));
+      const json = await res.json();
+      const xml = json.contents||'';
+      const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/gi)||[];
+      for(const item of itemMatches.slice(0,3)) {
+        const titleM = item.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+        const linkM  = item.match(/<link>([\s\S]*?)<\/link>/i)||item.match(/<link[^>]+href="([^"]+)"/i);
+        const clean = (titleM?.[1]||'').replace(/<[^>]+>/g,'').trim();
+        const url   = (linkM?.[1]||'').trim();
+        if(!clean||!url){continue;}
+        if(existingUrls.has(url)){skipped++;continue;}
+        onProgress('\uD83E\uDD16 Neutralizing: '+clean.slice(0,50)+'...');
+        const result = await neutralizeStory(clean, url, '', feed.category);
+        if(!result){skipped++;continue;}
+        const {error} = await sb.from('news_stories').insert({
+          source_url:url, original_title:clean,
+          neutral_headline:result.neutral_headline,
+          neutral_summary:result.neutral_summary,
+          local_relevance:result.local_relevance,
+          original_bias:result.original_bias,
+          category:result.category||feed.category,
+          poll_question:result.poll_question||null,
+          poll_benefits:result.poll_benefits||[],
+          poll_consequences:result.poll_consequences||[],
+          poll_yes:0, poll_no:0, poll_unsure:0,
+          submitted_by_id:user.id,
+          submitted_by_name:'Auto-fetch ('+feed.name+')',
+          upvotes:0, comment_count:0, approved:true,
+          created_at:new Date().toISOString()
+        });
+        if(!error){added++;existingUrls.add(url);}
+      }
+    }catch(e){onProgress('\u274C '+feed.name+': '+e.message);}
+  }
+  return {added,skipped};
+}
+
 function NewsTab({user, rep, profile}) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1624,6 +1676,9 @@ function NewsTab({user, rep, profile}) {
   const [submitMsg, setSubmitMsg] = useState('');
   const [urlError, setUrlError] = useState('');
   const isTrusted = (rep||0) >= 50;
+  const isAdmin = profile?.is_admin===true;
+  const [fetchingRss,setFetchingRss] = useState(false);
+  const [rssMsg,setRssMsg] = useState('');
 
   useEffect(()=>{ loadStories(); },[catFilter]);
 
@@ -5944,16 +5999,45 @@ function MapTab({user, profile}) {
     // Resources — food pantries, blessing boxes, etc.
     if(activeLayers.has('resources')) {
       const RESOURCE_ICONS = {
-        'blessing_box':   {emoji:'📦', color:'#c0392b', label:'Blessing Box'},
-        'food_pantry':    {emoji:'🥫', color:'#e67e22', label:'Food Pantry'},
-        'food_bank':      {emoji:'🏛',  color:'#d35400', label:'Food Bank'},
-        'free_store':     {emoji:'🛍',  color:'#8e44ad', label:'Free Store'},
-        'meal_program':   {emoji:'🍽',  color:'#27ae60', label:'Meal Program'},
-        'other':          {emoji:'🧡', color:'#c0392b', label:'Resource'},
+        // New blessing-box categories
+        'blessing_box':      {emoji:'📦', color:'#c0392b', label:'Blessing Box'},
+        'food_pantry':       {emoji:'🥫', color:'#e67e22', label:'Food Pantry'},
+        'food_bank':         {emoji:'🏛', color:'#d35400', label:'Food Bank'},
+        'free_store':        {emoji:'🛍', color:'#8e44ad', label:'Free Store'},
+        'meal_program':      {emoji:'🍽', color:'#27ae60', label:'Meal Program'},
+        // Old category names (backward compat)
+        'Food & Nutrition':  {emoji:'🥫', color:'#e67e22', label:'Food & Nutrition'},
+        'Housing':           {emoji:'🏠', color:'#1a5c8a', label:'Housing'},
+        'Health & Mental Health': {emoji:'💙', color:'#1a6b3c', label:'Health'},
+        'Jobs & Training':   {emoji:'🔧', color:'#5b3a8c', label:'Jobs & Training'},
+        'Legal Aid':         {emoji:'⚖️', color:'#8a6000', label:'Legal Aid'},
+        'Crisis Support':    {emoji:'🆘', color:'#c0392b', label:'Crisis Support'},
+        'Transportation':    {emoji:'🚌', color:'#2c7a6b', label:'Transportation'},
+        'Education':         {emoji:'📚', color:'#5b3a8c', label:'Education'},
+        'Other':             {emoji:'🧡', color:'#888', label:'Resource'},
+        'other':             {emoji:'🧡', color:'#888', label:'Resource'},
       };
-      mapData.resources.forEach(r=>{
-        // Use stored lat/lng if available, otherwise skip (need geocoding)
-        if(!r.lat||!r.lng) return;
+      // Geocode resources missing lat/lng on the fly, save back to DB
+      const geocodeRes = async(r)=>{
+        if(r.lat&&r.lng) return r;
+        if(!r.address) return null;
+        try{
+          const q=encodeURIComponent(r.address+', Jackson County, Michigan');
+          const res=await fetch('https://nominatim.openstreetmap.org/search?q='+q+'&format=json&limit=1&countrycodes=us');
+          const geo=await res.json();
+          if(geo&&geo[0]){
+            const lat=parseFloat(geo[0].lat),lng=parseFloat(geo[0].lon);
+            sb.from('community_resources').update({lat,lng}).eq('id',r.id).then(()=>{});
+            return {...r,lat,lng};
+          }
+        }catch(e){}
+        return null;
+      };
+      const resMissingCoords = mapData.resources.filter(r=>!r.lat||!r.lng);
+      const resHasCoords = mapData.resources.filter(r=>r.lat&&r.lng);
+      const resGeocodedFresh = (await Promise.all(resMissingCoords.map(geocodeRes))).filter(Boolean);
+      const allResourcesForMap = [...resHasCoords, ...resGeocodedFresh];
+      allResourcesForMap.forEach(r=>{
         const ri = RESOURCE_ICONS[r.category]||RESOURCE_ICONS['other'];
         addMarker(parseFloat(r.lat), parseFloat(r.lng),
           makeIcon(ri.emoji, ri.color),
