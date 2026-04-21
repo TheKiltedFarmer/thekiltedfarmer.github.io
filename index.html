@@ -1615,53 +1615,110 @@ function NewsStoryCard({story, user}) {
 
 // ── RSS Auto-Fetch ────────────────────────────────────────────────────────────
 const RSS_FEEDS = [
-  {name:'MLive Jackson',   url:'https://www.mlive.com/jackson/rss.xml',  category:'Local'},
-  {name:'Bridge Michigan', url:'https://bridgemi.com/feed',               category:'Michigan'},
-  {name:'Michigan Radio',  url:'https://www.michiganradio.org/rss.xml',  category:'Michigan'},
-  {name:'AP News',         url:'https://apnews.com/rss/apf-topnews',     category:'Federal'},
+  {name:'MLive Jackson',     url:'https://www.mlive.com/jackson/rss.xml',        category:'Local'},
+  {name:'Bridge Michigan',   url:'https://bridgemi.com/feed',                    category:'Michigan'},
+  {name:'Michigan Radio',    url:'https://www.michiganradio.org/rss.xml',        category:'Michigan'},
+  {name:'AP Top News',       url:'https://apnews.com/rss/apf-topnews',           category:'Federal'},
+  {name:'NPR News',          url:'https://feeds.npr.org/1001/rss.xml',           category:'Federal'},
 ];
-async function fetchAndPublishRss(user, existingStories, onProgress) {
-  const proxy = 'https://api.allorigins.win/get?url=';
-  let added=0, skipped=0;
-  const existingUrls = new Set((existingStories||[]).map(s=>s.source_url));
-  for(const feed of RSS_FEEDS) {
-    try{
-      onProgress('\uD83D\uDCE1 Fetching '+feed.name+'...');
-      const res = await fetch(proxy+encodeURIComponent(feed.url));
-      const json = await res.json();
-      const xml = json.contents||'';
-      const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/gi)||[];
-      for(const item of itemMatches.slice(0,3)) {
-        const titleM = item.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-        const linkM  = item.match(/<link>([\s\S]*?)<\/link>/i)||item.match(/<link[^>]+href="([^"]+)"/i);
-        const clean = (titleM?.[1]||'').replace(/<[^>]+>/g,'').trim();
-        const url   = (linkM?.[1]||'').trim();
-        if(!clean||!url){continue;}
-        if(existingUrls.has(url)){skipped++;continue;}
-        onProgress('\uD83E\uDD16 Neutralizing: '+clean.slice(0,50)+'...');
-        const result = await neutralizeStory(clean, url, '', feed.category);
-        if(!result){skipped++;continue;}
-        const {error} = await sb.from('news_stories').insert({
-          source_url:url, original_title:clean,
-          neutral_headline:result.neutral_headline,
-          neutral_summary:result.neutral_summary,
-          local_relevance:result.local_relevance,
-          original_bias:result.original_bias,
-          category:result.category||feed.category,
-          poll_question:result.poll_question||null,
-          poll_benefits:result.poll_benefits||[],
-          poll_consequences:result.poll_consequences||[],
-          poll_yes:0, poll_no:0, poll_unsure:0,
-          submitted_by_id:user.id,
-          submitted_by_name:'Auto-fetch ('+feed.name+')',
-          upvotes:0, comment_count:0, approved:true,
-          created_at:new Date().toISOString()
-        });
-        if(!error){added++;existingUrls.add(url);}
+
+// Two CORS proxies for fallback. AllOrigins fails often - corsproxy.io is a backup.
+const RSS_PROXIES = [
+  url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
+  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+];
+
+async function fetchFeedWithFallback(feedUrl) {
+  let lastErr = null;
+  for (let i = 0; i < RSS_PROXIES.length; i++) {
+    try {
+      const proxied = RSS_PROXIES[i](feedUrl);
+      const res = await fetch(proxied);
+      if (!res.ok) { lastErr = 'HTTP '+res.status; continue; }
+      const text = await res.text();
+      let xml = text;
+      if (i === 0) {
+        try { xml = JSON.parse(text).contents || ''; } catch { xml = ''; }
       }
-    }catch(e){onProgress('\u274C '+feed.name+': '+e.message);}
+      if (!xml || xml.length < 100) { lastErr = 'empty response'; continue; }
+      return { xml, proxyUsed: i };
+    } catch (e) {
+      lastErr = e.message;
+    }
   }
-  return {added,skipped};
+  throw new Error(lastErr || 'all proxies failed');
+}
+
+async function fetchAndPublishRss(user, existingStories, onProgress, onFeedResult) {
+  let added = 0, skipped = 0;
+  const existingUrls = new Set((existingStories || []).map(s => s.source_url));
+  const perFeed = [];
+
+  for (const feed of RSS_FEEDS) {
+    const feedLog = { name: feed.name, added: 0, skipped: 0, items: 0, error: null };
+    try {
+      onProgress('\uD83D\uDCE1 Fetching ' + feed.name + '...');
+      const { xml, proxyUsed } = await fetchFeedWithFallback(feed.url);
+      const itemMatches = xml.match(/<(item|entry)[\s>][\s\S]*?<\/(item|entry)>/gi) || [];
+      feedLog.items = itemMatches.length;
+      if (itemMatches.length === 0) {
+        feedLog.error = 'no items parsed (proxy ' + proxyUsed + ', xml ' + xml.length + ' chars)';
+      }
+
+      for (const item of itemMatches.slice(0, 3)) {
+        const titleM = item.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+        const linkM  = item.match(/<link>([\s\S]*?)<\/link>/i) || item.match(/<link[^>]+href="([^"]+)"/i);
+        const clean  = (titleM?.[1] || '').replace(/<[^>]+>/g, '').trim();
+        const url    = (linkM?.[1] || '').trim();
+        if (!clean || !url) { feedLog.skipped++; skipped++; continue; }
+        if (existingUrls.has(url)) { feedLog.skipped++; skipped++; continue; }
+
+        onProgress('\uD83E\uDD16 Neutralizing: ' + clean.slice(0, 50) + '...');
+        let result;
+        try {
+          result = await neutralizeStory(clean, url, '', feed.category);
+        } catch (e) {
+          feedLog.error = 'AI threw: ' + e.message;
+          feedLog.skipped++; skipped++; continue;
+        }
+        if (!result) {
+          feedLog.error = feedLog.error || 'AI returned null (worker or JSON parse failed)';
+          feedLog.skipped++; skipped++; continue;
+        }
+
+        const { error: insertErr } = await sb.from('news_stories').insert({
+          source_url: url,
+          original_title: clean,
+          neutral_headline: result.neutral_headline,
+          neutral_summary: result.neutral_summary,
+          local_relevance: result.local_relevance,
+          original_bias: result.original_bias,
+          category: result.category || feed.category,
+          poll_question: result.poll_question || null,
+          poll_benefits: result.poll_benefits || [],
+          poll_consequences: result.poll_consequences || [],
+          poll_yes: 0, poll_no: 0, poll_unsure: 0,
+          submitted_by_id: user.id,
+          submitted_by_name: 'Auto-fetch (' + feed.name + ')',
+          upvotes: 0, comment_count: 0, approved: true,
+          created_at: new Date().toISOString(),
+        });
+
+        if (insertErr) {
+          feedLog.error = 'DB insert: ' + insertErr.message;
+          feedLog.skipped++; skipped++;
+        } else {
+          feedLog.added++; added++;
+          existingUrls.add(url);
+        }
+      }
+    } catch (e) {
+      feedLog.error = e.message;
+    }
+    perFeed.push(feedLog);
+    onFeedResult && onFeedResult(feedLog);
+  }
+  return { added, skipped, perFeed };
 }
 
 function NewsTab({user, rep, profile}) {
@@ -5178,27 +5235,75 @@ function AuthScreen({onAuth, onGuest}) {
 
 
 // ── RSS Auto-Fetch Button (Admin) ─────────────────────────────────────────
-function RssFetchButton({onToast, user, profile}) {
+function RssFetchButton({ onToast, user, profile }) {
   const [fetching, setFetching] = React.useState(false);
   const [progress, setProgress] = React.useState('');
   const [result, setResult] = React.useState(null);
-  const run = async()=>{
-    if(fetching) return;
-    setFetching(true); setProgress('Starting RSS fetch...'); setResult(null);
+  const [log, setLog] = React.useState([]);
+
+  const run = async () => {
+    if (fetching) return;
+    setFetching(true);
+    setProgress('Starting RSS fetch...');
+    setResult(null);
+    setLog([]);
     try {
-      const {data:existing} = await sb.from('news_stories').select('source_url').limit(200);
-      const {added,skipped} = await fetchAndPublishRss({...user,...(profile||{})},existing||[],msg=>setProgress(msg));
-      setResult({added,skipped});
-      onToast('\u2705 RSS fetch done! '+added+' new stories added, '+skipped+' skipped.');
-    } catch(e) { onToast('\u274c RSS fetch error: '+e.message); }
-    setFetching(false); setProgress('');
+      const { data: existing } = await sb
+        .from('news_stories')
+        .select('source_url')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      const { added, skipped, perFeed } = await fetchAndPublishRss(
+        { ...user, ...(profile || {}) },
+        existing || [],
+        msg => setProgress(msg),
+        feedLog => setLog(prev => [...prev, feedLog])
+      );
+      setResult({ added, skipped, perFeed });
+      if (added > 0) onToast('\u2705 ' + added + ' new stories added \u00b7 ' + skipped + ' skipped');
+      else onToast('\u26a0\ufe0f No new stories added. Check the per-feed log below.');
+    } catch (e) {
+      onToast('\u274c RSS fetch error: ' + e.message);
+    }
+    setFetching(false);
+    setProgress('');
   };
-  return h('div',{style:{display:'inline-flex',flexDirection:'column',gap:4,alignItems:'flex-start'}},
-    h('button',{onClick:run,disabled:fetching,style:{background:fetching?'#444':'#1a5c8a',color:'#fff',border:'none',padding:'10px 18px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:fetching?'default':'pointer',whiteSpace:'nowrap'}},
-      fetching?'\uD83D\uDCE1 Fetching RSS...':'\uD83D\uDCE1 Auto-Fetch News'),
-    fetching&&progress&&h('div',{style:{fontSize:11,color:'#888',fontFamily:"'Lora',serif",maxWidth:260,lineHeight:1.4,background:'#f5f3ee',borderRadius:5,padding:'4px 8px'}},progress),
-    result&&h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700}},
-      '\u2705 +'+result.added+' new \u00b7 \u23ed '+result.skipped+' skipped')
+
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' } },
+    h('button', {
+      onClick: run, disabled: fetching,
+      style: {
+        background: fetching ? '#444' : '#1a5c8a', color: '#fff', border: 'none',
+        padding: '10px 18px', borderRadius: 7, fontFamily: "'Playfair Display',serif",
+        fontWeight: 700, fontSize: 13, cursor: fetching ? 'default' : 'pointer', whiteSpace: 'nowrap',
+      },
+    }, fetching ? '\uD83D\uDCE1 Fetching RSS...' : '\uD83D\uDCE1 Auto-Fetch News'),
+
+    fetching && progress && h('div', {
+      style: {
+        fontSize: 11, color: '#555', fontFamily: "'Lora',serif", maxWidth: 360, lineHeight: 1.4,
+        background: '#f5f3ee', borderRadius: 5, padding: '6px 10px',
+      },
+    }, progress),
+
+    log.length > 0 && h('div', {
+      style: {
+        fontSize: 11, fontFamily: "'Lora',serif", background: '#fff', border: '1px solid #e5dece',
+        borderRadius: 6, padding: '8px 10px', maxWidth: 420, lineHeight: 1.5,
+      },
+    },
+      h('div', { style: { fontWeight: 700, marginBottom: 4, color: '#1a1a2e' } }, 'Per-feed results:'),
+      log.map((f, i) => h('div', {
+        key: i,
+        style: { color: f.error ? '#c0392b' : '#1a6b3c', marginBottom: 2 },
+      },
+        (f.error ? '\u274c ' : '\u2705 ') + f.name + ': +' + f.added + ' new, ' + f.skipped + ' skipped, ' + f.items + ' items parsed' +
+        (f.error ? ' \u2014 ' + f.error : '')
+      ))
+    ),
+
+    result && h('div', { style: { fontSize: 11, color: '#1a6b3c', fontWeight: 700 } },
+      '\u2705 Total: +' + result.added + ' new \u00b7 \u23ed ' + result.skipped + ' skipped')
   );
 }
 // ── Admin Pending Review Queue ─────────────────────────────────────────────────
@@ -5762,7 +5867,7 @@ function EventsApprovalQueue({onToast}) {
   );
 }
 
-// ── Free Stuff & Skill Swap ─────────────────────────────────────────────────
+// ── Skill & Resource Exchange ─────────────────────────────────────────────────
 const EXCHANGE_CATEGORIES = ['All','Food & Produce','Tools & Equipment','Skills & Labor','Childcare','Transportation','Housing Help','Supplies','Knowledge & Tutoring','Animals & Plants','Other'];
 const EXCHANGE_CAT_COLORS = {
   'Food & Produce':'#1a6b3c','Tools & Equipment':'#8a4000','Skills & Labor':'#1a5c8a',
