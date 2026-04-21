@@ -1938,6 +1938,10 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
   const [myNewsPosition, setMyNewsPosition] = useState(null);
   const [activity, setActivity] = useState([]);
   const [memberCount, setMemberCount] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null); // userId to show in modal
+
+  // ZIP codes that have dedicated chat rooms (mirrors CHAT_ROOMS)
+  const ZIP_CHAT_ROOMS = new Set(['49201','49202','49203','49237','49230','49285']);
 
   // ── Load everything on mount ─────────────────────────────────────
   useEffect(()=>{ loadFeed(); },[userZip, user?.id]);
@@ -2584,15 +2588,31 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       activity.map((item,i)=>{
         const isAdded = myConnections.has(item.id);
         const isNew = (Date.now() - new Date(item.created_at)) < 21*86400000;
+        const zipIsChatRoom = item.zip && ZIP_CHAT_ROOMS.has(item.zip);
         return h('div',{key:item.id,
           style:{display:'flex',alignItems:'center',gap:10,padding:'10px 0',
             borderBottom: i<activity.length-1 ? '1px solid #f0ece0' : 'none'}
         },
-          renderAvatar(item.display_name, 30),
+          // Avatar — clickable, opens profile
+          h('div',{onClick:()=>setViewingProfile(item.id),
+            style:{cursor:'pointer'}
+          }, renderAvatar(item.display_name, 30)),
           h('div',{style:{flex:1,fontSize:13}},
-            h('b',{style:{color:NAVY}}, item.display_name || 'A neighbor'),
+            // Name — clickable, opens profile
+            h('a',{href:'#',
+              onClick:(e)=>{e.preventDefault(); setViewingProfile(item.id);},
+              style:{color:NAVY,fontWeight:700,textDecoration:'none',
+                borderBottom:'1px dotted '+NAVY, cursor:'pointer'}
+            }, item.display_name || 'A neighbor'),
             h('span',{style:{color:MUTED}}, ' joined from '),
-            h('b',{style:{color:NAVY}}, item.zip || 'Jackson County'),
+            // ZIP — clickable if it's a chat room, otherwise just bold text
+            item.zip && zipIsChatRoom
+              ? h('a',{href:'#',
+                  onClick:(e)=>{e.preventDefault(); onNavigate && onNavigate('connect',{zipRoom:item.zip});},
+                  style:{color:NAVY,fontWeight:700,textDecoration:'none',
+                    borderBottom:'1px dotted '+NAVY, cursor:'pointer'}
+                }, item.zip)
+              : h('b',{style:{color:NAVY}}, item.zip || 'Jackson County'),
             h('div',{style:{fontSize:11,color:MUTED,fontStyle:'italic',marginTop:2}}, timeAgo(item.created_at))
           ),
           isNew && !isAdded && user && h('button',{onClick:()=>addNeighbor(item.id),
@@ -2607,7 +2627,10 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
     ),
 
     h('div',{style:{textAlign:'center',marginTop:24,fontSize:12,color:MUTED,fontStyle:'italic'}},
-      '— End of this week\'s feed —')
+      '— End of this week\'s feed —'),
+
+    // Profile modal — opens when user taps a neighbor name or avatar
+    viewingProfile && h(PublicProfileModal,{userId:viewingProfile,onClose:()=>setViewingProfile(null)})
   );
 }
 
@@ -5106,9 +5129,14 @@ const checkRoomActivity = async(rooms) => {
   return activity;
 };
 
-function CommunityHub({user, profile}) {
-  const [activeTab, setActiveTab] = useState('chat');
-  const [activeRoom, setActiveRoom] = useState('general');
+function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
+  const [activeTab, setActiveTab] = useState(navCtx?.zipRoom ? 'chat' : 'chat');
+  const [activeRoom, setActiveRoom] = useState(navCtx?.zipRoom || 'general');
+
+  // Clear the nav context once consumed
+  useEffect(()=>{
+    if(navCtx && onNavCtxConsumed) onNavCtxConsumed();
+  },[]);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
@@ -9160,7 +9188,7 @@ function App() {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:3}},'🤝 Connect'),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888'}},'Chat with neighbors. Browse your community. Invite friends.')
         ),
-        h(CommunityHub,{user:{...user,...profile},profile})
+        h(CommunityHub,{user:{...user,...profile},profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)})
       ),
 
       // Resources tab
