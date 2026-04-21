@@ -789,7 +789,7 @@ function AIBreakdown({bill}) {
       const res=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',max_tokens:900,
+          model:'claude-sonnet-4-6',max_tokens:900,
           system:'You are a nonpartisan civic analyst specializing in local impact. Respond ONLY with valid JSON, no markdown. Be specific — name actual groups, income levels, businesses, and geographic areas affected. Schema: {"plain":"2-3 plain sentences any resident can understand","benefits":[{"group":"specific group name","detail":"how they benefit specifically"}],"concerns":[{"group":"specific group name","detail":"the specific concern or cost they bear"}],"who_gains_most":"1 sentence about who benefits most and why","who_pays":"1 sentence about who bears the cost or tradeoff","fineprint":["up to 3 specific gotchas or details worth knowing"],"local":"1-2 sentences on specific Jackson County / local impact","bottom":"one honest, plain sentence summary"}',
           messages:[{role:'user',content:'Analyze this civic proposal for '+bill.jurisdiction+':\nTitle: '+bill.title+'\nStatus: '+bill.status+'\nSponsor: '+bill.sponsor+'\nSummary: '+bill.summary+'\nText: '+(bill.full_text||bill.summary)+'\n\nBe specific about WHO benefits and WHO pays. Name actual groups - farmers, renters, landlords, small businesses, low-income residents, seniors, developers, etc.'}]
         })
@@ -900,7 +900,7 @@ function AIChat({bill}) {
       const res = await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
+          model:'claude-sonnet-4-6',
           max_tokens:600,
           system:`You are a neutral, nonpartisan civic assistant helping residents of Jackson County, Michigan understand local legislation. You answer questions about this specific bill clearly and fairly, presenting multiple perspectives where relevant. Never tell someone how to vote. Always be honest about uncertainty. Keep answers concise — 2-4 paragraphs max.
 
@@ -1428,7 +1428,7 @@ Rules:
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-haiku-4-5',
         max_tokens:900,
         messages:[{role:'user',content:prompt}]
       })
@@ -2240,7 +2240,7 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
       const aiRes=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',max_tokens:1000,
+          model:'claude-haiku-4-5',max_tokens:1000,
           system:'You are a civic data extractor. Extract bill/proposal info and return ONLY valid JSON, no markdown. Schema: {"title":"","level":"village|city|township|county|state|federal","jurisdiction":"","status":"","introduced":"","sponsor":"","summary":"2-3 plain English sentences","full_text":"key text + source URL"}',
           messages:[{role:'user',content:'Extract bill info from this page (source: '+sourceUrl+'):\n\n'+text}]
         })
@@ -5388,7 +5388,7 @@ function BillSections({bill, user, onRepGain}) {
       const res = await fetch(AI_PROXY, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          model:'claude-sonnet-4-20250514', max_tokens:800,
+          model:'claude-sonnet-4-6', max_tokens:800,
           system:'Break this bill into distinct votable sections. Return ONLY valid JSON array, no markdown. Each section: {"title":"short plain title","summary":"1-2 sentences what this part does","position":1}. 3-7 sections max. Only create sections if the bill genuinely has distinct separable parts worth voting on individually.',
           messages:[{role:'user',content:'Bill: '+bill.title+'\n\nSummary: '+bill.summary+'\n\nFull text: '+(bill.full_text||bill.summary)+'\n\nBreak into distinct votable sections.'}]
         })
@@ -7804,7 +7804,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
       const aiRes=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',max_tokens:1000,
+          model:'claude-haiku-4-5',max_tokens:1000,
           system:'You are a civic data extractor. Extract bill/proposal information from government website text and return ONLY valid JSON with no markdown. If you cannot find a specific field, use an empty string. Schema: {"title":"full bill or proposal title","level":"one of: village, city, township, county, state, federal","jurisdiction":"the specific government body e.g. City of Jackson or Village of Concord","status":"current status e.g. Council Vote Pending or Passed or Under Review","introduced":"date introduced if found","sponsor":"sponsor or author name if found","summary":"2-3 plain English sentences describing what this proposal does","full_text":"key text from the proposal plus the source URL"}',
           messages:[{role:'user',content:'Extract bill information from this government page (source: '+sourceUrl+'):\n\n'+text}]
         })
