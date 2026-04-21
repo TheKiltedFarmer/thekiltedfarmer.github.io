@@ -1615,38 +1615,37 @@ function NewsStoryCard({story, user}) {
 
 // ── RSS Auto-Fetch ────────────────────────────────────────────────────────────
 const RSS_FEEDS = [
-  {name:'MLive Jackson',     url:'https://www.mlive.com/jackson/rss.xml',        category:'Local'},
+  {name:'City of Jackson',   url:'https://www.cityofjackson.org/RSSFeed.aspx?ModID=67&CID=All-0', category:'Local'},
+  {name:'WLNS-6 Mid-MI',     url:'https://www.wlns.com/news/michigan/feed/',     category:'Local'},
   {name:'Bridge Michigan',   url:'https://bridgemi.com/feed',                    category:'Michigan'},
-  {name:'Michigan Radio',    url:'https://www.michiganradio.org/rss.xml',        category:'Michigan'},
-  {name:'AP Top News',       url:'https://apnews.com/rss/apf-topnews',           category:'Federal'},
   {name:'NPR News',          url:'https://feeds.npr.org/1001/rss.xml',           category:'Federal'},
 ];
 
-// Two CORS proxies for fallback. AllOrigins fails often - corsproxy.io is a backup.
-const RSS_PROXIES = [
-  url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
-  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+// Primary: our own Cloudflare Worker (unblockable, no CORS issues, 10-min edge cache).
+// Fallback: AllOrigins public proxy (in case the Worker is ever down).
+const RSS_SOURCES = [
+  { name: 'worker',     build: url => AI_PROXY + '/rss?url=' + encodeURIComponent(url), parse: 'raw' },
+  { name: 'allorigins', build: url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url), parse: 'json' },
 ];
 
 async function fetchFeedWithFallback(feedUrl) {
   let lastErr = null;
-  for (let i = 0; i < RSS_PROXIES.length; i++) {
+  for (const src of RSS_SOURCES) {
     try {
-      const proxied = RSS_PROXIES[i](feedUrl);
-      const res = await fetch(proxied);
-      if (!res.ok) { lastErr = 'HTTP '+res.status; continue; }
+      const res = await fetch(src.build(feedUrl));
+      if (!res.ok) { lastErr = src.name + ' HTTP ' + res.status; continue; }
       const text = await res.text();
       let xml = text;
-      if (i === 0) {
+      if (src.parse === 'json') {
         try { xml = JSON.parse(text).contents || ''; } catch { xml = ''; }
       }
-      if (!xml || xml.length < 100) { lastErr = 'empty response'; continue; }
-      return { xml, proxyUsed: i };
+      if (!xml || xml.length < 100) { lastErr = src.name + ' empty response'; continue; }
+      return { xml, proxyUsed: src.name };
     } catch (e) {
-      lastErr = e.message;
+      lastErr = src.name + ' threw: ' + e.message;
     }
   }
-  throw new Error(lastErr || 'all proxies failed');
+  throw new Error(lastErr || 'all sources failed');
 }
 
 async function fetchAndPublishRss(user, existingStories, onProgress, onFeedResult) {
