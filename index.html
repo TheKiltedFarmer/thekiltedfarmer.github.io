@@ -7522,7 +7522,7 @@ function ResourceApprovalQueue({onToast}) {
     const {error}=await sb.from('community_resources').insert({
       name:r.name,category:r.category,address:r.address,
       description:r.description,hours:r.hours,phone:r.phone,
-      website:r.website,lat,lng,verified:true,submitted_by:r.submitted_by,
+      website:r.website,lat,lng,verified:true,
     });
     if(!error){
       await sb.from('resource_suggestions').update({status:'approved'}).eq('id',r.id);
