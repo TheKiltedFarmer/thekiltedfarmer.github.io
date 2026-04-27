@@ -1900,7 +1900,7 @@ function WeekendEvents({bills}) {
     const fri = new Date(today); fri.setDate(today.getDate()+daysToFri);
     const sun = new Date(fri); sun.setDate(fri.getDate()+2);
     sb.from('events').select('id,title,event_date,event_time,location,category')
-      .eq('approved',true).gte('event_date',fri.toISOString().slice(0,10)).lte('event_date',sun.toISOString().slice(0,10))
+      .eq('approved',true).is('deleted_at',null).gte('event_date',fri.toISOString().slice(0,10)).lte('event_date',sun.toISOString().slice(0,10))
       .order('event_date',{ascending:true}).limit(6)
       .then(({data})=>{ if(data&&data.length) setEvents(data); }).catch(()=>{});
   },[]);
@@ -6027,7 +6027,7 @@ const EVENT_CAT_COLORS = {
   'Workshop':'#2c7a6b','Other':'#888'
 };
 
-function EventCard({event, user, onToast, onDelete, isAdmin}) {
+function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin}) {
   const [expanded, setExpanded] = useState(false);
   const [rsvp, setRsvp] = useState(null); // 'going' | 'maybe' | 'cantgo' | null
   const [rsvpCounts, setRsvpCounts] = useState({going:0,maybe:0,cantgo:0});
@@ -6169,10 +6169,10 @@ function EventCard({event, user, onToast, onDelete, isAdmin}) {
                 borderRadius:5,fontSize:12,fontFamily:"'Playfair Display',serif",fontWeight:700}},
               '🔗 More Info'),
             h('span',{style:{fontSize:11,color:'#bbb'}},'Added by '+event.submitted_by_name),
-            isAdmin&&h('button',{onClick:()=>onDelete(event),
-              style:{marginLeft:'auto',background:'transparent',border:'1px solid #e5dece',
-                color:'#c0392b',padding:'5px 10px',borderRadius:5,fontSize:11,cursor:'pointer'}},
-              '🗑 Remove')
+            (isAdmin||user) && h('div',{style:{marginLeft:'auto'}},
+              h(CrudControls,{contentType:'events', record:event, isAdmin, user, profile, onToast,
+                onUpdated:(updated)=>onUpdate&&onUpdate(updated),
+                onDeleted:()=>onDelete&&onDelete(event)}))
           )
         )
       )
@@ -6195,7 +6195,7 @@ function EventsTab({user, profile, onToast}) {
   const load = async()=>{
     setLoading(true);
     try {
-      const {data} = await sb.from('events').select('*').order('event_date',{ascending:true});
+      const {data} = await sb.from('events').select('*').is('deleted_at',null).order('event_date',{ascending:true});
       setEvents(data||[]);
     } catch(e) { /* table may not exist yet */ }
     setLoading(false);
@@ -6243,11 +6243,12 @@ function EventsTab({user, profile, onToast}) {
     setSaving(false);
   };
 
-  const deleteEvent = async(event)=>{
-    if(!window.confirm('Remove "'+event.title+'"?')) return;
-    await sb.from('events').delete().eq('id',event.id);
+  const deleteEvent = (event)=>{
+    // Hard-removal path replaced by CrudControls soft-delete; this just clears local state
     setEvents(prev=>prev.filter(e=>e.id!==event.id));
-    onToast('Event removed.');
+  };
+  const updateEvent = (updated)=>{
+    setEvents(prev=>prev.map(e=>e.id===updated.id?updated:e));
   };
 
   return h('div',null,
@@ -6341,7 +6342,7 @@ function EventsTab({user, profile, onToast}) {
         'Know of a local event? Be the first to add it!'
       )
     ),
-    filtered.map(e=>h(EventCard,{key:e.id,event:e,user,onToast,onDelete:deleteEvent,isAdmin}))
+    filtered.map(e=>h(EventCard,{key:e.id,event:e,user,profile,onToast,onDelete:deleteEvent,onUpdate:updateEvent,isAdmin}))
   );
 }
 
@@ -6409,7 +6410,7 @@ const EXCHANGE_CAT_COLORS = {
   'Supplies':'#555','Knowledge & Tutoring':'#c0392b','Animals & Plants':'#1a6b3c','Other':'#888'
 };
 
-function ExchangeCard({item, user, onToast, onDelete, isAdmin}) {
+function ExchangeCard({item, user, profile, onToast, onDelete, onUpdate, isAdmin}) {
   const [claimed, setClaimed] = useState(item.claimed||false);
   const [claiming, setClaiming] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -6489,14 +6490,19 @@ function ExchangeCard({item, user, onToast, onDelete, isAdmin}) {
               'Re-open listing'),
             claimed&&!isMe&&h('div',{style:{fontSize:13,color:'#1a6b3c',fontWeight:700,
               fontFamily:"'Lora',serif"}},'✓ You responded to this'),
-            isMe&&!claimed&&h('button',{onClick:()=>onDelete(item),
+            isMe&&!claimed&&h('button',{onClick:()=>{
+              if(!window.confirm('Remove "'+item.title+'"?')) return;
+              sb.from('exchange_listings').update({deleted_at:new Date().toISOString()}).eq('id',item.id)
+                .then(()=>{onDelete && onDelete(item); onToast('Removed.');});
+            },
               style:{marginLeft:'auto',background:'transparent',border:'1px solid #fcc',
                 color:'#c0392b',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}},
               '🗑 Remove'),
-            isAdmin&&!isMe&&h('button',{onClick:()=>onDelete(item),
-              style:{marginLeft:'auto',background:'transparent',border:'1px solid #fcc',
-                color:'#c0392b',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}},
-              '🗑 Remove')
+            isAdmin&&!isMe&&h('div',{style:{marginLeft:'auto'}},
+              h(CrudControls,{contentType:'exchange_listings', record:item, isAdmin, user, profile, onToast,
+                onUpdated:onUpdate,
+                onDeleted:()=>onDelete && onDelete(item)})
+            )
           )
         )
       )
@@ -6554,10 +6560,10 @@ function MapTab({user, profile}) {
           {data:resources},
           {data:members},
         ] = await Promise.all([
-          sb.from('events').select('id,title,event_date,event_time,location,zip,category').eq('approved',true).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
-          sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).limit(40),
+          sb.from('events').select('id,title,event_date,event_time,location,zip,category').eq('approved',true).is('deleted_at',null).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
+          sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).is('deleted_at',null).limit(40),
           sb.from('projects').select('id,title,supporter_count,proposer_name').limit(40),
-          sb.from('community_resources').select('id,name,category,address,lat,lng,description,hours,phone,website').eq('verified',true).limit(100),
+          sb.from('community_resources').select('id,name,category,address,lat,lng,description,hours,phone,website').eq('verified',true).is('deleted_at',null).limit(100),
           sb.from('profiles').select('zip').not('zip','is',null).neq('zip',''),
         ]);
         // Count members per ZIP
@@ -7088,7 +7094,7 @@ function ExchangeTab({user, profile, onToast}) {
     setLoading(true);
     try {
       const {data} = await sb.from('exchange_listings').select('*')
-        .order('created_at',{ascending:false}).limit(60);
+        .is('deleted_at',null).order('created_at',{ascending:false}).limit(60);
       setListings(data||[]);
     } catch(e) { /* table may not exist yet */ }
     setLoading(false);
@@ -7253,8 +7259,9 @@ function ExchangeTab({user, profile, onToast}) {
     ),
 
     !loading&&h('div',null,
-      filtered.map(item=>h(ExchangeCard,{key:item.id,item,user,onToast,
-        onDelete:canDelete=>canDelete&&removeItem(item)}))
+      filtered.map(item=>h(ExchangeCard,{key:item.id,item,user,profile,onToast,isAdmin,
+        onDelete:(removed)=>setListings(prev=>prev.filter(x=>x.id!==removed.id)),
+        onUpdate:(updated)=>setListings(prev=>prev.map(x=>x.id===updated.id?updated:x))}))
     )
   );
 }
@@ -7271,7 +7278,445 @@ const RESOURCE_CATS_MAP = {
   'other':        {label:'Other',        emoji:'🧡',  color:'#888'},
 };
 
-function ResourcesTab({user, profile, onToast}) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTENT MODERATION SYSTEM — Phase 1 + 2
+// Components:
+//   - CorrectionSuggestModal: any user can suggest a fix to any content
+//   - AdminEditModal: admin-only direct edit of any content
+//   - CorrectionsQueue: admin panel section to approve/reject pending corrections
+//   - DeletedItemsPanel: admin panel section to view/restore soft-deleted items
+//   - CrudControls: inline pencil/trash for admins, suggest-correction for users
+// Field schemas defined per content type so modals are generic.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Field schemas for editable content types.
+// Each entry: { label, fields: [{key, label, type, options?}] }
+const CONTENT_SCHEMAS = {
+  community_resources: {
+    label: 'Resource',
+    titleField: 'name',
+    fields: [
+      {key:'name',        label:'Name',        type:'text', required:true},
+      {key:'category',    label:'Category',    type:'select', options:[
+        ['blessing_box','📦 Blessing Box'],
+        ['food_pantry','🥫 Food Pantry'],
+        ['food_bank','🏛 Food Bank'],
+        ['free_store','🛍 Free Store'],
+        ['meal_program','🍽 Meal Program'],
+        ['other','🧡 Other'],
+      ]},
+      {key:'address',     label:'Address',     type:'text'},
+      {key:'phone',       label:'Phone',       type:'text'},
+      {key:'website',     label:'Website',     type:'text'},
+      {key:'hours',       label:'Hours',       type:'text'},
+      {key:'description', label:'Description', type:'textarea'},
+    ],
+  },
+  events: {
+    label: 'Event',
+    titleField: 'title',
+    fields: [
+      {key:'title',       label:'Title',       type:'text', required:true},
+      {key:'event_date',  label:'Date',        type:'date', required:true},
+      {key:'event_time',  label:'Time',        type:'text'},
+      {key:'location',    label:'Location',    type:'text'},
+      {key:'zip',         label:'ZIP',         type:'text'},
+      {key:'category',    label:'Category',    type:'text'},
+      {key:'description', label:'Description', type:'textarea'},
+    ],
+  },
+  exchange_listings: {
+    label: 'Exchange Listing',
+    titleField: 'title',
+    fields: [
+      {key:'title',         label:'Title',          type:'text', required:true},
+      {key:'listing_type',  label:'Type',           type:'select', options:[
+        ['offer','🤲 Offering'],
+        ['request','🙏 Requesting'],
+      ]},
+      {key:'category',      label:'Category',       type:'text'},
+      {key:'zip',           label:'ZIP',            type:'text'},
+      {key:'description',   label:'Description',    type:'textarea'},
+    ],
+  },
+};
+
+// ── Universal "Suggest a Correction" modal (for non-admins) ──────────────────
+function CorrectionSuggestModal({contentType, record, onClose, onToast, user, profile}) {
+  const schema = CONTENT_SCHEMAS[contentType];
+  if(!schema) return null;
+  const [fields, setFields] = useState(()=>{
+    const init = {};
+    schema.fields.forEach(f=>{ init[f.key] = record[f.key] || ''; });
+    return init;
+  });
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async()=>{
+    setSaving(true);
+    // Build diff: only include fields that changed
+    const suggested = {};
+    const current = {};
+    schema.fields.forEach(f=>{
+      const orig = record[f.key] || '';
+      const next = fields[f.key] || '';
+      if(String(orig) !== String(next)) {
+        suggested[f.key] = next;
+        current[f.key] = orig;
+      }
+    });
+    if(Object.keys(suggested).length === 0) {
+      onToast('No changes to submit.');
+      setSaving(false);
+      return;
+    }
+    const {error} = await sb.from('content_corrections').insert({
+      content_type: contentType,
+      content_id: String(record.id),
+      submitter_id: user.id,
+      submitter_name: profile?.display_name || user.email?.split('@')[0] || 'Resident',
+      current_value: current,
+      suggested_value: suggested,
+      reason: reason.trim() || null,
+    });
+    if(error) {
+      onToast('Error: ' + error.message);
+      setSaving(false);
+      return;
+    }
+    onToast('✓ Correction submitted. An admin will review it.');
+    onClose();
+  };
+
+  return h('div',{onClick:onClose, style:{position:'fixed',top:0,left:0,right:0,bottom:0,
+    background:'rgba(26,26,46,.6)',display:'flex',alignItems:'center',justifyContent:'center',
+    zIndex:9999,padding:16}},
+    h('div',{onClick:e=>e.stopPropagation(),
+      style:{background:'#fff',borderRadius:10,padding:24,maxWidth:560,width:'100%',
+        maxHeight:'85vh',overflowY:'auto'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#1a1a2e',marginBottom:6}},
+        '✏️ Suggest a correction'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:14,fontStyle:'italic'}},
+        'Editing: ', h('b',{style:{color:'#1a1a2e'}}, record[schema.titleField] || schema.label),
+        '. Only changed fields will be submitted to the moderation queue.'),
+      schema.fields.map(f=>h('div',{key:f.key,style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},
+          f.label + (f.required?' *':'')),
+        f.type==='textarea'
+          ? h('textarea',{value:fields[f.key], onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              rows:3, style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+          : f.type==='select'
+          ? h('select',{value:fields[f.key], onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box'}},
+              f.options.map(([v,l])=>h('option',{key:v,value:v},l)))
+          : h('input',{type:f.type==='date'?'date':'text', value:fields[f.key],
+              onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box'}})
+      )),
+      h('div',{style:{marginBottom:14}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},
+          'Why this correction? (optional)'),
+        h('textarea',{value:reason, onChange:e=>setReason(e.target.value),
+          placeholder:'e.g. "Phone number changed in 2025" or "They moved to a new address"',
+          rows:2,
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+            fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+      ),
+      h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end'}},
+        h('button',{onClick:onClose,
+          style:{background:'transparent',border:'1px solid #ddd',padding:'9px 18px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+          'Cancel'),
+        h('button',{onClick:submit, disabled:saving,
+          style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'9px 18px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+            cursor:saving?'default':'pointer'}},
+          saving ? 'Submitting...' : '✓ Submit Correction')
+      )
+    )
+  );
+}
+
+// ── Admin direct-edit modal ──────────────────────────────────────────────────
+function AdminEditModal({contentType, record, onClose, onSaved, onToast}) {
+  const schema = CONTENT_SCHEMAS[contentType];
+  if(!schema) return null;
+  const [fields, setFields] = useState(()=>{
+    const init = {};
+    schema.fields.forEach(f=>{ init[f.key] = record[f.key] || ''; });
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async()=>{
+    setSaving(true);
+    const updates = {};
+    schema.fields.forEach(f=>{ updates[f.key] = fields[f.key] || null; });
+    const {error} = await sb.from(contentType).update(updates).eq('id', record.id);
+    if(error) {
+      onToast('Error: ' + error.message);
+      setSaving(false);
+      return;
+    }
+    onToast('✓ Saved.');
+    onSaved && onSaved({...record, ...updates});
+    onClose();
+  };
+
+  return h('div',{onClick:onClose, style:{position:'fixed',top:0,left:0,right:0,bottom:0,
+    background:'rgba(26,26,46,.6)',display:'flex',alignItems:'center',justifyContent:'center',
+    zIndex:9999,padding:16}},
+    h('div',{onClick:e=>e.stopPropagation(),
+      style:{background:'#fff',borderRadius:10,padding:24,maxWidth:560,width:'100%',
+        maxHeight:'85vh',overflowY:'auto'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#1a1a2e',marginBottom:6}},
+        '✏️ Edit ' + schema.label + ' (admin)'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:14,fontStyle:'italic'}},
+        'Direct edit. Changes go live immediately.'),
+      schema.fields.map(f=>h('div',{key:f.key,style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},
+          f.label + (f.required?' *':'')),
+        f.type==='textarea'
+          ? h('textarea',{value:fields[f.key], onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              rows:3, style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',
+                fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+          : f.type==='select'
+          ? h('select',{value:fields[f.key], onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box'}},
+              f.options.map(([v,l])=>h('option',{key:v,value:v},l)))
+          : h('input',{type:f.type==='date'?'date':'text', value:fields[f.key],
+              onChange:e=>setFields(p=>({...p,[f.key]:e.target.value})),
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box'}})
+      )),
+      h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end'}},
+        h('button',{onClick:onClose,
+          style:{background:'transparent',border:'1px solid #ddd',padding:'9px 18px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+          'Cancel'),
+        h('button',{onClick:save, disabled:saving,
+          style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'9px 18px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+            cursor:saving?'default':'pointer'}},
+          saving ? 'Saving...' : '✓ Save Changes')
+      )
+    )
+  );
+}
+
+// ── Inline CRUD controls (admin: pencil + trash; user: suggest correction) ──
+function CrudControls({contentType, record, isAdmin, user, profile, onToast, onUpdated, onDeleted}) {
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+
+  if(isAdmin) {
+    const handleDelete = async()=>{
+      const schema = CONTENT_SCHEMAS[contentType];
+      const title = record[schema?.titleField] || 'this item';
+      if(!window.confirm('Delete "' + title + '"? It will be hidden but recoverable from the admin panel.')) return;
+      const {error} = await sb.from(contentType)
+        .update({deleted_at: new Date().toISOString()}).eq('id', record.id);
+      if(error) { onToast('Error: ' + error.message); return; }
+      onToast('🗑 Deleted (recoverable).');
+      onDeleted && onDeleted(record);
+    };
+    return h('div',{style:{display:'inline-flex',gap:6}},
+      h('button',{onClick:e=>{e.stopPropagation(); setShowEdit(true);},
+        title:'Edit',
+        style:{background:'#fff8e7',border:'1px solid #f0c040',color:'#8a6000',
+          padding:'4px 8px',borderRadius:4,fontSize:11,cursor:'pointer',
+          fontFamily:"'Playfair Display',serif",fontWeight:700}}, '✏️ Edit'),
+      h('button',{onClick:e=>{e.stopPropagation(); handleDelete();},
+        title:'Delete',
+        style:{background:'#fdf0ee',border:'1px solid #c0392b',color:'#c0392b',
+          padding:'4px 8px',borderRadius:4,fontSize:11,cursor:'pointer',
+          fontFamily:"'Playfair Display',serif",fontWeight:700}}, '🗑 Delete'),
+      showEdit && h(AdminEditModal,{contentType, record,
+        onClose:()=>setShowEdit(false),
+        onSaved:onUpdated, onToast})
+    );
+  }
+
+  // Non-admin: suggest correction link
+  if(!user) return null;
+  return h('div',{style:{display:'inline-flex'}},
+    h('button',{onClick:e=>{e.stopPropagation(); setShowSuggest(true);},
+      title:'Suggest a correction',
+      style:{background:'transparent',border:'none',color:'#888',
+        padding:'2px 6px',fontSize:11,cursor:'pointer',
+        fontFamily:"'Lora',serif",textDecoration:'underline',textDecorationStyle:'dotted'}},
+      '✏️ Suggest correction'),
+    showSuggest && h(CorrectionSuggestModal,{contentType, record,
+      onClose:()=>setShowSuggest(false), onToast, user, profile})
+  );
+}
+
+// ── Admin Panel: Corrections Queue ───────────────────────────────────────────
+function CorrectionsQueue({user, profile, onToast}) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  const load = ()=>{
+    setLoading(true);
+    sb.from('content_corrections').select('*').eq('status','pending')
+      .order('created_at',{ascending:false})
+      .then(({data})=>{ setPending(data||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  };
+  useEffect(load,[]);
+
+  const approve = async(c)=>{
+    // Apply suggested_value to the target record
+    const {error: updateErr} = await sb.from(c.content_type)
+      .update(c.suggested_value).eq('id', c.content_id);
+    if(updateErr) { onToast('Error applying: ' + updateErr.message); return; }
+    await sb.from('content_corrections').update({
+      status:'approved',
+      resolved_by: user.id,
+      resolved_at: new Date().toISOString(),
+    }).eq('id', c.id);
+    onToast('✓ Correction applied.');
+    setPending(p=>p.filter(x=>x.id!==c.id));
+  };
+
+  const reject = async(c)=>{
+    if(!window.confirm('Reject this correction?')) return;
+    await sb.from('content_corrections').update({
+      status:'rejected',
+      resolved_by: user.id,
+      resolved_at: new Date().toISOString(),
+    }).eq('id', c.id);
+    onToast('Rejected.');
+    setPending(p=>p.filter(x=>x.id!==c.id));
+  };
+
+  if(loading || pending.length === 0) return null;
+
+  return h('div',{style:{background:'#f5edff',border:'1px solid #b9a3e0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open?14:0, cursor:'pointer'}, onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '✏️ User-suggested corrections',
+        h('span',{style:{background:'#5b3a8c',color:'#fff',borderRadius:20,padding:'2px 8px',
+          fontSize:11,fontWeight:700}}, pending.length+' pending')
+      ),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    open && h('div',null,
+      pending.map(c=>{
+        const schema = CONTENT_SCHEMAS[c.content_type] || {label: c.content_type, fields:[]};
+        const changes = Object.keys(c.suggested_value || {});
+        return h('div',{key:c.id, style:{background:'#fff',border:'1px solid #e5dece',
+          borderRadius:7,padding:'12px 14px',marginBottom:10}},
+          h('div',{style:{fontSize:11,color:'#888',marginBottom:4,
+            textTransform:'uppercase',letterSpacing:1,fontFamily:"'Playfair Display',serif"}},
+            schema.label + ' · suggested by ' + (c.submitter_name || 'Resident')),
+          changes.map(k=>{
+            const oldVal = (c.current_value && c.current_value[k]) || '(empty)';
+            const newVal = c.suggested_value[k] || '(empty)';
+            return h('div',{key:k,style:{fontSize:13,marginBottom:4,fontFamily:"'Lora',serif"}},
+              h('b',{style:{color:'#5b3a8c'}}, k + ': '),
+              h('span',{style:{color:'#c0392b',textDecoration:'line-through'}}, String(oldVal)),
+              h('span',{style:{margin:'0 6px',color:'#888'}}, '→'),
+              h('span',{style:{color:'#1a6b3c',fontWeight:700}}, String(newVal))
+            );
+          }),
+          c.reason && h('div',{style:{fontSize:12,color:'#666',marginTop:6,paddingTop:6,
+            borderTop:'1px solid #f0ece0',fontStyle:'italic',fontFamily:"'Lora',serif"}},
+            '"' + c.reason + '"'),
+          h('div',{style:{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}},
+            h('button',{onClick:()=>approve(c),
+              style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'6px 12px',
+                borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              '✓ Apply Correction'),
+            h('button',{onClick:()=>reject(c),
+              style:{background:'#c0392b',color:'#fff',border:'none',padding:'6px 12px',
+                borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              '✕ Reject')
+          )
+        );
+      })
+    )
+  );
+}
+
+// ── Admin Panel: Deleted Items (recovery) ────────────────────────────────────
+function DeletedItemsPanel({onToast}) {
+  const [items, setItems] = useState({community_resources:[], events:[], exchange_listings:[]});
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  const load = async()=>{
+    setLoading(true);
+    const types = ['community_resources','events','exchange_listings'];
+    const next = {};
+    for(const t of types) {
+      const {data} = await sb.from(t).select('*')
+        .not('deleted_at','is',null)
+        .order('deleted_at',{ascending:false}).limit(20);
+      next[t] = data || [];
+    }
+    setItems(next);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const restore = async(type, item)=>{
+    const {error} = await sb.from(type).update({deleted_at: null}).eq('id', item.id);
+    if(error) { onToast('Error: ' + error.message); return; }
+    onToast('✓ Restored.');
+    setItems(prev=>({...prev, [type]: prev[type].filter(x=>x.id!==item.id)}));
+  };
+
+  const totalDeleted = items.community_resources.length + items.events.length + items.exchange_listings.length;
+  if(loading || totalDeleted === 0) return null;
+
+  return h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open?14:0, cursor:'pointer'}, onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '🗑 Deleted items (recoverable)',
+        h('span',{style:{background:'#8a6000',color:'#fff',borderRadius:20,padding:'2px 8px',
+          fontSize:11,fontWeight:700}}, totalDeleted)
+      ),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    open && h('div',null,
+      Object.entries(items).map(([type, list])=>list.length===0 ? null :
+        h('div',{key:type,style:{marginBottom:14}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,
+            marginBottom:6,fontFamily:"'Playfair Display',serif",fontWeight:700}},
+            (CONTENT_SCHEMAS[type]?.label || type) + ' (' + list.length + ')'),
+          list.map(item=>{
+            const titleField = CONTENT_SCHEMAS[type]?.titleField || 'name';
+            return h('div',{key:item.id,style:{display:'flex',justifyContent:'space-between',
+              alignItems:'center',background:'#fff',padding:'8px 12px',borderRadius:5,
+              border:'1px solid #f0ece0',marginBottom:6,gap:8}},
+              h('div',{style:{flex:1,minWidth:0}},
+                h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',
+                  whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
+                  item[titleField] || '(no title)'),
+                h('div',{style:{fontSize:11,color:'#888',fontStyle:'italic'}},
+                  'deleted ' + (item.deleted_at ? new Date(item.deleted_at).toLocaleDateString() : ''))
+              ),
+              h('button',{onClick:()=>restore(type,item),
+                style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'5px 10px',
+                  borderRadius:4,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:11,
+                  cursor:'pointer',whiteSpace:'nowrap'}}, '↩ Restore')
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
+
+function ResourcesTab({user, profile, onToast, isAdmin}) {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [catFilter, setCatFilter] = useState('all');
@@ -7281,7 +7726,7 @@ function ResourcesTab({user, profile, onToast}) {
   const set = k=>e=>setForm(f=>({...f,[k]:e.target.value}));
 
   useEffect(()=>{
-    sb.from('community_resources').select('*').eq('verified',true).order('category')
+    sb.from('community_resources').select('*').eq('verified',true).is('deleted_at',null).order('category')
       .then(({data})=>{ setResources(data||[]); setLoading(false); })
       .catch(()=>setLoading(false));
   },[]);
@@ -7398,13 +7843,18 @@ function ResourcesTab({user, profile, onToast}) {
     !loading&&filtered.length>0&&h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12}},
       filtered.map(r=>{
         const cat=RESOURCE_CATS_MAP[r.category]||RESOURCE_CATS_MAP['other'];
-        return h('div',{key:r.id,style:{background:'#fff',border:'2px solid '+cat.color+'33',borderRadius:10,padding:'14px 16px',borderTop:'4px solid '+cat.color}},
-          h('div',{style:{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8}},
-            h('div',{style:{fontSize:24,flexShrink:0}},cat.emoji),
-            h('div',null,
-              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',lineHeight:1.2}},r.name),
-              h('div',{style:{fontSize:10,fontWeight:700,color:cat.color,textTransform:'uppercase',letterSpacing:1,marginTop:2}},cat.label)
-            )
+        return h('div',{key:r.id,style:{background:'#fff',border:'2px solid '+cat.color+'33',borderRadius:10,padding:'14px 16px',borderTop:'4px solid '+cat.color,position:'relative'}},
+          h('div',{style:{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8,justifyContent:'space-between'}},
+            h('div',{style:{display:'flex',gap:8,alignItems:'flex-start',flex:1,minWidth:0}},
+              h('div',{style:{fontSize:24,flexShrink:0}},cat.emoji),
+              h('div',{style:{minWidth:0}},
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',lineHeight:1.2}},r.name),
+                h('div',{style:{fontSize:10,fontWeight:700,color:cat.color,textTransform:'uppercase',letterSpacing:1,marginTop:2}},cat.label)
+              )
+            ),
+            h(CrudControls,{contentType:'community_resources', record:r, isAdmin, user, profile, onToast,
+              onUpdated:(updated)=>setResources(prev=>prev.map(x=>x.id===updated.id?updated:x)),
+              onDeleted:()=>setResources(prev=>prev.filter(x=>x.id!==r.id))})
           ),
           r.address&&h('div',{style:{fontSize:12,color:'#555',marginBottom:4}},'📍 '+r.address),
           r.hours&&h('div',{style:{fontSize:12,color:'#555',marginBottom:4}},'🕐 '+r.hours),
@@ -8531,6 +8981,8 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
+    h(CorrectionsQueue,{user,profile,onToast}),
+    h(DeletedItemsPanel,{onToast}),
     h(NominationsInbox,{onToast}),
     h(FeedbackInbox,{onToast}),
     h(OfficialManager,{onToast}),
@@ -9328,7 +9780,7 @@ function App() {
       ),
 
       // Resources tab
-      mainTab==='resources'&&h(ResourcesTab,{user:{...user,reputation:rep},profile,onToast:setToast}),
+      mainTab==='resources'&&h(ResourcesTab,{user:{...user,reputation:rep},profile,onToast:setToast,isAdmin}),
 
       // Reps tab
       mainTab==='reps'&&h(Fragment,null,
