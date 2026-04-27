@@ -59,6 +59,48 @@ const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
 const SITE_URL = "https://thepeoplesvoices.org";
 const REP_TO_PROPOSE = 50;
 
+// ── Navigation Hubs ───────────────────────────────────────────────────────────
+// Top-level hubs and their sub-tabs. Each subTab is the legacy tab id.
+const HUBS = [
+  { id:'home',      icon:'\uD83C\uDFE0', label:'Home',      subs:[
+    { id:'feed', label:'Feed' }
+  ]},
+  { id:'civic',     icon:'\uD83C\uDFDB', label:'Civic',     subs:[
+    { id:'bills',     label:'Bills' },
+    { id:'news',      label:'News' },
+    { id:'proposals', label:'Civic Voice' },
+    { id:'reps',      label:'Reps' },
+    { id:'pulse',     label:'Pulse' }
+  ]},
+  { id:'community', icon:'\uD83E\uDD1D', label:'Community', subs:[
+    { id:'connect',  label:'Connect' },
+    { id:'events',   label:'Events' },
+    { id:'exchange', label:'Exchange' },
+    { id:'projects', label:'Projects' }
+  ]},
+  { id:'map',       icon:'\uD83D\uDDFA', label:'Map',       subs:[
+    { id:'map', label:'Map' }
+  ]},
+  { id:'resources', icon:'\uD83D\uDCDA', label:'Resources', subs:[
+    { id:'resources', label:'Resources' }
+  ]},
+];
+// Build subTab → hub lookup for resolveRoute
+const SUBTAB_TO_HUB = {};
+HUBS.forEach(h=>{ h.subs.forEach(s=>{ SUBTAB_TO_HUB[s.id] = h.id; }); });
+SUBTAB_TO_HUB['admin'] = 'admin'; // gear icon, not in main nav
+// Resolve any legacy tab id (or new hub id) into {hub, subTab}
+function resolveRoute(target){
+  if(!target) return {hub:'home', subTab:'feed'};
+  // If target is a hub id, route to its first sub
+  const hub = HUBS.find(h=>h.id===target);
+  if(hub) return {hub:hub.id, subTab:hub.subs[0].id};
+  if(target==='admin') return {hub:'admin', subTab:'admin'};
+  // Otherwise treat as subTab id
+  const parentHub = SUBTAB_TO_HUB[target] || 'home';
+  return {hub:parentHub, subTab:target};
+}
+
 // ── ZIP Codes ─────────────────────────────────────────────────────────────────
 const ZIP_COMMUNITY = {
   // Jackson City
@@ -6490,6 +6532,10 @@ function MapTab({user, profile}) {
   const mapRef     = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef([]);
+  const focusCircleRef = useRef(null);
+  const userZip = profile?.zip || '';
+  const userZipHasCoords = userZip && ZIP_COORDS[userZip];
+  const [zipFocus, setZipFocus] = useState(userZipHasCoords ? userZip : null);
   const [activeLayers, setActiveLayers] = useState(new Set(['events','exchange','projects','resources','members']));
   const [mapData, setMapData] = useState({events:[],exchange:[],projects:[],resources:[],members:[]});
   const [loading, setLoading] = useState(true);
@@ -6534,9 +6580,11 @@ function MapTab({user, profile}) {
     if(!mapRef.current||leafletRef.current) return;
     const L = window.L;
     if(!L) return;
+    const initialCenter = zipFocus && ZIP_COORDS[zipFocus] ? ZIP_COORDS[zipFocus] : [42.25,-84.40];
+    const initialZoom = zipFocus ? 13 : 10;
     const map = L.map(mapRef.current,{
-      center:[42.25,-84.40],
-      zoom:10,
+      center:initialCenter,
+      zoom:initialZoom,
       zoomControl:true,
     });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -6546,6 +6594,33 @@ function MapTab({user, profile}) {
     leafletRef.current = map;
     return ()=>{ map.remove(); leafletRef.current=null; };
   },[]);
+
+  // React to ZIP focus changes — pan/zoom smoothly + draw focus circle
+  useEffect(()=>{
+    const L = window.L;
+    const map = leafletRef.current;
+    if(!L||!map) return;
+    // Remove old focus circle
+    if(focusCircleRef.current){
+      map.removeLayer(focusCircleRef.current);
+      focusCircleRef.current = null;
+    }
+    if(zipFocus && ZIP_COORDS[zipFocus]){
+      const [lat,lng] = ZIP_COORDS[zipFocus];
+      map.flyTo([lat,lng], 13, {duration:0.8});
+      // Subtle gold focus circle around ZIP centroid
+      focusCircleRef.current = L.circle([lat,lng], {
+        radius: 3500,
+        color: '#f0c040',
+        weight: 2,
+        opacity: 0.55,
+        fillColor: '#f0c040',
+        fillOpacity: 0.06,
+      }).addTo(map);
+    } else {
+      map.flyTo([42.25,-84.40], 10, {duration:0.8});
+    }
+  },[zipFocus]);
 
   // Draw markers whenever data or layers change
   useEffect(()=>{
@@ -6558,8 +6633,8 @@ function MapTab({user, profile}) {
     markersRef.current.forEach(m=>map.removeLayer(m));
     markersRef.current = [];
 
-    const makeIcon = (emoji, color) => L.divIcon({
-      html:`<div style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">${emoji}</div>`,
+    const makeIcon = (emoji, color, highlight) => L.divIcon({
+      html:`<div style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;border:${highlight?'3px solid #f0c040':'2px solid #fff'};box-shadow:${highlight?'0 0 0 2px rgba(240,192,64,0.35), 0 2px 6px rgba(0,0,0,.3)':'0 2px 6px rgba(0,0,0,.3)'};">${emoji}</div>`,
       iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-18],className:'',
     });
 
@@ -6616,8 +6691,9 @@ function MapTab({user, profile}) {
         const coords = await getEventCoords(e);
         const d = new Date(e.event_date+'T12:00:00');
         const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        const inFocusZip = !!(zipFocus && (e.zip === zipFocus || (e.location||'').includes(zipFocus)));
         addMarker(coords[0], coords[1],
-          makeIcon('📅','#5b3a8c'),
+          makeIcon('📅','#5b3a8c', inFocusZip),
           `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:4px;">${e.title}</div>
            <div style="font-size:11px;color:#888;">${dateStr}${e.event_time?' · '+e.event_time:''}</div>
            <div style="font-size:11px;color:#555;margin-top:2px;">📍 ${e.location}</div>
@@ -6632,8 +6708,9 @@ function MapTab({user, profile}) {
         const zip = item.zip||(profile?.zip||'49201');
         const coords = ZIP_COORDS[zip]||ZIP_COORDS['49201'];
         const color = item.listing_type==='offer'?'#1a6b3c':'#1a5c8a';
+        const inFocusZip = !!(zipFocus && zip === zipFocus);
         addMarker(coords[0]+((Math.random()-.5)*.02), coords[1]+((Math.random()-.5)*.03),
-          makeIcon(item.listing_type==='offer'?'🤲':'🙏',color),
+          makeIcon(item.listing_type==='offer'?'🤲':'🙏',color, inFocusZip),
           `<div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;margin-bottom:3px;">${item.listing_type==='offer'?'Offering':'Requesting'}</div>
            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${item.title}</div>
            <div style="font-size:11px;color:#888;">${item.category}${zip?' · ZIP '+zip:''}</div>`
@@ -6697,8 +6774,9 @@ function MapTab({user, profile}) {
       const allResourcesForMap = [...resHasCoords, ...resGeocodedFresh];
       allResourcesForMap.forEach(r=>{
         const ri = RESOURCE_ICONS[r.category]||RESOURCE_ICONS['other'];
+        const inFocusZip = !!(zipFocus && r.address && r.address.includes(zipFocus));
         addMarker(parseFloat(r.lat), parseFloat(r.lng),
-          makeIcon(ri.emoji, ri.color),
+          makeIcon(ri.emoji, ri.color, inFocusZip),
           `<div style="min-width:180px;">
             <div style="font-size:10px;font-weight:700;color:${ri.color};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${ri.label}</div>
             <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:4px;">${r.name}</div>
@@ -6729,7 +6807,7 @@ function MapTab({user, profile}) {
     }
 
     })(); // end async IIFE
-  },[mapData,activeLayers,loading]);
+  },[mapData,activeLayers,loading,zipFocus]);
 
   const toggleLayer = id => setActiveLayers(prev=>{
     const n = new Set(prev);
@@ -6748,7 +6826,33 @@ function MapTab({user, profile}) {
       h('div',null,
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'🗺 Community Map'),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
-          "What's happening near you in Jackson County — events, exchange listings, projects, and neighbors.")
+          zipFocus
+            ? `Showing ${zipFocus} and the surrounding area. Pins inside your ZIP are highlighted.`
+            : "What's happening across Jackson County — events, exchange listings, projects, and neighbors.")
+      ),
+      // ZIP focus controls
+      h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+        zipFocus && h('div',{style:{display:'flex',alignItems:'center',gap:6,
+          background:'#fff8e7',border:'1.5px solid #f0c040',borderRadius:20,
+          padding:'5px 8px 5px 12px',fontFamily:"'Playfair Display',serif",
+          fontWeight:700,fontSize:12,color:'#1a1a2e'}},
+          h('span',null,'📍 Showing ',zipFocus),
+          h('button',{onClick:()=>setZipFocus(null),
+            title:'Clear ZIP focus',
+            style:{background:'transparent',border:'none',cursor:'pointer',
+              fontSize:14,color:'#888',padding:'0 2px',lineHeight:1}
+          },'✕')
+        ),
+        !zipFocus && userZipHasCoords && h('button',{onClick:()=>setZipFocus(userZip),
+          style:{background:'#1a1a2e',color:'#f0c040',border:'none',
+            padding:'6px 14px',borderRadius:20,fontFamily:"'Playfair Display',serif",
+            fontWeight:700,fontSize:12,cursor:'pointer',letterSpacing:'.04em'}
+        },'📍 ZOOM TO MY ZIP'),
+        zipFocus && h('button',{onClick:()=>setZipFocus(null),
+          style:{background:'transparent',color:'#1a1a2e',border:'1.5px solid #1a1a2e',
+            padding:'6px 14px',borderRadius:20,fontFamily:"'Playfair Display',serif",
+            fontWeight:700,fontSize:12,cursor:'pointer',letterSpacing:'.04em'}
+        },'🗺 ZOOM TO COUNTY')
       )
     ),
 
@@ -8723,7 +8827,12 @@ function App() {
   const [user,setUser]=useState(null);
   const [profile,setProfile]=useState(null);
   const [rep,setRep]=useState(0);
-  const [mainTab,setMainTab]=useState('feed');
+  // Hierarchical routing: hub + sub-tab. Legacy 'mainTab' values still flow through resolveRoute.
+  const [hub, setHub] = useState('home'); // home | civic | community | map | resources | admin
+  const [subTab, setSubTab] = useState('feed');
+  // Backward-compat shim: any code calling setMainTab('bills') etc. still works.
+  const setMainTab = (t)=>{ const r = resolveRoute(t); setHub(r.hub); setSubTab(r.subTab); };
+  const mainTab = subTab; // legacy reads
   const [feedNavCtx,setFeedNavCtx]=useState(null); // context from feed click {billId, userId}
   const [bills,setBills]=useState([]);
   const [pendingBills,setPendingBills]=useState([]);
@@ -9005,22 +9114,49 @@ function App() {
           )
         )
       ),
-      // Tabs — horizontally scrollable on mobile
+      // Main hub nav (5 hubs + admin) — primary, in the dark header
       h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
-          [['feed','\uD83D\uDCE1 Feed'],['bills','\uD83D\uDDF3 Bills'],['proposals','📝 Civic Voice'],['news','\uD83D\uDCF0 News'],['projects','\uD83C\uDF31 Community'],['events','📅 Events'],['exchange','🤲 Exchange'],['map','🗺 Map'],['pulse','📊 Pulse'],['connect','\uD83E\uDD1D Connect'],['resources','\uD83D\uDCDA Resources'],['reps','\uD83C\uDFDB Reps'],...(isAdmin?[['admin','\u2699\uFE0F Admin']]:[])].map(([t,l])=>
-            h('button',{key:t,onClick:()=>setMainTab(t),
+          [...HUBS, ...(isAdmin?[{id:'admin',icon:'\u2699\uFE0F',label:'Admin',subs:[{id:'admin',label:'Admin'}]}]:[])].map(hubDef=>
+            h('button',{key:hubDef.id, onClick:()=>{setHub(hubDef.id); setSubTab(hubDef.subs[0].id);},
               style:{background:'transparent',border:'none',
-                borderBottom:mainTab===t?'3px solid #f0c040':'3px solid transparent',
-                padding:'10px 12px',fontFamily:"'Playfair Display',serif",
-                fontWeight:mainTab===t?700:400,fontSize:12,
-                color:mainTab===t?'#f0c040':'#8899aa',
-                whiteSpace:'nowrap',flexShrink:0,cursor:'pointer'}
-            },l)
+                borderBottom: hub===hubDef.id ? '3px solid #f0c040' : '3px solid transparent',
+                padding:'12px 18px', fontFamily:"'Playfair Display',serif",
+                fontWeight: hub===hubDef.id ? 900 : 400,
+                fontSize: 14,
+                color: hub===hubDef.id ? '#f0c040' : '#8899aa',
+                whiteSpace:'nowrap', flexShrink:0, cursor:'pointer',
+                letterSpacing:'.02em'}
+            }, hubDef.icon+' '+hubDef.label)
           )
         )
       )
     ),
+
+    // Sub-tab row — lighter editorial band, only shown for hubs with multiple subs
+    (()=>{
+      const hubDef = HUBS.find(h=>h.id===hub) || (hub==='admin'?{subs:[{id:'admin',label:'Admin'}]}:null);
+      if(!hubDef || hubDef.subs.length<=1) return null;
+      return h('div',{style:{background:'#ebe6d7', borderBottom:'1px solid #d8cfb6'}},
+        h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',gap:4,
+          overflowX:'auto',WebkitOverflowScrolling:'touch'}},
+          hubDef.subs.map(s=>
+            h('button',{key:s.id, onClick:()=>setSubTab(s.id),
+              style:{background:'transparent', border:'none',
+                padding:'9px 14px',
+                fontFamily:"'Playfair Display',serif",
+                fontWeight: subTab===s.id ? 900 : 600,
+                fontSize: 12,
+                color: subTab===s.id ? '#1a1a2e' : '#6a6450',
+                borderBottom: subTab===s.id ? '2px solid #1a1a2e' : '2px solid transparent',
+                marginBottom: -1,
+                whiteSpace:'nowrap', flexShrink:0, cursor:'pointer',
+                textTransform:'uppercase', letterSpacing:'.08em'}
+            }, s.label)
+          )
+        )
+      );
+    })(),
 
     // Body
     h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px'}},
