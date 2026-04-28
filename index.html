@@ -7875,6 +7875,311 @@ function CrudControls({contentType, record, isAdmin, user, profile, onToast, onU
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEETING POPULATOR — admin tool to AI-generate draft public meetings
+// Drafts go through admin review before being published as events.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const JURISDICTIONS_V1 = [
+  { name:'Jackson County', type:'County', body:'Board of Commissioners' },
+  { name:'City of Jackson', type:'City',  body:'City Council' },
+  { name:'Village of Brooklyn',     type:'Village', body:'Village Council' },
+  { name:'Village of Cement City',  type:'Village', body:'Village Council' },
+  { name:'Village of Concord',      type:'Village', body:'Village Council' },
+  { name:'Village of Grass Lake',   type:'Village', body:'Village Council' },
+  { name:'Village of Hanover',      type:'Village', body:'Village Council' },
+  { name:'Village of Parma',        type:'Village', body:'Village Council' },
+  { name:'Village of Springport',   type:'Village', body:'Village Council' },
+  { name:'Blackman Charter Township',  type:'Township', body:'Township Board' },
+  { name:'Summit Township',            type:'Township', body:'Township Board' },
+  { name:'Leoni Township',             type:'Township', body:'Township Board' },
+  { name:'Spring Arbor Township',      type:'Township', body:'Township Board' },
+  { name:'Columbia Township',          type:'Township', body:'Township Board' },
+];
+
+function MeetingPopulator({user, profile, onToast}) {
+  const [drafts, setDrafts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  useEffect(()=>{
+    sb.from('meeting_drafts').select('*').eq('status','draft')
+      .order('proposed_date',{ascending:true,nullsFirst:false})
+      .then(({data})=>{ setDrafts(data||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  },[]);
+
+  // ── Generate drafts via AI ─────────────────────────────────────────────────
+  const generate = async()=>{
+    if(!window.confirm(
+      'Generate draft public meetings for the next 60 days across 14 Jackson County jurisdictions?\n\n' +
+      'These are TYPICAL SCHEDULES, not real fetched data. You will need to verify each one against the official jurisdiction calendar before publishing.\n\n' +
+      'This call costs Anthropic API tokens.'
+    )) return;
+    setGenerating(true);
+    onToast('Generating draft meetings — this may take 30 seconds...');
+
+    const today = new Date();
+    const horizon = new Date(today.getTime() + 60*24*60*60*1000);
+    const fmt = d => d.toISOString().slice(0,10);
+
+    const jurisdictionList = JURISDICTIONS_V1
+      .map((j,i)=>(i+1)+'. '+j.name+' ('+j.body+')').join('\n');
+
+    const systemPrompt =
+      'You are a civic data analyst familiar with typical Michigan municipal meeting schedules. ' +
+      'Generate a structured list of LIKELY public meetings based on common patterns for villages, townships, cities, and counties in Michigan. ' +
+      'You do NOT have real-time access to actual jurisdiction calendars — these are pattern-based educated guesses, not confirmed facts. ' +
+      'Be honest about that in your source_note for each meeting (e.g., "Typical 2nd Monday at 7 PM — verify with village clerk"). ' +
+      'Include all body types: council/board meetings, planning commissions, school boards (where applicable), parks/rec, fire/police boards, zoning boards. ' +
+      'Respond ONLY with valid JSON in this exact schema, no markdown, no commentary: ' +
+      '{"meetings":[{' +
+        '"jurisdiction":"Village of Concord",' +
+        '"meeting_type":"Village Council",' +
+        '"title":"Concord Village Council Regular Meeting",' +
+        '"proposed_date":"YYYY-MM-DD",' +
+        '"proposed_time":"7:00 PM",' +
+        '"proposed_location":"Concord Village Hall, 119 S Main St, Concord, MI 49237",' +
+        '"description":"Regular monthly council meeting. Verify agenda with village clerk.",' +
+        '"source_note":"Typical 2nd Monday at 7 PM"' +
+      '}]}';
+
+    const userPrompt =
+      'Generate likely public meetings for the next 60 days, from ' + fmt(today) + ' through ' + fmt(horizon) + '.\n\n' +
+      'Jurisdictions to cover (14 total):\n' + jurisdictionList + '\n\n' +
+      'For EACH jurisdiction, include their main legislative body meeting (council/board) plus any other regular bodies you have reasonable pattern knowledge of (planning commission, zoning board, parks, etc.). ' +
+      'Aim for 2-4 meetings per jurisdiction over 60 days. ' +
+      'Use real Jackson County, MI municipal building addresses where you know them. If you do not know an address, leave proposed_location empty rather than guess. ' +
+      'Be conservative with dates — if you are not confident about the typical schedule, leave proposed_date empty and include the pattern hint in description and source_note. ' +
+      'Return the full JSON object — do not truncate.';
+
+    try {
+      const res = await fetch(AI_PROXY, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages:[{role:'user', content: userPrompt}]
+        })
+      });
+      const json = await res.json();
+      const raw = json.content?.find(b=>b.type==='text')?.text||'{}';
+      const cleaned = raw.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(cleaned);
+      const meetings = parsed.meetings || [];
+      if(meetings.length === 0) {
+        onToast('AI returned no meetings. Try again or check API logs.');
+        setGenerating(false);
+        return;
+      }
+      // Insert all as drafts
+      const rows = meetings.map(m=>({
+        jurisdiction: m.jurisdiction || 'Unknown',
+        meeting_type: m.meeting_type || 'Public Meeting',
+        title: m.title || (m.jurisdiction + ' ' + (m.meeting_type||'Public Meeting')),
+        proposed_date: m.proposed_date || null,
+        proposed_time: m.proposed_time || null,
+        proposed_location: m.proposed_location || null,
+        description: m.description || null,
+        category: 'Government',
+        source_note: m.source_note || 'AI-generated typical pattern',
+        confidence: 'pattern',
+        status: 'draft',
+        generated_by: user.id,
+      }));
+      const {data: inserted, error} = await sb.from('meeting_drafts').insert(rows).select();
+      if(error) {
+        onToast('Error saving drafts: ' + error.message);
+      } else {
+        setDrafts(prev=>[...(inserted||[]), ...prev]);
+        onToast('✓ Generated '+(inserted?.length||0)+' draft meetings. Review each before publishing.');
+        setOpen(true);
+      }
+    } catch(e) {
+      onToast('Error generating: ' + e.message);
+    }
+    setGenerating(false);
+  };
+
+  // ── Publish a draft as a real event ────────────────────────────────────────
+  const publish = async(draft)=>{
+    if(!draft.proposed_date) {
+      onToast('Cannot publish without a date. Edit the draft to add one.');
+      return;
+    }
+    const eventRow = {
+      title: draft.title,
+      event_date: draft.proposed_date,
+      event_time: draft.proposed_time,
+      location: draft.proposed_location,
+      description: draft.description,
+      category: draft.category || 'Government',
+      submitted_by_id: user.id,
+      submitted_by_name: profile?.display_name || 'Admin',
+      approved: true,
+    };
+    const {data: event, error} = await sb.from('events').insert(eventRow).select().single();
+    if(error) {
+      onToast('Error publishing: ' + error.message);
+      return;
+    }
+    await sb.from('meeting_drafts').update({
+      status:'published',
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      published_event_id: event.id,
+    }).eq('id', draft.id);
+    setDrafts(prev=>prev.filter(d=>d.id !== draft.id));
+    onToast('✓ Published "' + draft.title + '" as an event.');
+  };
+
+  // ── Reject a draft ─────────────────────────────────────────────────────────
+  const rejectDraft = async(draft)=>{
+    if(!window.confirm('Reject this draft? It will be removed from the queue.')) return;
+    await sb.from('meeting_drafts').update({
+      status:'rejected',
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', draft.id);
+    setDrafts(prev=>prev.filter(d=>d.id !== draft.id));
+    onToast('Rejected.');
+  };
+
+  // ── Edit form ──────────────────────────────────────────────────────────────
+  const startEdit = (d)=>{
+    setEditingId(d.id);
+    setEditForm({
+      title: d.title || '',
+      proposed_date: d.proposed_date || '',
+      proposed_time: d.proposed_time || '',
+      proposed_location: d.proposed_location || '',
+      description: d.description || '',
+    });
+  };
+  const cancelEdit = ()=>{ setEditingId(null); setEditForm({}); };
+  const saveEdit = async(d)=>{
+    const updates = {
+      title: editForm.title,
+      proposed_date: editForm.proposed_date || null,
+      proposed_time: editForm.proposed_time || null,
+      proposed_location: editForm.proposed_location || null,
+      description: editForm.description || null,
+    };
+    const {error} = await sb.from('meeting_drafts').update(updates).eq('id', d.id);
+    if(error) { onToast('Error saving: ' + error.message); return; }
+    setDrafts(prev=>prev.map(x=>x.id===d.id ? {...x, ...updates} : x));
+    setEditingId(null);
+    setEditForm({});
+    onToast('✓ Saved.');
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  if(loading) return null;
+  const draftCount = drafts.length;
+  return h('div',{style:{background:'#e8f5ee',border:'1px solid #b9d8c4',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open ? 14 : 0, cursor: draftCount>0 ? 'pointer' : 'default'},
+      onClick: ()=>{ if(draftCount>0) setOpen(!open); }},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '📅 Meeting Auto-Populate',
+        draftCount > 0 && h('span',{style:{background:'#1a6b3c',color:'#fff',borderRadius:20,padding:'2px 8px',
+          fontSize:11,fontWeight:700}}, draftCount + ' pending review')
+      ),
+      draftCount > 0 && h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    // Generate button
+    !open && h('div',{style:{marginTop:10}},
+      h('div',{style:{fontSize:12,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6,marginBottom:10}},
+        'Generate draft public meetings for the next 60 days across 14 Jackson County jurisdictions. ' +
+        h('strong',null,'These are typical schedules, not real fetched data — verify each before publishing.')
+      ),
+      h('button',{onClick: generate, disabled: generating,
+        style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'9px 18px',
+          borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+          cursor: generating ? 'default' : 'pointer'}},
+        generating ? 'Generating... (~30s)' : '⚡ Generate Draft Meetings'
+      )
+    ),
+    open && h('div',null,
+      h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:6,padding:'10px 12px',
+        marginBottom:12,fontSize:12,color:'#8a6000',fontFamily:"'Lora',serif",lineHeight:1.5}},
+        '⚠ These are AI-generated typical schedules, not confirmed real meetings. Cross-check each one against the jurisdiction\'s official calendar before publishing.'),
+      drafts.map(d=>h('div',{key:d.id, style:{background:'#fff',border:'1px solid #d8e3dc',
+        borderRadius:7,padding:'12px 14px',marginBottom:10}},
+        editingId === d.id
+          ? h('div',null,
+              h('div',{style:{marginBottom:8}},
+                h('label',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Title'),
+                h('input',{value:editForm.title, onChange:e=>setEditForm(f=>({...f,title:e.target.value})),
+                  style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,boxSizing:'border-box'}})),
+              h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}},
+                h('div',null,
+                  h('label',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Date'),
+                  h('input',{type:'date', value:editForm.proposed_date, onChange:e=>setEditForm(f=>({...f,proposed_date:e.target.value})),
+                    style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,boxSizing:'border-box'}})),
+                h('div',null,
+                  h('label',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Time'),
+                  h('input',{value:editForm.proposed_time, onChange:e=>setEditForm(f=>({...f,proposed_time:e.target.value})), placeholder:'7:00 PM',
+                    style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,boxSizing:'border-box'}}))
+              ),
+              h('div',{style:{marginBottom:8}},
+                h('label',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Location'),
+                h('input',{value:editForm.proposed_location, onChange:e=>setEditForm(f=>({...f,proposed_location:e.target.value})),
+                  style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,boxSizing:'border-box'}})),
+              h('div',{style:{marginBottom:10}},
+                h('label',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Description'),
+                h('textarea',{value:editForm.description, onChange:e=>setEditForm(f=>({...f,description:e.target.value})), rows:2,
+                  style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif"}})),
+              h('div',{style:{display:'flex',gap:6}},
+                h('button',{onClick:()=>saveEdit(d),
+                  style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'6px 12px',borderRadius:4,
+                    fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'✓ Save'),
+                h('button',{onClick:cancelEdit,
+                  style:{background:'transparent',color:'#888',border:'1px solid #ddd',padding:'6px 12px',borderRadius:4,
+                    fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'Cancel')
+              )
+            )
+          : h('div',null,
+              h('div',{style:{fontSize:11,color:'#888',marginBottom:3,textTransform:'uppercase',letterSpacing:1,fontFamily:"'Playfair Display',serif"}},
+                d.jurisdiction + ' · ' + d.meeting_type),
+              h('div',{style:{fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:5,fontFamily:"'Playfair Display',serif"}},d.title),
+              h('div',{style:{fontSize:13,color:'#444',marginBottom:4,fontFamily:"'Lora',serif"}},
+                d.proposed_date
+                  ? h('span',null, '📅 ', new Date(d.proposed_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}),
+                      d.proposed_time && (' · '+d.proposed_time))
+                  : h('span',{style:{color:'#c0392b',fontStyle:'italic'}}, '⚠ No date set — must add one to publish')
+              ),
+              d.proposed_location && h('div',{style:{fontSize:12,color:'#666',marginBottom:4}}, '📍 ' + d.proposed_location),
+              d.description && h('div',{style:{fontSize:12,color:'#444',marginBottom:6,fontFamily:"'Lora',serif",lineHeight:1.5}}, d.description),
+              d.source_note && h('div',{style:{fontSize:11,color:'#888',fontStyle:'italic',marginBottom:8,fontFamily:"'Lora',serif"}},
+                '🤖 ' + d.source_note),
+              h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+                h('button',{onClick:()=>publish(d), disabled: !d.proposed_date,
+                  style:{background: d.proposed_date ? '#1a6b3c' : '#bbb',color:'#fff',border:'none',padding:'6px 12px',borderRadius:4,
+                    fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+                    cursor: d.proposed_date ? 'pointer' : 'not-allowed'}}, '✓ Publish as Event'),
+                h('button',{onClick:()=>startEdit(d),
+                  style:{background:'#fff8e7',color:'#8a6000',border:'1px solid #f0c040',padding:'6px 12px',borderRadius:4,
+                    fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'✏️ Edit'),
+                h('button',{onClick:()=>rejectDraft(d),
+                  style:{background:'#fdf0ee',color:'#c0392b',border:'1px solid #c0392b',padding:'6px 12px',borderRadius:4,
+                    fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'✕ Reject')
+              )
+            )
+      )),
+      drafts.length === 0 && h('div',{style:{textAlign:'center',padding:20,color:'#888',fontStyle:'italic'}},
+        'No draft meetings yet. Click "Generate Draft Meetings" to populate.')
+    )
+  );
+}
+
+
 // ── Admin Panel: Corrections Queue ───────────────────────────────────────────
 function CorrectionsQueue({user, profile, onToast}) {
   const [pending, setPending] = useState([]);
@@ -9308,6 +9613,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
+    h(MeetingPopulator,{user,profile,onToast}),
     h(CorrectionsQueue,{user,profile,onToast}),
     h(DeletedItemsPanel,{onToast}),
     h(NominationsInbox,{onToast}),
