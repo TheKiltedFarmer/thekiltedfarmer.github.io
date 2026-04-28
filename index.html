@@ -1824,7 +1824,8 @@ function NewsTab({user, rep, profile}) {
     setSubmitting(true); setSubmitMsg("\uD83E\uDD16 AI is reading and neutralizing this story...");
     const result = await neutralizeStory(originalTitle, url, userContext, category);
     if(!result) { setSubmitMsg("\u274C AI analysis failed. Check that the Cloudflare Worker is updated with the new domain, then try again."); setSubmitting(false); return; }
-    setSubmitMsg("\u2705 Neutralized! Publishing...");
+    const isVerifiedPress = profile?.is_press === true;
+    setSubmitMsg(isVerifiedPress ? "\u2705 Neutralized! Publishing..." : "\u2705 Neutralized! Submitting for admin review...");
     const {data,error} = await sb.from('news_stories').insert({
       source_url:url.trim(), original_title:originalTitle.trim(),
       neutral_headline:result.neutral_headline, neutral_summary:result.neutral_summary,
@@ -1835,10 +1836,22 @@ function NewsTab({user, rep, profile}) {
       poll_yes:0, poll_no:0, poll_unsure:0,
       submitted_by_id:user.id,
       submitted_by_name:profile?.display_name||user.email?.split('@')?.[0]||'Resident',
-      upvotes:0, comment_count:0, approved:true,
+      upvotes:0, comment_count:0,
+      approved: isVerifiedPress, // press auto-publishes; everyone else awaits review
       created_at:new Date().toISOString()
     }).select().single();
-    if(!error&&data) { setStories(prev=>[data,...prev]); setUrl(''); setOriginalTitle(''); setUserContext(''); setSubmitMsg(''); setShowSubmit(false); }
+    if(!error&&data) {
+      if(isVerifiedPress) {
+        // Auto-published — show in feed immediately
+        setStories(prev=>[data,...prev]);
+        setSubmitMsg('');
+      } else {
+        // Pending review — confirm but don't show in feed yet
+        setSubmitMsg('\u2713 Submitted! An admin will review and publish your story shortly.');
+        setTimeout(()=>setSubmitMsg(''), 4000);
+      }
+      setUrl(''); setOriginalTitle(''); setUserContext(''); setShowSubmit(false);
+    }
     else setSubmitMsg("\u274C Error: "+(error?.message||'unknown'));
     setSubmitting(false);
   };
@@ -3663,14 +3676,14 @@ const TOUR_PRESS = [
   {
     icon:'📰',
     title:"Welcome, press",
-    body:"You're signing up as press — a journalist, blogger, newsletter writer, or community reporter covering Jackson County. The People's Voice gives you a verified press badge after admin review.",
-    tip:"Press accounts can submit news directly without admin pre-approval (after verification), and your comments are marked as press."
+    body:"You're signing up as press — a journalist, blogger, newsletter writer, or community reporter covering Jackson County. The platform is a free civic tool you can use as background for your work.",
+    tip:"Press accounts cannot vote on bills, news polls, or ideas — but you can read and comment on everything."
   },
   {
     icon:'📝',
     title:"Submit news stories",
     body:"Find something residents should know? Submit it under News. The platform automatically generates a neutral, plain-English summary and opens it for community discussion and polling.",
-    tip:"Stories from verified press go live immediately. Stories from residents go through admin review first."
+    tip:"Verified press submissions go live immediately. Resident submissions go through admin review first."
   },
   {
     icon:'🗳',
@@ -3688,13 +3701,13 @@ const TOUR_PRESS = [
     icon:'🤝',
     title:"Source from the community",
     body:"The Connect tab and Neighbor Directory let you find residents to interview, organizers to talk to, and stories worth covering. ZIP-coded chats show what neighbors are actually talking about.",
-    tip:"Direct messages are end-to-end private. Use them to verify quotes or schedule interviews."
+    tip:"Direct messages are private between you and the recipient. Use them to verify quotes or schedule interviews."
   },
   {
     icon:'🏅',
     title:"Apply for your press badge",
-    body:"Right now your account is unverified press. Go to Profile → 🏅 Badges → 'Request Press Badge' and submit your outlet/beat info. Justin will verify and approve.",
-    tip:"Once verified, your name shows up with a press badge across the platform."
+    body:"Go to Profile → 🏅 Badges → 'Request Press Badge' and submit your outlet/beat info. Justin will review and approve manually.",
+    tip:"Visual press badge display on comments and news cards is in development — coming in a future update."
   },
 ];
 
@@ -3703,7 +3716,7 @@ const TOUR_OFFICIAL = [
     icon:'⚖️',
     title:"Welcome, official",
     body:"You're signing up as an elected official, candidate, or verified government staff. The People's Voice exists to connect officials with the constituents you serve, transparently and outside of campaign machinery.",
-    tip:"Officials cannot vote on bills here (this is for resident sentiment, not legislator action) but your comments and responses are highlighted across the platform."
+    tip:"Officials cannot vote on bills here (this is for resident sentiment, not legislator action). You can comment, message, and engage like any other user."
   },
   {
     icon:'🗳',
@@ -3721,19 +3734,19 @@ const TOUR_OFFICIAL = [
     icon:'📝',
     title:"Engage with Civic Voice",
     body:"Civic Voice is where residents propose ideas (community fridges, traffic calming, etc.). Many of these are things your office could actually act on. Comment, ask questions, signal whether something's feasible.",
-    tip:"An idea getting 10+ upvotes gets formally forwarded to your office as a constituent letter."
+    tip:"An idea reaching 10+ upvotes is flagged in the system as ready to forward — currently this happens through admin coordination, not automatic emails."
   },
   {
     icon:'🤝',
     title:"Be present, not performative",
     body:"The best officials on the platform comment thoughtfully, answer real questions, and don't spam. This isn't social media — it's a civic conversation. Quality over volume.",
-    tip:"Your comments show up with an ⚖️ badge. Make them count."
+    tip:"Your participation matters more than visibility — neighbors notice officials who actually engage."
   },
   {
     icon:'🏅',
     title:"Apply for your official badge",
-    body:"Go to Profile → 🏅 Badges → 'Request Official Badge' and submit your title and contact info. Justin will verify your role and activate the badge.",
-    tip:"Once verified, your comments are highlighted in gold across all bills, news, and ideas."
+    body:"Go to Profile → 🏅 Badges → 'Request Official Badge' and submit your title and contact info. Justin will verify your role manually.",
+    tip:"Visual official badge display on comments is in development — coming in a future update."
   },
 ];
 
@@ -7897,6 +7910,114 @@ const JURISDICTIONS_V1 = [
   { name:'Columbia Township',          type:'Township', body:'Township Board' },
 ];
 
+// ── Admin Panel: News Approval Queue ─────────────────────────────────────────
+// Stories submitted by non-press accounts arrive here before publishing.
+// Verified press submissions skip this queue (auto-approved at insert).
+function NewsApprovalQueue({user, profile, onToast}) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  const load = ()=>{
+    setLoading(true);
+    sb.from('news_stories').select('*').eq('approved',false)
+      .order('created_at',{ascending:false}).limit(50)
+      .then(({data})=>{ setPending(data||[]); setLoading(false); })
+      .catch(()=>setLoading(false));
+  };
+  useEffect(load,[]);
+
+  const approve = async(story)=>{
+    const {error} = await sb.from('news_stories').update({approved:true}).eq('id',story.id);
+    if(error) { onToast('Error: ' + error.message); return; }
+    // Notify the submitter
+    if(story.submitted_by_id) {
+      try {
+        await sb.from('notifications').insert({
+          user_id: story.submitted_by_id, type:'system',
+          title:'Your news story was approved 📰',
+          body:'"' + (story.neutral_headline || story.original_title) + '" is now live.',
+          read:false, created_at:new Date().toISOString()
+        });
+      } catch(e) {}
+    }
+    onToast('✓ Story approved & published.');
+    setPending(p=>p.filter(x=>x.id!==story.id));
+  };
+
+  const reject = async(story)=>{
+    if(!window.confirm('Reject this submission? The story will be deleted permanently.')) return;
+    await sb.from('news_stories').delete().eq('id',story.id);
+    if(story.submitted_by_id) {
+      try {
+        await sb.from('notifications').insert({
+          user_id: story.submitted_by_id, type:'system',
+          title:'Your news submission was not approved',
+          body:'"' + (story.original_title || 'Story') + '" — feel free to reach out if you have questions.',
+          read:false, created_at:new Date().toISOString()
+        });
+      } catch(e) {}
+    }
+    onToast('Rejected.');
+    setPending(p=>p.filter(x=>x.id!==story.id));
+  };
+
+  if(loading || pending.length === 0) return null;
+
+  return h('div',{style:{background:'#fff4ec',border:'1px solid #f0c0a0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open?14:0, cursor:'pointer'}, onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '📰 News submissions awaiting review',
+        h('span',{style:{background:'#8a4000',color:'#fff',borderRadius:20,padding:'2px 8px',
+          fontSize:11,fontWeight:700}}, pending.length+' pending')
+      ),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    open && h('div',null,
+      h('div',{style:{fontSize:11,color:'#666',fontStyle:'italic',marginBottom:10,fontFamily:"'Lora',serif"}},
+        'Stories from non-press accounts. Verified press submissions skip this queue.'),
+      pending.map(s=>{
+        const sourceHost = (()=>{ try { return new URL(s.source_url).hostname.replace(/^www\./,''); } catch(e) { return s.source_url; } })();
+        return h('div',{key:s.id, style:{background:'#fff',border:'1px solid #e5dece',
+          borderRadius:7,padding:'12px 14px',marginBottom:10}},
+          h('div',{style:{fontSize:11,color:'#888',marginBottom:3,
+            textTransform:'uppercase',letterSpacing:1,fontFamily:"'Playfair Display',serif"}},
+            (s.category||'News') + ' · submitted by ' + (s.submitted_by_name || 'Resident')),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',
+            marginBottom:6,lineHeight:1.3}},
+            s.neutral_headline || s.original_title),
+          s.original_title && s.neutral_headline !== s.original_title && h('div',{
+            style:{fontSize:11,color:'#888',fontStyle:'italic',marginBottom:6,fontFamily:"'Lora',serif"}},
+            'Original: "' + s.original_title + '"'),
+          h('div',{style:{fontSize:13,color:'#444',marginBottom:6,fontFamily:"'Lora',serif",lineHeight:1.5}},
+            s.neutral_summary),
+          s.local_relevance && h('div',{style:{fontSize:12,color:'#1a5c8a',marginBottom:6,
+            fontFamily:"'Lora',serif",fontStyle:'italic'}}, '📍 ' + s.local_relevance),
+          h('div',{style:{fontSize:11,color:'#888',marginBottom:10,fontFamily:"'Lora',serif"}},
+            '🔗 ',
+            h('a',{href:s.source_url, target:'_blank', rel:'noopener noreferrer',
+              style:{color:'#1a5c8a',textDecoration:'underline'}}, sourceHost),
+            s.original_bias && h('span',{style:{marginLeft:8,padding:'1px 6px',background:'#f5edff',
+              border:'1px solid #b9a3e0',borderRadius:8,fontSize:10,color:'#5b3a8c'}}, 'bias: '+s.original_bias)
+          ),
+          h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+            h('button',{onClick:()=>approve(s),
+              style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'6px 12px',
+                borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              '✓ Approve & Publish'),
+            h('button',{onClick:()=>reject(s),
+              style:{background:'#c0392b',color:'#fff',border:'none',padding:'6px 12px',
+                borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              '✕ Reject')
+          )
+        );
+      })
+    )
+  );
+}
+
 function MeetingPopulator({user, profile, onToast}) {
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9613,6 +9734,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
+    h(NewsApprovalQueue,{user,profile,onToast}),
     h(MeetingPopulator,{user,profile,onToast}),
     h(CorrectionsQueue,{user,profile,onToast}),
     h(DeletedItemsPanel,{onToast}),
