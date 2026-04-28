@@ -3499,7 +3499,8 @@ function ProposeModal({onClose,onSubmit}) {
 }
 
 // ── Onboarding Tour ───────────────────────────────────────────────────────────
-const TOUR_STEPS = [
+// ── Onboarding Tours (per account type) ──────────────────────────────────────
+const TOUR_RESIDENT = [
   {
     icon:'👋',
     title:"Welcome to The People's Voice",
@@ -3568,28 +3569,213 @@ const TOUR_STEPS = [
   },
 ];
 
+const TOUR_BUSINESS = [
+  {
+    icon:'🏪',
+    title:"Welcome, local business",
+    body:"The People's Voice is a civic platform for Jackson County, and you're now part of it as a local business. You're here as a community presence, not a campaign — no ads, no promotions, no spam. Just real participation.",
+    tip:"Business accounts can post events, list resources, and message neighbors — but cannot vote on bills, since civic votes are reserved for residents."
+  },
+  {
+    icon:'📅',
+    title:"Post your events",
+    body:"Hosting a community day, fundraiser, market, or open house? Post it under the Events tab. Neighbors will see it on the map, get notifications in their ZIP, and RSVP to come.",
+    tip:"Events are how your business shows up in community life — not as advertising, but as participation."
+  },
+  {
+    icon:'🤲',
+    title:"Contribute to the Exchange",
+    body:"The Exchange is a gift economy — neighbors offering and requesting freely. Businesses can offer surplus inventory, donate services, or post needs (volunteers, supplies). It's how local commerce becomes mutual aid.",
+    tip:"Find it under Community → Exchange. The Kilted Farmers gives away free pasta here every week."
+  },
+  {
+    icon:'📚',
+    title:"Add yourself to the Resources map",
+    body:"If your business is a community resource — a Blessing Box host, food pantry, free fridge, meal program — submit it under the Resources section. It pins to the community map so neighbors know where to find you.",
+    tip:"Use the Resources tab → 'Suggest a Resource' to add yourself. Admins approve before it goes live."
+  },
+  {
+    icon:'🤝',
+    title:"Connect with neighbors",
+    body:"Chat in your ZIP code's community room, send direct messages, and browse the Neighbor Directory. This is the social infrastructure of the platform — the place neighbors actually meet.",
+    tip:"Your business shows up with a 🏪 badge, so neighbors can tell you apart from residents."
+  },
+  {
+    icon:'🗳',
+    title:"You can read everything, just not vote",
+    body:"You'll see all the bills, news stories, and community ideas — and you can comment on any of them. But you can't cast civic votes. That keeps the platform's legitimacy: every civic vote is one resident, one voice.",
+    tip:"If a Civic Voice idea matters to your business, comment on it or share it with the residents in your network."
+  },
+  {
+    icon:'🏅',
+    title:"Verified Business badge",
+    body:"Once Justin (admin) reviews your account, you'll get a verified business marker. This signals to neighbors that you're a real local business and not a spammer or scammer.",
+    tip:"You can edit your business name, address, and description anytime from your Profile page."
+  },
+];
+
+const TOUR_NONPROFIT = [
+  {
+    icon:'🏢',
+    title:"Welcome, community organization",
+    body:"You're representing a nonprofit, faith community, or community group on The People's Voice. You're here as an organizer of community life — events, mutual aid, programs, and shared resources.",
+    tip:"Organizations cannot vote on civic bills (votes are reserved for residents) but you can do almost everything else."
+  },
+  {
+    icon:'📅',
+    title:"Post your events & programs",
+    body:"Volunteer days, food drives, community meetings, services, free meals — post anything happening at your organization. Events show up on the community map and notify neighbors in the relevant ZIPs.",
+    tip:"Recurring programs (weekly meal, monthly meeting) work great here."
+  },
+  {
+    icon:'📚',
+    title:"Add yourself to the Resources map",
+    body:"If your organization runs a Blessing Box, food pantry, free fridge, clothing closet, or any free community resource, add it under Resources. It pins to the map so the people who need it can find it.",
+    tip:"Justin will deliver free pasta from The Kilted Farmers to verified resources weekly."
+  },
+  {
+    icon:'🤲',
+    title:"Use the Exchange for mutual aid",
+    body:"Need volunteers? Have surplus to share? Post on the Exchange. It's a gift economy — give what you can, request what you need, no money changes hands.",
+    tip:"Organizations posting needs (volunteers, donations) can reach the whole community at once."
+  },
+  {
+    icon:'🤝',
+    title:"Be present in community life",
+    body:"Chat in your ZIP's room, message neighbors, comment on bills and news. The platform works because organizations like yours show up. Your participation is the connective tissue.",
+    tip:"Your organization shows up with a 🏢 badge — visible but never pushy."
+  },
+  {
+    icon:'🌱',
+    title:"Champion community ideas",
+    body:"Civic Voice has resident-submitted ideas (community fridges, crosswalks, public art, etc.). You can't upvote them, but you can comment, share, and help organize around the ones that align with your mission.",
+    tip:"Many community ideas need an organizational sponsor to actually happen — that could be you."
+  },
+  {
+    icon:'🏅',
+    title:"Verification & trust",
+    body:"Once Justin reviews your account, you'll get a verified organization marker. This helps neighbors trust that resources you post are real, and not someone trying to game the platform.",
+    tip:"Edit your organization details anytime from your Profile."
+  },
+];
+
+const TOUR_PRESS = [
+  {
+    icon:'📰',
+    title:"Welcome, press",
+    body:"You're signing up as press — a journalist, blogger, newsletter writer, or community reporter covering Jackson County. The People's Voice gives you a verified press badge after admin review.",
+    tip:"Press accounts can submit news directly without admin pre-approval (after verification), and your comments are marked as press."
+  },
+  {
+    icon:'📝',
+    title:"Submit news stories",
+    body:"Find something residents should know? Submit it under News. The platform automatically generates a neutral, plain-English summary and opens it for community discussion and polling.",
+    tip:"Stories from verified press go live immediately. Stories from residents go through admin review first."
+  },
+  {
+    icon:'🗳',
+    title:"You can read & comment, just not vote",
+    body:"To preserve editorial independence and avoid conflicts of interest, press accounts can't vote on bills, news polls, or upvote ideas. You can read and comment on everything.",
+    tip:"This is the same standard most newsrooms hold internally — your job is to report, not to take public positions."
+  },
+  {
+    icon:'🏛',
+    title:"Cover representatives",
+    body:"The Reps tab shows everyone from village council to U.S. Senate, with contact info and voting alignment data. Useful background for any story about local government.",
+    tip:"You can see how each rep's votes align with their constituents' polls — a real story angle."
+  },
+  {
+    icon:'🤝',
+    title:"Source from the community",
+    body:"The Connect tab and Neighbor Directory let you find residents to interview, organizers to talk to, and stories worth covering. ZIP-coded chats show what neighbors are actually talking about.",
+    tip:"Direct messages are end-to-end private. Use them to verify quotes or schedule interviews."
+  },
+  {
+    icon:'🏅',
+    title:"Apply for your press badge",
+    body:"Right now your account is unverified press. Go to Profile → 🏅 Badges → 'Request Press Badge' and submit your outlet/beat info. Justin will verify and approve.",
+    tip:"Once verified, your name shows up with a press badge across the platform."
+  },
+];
+
+const TOUR_OFFICIAL = [
+  {
+    icon:'⚖️',
+    title:"Welcome, official",
+    body:"You're signing up as an elected official, candidate, or verified government staff. The People's Voice exists to connect officials with the constituents you serve, transparently and outside of campaign machinery.",
+    tip:"Officials cannot vote on bills here (this is for resident sentiment, not legislator action) but your comments and responses are highlighted across the platform."
+  },
+  {
+    icon:'🗳',
+    title:"See what your community really thinks",
+    body:"Every bill here has a community vote — actual residents from your district, sorted by ZIP. You can see at a glance whether your jurisdiction is for or against a measure, before you vote.",
+    tip:"Filter the Bills tab by your jurisdiction to see only what's directly relevant."
+  },
+  {
+    icon:'🏛',
+    title:"Constituent contact, no spam",
+    body:"Residents can contact you directly through the Reps tab, but it's never bulk email — every contact is one resident, one message, with their ZIP attached. You'll know it's real.",
+    tip:"You can reply through the platform. Replies are public on the bill thread, which builds trust."
+  },
+  {
+    icon:'📝',
+    title:"Engage with Civic Voice",
+    body:"Civic Voice is where residents propose ideas (community fridges, traffic calming, etc.). Many of these are things your office could actually act on. Comment, ask questions, signal whether something's feasible.",
+    tip:"An idea getting 10+ upvotes gets formally forwarded to your office as a constituent letter."
+  },
+  {
+    icon:'🤝',
+    title:"Be present, not performative",
+    body:"The best officials on the platform comment thoughtfully, answer real questions, and don't spam. This isn't social media — it's a civic conversation. Quality over volume.",
+    tip:"Your comments show up with an ⚖️ badge. Make them count."
+  },
+  {
+    icon:'🏅',
+    title:"Apply for your official badge",
+    body:"Go to Profile → 🏅 Badges → 'Request Official Badge' and submit your title and contact info. Justin will verify your role and activate the badge.",
+    tip:"Once verified, your comments are highlighted in gold across all bills, news, and ideas."
+  },
+];
+
+// Pick the right tour for the user's account type
+const tourFor = (accountType) => {
+  switch(accountType) {
+    case 'business':  return TOUR_BUSINESS;
+    case 'nonprofit': return TOUR_NONPROFIT;
+    case 'press':     return TOUR_PRESS;
+    case 'official':  return TOUR_OFFICIAL;
+    default:          return TOUR_RESIDENT;
+  }
+};
+
+// Legacy alias for backward compatibility
+const TOUR_STEPS = TOUR_RESIDENT;
 
 
-function OnboardingTour({onDone, displayName}) {
+
+function OnboardingTour({onDone, displayName, accountType}) {
   const [step, setStep] = useState(0);
-  const current = TOUR_STEPS[step];
-  const isLast = step === TOUR_STEPS.length - 1;
+  const STEPS = tourFor(accountType);
+  const current = STEPS[step];
+  const isLast = step === STEPS.length - 1;
 
   return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:16}},
     h('div',{style:{background:'#fff',borderRadius:16,width:440,maxWidth:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)',overflow:'hidden'}},
       // Progress bar
       h('div',{style:{height:4,background:'#eee'}},
-        h('div',{style:{height:'100%',background:'#f0c040',width:((step+1)/TOUR_STEPS.length*100)+'%',transition:'width .3s'}})
+        h('div',{style:{height:'100%',background:'#f0c040',width:((step+1)/STEPS.length*100)+'%',transition:'width .3s'}})
       ),
       h('div',{style:{padding:'28px 28px 24px'}},
         // Step counter
         h('div',{style:{fontSize:11,color:'#aaa',textTransform:'uppercase',letterSpacing:2,marginBottom:16}},
-          'Step '+(step+1)+' of '+TOUR_STEPS.length
+          'Step '+(step+1)+' of '+STEPS.length
         ),
         // Icon + title
         h('div',{style:{fontSize:48,marginBottom:12,lineHeight:1}},current.icon),
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:'#1a1a2e',marginBottom:12,lineHeight:1.2}},
-          step===0 ? 'Welcome'+(displayName?', '+displayName.split(' ')[0]:'')+' to The People\'s Voice' : current.title
+          step===0 && displayName
+            ? current.title + ', ' + displayName.split(' ')[0]
+            : current.title
         ),
         h('p',{style:{fontFamily:"'Lora',serif",fontSize:15,color:'#444',lineHeight:1.8,marginBottom:16}},current.body),
         // Tip box
@@ -9675,7 +9861,7 @@ function App() {
   return h('div',{style:{minHeight:'100vh',background:'#f4f1ea'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
     showPropose&&h(ProposeModal,{onClose:()=>setShowPropose(false),onSubmit:handlePropose}),
-    showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0]}),
+    showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0],accountType:profile?.account_type}),
     showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates})),onToast:setToast}),
     showNotifications&&h(NotificationPanel,{notifications,user,chatRoomActivity,
       onClose:()=>setShowNotifications(false),
