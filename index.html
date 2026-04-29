@@ -6356,7 +6356,7 @@ function BillSections({bill, user, onRepGain}) {
 
 
 // ── Events Tab ────────────────────────────────────────────────────────────────
-const EVENT_CATEGORIES = ['All','Farmers Market','Festival','Town Hall','Community Meeting','Volunteer','Candidate Forum','Workshop','Other'];
+const EVENT_CATEGORIES = ['All','Government','Farmers Market','Festival','Town Hall','Community Meeting','Volunteer','Candidate Forum','Workshop','Other'];
 const EVENT_CAT_COLORS = {
   'Farmers Market':'#1a6b3c','Festival':'#5b3a8c','Town Hall':'#1a5c8a',
   'Community Meeting':'#1a5c8a','Volunteer':'#8a6000','Candidate Forum':'#c0392b',
@@ -6525,6 +6525,8 @@ function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin})
 function EventsTab({user, profile, onToast}) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('community'); // 'community' | 'meetings'
+  const [meetingScope, setMeetingScope] = useState('local'); // 'local' | 'county'
   const [catFilter, setCatFilter] = useState('All');
   const [showPast, setShowPast] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -6549,10 +6551,23 @@ function EventsTab({user, profile, onToast}) {
 
   const today = new Date().toISOString().slice(0,10);
 
+  const userZip = profile?.zip || null;
+
   const filtered = events.filter(e=>{
     const isPast = e.event_date.localeCompare(today) === -1;
     if(!showPast && isPast) return false;
-    if(catFilter!=='All' && e.category!==catFilter) return false;
+    const isMeeting = e.category === 'Government';
+    // View split: meetings tab only shows Government, community tab excludes it
+    if(view === 'meetings' && !isMeeting) return false;
+    if(view === 'community' && isMeeting) return false;
+    // Apply ZIP scope to meetings: 'local' = user's ZIP only (or all if no ZIP set)
+    if(view === 'meetings' && meetingScope === 'local' && userZip) {
+      // Show if event's ZIP matches user's ZIP, OR if title/location explicitly mentions Jackson County
+      const matchesZip = e.zip === userZip;
+      const isCountyWide = /jackson county/i.test(e.title || '') || /jackson county/i.test(e.location || '');
+      if(!matchesZip && !isCountyWide) return false;
+    }
+    if(view === 'community' && catFilter !== 'All' && e.category !== catFilter) return false;
     return true;
   });
 
@@ -6671,14 +6686,64 @@ function EventsTab({user, profile, onToast}) {
     // Header
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14,flexWrap:'wrap',gap:10}},
       h('div',null,
-        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'📅 Local Events'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},
+          view==='meetings' ? '🏛 Public Meetings' : '📅 Community Events'),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
-          upcoming>0?(upcoming+' upcoming events in Jackson County'):'Farmers markets, festivals, town halls, and more.'
+          view==='meetings'
+            ? (meetingScope==='local' && userZip
+                ? 'Meetings in '+userZip+' and Jackson County. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.'
+                : 'All public meetings across Jackson County. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.')
+            : (filtered.filter(e=>e.event_date>=today).length + ' upcoming community events. Farmers markets, festivals, volunteer days, and more.')
         )
       ),
       user&&h('button',{onClick:()=>setShowAdd(!showAdd),style:{background:showAdd?'#555':'#1a6b3c',color:'#fff',border:'none',padding:'10px 18px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}},
         showAdd?'✕ Cancel':'+ Add Event'
       )
+    ),
+
+    // Sub-tab nav
+    h('div',{style:{display:'flex',gap:0,borderBottom:'2px solid #1a1a2e',marginBottom:14}},
+      h('button',{onClick:()=>{setView('community');setCatFilter('All');},
+        style:{background:'transparent',border:'none',
+          padding:'9px 16px',
+          fontFamily:"'Playfair Display',serif",
+          fontWeight: view==='community' ? 900 : 600,
+          fontSize: 13,
+          color: view==='community' ? '#1a1a2e' : '#6a6450',
+          borderBottom: view==='community' ? '3px solid #f0c040' : '3px solid transparent',
+          marginBottom:-2,
+          cursor:'pointer',
+          textTransform:'uppercase', letterSpacing:'.06em'}}, '📅 Community'),
+      h('button',{onClick:()=>{setView('meetings');setCatFilter('All');},
+        style:{background:'transparent',border:'none',
+          padding:'9px 16px',
+          fontFamily:"'Playfair Display',serif",
+          fontWeight: view==='meetings' ? 900 : 600,
+          fontSize: 13,
+          color: view==='meetings' ? '#1a1a2e' : '#6a6450',
+          borderBottom: view==='meetings' ? '3px solid #f0c040' : '3px solid transparent',
+          marginBottom:-2,
+          cursor:'pointer',
+          textTransform:'uppercase', letterSpacing:'.06em'}}, '🏛 Public Meetings')
+    ),
+
+    // ZIP scope toggle (meetings tab only)
+    view==='meetings' && userZip && h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap'}},
+      h('div',{style:{fontSize:12,color:'#666',fontFamily:"'Lora',serif"}}, 'Showing:'),
+      h('button',{onClick:()=>setMeetingScope('local'),
+        style:{background: meetingScope==='local' ? '#1a1a2e' : '#fff',
+          color: meetingScope==='local' ? '#f0c040' : '#1a1a2e',
+          border:'1px solid '+(meetingScope==='local' ? '#1a1a2e' : '#d4cdb8'),
+          padding:'5px 14px',borderRadius:20,fontSize:12,cursor:'pointer',
+          fontFamily:"'Playfair Display',serif",fontWeight: meetingScope==='local' ? 700 : 400}},
+        '📍 ' + userZip + ' + County'),
+      h('button',{onClick:()=>setMeetingScope('county'),
+        style:{background: meetingScope==='county' ? '#1a1a2e' : '#fff',
+          color: meetingScope==='county' ? '#f0c040' : '#1a1a2e',
+          border:'1px solid '+(meetingScope==='county' ? '#1a1a2e' : '#d4cdb8'),
+          padding:'5px 14px',borderRadius:20,fontSize:12,cursor:'pointer',
+          fontFamily:"'Playfair Display',serif",fontWeight: meetingScope==='county' ? 700 : 400}},
+        '🗺 All Jackson County')
     ),
 
     // Add Event Form
@@ -6792,9 +6857,9 @@ function EventsTab({user, profile, onToast}) {
       )
     ),
 
-    // Category filter chips
-    h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}},
-      EVENT_CATEGORIES.map(c=>h('button',{key:c,onClick:()=>setCatFilter(c),style:{background:catFilter===c?'#1a1a2e':'#fff',color:catFilter===c?'#f0c040':'#555',border:'1px solid '+(catFilter===c?'#1a1a2e':'#e5dece'),padding:'5px 12px',borderRadius:20,fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:catFilter===c?700:400}},c))
+    // Category filter chips (community view only)
+    view==='community' && h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}},
+      EVENT_CATEGORIES.filter(c=>c!=='Government').map(c=>h('button',{key:c,onClick:()=>setCatFilter(c),style:{background:catFilter===c?'#1a1a2e':'#fff',color:catFilter===c?'#f0c040':'#555',border:'1px solid '+(catFilter===c?'#1a1a2e':'#e5dece'),padding:'5px 12px',borderRadius:20,fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:catFilter===c?700:400}},c))
     ),
 
     // Past events toggle
@@ -8230,16 +8295,40 @@ function MeetingPopulator({user, profile, onToast}) {
     }
   };
 
+  const backfillZips = async()=>{
+    if(!window.confirm('Backfill ZIP codes on existing events with category = Government?\n\nThis will scan event addresses for 5-digit ZIPs and update events that don\'t have one yet. Safe to run multiple times.')) return;
+    onToast('Scanning events for ZIP backfill...');
+    try {
+      const {data: rows, error} = await sb.from('events')
+        .select('id,location,zip,category')
+        .eq('category','Government')
+        .is('deleted_at',null);
+      if(error) throw error;
+      let updated = 0;
+      for(const r of (rows||[])) {
+        if(r.zip) continue; // already has a ZIP
+        const m = (r.location||'').match(/\b(\d{5})\b/);
+        if(!m) continue;
+        const newZip = m[1];
+        const {error: updErr} = await sb.from('events').update({zip:newZip}).eq('id',r.id);
+        if(!updErr) updated++;
+      }
+      onToast('✓ Backfilled ZIP on ' + updated + ' events. Reload the events tab to see local filtering work.');
+    } catch(e) {
+      onToast('Backfill error: ' + e.message);
+    }
+  };
+
   const generate = async()=>{
     if(!window.confirm(
-      'Generate draft public meetings for the next 60 days across 14 Jackson County jurisdictions?\n\n' +
+      'Generate draft public meetings for the next 30 days across 14 Jackson County jurisdictions?\n\n' +
       'These are TYPICAL SCHEDULES, not real fetched data. You will need to verify each one against the official jurisdiction calendar before publishing.\n\n' +
       'This call costs Anthropic API tokens.'
     )) return;
     setGenerating(true);
 
     const today = new Date();
-    const horizon = new Date(today.getTime() + 60*24*60*60*1000);
+    const horizon = new Date(today.getTime() + 30*24*60*60*1000);
     const fmt = d => d.toISOString().slice(0,10);
 
     // Split jurisdictions into 3 batches of ~5 to stay well under token limits
@@ -8350,11 +8439,15 @@ function MeetingPopulator({user, profile, onToast}) {
       onToast('Cannot publish without a date. Edit the draft to add one.');
       return;
     }
+    // Try to extract a 5-digit ZIP from the location for filtering by jurisdiction
+    const zipMatch = (draft.proposed_location||'').match(/\b(\d{5})\b/);
+    const extractedZip = zipMatch ? zipMatch[1] : null;
     const eventRow = {
       title: draft.title,
       event_date: draft.proposed_date,
       event_time: draft.proposed_time,
       location: draft.proposed_location,
+      zip: extractedZip,
       description: draft.description,
       category: draft.category || 'Government',
       submitted_by_id: user.id,
@@ -8434,14 +8527,23 @@ function MeetingPopulator({user, profile, onToast}) {
     // Generate button
     !open && h('div',{style:{marginTop:10}},
       h('div',{style:{fontSize:12,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6,marginBottom:10}},
-        'Generate draft public meetings for the next 60 days across 14 Jackson County jurisdictions. ',
+        'Generate draft public meetings for the next 30 days across 14 Jackson County jurisdictions. ',
         h('strong',null,'These are typical schedules, not real fetched data — verify each before publishing.')
       ),
-      h('button',{onClick: generate, disabled: generating,
-        style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'9px 18px',
-          borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
-          cursor: generating ? 'default' : 'pointer'}},
-        generating ? 'Generating... (~30s)' : '⚡ Generate Draft Meetings'
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        h('button',{onClick: generate, disabled: generating,
+          style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'9px 18px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+            cursor: generating ? 'default' : 'pointer'}},
+          generating ? 'Generating... (~30s)' : '⚡ Generate Draft Meetings'
+        ),
+        h('button',{onClick: backfillZips, disabled: generating,
+          title:'Extract ZIP codes from existing event addresses to enable local filtering',
+          style:{background:'#fff',color:'#1a1a2e',border:'1px solid #1a1a2e',padding:'9px 14px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+            cursor: generating ? 'default' : 'pointer'}},
+          '🔧 Backfill ZIP on existing events'
+        )
       )
     ),
     open && h('div',null,
