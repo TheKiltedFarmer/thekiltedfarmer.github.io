@@ -10974,6 +10974,7 @@ function App() {
   const [notifications,setNotifications]=useState([]);
   const [unreadNotifCount,setUnreadNotifCount]=useState(0);
   const [chatRoomActivity, setChatRoomActivity] = useState({}); // {roomId: count of new msgs since last seen}
+  const [welcomeBack, setWelcomeBack] = useState(null); // {daysAway, summary} or null
   const [guestMode,setGuestMode]=useState(false);
 
   useEffect(()=>{
@@ -11007,6 +11008,8 @@ function App() {
         setUser({...session.user,...(prof||{})});setProfile(prof||{});setRep(prof?.reputation||0);
         loadUserVotes(session.user.id);
         loadNotifications(session.user.id);
+        // Welcome-back + auto-welcome DM (fire and forget — don't block initApp)
+        handleReturnVisit(session.user, prof||{}).catch(e=>console.error('return visit handler error:',e));
       }
       await loadBills();
       await loadProjects();
@@ -11072,6 +11075,8 @@ function App() {
     setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);
     // Show onboarding for brand new users
     if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
+    // Welcome-back banner + auto-DM check (fire and forget)
+    handleReturnVisit(authUser, prof||{}).catch(e=>console.error('return visit handler error:',e));
     // Auto-award ZIP and rep badges on login
     setTimeout(async()=>{
       const zip = prof?.zip||'';
@@ -11121,6 +11126,98 @@ function App() {
     const {data:proj,error}=await sb.from('projects').insert({...data,proposer_id:user.id,proposer_name:name,supporter_count:1}).select().single();
     if(!error&&proj){await sb.from('project_supporters').insert({project_id:proj.id,user_id:user.id});setProjects(prev=>[proj,...prev]);gainRep(10);setToast("Project submitted! +10 rep");}
   };
+  // ── Welcome back / auto-welcome DM handler ────────────────────────────────
+  // Runs on every login. Computes how long the user was away, sends auto-welcome
+  // DM if first time, then updates last_active_at to now.
+  const handleReturnVisit = async(authUser, prof)=>{
+    if(!authUser?.id) return;
+    const previousActive = prof.last_active_at;
+    const previousActiveDate = previousActive ? new Date(previousActive) : null;
+    const now = new Date();
+
+    // Step 1: send welcome DM if not yet sent
+    if(prof.welcome_dm_sent === false || prof.welcome_dm_sent === null) {
+      try {
+        // Look up the founding admin (oldest admin profile)
+        const {data: admins} = await sb.from('profiles')
+          .select('id, display_name')
+          .eq('is_admin', true)
+          .order('created_at',{ascending:true}).limit(1);
+        const founder = admins && admins[0];
+        if(founder && founder.id !== authUser.id) {
+          const firstName = (prof.display_name || '').split(' ')[0] || 'neighbor';
+          const welcomeBody =
+            "Hi " + firstName + " — I'm Justin, the guy who built this. Welcome to The People's Voice.\n\n" +
+            "Quick context: this platform is for Jackson County residents. No ads, no algorithms picking sides, no bots. Just a place where neighbors can vote on real legislation, see what local government is actually doing, and find each other.\n\n" +
+            "A few things to try:\n" +
+            "• Vote on a bill in the Civic tab — your voice gets counted alongside your neighbors'\n" +
+            "• Check the Community map for events and resources near your ZIP\n" +
+            "• The Question (Civic → The Question) is a focused civic discussion — one question at a time, two weeks to think it over\n\n" +
+            "If you have questions, ideas, or run into anything broken, just reply here. I read every message.\n\n" +
+            "— Justin Fairchild\n" +
+            "The Kilted Farmer · Concord, MI";
+          await sb.from('direct_messages').insert({
+            sender_id: founder.id,
+            sender_name: founder.display_name || 'Justin',
+            recipient_id: authUser.id,
+            recipient_name: prof.display_name || 'Neighbor',
+            content: welcomeBody,
+            read: false,
+            created_at: new Date().toISOString()
+          });
+          // Also create a notification so the bell shows
+          await sb.from('notifications').insert({
+            user_id: authUser.id, type:'dm',
+            title:'Welcome message from ' + (founder.display_name || 'Justin'),
+            body: 'Tap to read your welcome message.',
+            read: false, created_at: new Date().toISOString()
+          });
+        }
+        await sb.from('profiles').update({welcome_dm_sent: true}).eq('id', authUser.id);
+      } catch(e) { console.error('welcome DM error:', e); }
+    }
+
+    // Step 2: compute days away for the welcome-back banner
+    let daysAway = 0;
+    if(previousActiveDate) {
+      daysAway = Math.floor((now.getTime() - previousActiveDate.getTime()) / 86400000);
+    }
+    // Only show banner if user was gone > 1 day (and previously had any activity)
+    if(daysAway >= 1 && previousActiveDate) {
+      try {
+        const sinceIso = previousActiveDate.toISOString();
+        const userZip = prof.zip || null;
+        const [
+          newBillsRes, newNeighborsRes, newIdeasRes, newNewsRes, unreadDmsRes
+        ] = await Promise.all([
+          sb.from('bills').select('id',{count:'exact',head:true}).gte('created_at', sinceIso),
+          userZip
+            ? sb.from('profiles').select('id',{count:'exact',head:true}).eq('zip', userZip).gte('created_at', sinceIso).neq('id', authUser.id)
+            : Promise.resolve({count:0}),
+          sb.from('community_ideas').select('id',{count:'exact',head:true}).gte('created_at', sinceIso),
+          sb.from('news_stories').select('id',{count:'exact',head:true}).eq('approved',true).gte('created_at', sinceIso),
+          sb.from('direct_messages').select('id',{count:'exact',head:true}).eq('recipient_id', authUser.id).eq('read', false).gte('created_at', sinceIso),
+        ]);
+        const summary = {
+          newBills: newBillsRes.count || 0,
+          newNeighbors: newNeighborsRes.count || 0,
+          newIdeas: newIdeasRes.count || 0,
+          newNews: newNewsRes.count || 0,
+          unreadDms: unreadDmsRes.count || 0,
+        };
+        const hasAny = Object.values(summary).some(v=>v>0);
+        if(hasAny) {
+          setWelcomeBack({daysAway, summary});
+        }
+      } catch(e) { console.error('welcome back summary error:', e); }
+    }
+
+    // Step 3: update last_active_at to now
+    try {
+      await sb.from('profiles').update({last_active_at: now.toISOString()}).eq('id', authUser.id);
+    } catch(e) { console.error('last_active_at update error:', e); }
+  };
+
   const handleSignOut=async()=>{await sb.auth.signOut();setUser(null);setProfile(null);setRep(0);setUserVotes({});};
 
   // ZIP search - must be declared before any conditional returns (Rules of Hooks)
@@ -11306,6 +11403,44 @@ function App() {
 
     // Body
     h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px'}},
+
+      // Welcome-back banner — shown after a day+ away with new activity
+      welcomeBack && h('div',{style:{
+        background:'linear-gradient(135deg,#fff8e7,#faf3d8)',
+        border:'1px solid #f0c040',borderRadius:10,padding:'14px 18px',
+        marginBottom:14,position:'relative'}},
+        h('button',{onClick:()=>setWelcomeBack(null),
+          style:{position:'absolute',top:8,right:10,background:'transparent',border:'none',
+            color:'#8a6000',fontSize:18,cursor:'pointer',lineHeight:1,padding:'2px 6px'}},'×'),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:14,color:'#1a1a2e',marginBottom:6}},
+          '👋 Welcome back' + (profile?.display_name ? ', '+profile.display_name.split(' ')[0] : '') + ' — '
+            + (welcomeBack.daysAway === 1 ? "yesterday's news, but you're caught up now."
+              : welcomeBack.daysAway < 7 ? "you were gone " + welcomeBack.daysAway + " days. Here's what you missed:"
+              : welcomeBack.daysAway < 30 ? "it's been " + welcomeBack.daysAway + " days. Quite a bit happened:"
+              : "it's been over a month. A lot has happened in Jackson County:")
+        ),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7}},
+          (()=>{
+            const s = welcomeBack.summary;
+            const parts = [];
+            if(s.newBills > 0) parts.push(h('span',{key:'b'}, h('b',null, s.newBills + ' new bill' + (s.newBills===1?'':'s')), ' to vote on'));
+            if(s.newIdeas > 0) parts.push(h('span',{key:'i'}, h('b',null, s.newIdeas + ' new idea' + (s.newIdeas===1?'':'s')), ' in Civic Voice'));
+            if(s.newNews > 0) parts.push(h('span',{key:'n'}, h('b',null, s.newNews + ' news stor' + (s.newNews===1?'y':'ies'))));
+            if(s.newNeighbors > 0) parts.push(h('span',{key:'p'}, h('b',null, s.newNeighbors + ' new neighbor' + (s.newNeighbors===1?'':'s')), ' in your ZIP'));
+            if(s.unreadDms > 0) parts.push(h('span',{key:'d'}, h('b',null, s.unreadDms + ' unread message' + (s.unreadDms===1?'':'s'))));
+            if(parts.length === 0) return 'Nothing major — but it\'s good to have you back.';
+            // Interleave with "·" separators
+            const interleaved = [];
+            parts.forEach((p,i)=>{
+              if(i>0) interleaved.push(h('span',{key:'sep'+i,style:{color:'#bbb',margin:'0 8px'}},'·'));
+              interleaved.push(p);
+            });
+            return interleaved;
+          })()
+        ),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#8a6000',fontStyle:'italic',marginTop:8}},
+          '🪶 Take your time. Browse what interests you. Your voice matters when you have something to say.')
+      ),
 
       // Profile completion nudge banner
       user&&(!profile?.display_name||!profile?.zip)&&h('div',{style:{
