@@ -6458,7 +6458,14 @@ function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin})
               isPast&&h('span',{style:{background:'#e5e5e5',color:'#888',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},'Past Event'),
               rsvp==='going'&&h('span',{style:{background:'#1a6b3c',color:'#fff',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},'✅ You\'re going')
             ),
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:4}},event.title),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:4,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
+              event.title,
+              event.series_id && h('span',{title:'Recurring event'+(event.recurrence_rule?' ('+event.recurrence_rule.replace(/_/g,' ')+')':''),
+                style:{fontSize:10,background:'#fff8e7',color:'#8a6000',
+                  border:'1px solid #f0c040',padding:'1px 7px',borderRadius:10,
+                  fontFamily:"'Lora',serif",fontWeight:700,letterSpacing:'.02em'}},
+                '🔁 ' + (event.recurrence_rule==='weekly'?'weekly':event.recurrence_rule==='biweekly'?'bi-weekly':event.recurrence_rule==='monthly'?'monthly':'recurring'))
+            ),
             h('div',{style:{fontSize:12,color:'#555',display:'flex',gap:12,flexWrap:'wrap'}},
               event.event_time&&h('span',null,'🕐 '+event.event_time),
               h('span',null,'📍 '+event.location)
@@ -6524,7 +6531,8 @@ function EventsTab({user, profile, onToast}) {
   const [saving, setSaving] = useState(false);
   const isAdmin = profile?.is_admin===true;
 
-  const EMPTY_FORM = {title:'',event_date:'',event_time:'',location:'',zip:'',category:'Farmers Market',description:'',link:''};
+  const EMPTY_FORM = {title:'',event_date:'',event_time:'',location:'',zip:'',category:'Farmers Market',description:'',link:'',
+    is_recurring:false, recurrence:'weekly', custom_days:'7', recurrence_end:''};
   const [form, setForm] = useState(EMPTY_FORM);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
 
@@ -6555,28 +6563,100 @@ function EventsTab({user, profile, onToast}) {
       onToast('Please fill in Title, Date, and Location.'); return;
     }
     setSaving(true);
-    const payload = {
-      ...form,
-      submitted_by_id: user.id,
-      submitted_by_name: profile?.display_name||user.email||'Neighbor',
-      approved: isAdmin, // admins auto-approve their own submissions
-      created_at: new Date().toISOString()
-    };
     try {
-      const {data,error} = await sb.from('events').insert(payload).select().single();
+      // Compute occurrence dates. Single event: just [start]. Recurring: walk by interval until end.
+      const occurrences = computeOccurrences(form);
+      if(occurrences.length === 0) {
+        onToast('Recurrence settings produced no events. Check your dates.');
+        setSaving(false);
+        return;
+      }
+      // Hard cap: 100 occurrences to prevent runaway series
+      if(occurrences.length > 100) {
+        onToast('Too many occurrences (' + occurrences.length + '). Maximum is 100. Shorten the date range or increase the interval.');
+        setSaving(false);
+        return;
+      }
+      const seriesId = form.is_recurring && occurrences.length > 1
+        ? (window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2))
+        : null;
+      const recurrenceLabel = form.is_recurring && occurrences.length > 1
+        ? (form.recurrence === 'custom' ? 'every_' + form.custom_days + '_days' : form.recurrence)
+        : null;
+      const rows = occurrences.map(date=>({
+        title: form.title,
+        event_date: date,
+        event_time: form.event_time || null,
+        location: form.location,
+        zip: form.zip || null,
+        category: form.category,
+        description: form.description || null,
+        link: form.link || null,
+        submitted_by_id: user.id,
+        submitted_by_name: profile?.display_name||user.email||'Neighbor',
+        approved: isAdmin,
+        created_at: new Date().toISOString(),
+        series_id: seriesId,
+        recurrence_rule: recurrenceLabel,
+      }));
+      const {data,error} = await sb.from('events').insert(rows).select();
       if(error) throw error;
       if(isAdmin) {
-        setEvents(prev=>[...prev,data].sort((a,b)=>a.event_date.localeCompare(b.event_date)));
-        onToast('✅ Event added!');
+        setEvents(prev=>[...prev,...(data||[])].sort((a,b)=>a.event_date.localeCompare(b.event_date)));
+        if(occurrences.length > 1) {
+          onToast('✅ Created ' + occurrences.length + ' recurring events!');
+        } else {
+          onToast('✅ Event added!');
+        }
       } else {
-        onToast('✅ Event submitted for review! It will appear once approved.');
+        if(occurrences.length > 1) {
+          onToast('✅ Submitted ' + occurrences.length + ' events for review!');
+        } else {
+          onToast('✅ Event submitted for review! It will appear once approved.');
+        }
       }
       setForm(EMPTY_FORM);
       setShowAdd(false);
     } catch(e) {
-      onToast('❌ Could not save event. Run the events SQL in Supabase first.');
+      console.error('Event submit error:', e);
+      onToast('❌ Could not save event: ' + (e.message || 'unknown'));
     }
     setSaving(false);
+  };
+
+  // Helper: compute list of YYYY-MM-DD strings for occurrences
+  const computeOccurrences = (f)=>{
+    if(!f.is_recurring) return [f.event_date];
+    const start = new Date(f.event_date + 'T12:00:00');
+    if(isNaN(start.getTime())) return [];
+    // Default end: 12 months out if not specified
+    const end = f.recurrence_end
+      ? new Date(f.recurrence_end + 'T12:00:00')
+      : new Date(start.getTime() + 365*24*60*60*1000);
+    if(isNaN(end.getTime()) || end < start) return [f.event_date];
+
+    const dates = [];
+    const cursor = new Date(start.getTime());
+
+    if(f.recurrence === 'monthly') {
+      // Same day of month each month
+      while(cursor <= end) {
+        dates.push(cursor.toISOString().slice(0,10));
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    } else {
+      // Day-based interval (weekly=7, biweekly=14, custom=N)
+      let intervalDays;
+      if(f.recurrence === 'weekly') intervalDays = 7;
+      else if(f.recurrence === 'biweekly') intervalDays = 14;
+      else if(f.recurrence === 'custom') intervalDays = Math.max(1, parseInt(f.custom_days,10) || 7);
+      else intervalDays = 7;
+      while(cursor <= end) {
+        dates.push(cursor.toISOString().slice(0,10));
+        cursor.setDate(cursor.getDate() + intervalDays);
+      }
+    }
+    return dates;
   };
 
   const deleteEvent = (event)=>{
@@ -6649,6 +6729,63 @@ function EventsTab({user, profile, onToast}) {
       h('div',{style:{marginBottom:16}},
         h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Link (optional)'),
         h('input',{value:form.link,onChange:set('link'),placeholder:'https://...',style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+      ),
+      // Recurrence toggle
+      h('div',{style:{marginBottom:14,padding:'12px 14px',background:'rgba(240,192,64,0.08)',
+        border:'1px solid rgba(240,192,64,0.25)',borderRadius:7}},
+        h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'#f0c040',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+          h('input',{type:'checkbox',checked:form.is_recurring,
+            onChange:e=>setForm(f=>({...f,is_recurring:e.target.checked})),
+            style:{width:16,height:16,cursor:'pointer'}}),
+          '🔁 This event repeats'
+        ),
+        form.is_recurring && h('div',{style:{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(240,192,64,0.2)'}},
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:10}},
+            h('div',null,
+              h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Repeats'),
+              h('select',{value:form.recurrence,onChange:set('recurrence'),
+                style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}},
+                h('option',{value:'weekly'},'Every week'),
+                h('option',{value:'biweekly'},'Every 2 weeks'),
+                h('option',{value:'monthly'},'Every month (same date)'),
+                h('option',{value:'custom'},'Custom interval')
+              )
+            ),
+            form.recurrence === 'custom'
+              ? h('div',null,
+                  h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Every N days'),
+                  h('input',{type:'number',min:1,max:365,value:form.custom_days,onChange:set('custom_days'),
+                    style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+                )
+              : h('div',null,
+                  h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'End date (optional)'),
+                  h('input',{type:'date',value:form.recurrence_end,onChange:set('recurrence_end'),min:form.event_date||today,
+                    style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+                )
+          ),
+          form.recurrence === 'custom' && h('div',{style:{marginBottom:10}},
+            h('label',{style:{fontSize:11,color:'#8899aa',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'End date (optional)'),
+            h('input',{type:'date',value:form.recurrence_end,onChange:set('recurrence_end'),min:form.event_date||today,
+              style:{width:'100%',border:'1px solid #444',borderRadius:6,padding:'9px 12px',fontSize:13,background:'#23233a',color:'#fff',boxSizing:'border-box'}})
+          ),
+          // Live preview of how many events will be created
+          form.event_date && (()=>{
+            try {
+              const dates = computeOccurrences(form);
+              if(dates.length === 0) return null;
+              const first = dates[0];
+              const last = dates[dates.length-1];
+              const fmtDate = (s)=>new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+              return h('div',{style:{fontSize:12,color:'#f0c040',fontFamily:"'Lora',serif",fontStyle:'italic',lineHeight:1.5}},
+                '📅 This will create ', h('b',null, dates.length + ' event' + (dates.length===1?'':'s')),
+                dates.length > 1 ? ' from ' + fmtDate(first) + ' through ' + fmtDate(last) : ' on ' + fmtDate(first),
+                dates.length > 100 && h('div',{style:{color:'#ff8866',marginTop:4}}, '⚠ Maximum 100 — please shorten the range or increase the interval.'),
+                dates.length === 1 && form.is_recurring && h('div',{style:{color:'#ff8866',marginTop:4}}, '⚠ Recurrence settings produced only one event. Check the end date.'),
+                ' Default end is 12 months out if blank.'
+              );
+            } catch(e) { return null; }
+          })()
+        )
       ),
       h('button',{onClick:submit,disabled:saving,style:{width:'100%',background:saving?'#555':'#f0c040',color:'#1a1a2e',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}},
         saving?'Saving...':isAdmin?'Publish Event ->':'Submit for Review ->'
@@ -7857,17 +7994,35 @@ function CrudControls({contentType, record, isAdmin, user, profile, onToast, onU
       onToast('🗑 Deleted (recoverable).');
       onDeleted && onDeleted(record);
     };
-    return h('div',{style:{display:'inline-flex',gap:6}},
+    const handleDeleteSeries = async()=>{
+      if(!record.series_id) return;
+      if(!window.confirm('Delete ALL future occurrences of this recurring event? Past occurrences are kept.')) return;
+      const todayStr = new Date().toISOString().slice(0,10);
+      const {error} = await sb.from(contentType)
+        .update({deleted_at: new Date().toISOString()})
+        .eq('series_id', record.series_id)
+        .gte('event_date', todayStr);
+      if(error) { onToast('Error: ' + error.message); return; }
+      onToast('🗑 Deleted all future occurrences in this series.');
+      onDeleted && onDeleted(record);
+    };
+    const isRecurring = contentType === 'events' && record.series_id;
+    return h('div',{style:{display:'inline-flex',gap:6,flexWrap:'wrap'}},
       h('button',{onClick:e=>{e.stopPropagation(); setShowEdit(true);},
         title:'Edit',
         style:{background:'#fff8e7',border:'1px solid #f0c040',color:'#8a6000',
           padding:'4px 8px',borderRadius:4,fontSize:11,cursor:'pointer',
           fontFamily:"'Playfair Display',serif",fontWeight:700}}, '✏️ Edit'),
       h('button',{onClick:e=>{e.stopPropagation(); handleDelete();},
-        title:'Delete',
+        title:'Delete this occurrence only',
         style:{background:'#fdf0ee',border:'1px solid #c0392b',color:'#c0392b',
           padding:'4px 8px',borderRadius:4,fontSize:11,cursor:'pointer',
-          fontFamily:"'Playfair Display',serif",fontWeight:700}}, '🗑 Delete'),
+          fontFamily:"'Playfair Display',serif",fontWeight:700}}, isRecurring ? '🗑 This one' : '🗑 Delete'),
+      isRecurring && h('button',{onClick:e=>{e.stopPropagation(); handleDeleteSeries();},
+        title:'Delete all future occurrences in this series',
+        style:{background:'#fdf0ee',border:'1px solid #c0392b',color:'#c0392b',
+          padding:'4px 8px',borderRadius:4,fontSize:11,cursor:'pointer',
+          fontFamily:"'Playfair Display',serif",fontWeight:700}}, '🗑 Whole series'),
       showEdit && h(AdminEditModal,{contentType, record,
         onClose:()=>setShowEdit(false),
         onSaved:onUpdated, onToast})
