@@ -85,6 +85,7 @@ const HUBS = [
   { id:'civic',     icon:'\uD83C\uDFDB', label:'Civic',     subs:[
     { id:'bills',     label:'Bills' },
     { id:'news',      label:'News' },
+    { id:'thequestion', label:'The Question' },
     { id:'proposals', label:'Civic Voice' },
     { id:'reps',      label:'Reps' },
     { id:'pulse',     label:'Pulse' }
@@ -8129,6 +8130,582 @@ const JURISDICTIONS_V1 = [
   { name:'Spring Arbor Township',      type:'Township', body:'Township Board' },
   { name:'Columbia Township',          type:'Township', body:'Township Board' },
 ];
+// ═══════════════════════════════════════════════════════════════════════════════
+// THE QUESTION — bi-weekly civic discourse feature
+// Admin authors a question, AI generates a balanced briefing, residents respond
+// with position + reasoning + what-would-change-their-mind. Archive shows past Qs.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Sample question seeds (suggestions for admins) ───────────────────────────
+const QUESTION_SEEDS = [
+  "What's the biggest barrier to healthcare access for Jackson County families, and what could a local response look like?",
+  "If our community had to choose between investing in better roads, better schools, or better mental health services, what's the priority?",
+  "What's something both political parties get wrong about our community?",
+  "Should small towns like Concord prioritize economic growth or preserving their character?",
+  "What's the most important thing local government could do to help working families?",
+  "How should our community balance individual property rights with community planning?",
+];
+
+// ── Admin: Author a new Question ─────────────────────────────────────────────
+function QuestionAuthorPanel({user, profile, onToast}) {
+  const [open, setOpen] = useState(false);
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [draftQuestions, setDraftQuestions] = useState([]);
+  const [title, setTitle] = useState('');
+  const [framing, setFraming] = useState('');
+  const [optionA, setOptionA] = useState('');
+  const [optionB, setOptionB] = useState('');
+  const [optionC, setOptionC] = useState('');
+  const [briefingAgreed, setBriefingAgreed] = useState('');
+  const [briefingDisagreement, setBriefingDisagreement] = useState('');
+  const [briefingLocal, setBriefingLocal] = useState('');
+  const [briefingBlindspots, setBriefingBlindspots] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  const loadQuestions = ()=>{
+    sb.from('the_questions').select('*')
+      .order('created_at',{ascending:false}).limit(20)
+      .then(({data})=>{
+        const all = data||[];
+        setActiveQuestion(all.find(q=>q.status==='active') || null);
+        setDraftQuestions(all.filter(q=>q.status==='draft'));
+      })
+      .catch(()=>{});
+  };
+  useEffect(loadQuestions,[]);
+
+  const resetForm = ()=>{
+    setTitle(''); setFraming(''); setOptionA(''); setOptionB(''); setOptionC('');
+    setBriefingAgreed(''); setBriefingDisagreement(''); setBriefingLocal(''); setBriefingBlindspots('');
+    setEditingId(null);
+  };
+
+  const generateBriefing = async()=>{
+    if(!title.trim()) { onToast('Enter a question title first.'); return; }
+    setGenerating(true);
+    onToast('AI is drafting a balanced briefing...');
+    const systemPrompt =
+      'You are a careful, nonpartisan civic facilitator generating briefing material for a small community discourse platform in Jackson County, Michigan. ' +
+      'Your job is to produce a balanced briefing that treats residents as adults capable of holding complexity. ' +
+      'Avoid partisan framing. Avoid the structure of "two sides." Instead, surface the underlying values question and shared facts. ' +
+      'Do NOT take a position. Do NOT load language toward either ideological pole. ' +
+      'Respond ONLY with valid JSON, no markdown, no commentary, no comments inside the JSON. ' +
+      'Schema: {' +
+        '"framing":"1-2 sentence introduction that names the question without sensationalizing it",' +
+        '"options":["Option A label (5-10 words)","Option B label","Option C label"],' +
+        '"agreed":"3-5 sentences on the empirical facts and shared context that anyone honest acknowledges. No opinions, just what is.",' +
+        '"disagreement":"3-5 sentences on the values question underneath the surface debate. Frame as a tension between legitimate concerns, not a battle.",' +
+        '"local":"2-4 sentences on what this question means specifically for Jackson County — concrete examples where possible.",' +
+        '"blindspots":"2-3 sentences naming what this briefing is NOT addressing and why (e.g., national-level dynamics, certain stakeholder voices, technical complexities)."' +
+      '}';
+    const userPrompt = 'Question: ' + title.trim() + '\n\nGenerate the briefing.';
+    try {
+      const res = await fetch(AI_PROXY, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens: 2000,
+          system: systemPrompt,
+          messages:[{role:'user', content: userPrompt}]
+        })
+      });
+      const json = await res.json();
+      const raw = json.content?.find(b=>b.type==='text')?.text||'';
+      let cleaned = raw.replace(/```json|```/g,'').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if(firstBrace >= 0 && lastBrace > firstBrace) cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      let parsed;
+      try { parsed = JSON.parse(cleaned); }
+      catch(e1) {
+        const repaired = cleaned.replace(/\/\/.*$/gm,'').replace(/\/\*[\s\S]*?\*\//g,'').replace(/,(\s*[}\]])/g,'$1');
+        try { parsed = JSON.parse(repaired); } catch(e2) {
+          onToast('AI returned malformed JSON. Try again.');
+          setGenerating(false);
+          return;
+        }
+      }
+      setFraming(parsed.framing || '');
+      const opts = Array.isArray(parsed.options) ? parsed.options : [];
+      setOptionA(opts[0]||''); setOptionB(opts[1]||''); setOptionC(opts[2]||'');
+      setBriefingAgreed(parsed.agreed || '');
+      setBriefingDisagreement(parsed.disagreement || '');
+      setBriefingLocal(parsed.local || '');
+      setBriefingBlindspots(parsed.blindspots || '');
+      onToast('✓ Briefing drafted. Review and edit before publishing.');
+    } catch(e) {
+      onToast('Error generating: ' + e.message);
+    }
+    setGenerating(false);
+  };
+
+  const saveDraft = async()=>{
+    if(!title.trim()) { onToast('Title is required.'); return; }
+    setSaving(true);
+    const opts = [optionA,optionB,optionC].filter(o=>o.trim()).map(o=>o.trim());
+    const payload = {
+      title: title.trim(),
+      framing: framing.trim() || null,
+      briefing_agreed: briefingAgreed.trim() || null,
+      briefing_disagreement: briefingDisagreement.trim() || null,
+      briefing_local: briefingLocal.trim() || null,
+      briefing_blindspots: briefingBlindspots.trim() || null,
+      options: opts,
+      status: 'draft',
+      created_by: user.id,
+    };
+    let result;
+    if(editingId) {
+      result = await sb.from('the_questions').update(payload).eq('id', editingId).select().single();
+    } else {
+      result = await sb.from('the_questions').insert(payload).select().single();
+    }
+    if(result.error) {
+      onToast('Error saving: ' + result.error.message);
+    } else {
+      onToast('✓ Draft saved.');
+      resetForm();
+      loadQuestions();
+    }
+    setSaving(false);
+  };
+
+  const publishQuestion = async(draftId)=>{
+    if(activeQuestion) {
+      if(!window.confirm('There is already an active question. Archive it and publish this one?')) return;
+      // Archive the current active question first
+      await sb.from('the_questions').update({status:'archived'}).eq('id', activeQuestion.id);
+    }
+    // Set active dates: 14 days active
+    const now = new Date();
+    const until = new Date(now.getTime() + 14*24*60*60*1000);
+    const {error} = await sb.from('the_questions').update({
+      status:'active',
+      active_from: now.toISOString(),
+      active_until: until.toISOString(),
+    }).eq('id', draftId);
+    if(error) {
+      onToast('Error publishing: ' + error.message);
+      return;
+    }
+    onToast('✓ Question is now live for 14 days.');
+    loadQuestions();
+  };
+
+  const editDraft = (q)=>{
+    setEditingId(q.id);
+    setTitle(q.title || '');
+    setFraming(q.framing || '');
+    const opts = q.options || [];
+    setOptionA(opts[0]||''); setOptionB(opts[1]||''); setOptionC(opts[2]||'');
+    setBriefingAgreed(q.briefing_agreed || '');
+    setBriefingDisagreement(q.briefing_disagreement || '');
+    setBriefingLocal(q.briefing_local || '');
+    setBriefingBlindspots(q.briefing_blindspots || '');
+    setOpen(true);
+  };
+
+  const deleteDraft = async(draftId)=>{
+    if(!window.confirm('Delete this draft?')) return;
+    await sb.from('the_questions').delete().eq('id', draftId);
+    loadQuestions();
+    onToast('Deleted.');
+  };
+
+  return h('div',{style:{background:'#f0eaff',border:'1px solid #b9a3e0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open ? 14 : 0, cursor:'pointer'}, onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '❓ The Question — author & publish',
+        activeQuestion && h('span',{style:{background:'#1a6b3c',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},'1 active'),
+        draftQuestions.length > 0 && h('span',{style:{background:'#5b3a8c',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},
+          draftQuestions.length+' draft'+(draftQuestions.length===1?'':'s'))
+      ),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    open && h('div',null,
+      // Active question display
+      activeQuestion && h('div',{style:{background:'#fff',border:'1px solid #1a6b3c',borderLeft:'4px solid #1a6b3c',borderRadius:7,padding:'12px 14px',marginBottom:14}},
+        h('div',{style:{fontSize:11,color:'#1a6b3c',textTransform:'uppercase',letterSpacing:1,fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:4}},
+          'Currently active · ends ' + (activeQuestion.active_until ? new Date(activeQuestion.active_until).toLocaleDateString() : 'soon')),
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e'}}, activeQuestion.title)
+      ),
+      // Drafts list
+      draftQuestions.length > 0 && h('div',{style:{marginBottom:14}},
+        h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:"'Playfair Display',serif",fontWeight:700}},'Drafts'),
+        draftQuestions.map(q=>h('div',{key:q.id,
+          style:{background:'#fff',border:'1px solid #e5dece',borderRadius:5,padding:'8px 12px',marginBottom:6,
+            display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}},
+          h('div',{style:{flex:1,fontSize:13,fontFamily:"'Playfair Display',serif",fontWeight:700,color:'#1a1a2e'}}, q.title),
+          h('div',{style:{display:'flex',gap:4}},
+            h('button',{onClick:()=>publishQuestion(q.id),
+              style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Playfair Display',serif"}},
+              '✓ Publish'),
+            h('button',{onClick:()=>editDraft(q),
+              style:{background:'#fff8e7',color:'#8a6000',border:'1px solid #f0c040',padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Playfair Display',serif"}},
+              '✏️ Edit'),
+            h('button',{onClick:()=>deleteDraft(q.id),
+              style:{background:'#fdf0ee',color:'#c0392b',border:'1px solid #c0392b',padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'Playfair Display',serif"}},
+              '✕')
+          )
+        ))
+      ),
+      // Author form
+      h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:7,padding:14}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:10}},
+          editingId ? '✏️ Edit draft' : '✏️ Compose a new Question'),
+        // Question seeds
+        !editingId && h('div',{style:{marginBottom:10}},
+          h('div',{style:{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'💡 Try one of these seeds:'),
+          h('div',{style:{display:'flex',gap:4,flexWrap:'wrap'}},
+            QUESTION_SEEDS.slice(0,3).map((s,i)=>h('button',{key:i, onClick:()=>setTitle(s),
+              style:{fontSize:11,background:'#f5edff',color:'#5b3a8c',border:'1px solid #b9a3e0',
+                padding:'3px 8px',borderRadius:12,cursor:'pointer',fontFamily:"'Lora',serif",
+                textAlign:'left',maxWidth:'100%'}},
+              s.length > 60 ? s.slice(0,60)+'...' : s))
+          )
+        ),
+        // Title
+        h('div',{style:{marginBottom:10}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Question *'),
+          h('textarea',{value:title, onChange:e=>setTitle(e.target.value), rows:2,
+            placeholder:'A question that invites real thinking, not a partisan litmus test.',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        // Generate briefing button
+        h('button',{onClick:generateBriefing, disabled: generating || !title.trim(),
+          style:{background:'#5b3a8c',color:'#fff',border:'none',padding:'7px 14px',
+            borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+            cursor: (generating||!title.trim()) ? 'default':'pointer',
+            opacity: (generating||!title.trim()) ? 0.6 : 1, marginBottom:10}},
+          generating ? '🤖 Drafting...' : '🤖 AI: Draft balanced briefing'
+        ),
+        // Briefing fields
+        h('div',{style:{marginBottom:10}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Framing'),
+          h('textarea',{value:framing, onChange:e=>setFraming(e.target.value), rows:2,
+            placeholder:'1-2 sentences introducing the question.',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}},
+          h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Option A'),
+            h('input',{value:optionA, onChange:e=>setOptionA(e.target.value), placeholder:'Position A',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,boxSizing:'border-box'}})),
+          h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Option B'),
+            h('input',{value:optionB, onChange:e=>setOptionB(e.target.value), placeholder:'Position B',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,boxSizing:'border-box'}})),
+          h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Option C'),
+            h('input',{value:optionC, onChange:e=>setOptionC(e.target.value), placeholder:'Position C',
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,boxSizing:'border-box'}}))
+        ),
+        h('div',{style:{marginBottom:8}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'What we agree on'),
+          h('textarea',{value:briefingAgreed, onChange:e=>setBriefingAgreed(e.target.value), rows:3,
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        h('div',{style:{marginBottom:8}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Where the real disagreement is'),
+          h('textarea',{value:briefingDisagreement, onChange:e=>setBriefingDisagreement(e.target.value), rows:3,
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        h('div',{style:{marginBottom:8}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Local stakes (Jackson County)'),
+          h('textarea',{value:briefingLocal, onChange:e=>setBriefingLocal(e.target.value), rows:3,
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        h('div',{style:{marginBottom:12}},
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},"What's NOT in this briefing"),
+          h('textarea',{value:briefingBlindspots, onChange:e=>setBriefingBlindspots(e.target.value), rows:2,
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+        h('div',{style:{display:'flex',gap:6}},
+          h('button',{onClick:saveDraft, disabled:saving,
+            style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'8px 16px',
+              borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:saving?'default':'pointer'}},
+            saving ? 'Saving...' : (editingId ? '✓ Save Edits' : '✓ Save as Draft')),
+          editingId && h('button',{onClick:resetForm,
+            style:{background:'transparent',color:'#888',border:'1px solid #ddd',padding:'8px 16px',
+              borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+            'Cancel')
+        )
+      )
+    )
+  );
+}
+
+// ── Resident-facing: The Question tab ────────────────────────────────────────
+function TheQuestionTab({user, profile, onToast, onNavigate}) {
+  const [activeQ, setActiveQ] = useState(null);
+  const [archived, setArchived] = useState([]);
+  const [myResponse, setMyResponse] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const [position, setPosition] = useState('');
+  const [reasoning, setReasoning] = useState('');
+  const [changeMyMind, setChangeMyMind] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [view, setView] = useState('current'); // 'current' | 'archive'
+  const [loading, setLoading] = useState(true);
+
+  const load = async()=>{
+    setLoading(true);
+    try {
+      const [activeRes, archiveRes] = await Promise.all([
+        sb.from('the_questions').select('*').eq('status','active').limit(1).maybeSingle(),
+        sb.from('the_questions').select('*').eq('status','archived').order('active_from',{ascending:false}).limit(20),
+      ]);
+      const active = activeRes.data;
+      setActiveQ(active);
+      setArchived(archiveRes.data || []);
+      if(active && user) {
+        const {data: respRows} = await sb.from('the_question_responses')
+          .select('*').eq('question_id', active.id);
+        const all = respRows || [];
+        setResponses(all);
+        const mine = all.find(r=>r.user_id === user.id);
+        if(mine) {
+          setMyResponse(mine);
+          setPosition(mine.position || '');
+          setReasoning(mine.reasoning || '');
+          setChangeMyMind(mine.change_my_mind || '');
+        }
+      }
+    } catch(e) { console.error('TheQuestion load error:',e); }
+    setLoading(false);
+  };
+  useEffect(load,[user?.id]);
+
+  const submit = async()=>{
+    if(!user) { onNavigate && onNavigate('auth'); return; }
+    if(!position) { onToast('Please pick a position.'); return; }
+    if(!reasoning.trim() || reasoning.trim().length < 10) { onToast('Please share your reasoning (at least a sentence).'); return; }
+    if(!changeMyMind.trim() || changeMyMind.trim().length < 10) { onToast('Please share what would change your mind (at least a sentence).'); return; }
+    setSubmitting(true);
+    const payload = {
+      question_id: activeQ.id,
+      user_id: user.id,
+      position,
+      reasoning: reasoning.trim(),
+      change_my_mind: changeMyMind.trim(),
+      display_name: profile?.display_name || user.email?.split('@')[0] || 'Resident',
+      zip: profile?.zip || null,
+      account_type: profile?.account_type || 'resident',
+    };
+    let result;
+    if(myResponse) {
+      result = await sb.from('the_question_responses').update(payload).eq('id', myResponse.id).select().single();
+    } else {
+      result = await sb.from('the_question_responses').insert(payload).select().single();
+    }
+    if(result.error) {
+      onToast('Error: ' + result.error.message);
+    } else {
+      setMyResponse(result.data);
+      // Refresh full responses list
+      const {data: respRows} = await sb.from('the_question_responses').select('*').eq('question_id', activeQ.id);
+      setResponses(respRows || []);
+      onToast(myResponse ? '✓ Response updated.' : '✓ Response submitted. Thank you for thinking carefully.');
+    }
+    setSubmitting(false);
+  };
+
+  if(loading) return h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},'Loading...');
+
+  // Tab nav for current vs archive
+  const NavTabs = h('div',{style:{display:'flex',gap:0,borderBottom:'2px solid #1a1a2e',marginBottom:16}},
+    h('button',{onClick:()=>setView('current'),
+      style:{background:'transparent',border:'none',padding:'9px 16px',
+        fontFamily:"'Playfair Display',serif",fontWeight: view==='current' ? 900 : 600,
+        fontSize:13, color: view==='current' ? '#1a1a2e' : '#6a6450',
+        borderBottom: view==='current' ? '3px solid #f0c040' : '3px solid transparent',
+        marginBottom:-2,cursor:'pointer',textTransform:'uppercase',letterSpacing:'.06em'}}, '❓ Current Question'),
+    h('button',{onClick:()=>setView('archive'),
+      style:{background:'transparent',border:'none',padding:'9px 16px',
+        fontFamily:"'Playfair Display',serif",fontWeight: view==='archive' ? 900 : 600,
+        fontSize:13, color: view==='archive' ? '#1a1a2e' : '#6a6450',
+        borderBottom: view==='archive' ? '3px solid #f0c040' : '3px solid transparent',
+        marginBottom:-2,cursor:'pointer',textTransform:'uppercase',letterSpacing:'.06em'}},
+      '📚 Archive ' + (archived.length > 0 ? '(' + archived.length + ')' : ''))
+  );
+
+  // Header
+  const Header = h('div',{style:{marginBottom:14}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#1a1a2e'}},'❓ The Question'),
+    h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
+      'A focused civic conversation. One question at a time. Two weeks to think and respond.')
+  );
+
+  // ── Current view ──
+  if(view === 'current') {
+    if(!activeQ) {
+      return h('div',null, Header, NavTabs,
+        h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:30,textAlign:'center'}},
+          h('div',{style:{fontSize:40,marginBottom:12}},'🕯'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:8}},'No active question right now.'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',lineHeight:1.6}},
+            'Check back soon — a new Question goes live every few weeks.'))
+      );
+    }
+
+    // Aggregate response counts by position
+    const totalResponses = responses.length;
+    const positionCounts = {};
+    (activeQ.options || []).forEach(o => positionCounts[o] = 0);
+    responses.forEach(r => { if(r.position) positionCounts[r.position] = (positionCounts[r.position]||0) + 1; });
+
+    const dayOfQuestion = activeQ.active_from ? Math.floor((Date.now() - new Date(activeQ.active_from).getTime())/(86400000)) : 0;
+    const daysLeft = activeQ.active_until ? Math.max(0, Math.ceil((new Date(activeQ.active_until).getTime() - Date.now())/(86400000))) : null;
+
+    return h('div',null, Header, NavTabs,
+      // Question card
+      h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'24px 26px',marginBottom:16,
+        borderTop:'4px solid #5b3a8c'}},
+        h('div',{style:{fontSize:11,color:'#5b3a8c',textTransform:'uppercase',letterSpacing:'.15em',
+          fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8}},
+          'The Question · Day ' + (dayOfQuestion+1) + (daysLeft !== null ? ' · ' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left' : '')),
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:'#1a1a2e',
+          margin:'0 0 10px 0',lineHeight:1.3}}, activeQ.title),
+        activeQ.framing && h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#444',
+          lineHeight:1.7,margin:'0 0 0 0',fontStyle:'italic'}}, activeQ.framing)
+      ),
+
+      // Briefing
+      (activeQ.briefing_agreed || activeQ.briefing_disagreement || activeQ.briefing_local || activeQ.briefing_blindspots) &&
+      h('div',{style:{background:'#f4f1ea',border:'1px solid #d4cdb8',borderRadius:10,padding:'18px 22px',marginBottom:16}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+          color:'#1a1a2e',marginBottom:14,textTransform:'uppercase',letterSpacing:'.12em'}},
+          '📖 A balanced briefing'),
+        activeQ.briefing_agreed && h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+            color:'#1a6b3c',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:5}}, '✓ What we agree on'),
+          h('p',{style:{fontFamily:"'Lora',serif",fontSize:13.5,color:'#333',lineHeight:1.7,margin:0}},
+            activeQ.briefing_agreed)
+        ),
+        activeQ.briefing_disagreement && h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+            color:'#7a2838',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:5}}, '⚖ Where the real disagreement is'),
+          h('p',{style:{fontFamily:"'Lora',serif",fontSize:13.5,color:'#333',lineHeight:1.7,margin:0}},
+            activeQ.briefing_disagreement)
+        ),
+        activeQ.briefing_local && h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+            color:'#1a5c8a',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:5}}, '📍 Local stakes'),
+          h('p',{style:{fontFamily:"'Lora',serif",fontSize:13.5,color:'#333',lineHeight:1.7,margin:0}},
+            activeQ.briefing_local)
+        ),
+        activeQ.briefing_blindspots && h('div',{style:{paddingTop:12,borderTop:'1px solid #d4cdb8'}},
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:11,
+            color:'#888',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:5}}, "🔍 What's not in this briefing"),
+          h('p',{style:{fontFamily:"'Lora',serif",fontSize:12.5,color:'#666',lineHeight:1.7,margin:0,fontStyle:'italic'}},
+            activeQ.briefing_blindspots)
+        )
+      ),
+
+      // Response form
+      h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'18px 22px',marginBottom:16}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:4}},
+          myResponse ? '✓ Your response (you can revise until the question closes)' : 'Your response'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',marginBottom:14,fontStyle:'italic'}},
+          'All three fields are required. The thinking matters more than the position.'),
+
+        // Position
+        h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,
+            fontFamily:"'Playfair Display',serif",fontWeight:700}}, 'Your position *'),
+          h('div',{style:{display:'flex',gap:6,flexDirection:'column'}},
+            (activeQ.options||[]).map(opt=>{
+              const chosen = position === opt;
+              return h('button',{key:opt, onClick:()=>setPosition(opt),
+                style:{padding:'10px 14px',
+                  background: chosen ? '#5b3a8c' : 'transparent',
+                  color: chosen ? '#fff' : '#1a1a2e',
+                  border:'1.5px solid '+(chosen ? '#5b3a8c' : '#d4cdb8'),
+                  borderRadius:6,fontFamily:"'Lora',serif",fontWeight: chosen ? 700 : 400,
+                  fontSize:13.5,cursor:'pointer',textAlign:'left'}},
+                opt);
+            })
+          )
+        ),
+
+        // Reasoning
+        h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,
+            fontFamily:"'Playfair Display',serif",fontWeight:700}}, 'Why? *'),
+          h('textarea',{value:reasoning, onChange:e=>setReasoning(e.target.value), rows:3,
+            placeholder:'Briefly: what led you to that position?',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'9px 12px',
+              fontSize:13.5,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+
+        // Change my mind
+        h('div',{style:{marginBottom:14}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,
+            fontFamily:"'Playfair Display',serif",fontWeight:700}}, "What's the strongest argument from people who disagree with you? *"),
+          h('textarea',{value:changeMyMind, onChange:e=>setChangeMyMind(e.target.value), rows:3,
+            placeholder:'Steelman the other side. What would actually give you pause?',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'9px 12px',
+              fontSize:13.5,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
+        ),
+
+        h('button',{onClick:submit, disabled: submitting,
+          style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'11px 22px',
+            borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:14,
+            cursor: submitting ? 'default':'pointer',width:'100%'}},
+          submitting ? 'Submitting...' : (myResponse ? '✓ Update My Response' : '✓ Submit My Response')
+        )
+      ),
+
+      // Aggregate snapshot (only if user has responded)
+      myResponse && totalResponses > 0 && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'18px 22px'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:12,
+          textTransform:'uppercase',letterSpacing:'.12em'}},
+          '📊 Where the community stands · ' + totalResponses + ' response' + (totalResponses===1?'':'s')),
+        Object.entries(positionCounts).map(([opt,n])=>{
+          const pct = totalResponses > 0 ? Math.round(n/totalResponses*100) : 0;
+          return h('div',{key:opt,style:{marginBottom:8}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3,fontSize:12,fontFamily:"'Lora',serif"}},
+              h('span',{style:{color:'#1a1a2e'}}, opt),
+              h('span',{style:{color:'#888'}}, n + ' (' + pct + '%)')
+            ),
+            h('div',{style:{height:6,background:'#f0ece0',borderRadius:3,overflow:'hidden'}},
+              h('div',{style:{width:pct+'%',height:'100%',background:'#5b3a8c',transition:'width .5s ease'}})
+            )
+          );
+        }),
+        h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid #f0ece0',fontSize:12,color:'#888',
+          fontFamily:"'Lora',serif",fontStyle:'italic'}},
+          'Full results — including reasoning samples — are published when the question closes.')
+      )
+    );
+  }
+
+  // ── Archive view ──
+  return h('div',null, Header, NavTabs,
+    archived.length === 0
+      ? h('div',{style:{textAlign:'center',padding:30,color:'#888',fontStyle:'italic'}},
+          'No archived questions yet. Past questions will appear here once they close.')
+      : h('div',null,
+          archived.map(q=>h('div',{key:q.id, style:{background:'#fff',border:'1px solid #e5dece',
+            borderRadius:8,padding:'14px 18px',marginBottom:10}},
+            h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,
+              fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:4}},
+              q.active_from ? new Date(q.active_from).toLocaleDateString() : ''),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,
+              color:'#1a1a2e',marginBottom:6,lineHeight:1.3}}, q.title),
+            q.framing && h('div',{style:{fontFamily:"'Lora',serif",fontSize:12.5,color:'#666',
+              fontStyle:'italic',lineHeight:1.5}}, q.framing)
+          ))
+        )
+  );
+}
+
+
 
 // ── Admin Panel: News Approval Queue ─────────────────────────────────────────
 // Stories submitted by non-press accounts arrive here before publishing.
@@ -10054,6 +10631,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
     h(NewsApprovalQueue,{user,profile,onToast}),
+    h(QuestionAuthorPanel,{user,profile,onToast}),
     h(MeetingPopulator,{user,profile,onToast}),
     h(CorrectionsQueue,{user,profile,onToast}),
     h(DeletedItemsPanel,{onToast}),
@@ -10755,6 +11333,8 @@ function App() {
       mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       mainTab==='news'&&h(NewsTab,{user,rep,profile}),
+
+      mainTab==='thequestion'&&h(TheQuestionTab,{user,profile,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       mainTab==='bills'&&h(Fragment,null,
 
