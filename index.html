@@ -5852,6 +5852,23 @@ function AuthScreen({onAuth, onGuest}) {
   const [accountType,setAccountType]=useState('resident'); // resident|business|nonprofit|press|official
   const [orgName,setOrgName]=useState(''); // shown for business/nonprofit
 
+  // Detect password recovery link on mount. Supabase fires PASSWORD_RECOVERY event
+  // when the user lands with a recovery token in the URL hash, OR we can check ?reset=1
+  useEffect(()=>{
+    if(typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const hashHasRecovery = (window.location.hash||'').includes('type=recovery') ||
+                             (window.location.hash||'').includes('access_token');
+    if(params.get('reset') === '1' || hashHasRecovery) {
+      setMode('reset');
+    }
+    // Listen for Supabase auth events — PASSWORD_RECOVERY fires when token is processed
+    const {data: subscription} = sb.auth.onAuthStateChange((event)=>{
+      if(event === 'PASSWORD_RECOVERY') setMode('reset');
+    });
+    return ()=>{ try { subscription?.subscription?.unsubscribe?.(); } catch(e){} };
+  },[]);
+
   const community=ZIP_COMMUNITY[zip.trim()]||null;
   const zipValid=VALID_ZIPS.includes(zip.trim());
 
@@ -5935,6 +5952,40 @@ function AuthScreen({onAuth, onGuest}) {
     setLoading(false);
   };
 
+  // Send password reset email
+  const handleSendReset=async()=>{
+    if(!email.trim()) { setError('Enter your email address.'); return; }
+    setLoading(true); setError('');
+    const redirectTo = window.location.origin + window.location.pathname + '?reset=1';
+    const {error:err} = await sb.auth.resetPasswordForEmail(email.trim(), {redirectTo});
+    if(err) {
+      setError(err.message);
+    } else {
+      setError('');
+      setMode('reset_sent');
+    }
+    setLoading(false);
+  };
+
+  // Set a new password (after clicking reset link in email)
+  const handleSetNewPassword=async()=>{
+    if(pass.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    setLoading(true); setError('');
+    const {error:err} = await sb.auth.updateUser({password: pass});
+    if(err) {
+      setError(err.message);
+      setLoading(false);
+      return;
+    }
+    // Clear the recovery token from the URL so reload doesn't re-trigger
+    if(window.history && window.history.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    setError('');
+    setMode('reset_complete');
+    setLoading(false);
+  };
+
   const inp=(val,setter,placeholder,type='text',extra={})=>
     h('input',{value:val,onChange:e=>setter(e.target.value),placeholder,type,
       style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',marginBottom:10,fontSize:14,boxSizing:'border-box',...(extra.style||{})},...extra});
@@ -5970,8 +6021,8 @@ function AuthScreen({onAuth, onGuest}) {
         )
       ),
 
-      // Mode toggle
-      h('div',{style:{display:'flex',marginBottom:20,border:'1px solid #eee',borderRadius:8,overflow:'hidden'}},
+      // Mode toggle (only for login/signup; hidden during password reset flow)
+      (mode==='login'||mode==='signup') && h('div',{style:{display:'flex',marginBottom:20,border:'1px solid #eee',borderRadius:8,overflow:'hidden'}},
         [['login','Sign In'],['signup','Create Account']].map(([m,l])=>
           h('button',{key:m,onClick:()=>{setMode(m);setError('');setStep(1);},
             style:{flex:1,padding:'10px',background:mode===m?'#1a1a2e':'#fff',color:mode===m?'#f0c040':'#555',border:'none',fontFamily:"'Playfair Display',serif",fontWeight:mode===m?700:400,fontSize:14}},l)
@@ -5985,7 +6036,84 @@ function AuthScreen({onAuth, onGuest}) {
         error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
         h('button',{onClick:handleLogin,disabled:loading,style:{width:'100%',background:loading?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
           loading?h(Spinner):'Sign In ->'
+        ),
+        h('div',{style:{textAlign:'center',marginTop:10}},
+          h('button',{onClick:()=>{setMode('forgot');setError('');setPass('');},
+            style:{background:'transparent',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',
+              fontFamily:"'Lora',serif",textDecoration:'underline',padding:0}},
+            'Forgot password?')
         )
+      ),
+
+      // ── FORGOT PASSWORD FORM ──
+      mode==='forgot'&&h(Fragment,null,
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',marginBottom:14,lineHeight:1.6}},
+          'Enter the email address you used to sign up. We\'ll send a link to reset your password.'),
+        inp(email,setEmail,'Email address','email'),
+        error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
+        h('button',{onClick:handleSendReset,disabled:loading,
+          style:{width:'100%',background:loading?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',
+            padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
+          loading?h(Spinner):'Send Reset Link'
+        ),
+        h('div',{style:{textAlign:'center',marginTop:10}},
+          h('button',{onClick:()=>{setMode('login');setError('');},
+            style:{background:'transparent',border:'none',color:'#888',fontSize:12,cursor:'pointer',
+              fontFamily:"'Lora',serif",textDecoration:'underline',padding:0}},
+            '← Back to sign in')
+        )
+      ),
+
+      // ── RESET EMAIL SENT CONFIRMATION ──
+      mode==='reset_sent'&&h(Fragment,null,
+        h('div',{style:{textAlign:'center',padding:'10px 0 20px'}},
+          h('div',{style:{fontSize:42,marginBottom:10}}, '📧'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:'#1a1a2e',marginBottom:8}},
+            'Check your email'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.6,marginBottom:14}},
+            "If an account exists for ",h('b',null,email||'that address'),", you'll get a reset link in the next minute or two. Check your spam folder if you don't see it.")
+        ),
+        h('button',{onClick:()=>{setMode('login');setError('');setPass('');},
+          style:{width:'100%',background:'#1a1a2e',color:'#f0c040',border:'none',
+            padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}},
+          '← Back to Sign In')
+      ),
+
+      // ── SET NEW PASSWORD (arrives via reset link) ──
+      mode==='reset'&&h(Fragment,null,
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',marginBottom:14,lineHeight:1.6}},
+          'Choose a new password for your account.'),
+        inp(pass,setPass,'New password (min 6 characters)','password'),
+        error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
+        h('button',{onClick:handleSetNewPassword,disabled:loading,
+          style:{width:'100%',background:loading?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',
+            padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
+          loading?h(Spinner):'Update Password'
+        )
+      ),
+
+      // ── RESET COMPLETE ──
+      mode==='reset_complete'&&h(Fragment,null,
+        h('div',{style:{textAlign:'center',padding:'10px 0 20px'}},
+          h('div',{style:{fontSize:42,marginBottom:10}}, '✓'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:'#1a6b3c',marginBottom:8}},
+            'Password updated'),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.6,marginBottom:14}},
+            "You're now signed in with your new password.")
+        ),
+        h('button',{onClick:async()=>{
+          // The user is already signed in via the recovery token; pull their profile and continue
+          const {data:{user}} = await sb.auth.getUser();
+          if(user) {
+            const {data:prof} = await sb.from('profiles').select('*').eq('id',user.id).single();
+            onAuth(user, prof||{});
+          } else {
+            setMode('login'); setPass('');
+          }
+        },
+          style:{width:'100%',background:'#1a1a2e',color:'#f0c040',border:'none',
+            padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,cursor:'pointer'}},
+          'Continue ->')
       ),
 
       // ── SIGNUP FORM - STEP INDICATOR ──
