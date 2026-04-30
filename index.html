@@ -3819,6 +3819,11 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState('contributions');
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState('');
   const [myEvents, setMyEvents] = useState([]);
   const [myExchange, setMyExchange] = useState([]);
   const [myProjects, setMyProjects] = useState([]);
@@ -4224,6 +4229,56 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
                 fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',width:'100%'}
             },'📋 Copy Invite Link → thepeoplesvoices.org')
           ),
+          // Change password
+          h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🔑 Password'),
+            !pwOpen && h('button',{onClick:()=>{setPwOpen(true);setPwMsg('');setPwNew('');setPwConfirm('');},
+              style:{background:'#fff8e7',color:'#8a6000',border:'1px solid #f0c040',padding:'8px 14px',
+                borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+              'Change Password'),
+            pwOpen && h('div',null,
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#666',marginBottom:10,lineHeight:1.5}},
+                'Choose a new password (min 6 characters). You\'ll stay signed in.'),
+              h('input',{type:'password',value:pwNew,onChange:e=>setPwNew(e.target.value),
+                placeholder:'New password',
+                style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'9px 12px',
+                  fontSize:13,marginBottom:8,boxSizing:'border-box'}}),
+              h('input',{type:'password',value:pwConfirm,onChange:e=>setPwConfirm(e.target.value),
+                placeholder:'Confirm new password',
+                style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'9px 12px',
+                  fontSize:13,marginBottom:8,boxSizing:'border-box'}}),
+              pwMsg && h('div',{style:{fontSize:12,padding:'8px 10px',marginBottom:8,
+                  borderRadius:5,fontFamily:"'Lora',serif",
+                  background: pwMsg.startsWith('✓') ? '#e8f5ee' : '#fdf0ee',
+                  border:'1px solid '+(pwMsg.startsWith('✓') ? '#b9d8c4' : '#f0c0b8'),
+                  color: pwMsg.startsWith('✓') ? '#1a6b3c' : '#c0392b'}}, pwMsg),
+              h('div',{style:{display:'flex',gap:6}},
+                h('button',{onClick:async()=>{
+                  if(pwNew.length < 6) { setPwMsg('Password must be at least 6 characters.'); return; }
+                  if(pwNew !== pwConfirm) { setPwMsg('Passwords don\'t match.'); return; }
+                  setPwSaving(true); setPwMsg('');
+                  const {error} = await sb.auth.updateUser({password: pwNew});
+                  if(error) {
+                    setPwMsg('Error: ' + error.message);
+                  } else {
+                    setPwMsg('✓ Password updated.');
+                    setPwNew(''); setPwConfirm('');
+                    setTimeout(()=>{setPwOpen(false); setPwMsg('');}, 2000);
+                  }
+                  setPwSaving(false);
+                }, disabled: pwSaving,
+                  style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'8px 14px',
+                    borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+                    cursor: pwSaving ? 'default' : 'pointer'}},
+                  pwSaving ? 'Saving...' : '✓ Update Password'),
+                h('button',{onClick:()=>{setPwOpen(false);setPwMsg('');setPwNew('');setPwConfirm('');},
+                  style:{background:'transparent',color:'#888',border:'1px solid #ddd',padding:'8px 14px',
+                    borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+                  'Cancel')
+              )
+            )
+          ),
+
           // Notification prefs shortcut
           h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🔔 Notifications'),
