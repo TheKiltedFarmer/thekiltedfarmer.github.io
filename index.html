@@ -6041,6 +6041,25 @@ function AuthScreen({onAuth, onGuest}) {
     setLoading(false);
   };
 
+  // Resend signup confirmation email — for users who never clicked the original link
+  const [resendStatus, setResendStatus] = useState(''); // '' | 'sending' | 'sent' | 'error'
+  const handleResendConfirmation=async()=>{
+    if(!email.trim()) return;
+    setResendStatus('sending');
+    const redirectTo = window.location.origin + window.location.pathname;
+    const {error:err} = await sb.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: {emailRedirectTo: redirectTo}
+    });
+    if(err) {
+      setResendStatus('error');
+      setError('Could not resend: ' + err.message);
+    } else {
+      setResendStatus('sent');
+    }
+  };
+
   const inp=(val,setter,placeholder,type='text',extra={})=>
     h('input',{value:val,onChange:e=>setter(e.target.value),placeholder,type,
       style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',marginBottom:10,fontSize:14,boxSizing:'border-box',...(extra.style||{})},...extra});
@@ -6089,6 +6108,19 @@ function AuthScreen({onAuth, onGuest}) {
         inp(email,setEmail,'Email address','email'),
         inp(pass,setPass,'Password','password'),
         error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
+        // Show "resend confirmation" prompt when error indicates the email isn't confirmed
+        error && /confirm|not.*verified|unverified/i.test(error) && email.trim() && h('div',{
+          style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:6,padding:'10px 12px',
+            marginBottom:12,fontSize:12,color:'#8a6000',fontFamily:"'Lora',serif",lineHeight:1.5}},
+          h('div',{style:{marginBottom:8}}, "Didn't get the confirmation email when you signed up? It may have gone to spam, or the original link may have expired."),
+          resendStatus === 'sent'
+            ? h('div',{style:{color:'#1a6b3c',fontWeight:700}}, '✓ Sent! Check your inbox (and spam folder).')
+            : h('button',{onClick:handleResendConfirmation, disabled: resendStatus === 'sending',
+                style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'7px 14px',
+                  borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,
+                  cursor: resendStatus === 'sending' ? 'default' : 'pointer'}},
+                resendStatus === 'sending' ? 'Sending...' : '📧 Resend confirmation email')
+        ),
         h('button',{onClick:handleLogin,disabled:loading,style:{width:'100%',background:loading?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
           loading?h(Spinner):'Sign In ->'
         ),
@@ -8893,6 +8925,123 @@ function TheQuestionTab({user, profile, onToast, onNavigate}) {
 // ── Admin Panel: News Approval Queue ─────────────────────────────────────────
 // Stories submitted by non-press accounts arrive here before publishing.
 // Verified press submissions skip this queue (auto-approved at insert).
+// ── Admin Panel: Stuck Signups Queue ─────────────────────────────────────────
+// Shows users who signed up but never confirmed their email, or never signed in.
+// Reads from the `stuck_signups` view (defined in stuck_signups_view.sql).
+function StuckSignupsQueue({user, profile, onToast}) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [resending, setResending] = useState(null); // user.id being resent
+
+  const load = ()=>{
+    setLoading(true);
+    sb.from('stuck_signups').select('*').limit(50)
+      .then(({data,error})=>{
+        if(error) {
+          console.error('stuck_signups view error:', error);
+          setRows([]);
+        } else {
+          setRows(data||[]);
+        }
+        setLoading(false);
+      })
+      .catch(()=>{ setRows([]); setLoading(false); });
+  };
+  useEffect(load,[]);
+
+  const resendForUser = async(row)=>{
+    if(!row.email) return;
+    setResending(row.id);
+    try {
+      const redirectTo = window.location.origin + window.location.pathname;
+      const {error} = await sb.auth.resend({
+        type:'signup',
+        email: row.email,
+        options:{emailRedirectTo: redirectTo}
+      });
+      if(error) {
+        onToast('Resend failed: ' + error.message);
+      } else {
+        onToast('✓ Confirmation email resent to ' + row.email);
+      }
+    } catch(e) {
+      onToast('Resend error: ' + e.message);
+    }
+    setResending(null);
+  };
+
+  if(loading) return null;
+  if(rows.length === 0) return null;
+
+  // Sort: unconfirmed-24h+ first (most urgent), then unconfirmed-recent, then never-signed-in
+  const order = {unconfirmed_24h_old:0, unconfirmed_recent:1, confirmed_never_signed_in:2, active:3};
+  const sorted = [...rows].sort((a,b)=>(order[a.status]||9)-(order[b.status]||9));
+
+  const fmtDate = (d)=>{
+    if(!d) return '—';
+    try { return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+    catch(e){ return '—'; }
+  };
+
+  const daysSince = (d)=>{
+    if(!d) return null;
+    try { return Math.floor((Date.now() - new Date(d).getTime())/86400000); }
+    catch(e){ return null; }
+  };
+
+  return h('div',{style:{background:'#fdf0e8',border:'1px solid #f0a868',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',
+      marginBottom: open?14:0, cursor:'pointer'}, onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',
+        display:'flex',alignItems:'center',gap:8}},
+        '🔓 Stuck signups',
+        h('span',{style:{background:'#a04020',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},
+          rows.length + ' user' + (rows.length===1?'':'s'))
+      ),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')
+    ),
+    open && h('div',null,
+      h('div',{style:{fontSize:11,color:'#666',fontStyle:'italic',marginBottom:10,fontFamily:"'Lora',serif"}},
+        'These users signed up but haven\'t confirmed their email or signed in. They may not realize they need to.'),
+      sorted.map(row=>{
+        const days = daysSince(row.signed_up_at);
+        const isUnconfirmed = !row.email_confirmed_at;
+        const statusLabel =
+          row.status === 'unconfirmed_24h_old' ? '⚠ Unconfirmed for ' + (days||'?') + ' day' + (days===1?'':'s') :
+          row.status === 'unconfirmed_recent' ? 'Just signed up — email confirmation pending' :
+          row.status === 'confirmed_never_signed_in' ? 'Confirmed but never signed in' :
+          row.status;
+        const statusColor = row.status === 'unconfirmed_24h_old' ? '#a04020' :
+          row.status === 'unconfirmed_recent' ? '#8a6000' : '#1a5c8a';
+        return h('div',{key:row.id, style:{background:'#fff',border:'1px solid #e8d8c8',
+          borderRadius:7,padding:'10px 12px',marginBottom:8}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap'}},
+            h('div',{style:{flex:1,minWidth:200}},
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e'}},
+                row.display_name || row.email.split('@')[0]),
+              h('div',{style:{fontSize:11,color:'#666',fontFamily:"'Lora',serif",marginTop:2}},
+                row.email + (row.zip ? ' · ' + row.zip : '')),
+              h('div',{style:{fontSize:11,color:statusColor,fontFamily:"'Lora',serif",marginTop:4,fontWeight:700}},
+                statusLabel),
+              h('div',{style:{fontSize:10,color:'#888',fontFamily:"'Lora',serif",marginTop:2}},
+                'Signed up ' + fmtDate(row.signed_up_at))
+            ),
+            isUnconfirmed && h('button',{onClick:()=>resendForUser(row), disabled: resending===row.id,
+              style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'6px 12px',
+                borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:11,
+                cursor: resending===row.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}},
+              resending===row.id ? 'Sending...' : '📧 Resend confirmation')
+          )
+        );
+      }),
+      h('div',{style:{fontSize:11,color:'#888',fontStyle:'italic',marginTop:10,
+        padding:10,background:'#fff8ee',borderRadius:6,fontFamily:"'Lora',serif",lineHeight:1.5}},
+        '💡 Tip: For a stuck user, you can also manually confirm them via Supabase Dashboard → Authentication → Users → click the user → "Confirm email." This bypasses the email entirely.')
+    )
+  );
+}
+
 function NewsApprovalQueue({user, profile, onToast}) {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -10813,6 +10962,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
     h(ResourceApprovalQueue,{onToast}),
+    h(StuckSignupsQueue,{user,profile,onToast}),
     h(NewsApprovalQueue,{user,profile,onToast}),
     h(QuestionAuthorPanel,{user,profile,onToast}),
     h(MeetingPopulator,{user,profile,onToast}),
