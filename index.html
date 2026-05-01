@@ -5541,10 +5541,10 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
     (n.display_name||'').toLowerCase().includes(search.toLowerCase())
   );
 
-  return h('div',{style:{display:'flex',gap:0,background:'#fff',borderRadius:10,overflow:'hidden',border:'1px solid #e5dece',minHeight:480}},
+  return h('div',{style:{display:'flex',gap:0,background:'#fff',borderRadius:10,overflow:'hidden',border:'1px solid #e5dece',height:600,maxHeight:'75vh'}},
 
     // Left — conversation list
-    h('div',{style:{width:220,borderRight:'1px solid #e5dece',display:'flex',flexDirection:'column',flexShrink:0}},
+    h('div',{style:{width:220,borderRight:'1px solid #e5dece',display:'flex',flexDirection:'column',flexShrink:0,minHeight:0}},
       h('div',{style:{padding:'12px 14px',borderBottom:'1px solid #e5dece',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#1a1a2e'}},
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#f0c040'}},'Direct Messages'),
         h('button',{onClick:()=>setShowNewDm(!showNewDm),
