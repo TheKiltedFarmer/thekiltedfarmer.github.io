@@ -3512,6 +3512,210 @@ function ProposeModal({onClose,onSubmit}) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHAT THREADING UTILITIES (shared by ZIP chat, group chat, direct messages)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Build a tree from flat messages. Returns array of {msg, children}.
+// Messages with parent_message_id pointing to a parent in the same set get nested.
+// Orphans (parent not in set) are surfaced as top-level so they're not lost.
+const buildMessageTree = (flat)=>{
+  if(!Array.isArray(flat) || flat.length === 0) return [];
+  const byId = {};
+  const childrenOf = {};
+  for(const m of flat) {
+    if(!m || m.id == null) continue;
+    byId[m.id] = m;
+    childrenOf[m.id] = [];
+  }
+  const roots = [];
+  for(const m of flat) {
+    if(!m || m.id == null) continue;
+    if(m.parent_message_id != null && byId[m.parent_message_id]) {
+      childrenOf[m.parent_message_id].push(m);
+    } else {
+      roots.push(m);
+    }
+  }
+  const build = (msg)=>({msg, children: (childrenOf[msg.id]||[]).map(build)});
+  return roots.map(build);
+};
+
+// Visual depth cap for indentation: after this depth, replies stack flat
+const MAX_VISIBLE_DEPTH = 5;
+
+// Inline event card rendering — shared across all chat surfaces
+function ChatEventCard({eventId, currentUserId, onToast}) {
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [rsvp, setRsvp] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(()=>{
+    if(!eventId) return;
+    sb.from('events').select('id,title,event_date,event_time,location,category,zip,description')
+      .eq('id', eventId).maybeSingle()
+      .then(({data})=>{ setEvent(data); setLoading(false); })
+      .catch(()=>setLoading(false));
+    if(currentUserId) {
+      sb.from('event_rsvps').select('status').eq('event_id', eventId).eq('user_id', currentUserId)
+        .maybeSingle().then(({data})=>{ if(data) setRsvp(data.status); }).catch(()=>{});
+    }
+  },[eventId, currentUserId]);
+
+  const setRsvpStatus = async(status)=>{
+    if(!currentUserId) { onToast && onToast('Sign in to RSVP'); return; }
+    setSubmitting(true);
+    try {
+      const {data: existing} = await sb.from('event_rsvps')
+        .select('id').eq('event_id', eventId).eq('user_id', currentUserId).maybeSingle();
+      if(existing) {
+        await sb.from('event_rsvps').update({status}).eq('id', existing.id);
+      } else {
+        await sb.from('event_rsvps').insert({event_id: eventId, user_id: currentUserId, status});
+      }
+      setRsvp(status);
+      onToast && onToast(status === 'going' ? '✓ Going' : status === 'maybe' ? '✓ Maybe' : '✓ Can\'t go');
+    } catch(e) { onToast && onToast('Could not save RSVP'); }
+    setSubmitting(false);
+  };
+
+  if(loading) return h('div',{style:{background:'#f5f3ee',border:'1px solid #e5dece',
+    borderRadius:8,padding:'10px 12px',fontSize:12,color:'#888',fontStyle:'italic'}},'Loading event...');
+  if(!event) return h('div',{style:{background:'#fdf0ee',border:'1px solid #f0a0a0',
+    borderRadius:8,padding:'10px 12px',fontSize:12,color:'#a04030',fontStyle:'italic'}},'⚠ Event not found (may have been deleted)');
+
+  const fmtDate = (d)=>{
+    try { return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
+    catch(e) { return d; }
+  };
+
+  return h('div',{style:{background:'#fff',border:'1.5px solid #f0c040',borderRadius:10,
+    padding:'10px 12px',marginTop:4,maxWidth:300}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:6}},
+      h('span',{style:{fontSize:9,background:'#f0c040',color:'#1a1a2e',padding:'1px 6px',borderRadius:8,
+        fontFamily:"'Playfair Display',serif",fontWeight:700,letterSpacing:'.05em'}},'📅 EVENT'),
+      h('span',{style:{fontSize:10,color:'#888',fontFamily:"'Lora',serif"}},
+        event.category||'Community')
+    ),
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
+      color:'#1a1a2e',marginBottom:4,lineHeight:1.3}}, event.title),
+    h('div',{style:{fontSize:11,color:'#555',fontFamily:"'Lora',serif",marginBottom:3}},
+      '📅 ', fmtDate(event.event_date), event.event_time && ' · '+event.event_time),
+    event.location && h('div',{style:{fontSize:11,color:'#555',fontFamily:"'Lora',serif",marginBottom:8}},
+      '📍 ', event.location.length > 50 ? event.location.slice(0,50)+'...' : event.location),
+    currentUserId && h('div',{style:{display:'flex',gap:4,marginTop:6}},
+      h('button',{onClick:()=>setRsvpStatus('going'), disabled: submitting,
+        style:{flex:1,background:rsvp==='going'?'#1a6b3c':'#fff',color:rsvp==='going'?'#fff':'#1a6b3c',
+          border:'1px solid #1a6b3c',padding:'4px 6px',borderRadius:5,fontSize:10,fontWeight:700,
+          fontFamily:"'Playfair Display',serif",cursor:'pointer'}}, '✓ Going'),
+      h('button',{onClick:()=>setRsvpStatus('maybe'), disabled: submitting,
+        style:{flex:1,background:rsvp==='maybe'?'#8a6000':'#fff',color:rsvp==='maybe'?'#fff':'#8a6000',
+          border:'1px solid #8a6000',padding:'4px 6px',borderRadius:5,fontSize:10,fontWeight:700,
+          fontFamily:"'Playfair Display',serif",cursor:'pointer'}}, '? Maybe'),
+      h('button',{onClick:()=>setRsvpStatus('no'), disabled: submitting,
+        style:{flex:1,background:rsvp==='no'?'#7a2838':'#fff',color:rsvp==='no'?'#fff':'#7a2838',
+          border:'1px solid #7a2838',padding:'4px 6px',borderRadius:5,fontSize:10,fontWeight:700,
+          fontFamily:"'Playfair Display',serif",cursor:'pointer'}}, "✕ Can't")
+    )
+  );
+}
+
+// Modal: pick an event to share into a chat
+function EventSharePicker({onPick, onClose, userZip}) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [scope, setScope] = useState('all'); // 'all' | 'mine' (zip)
+
+  useEffect(()=>{
+    const today = new Date().toISOString().slice(0,10);
+    let q = sb.from('events').select('id,title,event_date,event_time,location,category,zip')
+      .eq('approved', true).is('deleted_at', null).gte('event_date', today)
+      .order('event_date',{ascending:true}).limit(50);
+    q.then(({data})=>{ setEvents(data||[]); setLoading(false); }).catch(()=>setLoading(false));
+  },[]);
+
+  const filtered = scope === 'mine' && userZip
+    ? events.filter(e => e.zip === userZip || /jackson county/i.test(e.title||'') || /jackson county/i.test(e.location||''))
+    : events;
+
+  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,.65)',display:'flex',
+    alignItems:'center',justifyContent:'center',zIndex:9000,padding:14},
+    onClick: onClose},
+    h('div',{onClick:e=>e.stopPropagation(),
+      style:{background:'#fff',borderRadius:12,width:480,maxWidth:'100%',maxHeight:'80vh',
+        overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 30px 60px rgba(0,0,0,.4)'}},
+      h('div',{style:{padding:'14px 18px',borderBottom:'1px solid #e5dece',display:'flex',
+        justifyContent:'space-between',alignItems:'center'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#1a1a2e'}},
+          '📅 Share an event'),
+        h('button',{onClick:onClose,
+          style:{background:'transparent',border:'none',fontSize:20,cursor:'pointer',color:'#888',padding:'0 4px'}},'×')
+      ),
+      userZip && h('div',{style:{padding:'10px 18px',borderBottom:'1px solid #f0ece0',display:'flex',gap:6}},
+        h('button',{onClick:()=>setScope('mine'),
+          style:{background:scope==='mine'?'#1a1a2e':'#fff',color:scope==='mine'?'#f0c040':'#1a1a2e',
+            border:'1px solid '+(scope==='mine'?'#1a1a2e':'#d4cdb8'),
+            padding:'4px 12px',borderRadius:14,fontSize:11,cursor:'pointer',
+            fontFamily:"'Playfair Display',serif",fontWeight:scope==='mine'?700:400}}, '📍 ' + userZip),
+        h('button',{onClick:()=>setScope('all'),
+          style:{background:scope==='all'?'#1a1a2e':'#fff',color:scope==='all'?'#f0c040':'#1a1a2e',
+            border:'1px solid '+(scope==='all'?'#1a1a2e':'#d4cdb8'),
+            padding:'4px 12px',borderRadius:14,fontSize:11,cursor:'pointer',
+            fontFamily:"'Playfair Display',serif",fontWeight:scope==='all'?700:400}}, 'All Events')
+      ),
+      h('div',{style:{flex:1,overflowY:'auto',padding:'8px 0'}},
+        loading && h('div',{style:{padding:30,textAlign:'center',color:'#aaa',fontStyle:'italic'}},'Loading...'),
+        !loading && filtered.length === 0 && h('div',{style:{padding:30,textAlign:'center',color:'#aaa',fontStyle:'italic'}},
+          'No upcoming events.'),
+        filtered.map(e=>{
+          const fmtDate = (d)=>{ try { return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); } catch(_){ return d; } };
+          return h('button',{key:e.id, onClick:()=>{onPick(e); onClose();},
+            style:{display:'block',width:'100%',textAlign:'left',background:'transparent',border:'none',
+              borderBottom:'1px solid #f0ece0',padding:'10px 18px',cursor:'pointer'}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:3}}, e.title),
+            h('div',{style:{fontSize:11,color:'#666',fontFamily:"'Lora',serif"}},
+              fmtDate(e.event_date), e.event_time && ' · '+e.event_time,
+              e.location && ' · ' + (e.location.length > 40 ? e.location.slice(0,40)+'...' : e.location))
+          );
+        })
+      )
+    )
+  );
+}
+
+// Reply preview shown inside the input area when the user is replying to a message
+function ReplyPreview({replyTo, onCancel}) {
+  if(!replyTo) return null;
+  const snippet = (replyTo.content || replyTo.parent_snippet || '').slice(0,80);
+  return h('div',{style:{padding:'6px 12px',background:'#fff8e7',borderTop:'1px solid #f0c040',
+    display:'flex',alignItems:'center',gap:8}},
+    h('div',{style:{flex:1,minWidth:0}},
+      h('div',{style:{fontSize:10,color:'#8a6000',fontFamily:"'Playfair Display',serif",fontWeight:700,
+        textTransform:'uppercase',letterSpacing:'.06em',marginBottom:1}},
+        '↩ Replying to ' + (replyTo.display_name || replyTo.sender_name || 'message')),
+      h('div',{style:{fontSize:11,color:'#666',fontFamily:"'Lora',serif",fontStyle:'italic',
+        whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
+        snippet || (replyTo.shared_event_id ? '[shared event]' : '[message]'))
+    ),
+    h('button',{onClick:onCancel,
+      style:{background:'transparent',border:'none',color:'#888',fontSize:16,cursor:'pointer',padding:'0 4px'}}, '×')
+  );
+}
+
+// Inline "replied to" indicator shown above a reply message
+function ReplyContext({parentSnippet, parentAuthor, onJump}) {
+  if(!parentSnippet && !parentAuthor) return null;
+  return h('div',{onClick:onJump,
+    style:{fontSize:10,color:'#888',marginBottom:3,padding:'3px 8px',
+      background:'rgba(0,0,0,0.03)',borderLeft:'2px solid #f0c040',borderRadius:'0 4px 4px 0',
+      fontFamily:"'Lora',serif",fontStyle:'italic',cursor:'pointer',
+      maxWidth:'95%',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
+    '↩ ', h('b',null, parentAuthor || 'a neighbor'), ': ',
+    (parentSnippet||'').slice(0,60));
+}
+
+
 // ── Onboarding Tour ───────────────────────────────────────────────────────────
 // ── Onboarding Tours (per account type) ──────────────────────────────────────
 const TOUR_RESIDENT = [
@@ -5513,7 +5717,9 @@ const checkRoomActivity = async(rooms) => {
 };
 
 function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
-  const [activeTab, setActiveTab] = useState(navCtx?.dmTarget ? 'dm' : 'chat');
+  const [activeTab, setActiveTab] = useState(
+    (navCtx?.dmTarget || navCtx?.openConnectDm) ? 'dm' : 'chat'
+  );
   const [activeRoom, setActiveRoom] = useState(navCtx?.zipRoom || 'general');
 
   // Clear the nav context once consumed
@@ -5532,6 +5738,13 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
   const [unreadDms, setUnreadDms] = useState(0);
   const [roomActivity, setRoomActivity] = useState({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // ── Threading + event sharing state ──
+  const [chatReplyTo, setChatReplyTo] = useState(null);       // ZIP chat: message being replied to
+  const [chatEventToShare, setChatEventToShare] = useState(null);  // ZIP chat: event picked to share
+  const [chatShowEventPicker, setChatShowEventPicker] = useState(false);
+  const [dmReplyTo, setDmReplyTo] = useState(null);
+  const [dmEventToShare, setDmEventToShare] = useState(null);
+  const [dmShowEventPicker, setDmShowEventPicker] = useState(false);
   const [viewingProfile, setViewingProfile] = useState(null); // userId to show public profile
   const fileInputRef = useRef(null);
   const bottomRef = useRef(null);
@@ -5598,24 +5811,31 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
   },[messages]);
 
   const sendMessage = async()=>{
-    if(!msgText.trim()||!user) return;
+    if((!msgText.trim() && !chatEventToShare) || !user) return;
     if(msgText.trim().length > 1000) return;
     setSending(true);
     const msg = {
       room_id: activeRoom,
       user_id: user.id,
       display_name: displayName,
-      content: msgText.trim(),
+      content: msgText.trim() || (chatEventToShare ? '[shared event]' : ''),
       is_official: profile?.is_official||false,
       official_title: profile?.official_title||null,
       is_press: profile?.is_press||false,
       press_outlet: profile?.press_outlet||null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      // Threading fields
+      parent_message_id: chatReplyTo?.id || null,
+      parent_snippet: chatReplyTo ? (chatReplyTo.content||'').slice(0,100) : null,
+      parent_author: chatReplyTo?.display_name || null,
+      shared_event_id: chatEventToShare?.id || null,
     };
     const {data} = await sb.from('community_chat').insert(msg).select().single();
     if(data) setMessages(prev=>[...prev,data]);
     else setMessages(prev=>[...prev,{...msg,id:Date.now()}]);
     setMsgText('');
+    setChatReplyTo(null);
+    setChatEventToShare(null);
     setSending(false);
   };
 
@@ -5698,75 +5918,129 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
             h('div',{style:{fontSize:32,marginBottom:8}},'💬'),
             h('div',{style:{fontSize:13,fontStyle:'italic'}},'No messages yet. Start the conversation!')
           ),
-          messages.map((m,i)=>{
-            const isMe = m.user_id===user?.id;
-            return h('div',{key:m.id||i,style:{display:'flex',gap:8,alignItems:'flex-start',flexDirection:isMe?'row-reverse':'row'}},
-              h('div',{style:{width:30,height:30,borderRadius:'50%',flexShrink:0,
-                background:m.is_official?'#1a5c8a':'#1a1a2e',
-                color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}},
-                (m.display_name||'?')[0].toUpperCase()
-              ),
-              h('div',{style:{maxWidth:'75%'}},
-                h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:3,flexDirection:isMe?'row-reverse':'row'}},
-                  h('span',{style:{fontSize:11,fontWeight:700,color:isMe?'#1a5c8a':'#1a1a2e'}},isMe?'You':m.display_name),
-                  m.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'OFFICIAL'),
-                  m.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'PRESS'),
-                  !isMe&&m.user_id&&user&&h('button',{
-                    onClick:()=>toggleConnection(m.user_id),
-                    title:connections.has(m.user_id)?'Remove neighbor':'Add as neighbor',
-                    style:{background:'none',border:'none',cursor:'pointer',fontSize:10,
-                      color:connections.has(m.user_id)?'#1a6b3c':'#bbb',padding:'0 2px',lineHeight:1}
-                  },connections.has(m.user_id)?'\u2713 Neighbor':'+ Add'),
-                  h('span',{style:{fontSize:10,color:'#bbb'}},m.created_at?new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'')
+          // Render threaded tree
+          (()=>{
+            const tree = buildMessageTree(messages);
+            const renderNode = (node, depth) => {
+              const m = node.msg;
+              const isMe = m.user_id===user?.id;
+              const visualDepth = Math.min(depth, MAX_VISIBLE_DEPTH);
+              const indent = visualDepth * 16;
+              return h('div',{key:m.id,style:{display:'flex',flexDirection:'column',gap:6, marginLeft: indent}},
+                h('div',{style:{display:'flex',gap:8,alignItems:'flex-start',flexDirection:isMe?'row-reverse':'row'}},
+                  h('div',{style:{width:30,height:30,borderRadius:'50%',flexShrink:0,
+                    background:m.is_official?'#1a5c8a':'#1a1a2e',
+                    color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}},
+                    (m.display_name||'?')[0].toUpperCase()
+                  ),
+                  h('div',{style:{maxWidth:'75%',minWidth:0}},
+                    h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:3,flexDirection:isMe?'row-reverse':'row',flexWrap:'wrap'}},
+                      h('span',{style:{fontSize:11,fontWeight:700,color:isMe?'#1a5c8a':'#1a1a2e'}},isMe?'You':m.display_name),
+                      m.is_official&&h('span',{style:{background:'#1a5c8a',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'OFFICIAL'),
+                      m.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:10}},'PRESS'),
+                      !isMe&&m.user_id&&user&&h('button',{
+                        onClick:()=>toggleConnection(m.user_id),
+                        title:connections.has(m.user_id)?'Remove neighbor':'Add as neighbor',
+                        style:{background:'none',border:'none',cursor:'pointer',fontSize:10,
+                          color:connections.has(m.user_id)?'#1a6b3c':'#bbb',padding:'0 2px',lineHeight:1}
+                      },connections.has(m.user_id)?'\u2713 Neighbor':'+ Add'),
+                      h('span',{style:{fontSize:10,color:'#bbb'}},m.created_at?new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'')
+                    ),
+                    // Reply context if this is a reply
+                    m.parent_message_id && h(ReplyContext, {parentSnippet: m.parent_snippet, parentAuthor: m.parent_author}),
+                    // Message body
+                    m.image_url
+                      ? h('div',{style:{marginTop:2}},
+                          h('img',{src:m.image_url,alt:'photo',
+                            style:{maxWidth:220,maxHeight:220,borderRadius:8,display:'block',cursor:'pointer'},
+                            onClick:()=>window.open(m.image_url,'_blank')
+                          })
+                        )
+                      : (m.content && m.content !== '[shared event]') && h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
+                          borderRadius:8,padding:'8px 11px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6,color:'#333',wordBreak:'break-word'}},
+                          m.content
+                        ),
+                    // Inline event card if a shared event exists
+                    m.shared_event_id && h(ChatEventCard, {eventId: m.shared_event_id, currentUserId: user?.id, onToast: (msg)=>{} }),
+                    // Reply button
+                    user && h('button',{onClick:()=>setChatReplyTo(m),
+                      style:{background:'transparent',border:'none',color:'#888',fontSize:10,
+                        cursor:'pointer',padding:'2px 0',marginTop:2,fontFamily:"'Playfair Display',serif",
+                        fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}},'\u21A9 Reply')
+                  )
                 ),
-                m.image_url
-                  ? h('div',{style:{marginTop:2}},
-                      h('img',{src:m.image_url,alt:'photo',
-                        style:{maxWidth:220,maxHeight:220,borderRadius:8,display:'block',cursor:'pointer'},
-                        onClick:()=>window.open(m.image_url,'_blank')
-                      })
-                    )
-                  : h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
-                      borderRadius:8,padding:'8px 11px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6,color:'#333'}},
-                      m.content
-                    )
-              )
-            );
-          }),
+                // Render children recursively
+                node.children.length > 0 && h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+                  node.children.map(child => renderNode(child, depth + 1))
+                )
+              );
+            };
+            return tree.map(node => renderNode(node, 0));
+          })(),
           h('div',{ref:bottomRef})
         ),
         !user
           ? h('div',{style:{padding:14,background:'#faf8f3',borderTop:'1px solid #e5dece',textAlign:'center',fontSize:13,color:'#888',fontStyle:'italic'}},
               'Sign in to join the conversation'
             )
-          : h('div',{style:{padding:'10px 12px',background:'#faf8f3',borderTop:'1px solid #e5dece',display:'flex',gap:8,alignItems:'center'}},
-              // Hidden file input
-              h('input',{ref:fileInputRef,type:'file',accept:'image/*',style:{display:'none'},
-                onChange:e=>e.target.files[0]&&uploadPhoto(e.target.files[0])
-              }),
-              // Photo button
-              h('button',{
-                onClick:()=>fileInputRef.current&&fileInputRef.current.click(),
-                disabled:uploadingPhoto,
-                title:'Send a photo',
-                style:{background:'transparent',border:'1px solid #ddd',borderRadius:'50%',
-                  width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',
-                  cursor:'pointer',flexShrink:0,fontSize:16,color:uploadingPhoto?'#ccc':'#888'}
-              }, uploadingPhoto?'⏳':'📷'),
-              h('input',{
-                value:msgText,onChange:e=>setMsgText(e.target.value.slice(0,1000)),
-                onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(),
-                placeholder:'Say something to your community...',
-                maxLength:1000,
-                style:{flex:1,border:'1px solid #ddd',borderRadius:20,padding:'9px 14px',fontSize:13,
-                  fontFamily:"'Lora',serif",background:'#fff'}
-              }),
-              h('button',{onClick:sendMessage,disabled:!msgText.trim()||sending,
+          : h('div',null,
+              // Reply preview when replying
+              h(ReplyPreview, {replyTo: chatReplyTo, onCancel: ()=>setChatReplyTo(null)}),
+              // Selected event preview when about to share
+              chatEventToShare && h('div',{style:{padding:'6px 12px',background:'#fff8e7',borderTop:'1px solid #f0c040',
+                display:'flex',alignItems:'center',gap:8}},
+                h('div',{style:{flex:1,minWidth:0}},
+                  h('div',{style:{fontSize:10,color:'#8a6000',fontFamily:"'Playfair Display',serif",fontWeight:700,
+                    textTransform:'uppercase',letterSpacing:'.06em',marginBottom:1}}, '\uD83D\uDCC5 About to share:'),
+                  h('div',{style:{fontSize:12,color:'#1a1a2e',fontFamily:"'Lora',serif",
+                    whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}, chatEventToShare.title)
+                ),
+                h('button',{onClick:()=>setChatEventToShare(null),
+                  style:{background:'transparent',border:'none',color:'#888',fontSize:16,cursor:'pointer',padding:'0 4px'}},'\u00D7')
+              ),
+              h('div',{style:{padding:'10px 12px',background:'#faf8f3',borderTop:'1px solid #e5dece',display:'flex',gap:8,alignItems:'center'}},
+                // Hidden file input
+                h('input',{ref:fileInputRef,type:'file',accept:'image/*',style:{display:'none'},
+                  onChange:e=>e.target.files[0]&&uploadPhoto(e.target.files[0])
+                }),
+                // Photo button
+                h('button',{
+                  onClick:()=>fileInputRef.current&&fileInputRef.current.click(),
+                  disabled:uploadingPhoto,
+                  title:'Send a photo',
+                  style:{background:'transparent',border:'1px solid #ddd',borderRadius:'50%',
+                    width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',
+                    cursor:'pointer',flexShrink:0,fontSize:16,color:uploadingPhoto?'#ccc':'#888'}
+                }, uploadingPhoto?'\u23F3':'\uD83D\uDCF7'),
+                // Event share button
+                h('button',{
+                  onClick:()=>setChatShowEventPicker(true),
+                  title:'Share an event',
+                  style:{background:'transparent',border:'1px solid #ddd',borderRadius:'50%',
+                    width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',
+                    cursor:'pointer',flexShrink:0,fontSize:16,color:'#888'}
+                }, '\uD83D\uDCC5'),
+                h('input',{
+                  value:msgText,onChange:e=>setMsgText(e.target.value.slice(0,1000)),
+                  onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&sendMessage(),
+                  placeholder: chatReplyTo ? 'Reply to ' + (chatReplyTo.display_name||'message') + '...' : 'Say something to your community...',
+                  maxLength:1000,
+                  style:{flex:1,border:'1px solid #ddd',borderRadius:20,padding:'9px 14px',fontSize:13,
+                    fontFamily:"'Lora',serif",background:'#fff'}
+                }),
+                h('button',{onClick:sendMessage,disabled:(!msgText.trim()&&!chatEventToShare)||sending,
                 style:{background:msgText.trim()&&!sending?'#1a1a2e':'#ddd',color:msgText.trim()&&!sending?'#f0c040':'#aaa',
                   border:'none',borderRadius:20,padding:'9px 16px',fontFamily:"'Playfair Display',serif",
                   fontWeight:700,fontSize:13,cursor:msgText.trim()&&!sending?'pointer':'default',whiteSpace:'nowrap'}
               },'Send')
-            )
+              )
+            ),
+        // Event picker modal for ZIP chat
+        chatShowEventPicker && h(EventSharePicker, {
+          onPick: (e)=>setChatEventToShare(e),
+          onClose: ()=>setChatShowEventPicker(false),
+          userZip: profile?.zip
+        })
       )
     ),
 
@@ -11132,11 +11406,28 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
       ),
       notifications.map((n,i)=>{
         const type = NOTIF_TYPES[n.type]||NOTIF_TYPES.system;
-        return h('div',{key:n.id||i,style:{
-          padding:'12px 16px',
-          borderBottom:i<notifications.length-1?'1px solid #f5f3ee':'none',
-          background:n.read?'#fff':'#f0f7ff',
-          display:'flex',gap:10,alignItems:'flex-start'}},
+        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update';
+        return h('div',{key:n.id||i,
+          onClick: isClickable ? ()=>{
+            // Mark as read locally and in DB
+            try { sb.from('notifications').update({read:true}).eq('id',n.id); } catch(e){}
+            // Route based on type
+            if(n.type === 'dm') {
+              // Navigate to Connect → DM tab. We don't have the sender's user_id
+              // on the notification, so the user lands on their DM list and picks
+              // the conversation they want.
+              onOpenChat && onOpenChat('dm');
+            } else {
+              // Default: just close the panel, future routing can be added
+              onClose && onClose();
+            }
+          } : undefined,
+          style:{
+            padding:'12px 16px',
+            borderBottom:i<notifications.length-1?'1px solid #f5f3ee':'none',
+            background:n.read?'#fff':'#f0f7ff',
+            display:'flex',gap:10,alignItems:'flex-start',
+            cursor: isClickable ? 'pointer' : 'default'}},
           h('div',{style:{fontSize:20,flexShrink:0,marginTop:2}},type.icon),
           h('div',{style:{flex:1,minWidth:0}},
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:n.read?400:700,fontSize:13,color:'#1a1a2e',lineHeight:1.4,marginBottom:3}},n.title),
@@ -11623,6 +11914,10 @@ function App() {
       onOpenPrefs:()=>{setShowNotifications(false);setShowNotificationPrefs(true);},
       onOpenChat:(roomId)=>{
         setShowNotifications(false);
+        // Special token 'dm' means open Connect tab on DM list
+        if(roomId === 'dm') {
+          setFeedNavCtx({openConnectDm:true});
+        }
         setMainTab('connect');
       }
     }),
