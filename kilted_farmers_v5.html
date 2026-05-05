@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Kilted Farmers — Distribution Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green:#2D6A4F; --green-dark:#1B4332; --green-light:#52B788;
+  --tan:#A67C52; --tan-light:#D4A96A;
+  --cream:#FAF6EF; --cream-dark:#F0E9DC;
+  --ink:#1A1A1A; --mid:#5A5A5A; --rule:#D8CFC4;
+  --red:#C0392B; --blue:#2471A3;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--ink);min-height:100vh;}
+
+.header{background:var(--green-dark);padding:28px 40px 22px;text-align:center;position:relative;overflow:hidden;}
+.header::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(255,255,255,0.03) 20px,rgba(255,255,255,0.03) 40px);}
+.header-kilt{font-size:12px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;margin-bottom:5px;position:relative;}
+.header h1{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:#fff;position:relative;}
+.header-sub{font-size:12px;color:rgba(255,255,255,0.5);margin-top:5px;position:relative;}
+.header-rule{width:50px;height:2px;background:var(--tan-light);margin:12px auto 0;position:relative;}
+
+.tab-bar{display:flex;background:#fff;border-bottom:2px solid var(--rule);padding:0 16px;max-width:960px;margin:0 auto;overflow-x:auto;}
+.tab{padding:12px 16px;font-size:13px;font-weight:600;color:var(--mid);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;white-space:nowrap;}
+.tab:hover{color:var(--green);}
+.tab.active{color:var(--green-dark);border-bottom-color:var(--green-dark);}
+
+.main{max-width:960px;margin:0 auto;padding:24px 18px 80px;}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+.card{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:22px 26px;margin-bottom:18px;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
+.card-title{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--green-dark);margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+.card-title-dot{width:7px;height:7px;border-radius:50%;background:var(--tan);flex-shrink:0;}
+.card-sub{font-size:13px;color:var(--mid);margin-bottom:14px;padding-left:15px;}
+
+.period-bar{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap;}
+.period-label{font-size:13px;color:var(--mid);font-weight:600;}
+.period-select,.period-input{padding:7px 11px;border:1.5px solid var(--rule);border-radius:6px;background:#fff;font-family:'Source Sans 3',sans-serif;font-size:13px;color:var(--ink);}
+.period-input{width:150px;}
+.period-select:focus,.period-input:focus{outline:none;border-color:var(--green);}
+
+.revenue-row{display:flex;align-items:center;gap:8px;}
+.big-input{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:var(--green-dark);border:none;border-bottom:2px solid var(--rule);background:transparent;width:200px;padding:4px 0;}
+.big-input:focus{outline:none;border-color:var(--green);}
+.currency-prefix{font-family:'Playfair Display',serif;font-size:19px;color:var(--tan);font-weight:700;}
+
+.row-flex{display:flex;gap:8px;align-items:center;margin-bottom:8px;animation:fadeIn 0.2s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.inp{padding:7px 10px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:13px;background:var(--cream);}
+.inp:focus{outline:none;border-color:var(--green);background:#fff;}
+.inp-name{flex:1;}
+.inp-amt{width:110px;text-align:right;}
+.inp-sm{width:80px;text-align:center;}
+.receipt-btn{padding:5px 10px;border:1.5px solid var(--rule);border-radius:6px;background:var(--cream);font-size:11px;font-family:'Source Sans 3',sans-serif;cursor:pointer;color:var(--mid);transition:all 0.15s;white-space:nowrap;}
+.receipt-btn:hover{border-color:var(--tan);color:var(--tan);}
+.receipt-btn.has-receipt{border-color:var(--green);color:var(--green);background:#edf7f1;}
+.remove-btn{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--rule);background:transparent;color:var(--mid);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;}
+.remove-btn:hover{border-color:var(--red);color:var(--red);background:#fff0ee;}
+.add-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1.5px dashed var(--green-light);border-radius:6px;background:transparent;color:var(--green);font-family:'Source Sans 3',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;margin-top:4px;}
+.add-btn:hover{background:#edf7f1;border-style:solid;}
+
+.team-table{width:100%;border-collapse:collapse;}
+.team-table th{text-align:left;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);padding:0 9px 9px;border-bottom:1px solid var(--rule);}
+.team-table td{padding:8px 9px;border-bottom:1px solid var(--cream-dark);vertical-align:middle;}
+.member-name-input{border:none;background:transparent;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;color:var(--ink);width:110px;padding:2px 0;border-bottom:1px solid transparent;}
+.member-name-input:focus{outline:none;border-color:var(--tan);}
+.role-select{padding:3px 7px;border:1.5px solid var(--rule);border-radius:5px;font-family:'Source Sans 3',sans-serif;font-size:11px;background:var(--cream);color:var(--ink);cursor:pointer;}
+.role-badge{display:inline-block;font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 6px;border-radius:4px;font-weight:600;}
+.role-steward{background:#e8f4ee;color:var(--green-dark);border:1px solid #b7dcc8;}
+.role-contributor{background:#fdf3e7;color:var(--tan);border:1px solid var(--tan-light);}
+.member-hours-input{border:1.5px solid var(--rule);border-radius:6px;background:var(--cream);font-family:'Source Sans 3',sans-serif;font-size:12px;color:var(--ink);width:62px;padding:5px 7px;text-align:center;}
+.member-hours-input:focus{outline:none;border-color:var(--green);background:#fff;}
+.member-share{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--green-dark);}
+.member-pct{font-size:11px;color:var(--mid);}
+
+/* TIME CLOCK */
+.clock-member-card{background:#fff;border:1px solid var(--rule);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+.clock-member-header{display:flex;align-items:center;justify-content:space-between;padding:12px 15px;background:var(--cream);border-bottom:1px solid var(--rule);cursor:pointer;}
+.clock-member-name{font-weight:700;font-size:13px;color:var(--ink);display:flex;align-items:center;gap:8px;}
+.clock-member-total{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--green-dark);}
+.clock-body{padding:14px;display:none;}
+.clock-body.open{display:block;}
+.clock-inout{display:flex;gap:7px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+.clock-time-input{padding:6px 9px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:12px;background:var(--cream);width:170px;}
+.clock-time-input:focus{outline:none;border-color:var(--green);background:#fff;}
+.clock-btn{padding:6px 12px;border-radius:6px;border:none;font-family:'Source Sans 3',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;}
+.clock-btn-in{background:var(--green);color:#fff;}
+.clock-btn-in:hover{background:var(--green-dark);}
+.clock-btn-out{background:var(--tan);color:#fff;}
+.clock-btn-out:hover{background:#8a6340;}
+.punch-entry{display:flex;gap:7px;align-items:center;padding:4px 0;border-bottom:1px solid var(--cream-dark);font-size:11px;color:var(--mid);}
+.punch-entry:last-child{border-bottom:none;}
+.punch-time{font-family:'Playfair Display',serif;font-size:11px;color:var(--ink);font-weight:700;}
+.punch-dur{color:var(--green);font-weight:600;min-width:50px;}
+.daily-section{margin-top:12px;}
+.daily-section-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);margin-bottom:6px;font-weight:600;}
+.daily-row{display:flex;gap:6px;align-items:center;margin-bottom:5px;}
+.daily-date{padding:5px 8px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:12px;background:var(--cream);width:135px;}
+.daily-hours{padding:5px 8px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:12px;background:var(--cream);width:65px;text-align:center;}
+.daily-note{flex:1;padding:5px 8px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:12px;background:var(--cream);}
+
+/* SUMMARY */
+.summary{background:var(--green-dark);border-radius:12px;padding:26px 30px;color:#fff;margin-bottom:18px;position:relative;overflow:hidden;}
+.summary::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 30px,rgba(255,255,255,0.02) 30px,rgba(255,255,255,0.02) 60px);}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;position:relative;margin-bottom:18px;}
+.summary-item-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px;}
+.summary-item-value{font-family:'Playfair Display',serif;font-size:24px;font-weight:900;color:#fff;line-height:1;}
+.summary-item-value.accent{color:var(--tan-light);}
+.summary-divider{height:1px;background:rgba(255,255,255,0.15);margin-bottom:14px;position:relative;}
+.breakdown-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;position:relative;}
+.breakdown-label{color:rgba(255,255,255,0.65);}
+.breakdown-value{color:#fff;font-weight:600;}
+.breakdown-value.neg{color:#ff9f9f;}
+.breakdown-final{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.2);position:relative;}
+.breakdown-final-label{font-family:'Playfair Display',serif;font-size:14px;color:#fff;font-weight:700;}
+.breakdown-final-value{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:var(--green-light);}
+
+.status-bar{padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:14px;display:none;}
+.status-bar.success{background:#edf7f1;color:var(--green-dark);border:1px solid #b7dcc8;display:block;}
+.status-bar.error{background:#fff0ee;color:var(--red);border:1px solid #f5b7b1;display:block;}
+.status-bar.loading{background:#fdf3e7;color:var(--tan);border:1px solid var(--tan-light);display:block;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--green-dark);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;font-family:"Source Sans 3",sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.2);z-index:9999;opacity:0;transform:translateY(8px);transition:all 0.25s ease;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.error{background:var(--red);}
+
+/* REVENUE LOG */
+.rev-entry-form{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:16px;}
+.rev-field label{display:block;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin-bottom:4px;font-weight:600;}
+.rev-field input,.rev-field select{width:100%;padding:8px 11px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:13px;background:var(--cream);}
+.rev-field input:focus,.rev-field select:focus{outline:none;border-color:var(--green);background:#fff;}
+.rev-log-table{width:100%;border-collapse:collapse;font-size:13px;}
+.rev-log-table th{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);padding:7px 10px;background:var(--cream);border:1px solid var(--rule);text-align:left;}
+.rev-log-table td{padding:8px 10px;border:1px solid var(--rule);}
+.rev-log-table tr:nth-child(even) td{background:var(--cream);}
+.rev-total-row td{background:var(--green-dark)!important;color:#fff;font-weight:700;font-family:'Playfair Display',serif;}
+.rev-amount{font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--green-dark);}
+.source-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:var(--cream-dark);color:var(--mid);}
+
+/* INGREDIENT CALC */
+.ing-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+@media(max-width:600px){.ing-grid{grid-template-columns:1fr;}}
+.ing-row{display:flex;gap:7px;align-items:center;margin-bottom:7px;}
+.ing-name{flex:1;padding:7px 10px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:13px;background:var(--cream);}
+.ing-name:focus{outline:none;border-color:var(--green);background:#fff;}
+.ing-num{width:90px;padding:7px 10px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:13px;background:var(--cream);text-align:right;}
+.ing-num:focus{outline:none;border-color:var(--green);background:#fff;}
+.ing-unit{width:70px;padding:7px 8px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:12px;background:var(--cream);}
+.ing-results{background:var(--green-dark);border-radius:10px;padding:22px 26px;color:#fff;}
+.ing-result-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
+.ing-result-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:3px;}
+.ing-result-value{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:#fff;}
+.ing-result-value.accent{color:var(--tan-light);}
+.ing-divider{height:1px;background:rgba(255,255,255,0.15);margin-bottom:14px;}
+.ing-breakdown-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;}
+.ing-breakdown-label{color:rgba(255,255,255,0.65);}
+.ing-breakdown-value{color:#fff;font-weight:600;}
+.markup-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.markup-label{font-size:13px;color:var(--mid);font-weight:600;}
+.markup-input{width:80px;padding:7px 10px;border:1.5px solid var(--rule);border-radius:6px;font-family:'Source Sans 3',sans-serif;font-size:13px;background:var(--cream);text-align:center;}
+.markup-input:focus{outline:none;border-color:var(--green);background:#fff;}
+.markup-suffix{font-size:13px;color:var(--mid);}
+.batch-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+
+/* PRINT */
+.print-card{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:24px 28px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
+.print-header-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:13px;border-bottom:3px solid var(--green-dark);}
+.print-title{font-family:'Playfair Display',serif;font-size:19px;font-weight:900;color:var(--green-dark);}
+.print-sub{font-size:11px;color:var(--mid);margin-top:2px;}
+.print-period{font-family:'Playfair Display',serif;font-size:13px;font-weight:700;color:var(--tan);text-align:right;}
+.print-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;margin-bottom:12px;}
+.print-meta-item{display:flex;justify-content:space-between;padding:5px 9px;background:var(--cream);border-radius:4px;}
+.print-meta-label{color:var(--mid);}
+.print-meta-value{font-weight:600;color:var(--ink);}
+.ct-box{background:#fdf3e7;border:1px solid var(--tan-light);border-radius:8px;padding:9px 13px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.ct-label{font-size:12px;color:var(--tan);font-weight:600;}
+.ct-value{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--tan);}
+.dist-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px;}
+.dist-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);padding:6px 8px;background:var(--cream);border:1px solid var(--rule);text-align:left;}
+.dist-table td{padding:7px 8px;border:1px solid var(--rule);}
+.dist-table td:nth-child(3),.dist-table td:nth-child(4),.dist-table td:nth-child(5){text-align:center;}
+.dist-table td:last-child{text-align:right;font-family:'Playfair Display',serif;font-size:13px;font-weight:700;color:var(--green-dark);}
+.dist-table tr:nth-child(even) td{background:var(--cream);}
+.dist-table .total-row td{background:var(--green-dark);color:#fff;font-weight:700;border-color:var(--green-dark);}
+.dist-table .total-row td:last-child{color:var(--tan-light);}
+.expense-chips{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0 10px;}
+.expense-chip{padding:2px 9px;background:var(--cream-dark);border-radius:20px;font-size:11px;color:var(--mid);display:flex;align-items:center;gap:3px;}
+.sig-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);}
+.sig-block{font-size:11px;color:var(--mid);}
+.sig-line{border-bottom:1px solid var(--ink);height:24px;margin-bottom:3px;}
+
+/* HISTORY */
+.history-item{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:14px 18px;margin-bottom:10px;cursor:pointer;transition:all 0.15s;}
+.history-item:hover{border-color:var(--green);box-shadow:0 2px 12px rgba(45,106,79,0.1);}
+.history-item-header{display:flex;justify-content:space-between;align-items:flex-start;}
+.history-item-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--green-dark);}
+.history-item-date{font-size:11px;color:var(--mid);}
+.history-item-meta{display:flex;gap:14px;margin-top:6px;font-size:12px;color:var(--mid);}
+.history-item-pool{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--green-dark);}
+.receipt-preview{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px;}
+.receipt-thumb{width:55px;height:55px;border-radius:6px;object-fit:cover;border:1px solid var(--rule);cursor:pointer;transition:transform 0.15s;}
+.receipt-thumb:hover{transform:scale(1.05);}
+
+.actions{display:flex;gap:9px;justify-content:center;margin-bottom:32px;flex-wrap:wrap;}
+.btn-primary{padding:10px 24px;background:var(--green-dark);color:#fff;border:none;border-radius:8px;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;}
+.btn-primary:hover{background:var(--green);}
+.btn-primary:disabled{background:#aaa;cursor:not-allowed;}
+.btn-secondary{padding:10px 24px;background:transparent;color:var(--green-dark);border:2px solid var(--green-dark);border-radius:8px;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;}
+.btn-secondary:hover{background:var(--cream-dark);}
+.btn-tan{padding:10px 24px;background:var(--tan);color:#fff;border:none;border-radius:8px;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;}
+.btn-tan:hover{background:#8a6340;}
+.btn-tan:disabled{background:#aaa;cursor:not-allowed;}
+.btn-green{padding:10px 24px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:'Source Sans 3',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;}
+.btn-green:hover{background:var(--green-dark);}
+.btn-green:disabled{background:#aaa;cursor:not-allowed;}
+
+.footer{text-align:center;font-size:11px;color:var(--mid);padding:16px;border-top:1px solid var(--rule);}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:12px;max-width:680px;width:95%;max-height:90vh;overflow-y:auto;padding:24px;}
+.modal-title{font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:var(--green-dark);margin-bottom:14px;}
+.modal-close{float:right;background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--mid);}
+
+@media print{
+  body{background:#fff;}
+  .header,.tab-bar,.inputs-section,.summary,.actions,.footer,.clock-section,.status-bar{display:none!important;}
+  .tab-content{display:block!important;}
+  .print-card{box-shadow:none;border:none;padding:0;}
+  .main{padding:0;max-width:100%;}
+}
+@media(max-width:620px){
+  .summary-grid{grid-template-columns:1fr 1fr;}
+  .header h1{font-size:22px;}
+  .card{padding:15px;}
+  .print-meta,.sig-row{grid-template-columns:1fr;}
+  .rev-entry-form{grid-template-columns:1fr 1fr;}
+  .ing-result-grid{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- PASSWORD GATE -->
+<div id="passwordGate" style="position:fixed;inset:0;background:var(--green-dark);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;">
+  <div style="text-align:center;padding:40px 32px;background:rgba(255,255,255,0.05);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:360px;width:90%;">
+    <div style="font-size:12px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;margin-bottom:10px;font-family:Source Sans 3,sans-serif;">The Kilted Farmers</div>
+    <div style="font-family:Playfair Display,serif;font-size:28px;font-weight:900;color:#fff;margin-bottom:6px;">Operations Hub</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:28px;">Team access only</div>
+    <input type="password" id="passwordInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPassword()"
+      style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-family:Source Sans 3,sans-serif;font-size:15px;margin-bottom:10px;text-align:center;letter-spacing:2px;">
+    <div id="passwordError" style="color:#ff9f9f;font-size:13px;margin-bottom:10px;min-height:18px;font-family:Source Sans 3,sans-serif;"></div>
+    <button onclick="checkPassword()"
+      style="width:100%;padding:12px;background:var(--tan);color:#fff;border:none;border-radius:8px;font-family:Source Sans 3,sans-serif;font-size:14px;font-weight:600;cursor:pointer;">
+      Enter
+    </button>
+  </div>
+  <div style="margin-top:20px;font-size:11px;color:rgba(255,255,255,0.2);font-family:Source Sans 3,sans-serif;">Concord, Michigan</div>
+</div>
+
+<script>
+const PW_HASH='f7a7da26ecb30f0ce23764651a08414223e2d42e35ddd240218ee05ba02a270d';
+async function hashStr(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function checkPassword(){
+  const val=document.getElementById('passwordInput').value;
+  const hash=await hashStr(val);
+  if(hash===PW_HASH){
+    sessionStorage.setItem('kf_auth','1');
+    document.getElementById('passwordGate').style.display='none';
+    document.getElementById('passwordInput').value='';
+  } else {
+    document.getElementById('passwordError').textContent='Incorrect password. Try again.';
+    document.getElementById('passwordInput').value='';
+    document.getElementById('passwordInput').focus();
+  }
+}
+// Auto-bypass if already authenticated this session
+if(sessionStorage.getItem('kf_auth')==='1'){
+  document.getElementById('passwordGate').style.display='none';
+}
+</script>
+
+<div class="header">
+  <div class="header-kilt">The Kilted Farmers</div>
+  <h1>Operations Hub</h1>
+  <div class="header-sub">Distribution · Revenue · Ingredients · History</div>
+  <div class="header-rule"></div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('distribution',this)">Distribution</div>
+  <div class="tab" onclick="switchTab('revenue',this)">Revenue Log</div>
+  <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
+  <div class="tab" onclick="switchTab('team',this)">Team</div>
+  <div class="tab" onclick="switchTab('ingredients',this)">Ingredients</div>
+  <div class="tab" onclick="switchTab('printsheet',this)">Print Sheet</div>
+  <div class="tab" onclick="switchTab('history',this)">History</div>
+</div>
+
+<div class="main">
+
+<!-- ─── DISTRIBUTION ─── -->
+<div class="tab-content active" id="tab-distribution">
+  <div id="distStatus" class="status-bar"></div>
+  <div class="period-bar" style="margin-top:4px;">
+    <span class="period-label">Pay Period:</span>
+    <select class="period-select" id="periodType" onchange="calculate()">
+      <option value="Weekly">Weekly</option>
+      <option value="Bi-Weekly">Bi-Weekly</option>
+      <option value="Monthly" selected>Monthly</option>
+      <option value="Quarterly">Quarterly</option>
+    </select>
+    <input type="text" class="period-input" id="periodDate" placeholder="e.g. May 2026" oninput="calculate()">
+  </div>
+  <div class="inputs-section">
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot"></div>Gross Revenue</div>
+      <div class="card-sub">Auto-filled from Revenue Log, or enter manually</div>
+      <div class="revenue-row">
+        <span class="currency-prefix">$</span>
+        <input type="number" class="big-input" id="revenue" placeholder="0.00" oninput="calculate()" min="0" step="0.01">
+      </div>
+      <div style="margin-top:10px;">
+        <button class="add-btn" onclick="pullFromRevLog()">↓ Pull total from Revenue Log</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot"></div>Expenses</div>
+      <div class="card-sub">List each expense. Attach receipts for full transparency.</div>
+      <div id="expenseList"></div>
+      <button class="add-btn" onclick="addExpense()">+ Add Expense</button>
+    </div>
+  </div>
+  <div class="summary">
+    <div class="summary-grid">
+      <div><div class="summary-item-label">Gross Revenue</div><div class="summary-item-value" id="s-revenue">$0</div></div>
+      <div><div class="summary-item-label">Total Expenses</div><div class="summary-item-value" id="s-expenses">$0</div></div>
+      <div><div class="summary-item-label">Distributable Pool</div><div class="summary-item-value accent" id="s-pool">$0</div></div>
+    </div>
+    <div class="summary-divider"></div>
+    <div class="breakdown-row"><span class="breakdown-label">Gross Revenue</span><span class="breakdown-value" id="b-revenue">$0.00</span></div>
+    <div class="breakdown-row"><span class="breakdown-label">Total Expenses</span><span class="breakdown-value neg" id="b-expenses">— $0.00</span></div>
+    <div class="breakdown-row"><span class="breakdown-label">Common Table (8%)</span><span class="breakdown-value neg" id="b-ct">— $0.00</span></div>
+    <div class="breakdown-final"><span class="breakdown-final-label">Distributable Pool</span><span class="breakdown-final-value" id="b-pool">$0.00</span></div>
+  </div>
+  <div class="actions">
+    <button class="btn-tan" id="savePeriodBtn" onclick="savePeriod()">💾 Save This Period</button>
+    <button class="btn-secondary" onclick="resetAll()">↺ Reset</button>
+  </div>
+</div>
+
+<!-- ─── REVENUE LOG ─── -->
+<div class="tab-content" id="tab-revenue">
+  <div id="revStatus" class="status-bar"></div>
+  <div class="card" style="margin-top:4px;">
+    <div class="card-title"><div class="card-title-dot"></div>Log a Revenue Entry</div>
+    <div class="card-sub">Record income as it comes in. Saves immediately so the whole team can see it.</div>
+    <div class="rev-entry-form">
+      <div class="rev-field">
+        <label>Amount</label>
+        <input type="number" id="revAmount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="rev-field">
+        <label>Source</label>
+        <select id="revSource">
+          <option>Farmers Market</option>
+          <option>Wholesale Account</option>
+          <option>Direct Sale / Cash</option>
+          <option>Check</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="rev-field">
+        <label>Reported By</label>
+        <input type="text" id="revReporter" placeholder="Your name">
+      </div>
+      <div class="rev-field">
+        <label>Notes (optional)</label>
+        <input type="text" id="revNotes" placeholder="e.g. Concord Farmers Market">
+      </div>
+      <button class="btn-green" onclick="logRevenue()" style="align-self:end;">+ Log</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Revenue This Period</div>
+    <div class="card-sub">All entries for the current pay period label. Pull total into Distribution when ready.</div>
+    <div id="revLogContent"><p style="color:var(--mid);font-size:13px;">Enter a period label in the Distribution tab first, then log entries here.</p></div>
+  </div>
+</div>
+
+<!-- ─── TIME CLOCK ─── -->
+<div class="tab-content" id="tab-timeclock">
+  <div style="margin-top:4px;" class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Time Clock</div>
+    <div class="card-sub">Clock in/out with timestamps or enter daily hours. All entries feed into the distribution automatically.</div>
+  </div>
+  <div id="clockSection"></div>
+</div>
+
+<!-- ─── TEAM ─── -->
+<div class="tab-content" id="tab-team">
+  <div style="margin-top:4px;" class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Team Members</div>
+    <div class="card-sub">Stewards are full LLC members. Contributors are in their trial year. All hours count equally.</div>
+    <table class="team-table">
+      <thead><tr><th>Name</th><th>Role</th><th style="width:80px;text-align:center;">Hours</th><th style="width:115px;text-align:right;">Share</th><th style="width:32px;"></th></tr></thead>
+      <tbody id="teamBody"></tbody>
+      <tfoot><tr><td colspan="5" style="padding-top:11px;"><button class="add-btn" onclick="addMember()">+ Add Member</button></td></tr></tfoot>
+    </table>
+  </div>
+</div>
+
+<!-- ─── INGREDIENTS ─── -->
+<div class="tab-content" id="tab-ingredients">
+
+  <div style="margin-top:4px;" class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Bulk Ingredients</div>
+    <div class="card-sub">Base ingredients bought in large quantities — flour, eggs, etc. Enter what you paid and how many individual pasta orders that purchase yields.</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;">
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Ingredient</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Purchase Cost ($)</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Yields (# pastas)</div>
+      <div></div>
+    </div>
+    <div id="bulkIngList"></div>
+    <button class="add-btn" onclick="addBulkIng()">+ Add Bulk Ingredient</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Specialty / Portion Ingredients</div>
+    <div class="card-sub">Small-quantity ingredients — squid ink, truffle, garlic, butternut squash. Enter what you paid, the size of that purchase, and how much goes into each pasta order.</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;">
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Ingredient</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Purchase Cost ($)</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Purchase Size</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Used Per Pasta</div>
+      <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:600;">Unit</div>
+      <div></div>
+    </div>
+    <div id="specIngList"></div>
+    <button class="add-btn" onclick="addSpecIng()">+ Add Specialty Ingredient</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Pricing Settings</div>
+    <div class="card-sub">Set your batch size, markup, and optional labor cost to calculate final retail price per pasta.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+      <div class="markup-row" style="margin-bottom:0;">
+        <label class="markup-label">Batch size</label>
+        <input type="number" class="markup-input" id="batchSize" value="20" min="1" step="1" oninput="calcIngredients()" style="width:70px;">
+        <span class="markup-suffix">pastas</span>
+      </div>
+      <div class="markup-row" style="margin-bottom:0;">
+        <label class="markup-label">Markup</label>
+        <input type="number" class="markup-input" id="markupPct" value="40" min="0" step="1" oninput="calcIngredients()">
+        <span class="markup-suffix">%</span>
+      </div>
+      <div class="markup-row" style="margin-bottom:0;">
+        <label class="markup-label">Labor $/hr</label>
+        <input type="number" class="markup-input" id="laborRate" value="0" min="0" step="0.01" oninput="calcIngredients()" style="width:70px;">
+      </div>
+      <div class="markup-row" style="margin-bottom:0;">
+        <label class="markup-label">Batch hrs</label>
+        <input type="number" class="markup-input" id="batchHours" value="0" min="0" step="0.5" oninput="calcIngredients()" style="width:70px;">
+      </div>
+    </div>
+  </div>
+
+  <div class="ing-results">
+    <div class="ing-result-grid">
+      <div><div class="ing-result-label">Cost Per Pasta</div><div class="ing-result-value" id="ir-perunit">$0.00</div></div>
+      <div><div class="ing-result-label">Batch Cost (total)</div><div class="ing-result-value" id="ir-total">$0.00</div></div>
+      <div><div class="ing-result-label">Suggested Retail</div><div class="ing-result-value accent" id="ir-price">$0.00</div></div>
+    </div>
+    <div class="ing-divider"></div>
+    <div id="ir-bulk-breakdown"></div>
+    <div id="ir-spec-breakdown"></div>
+    <div class="ing-breakdown-row" style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.15);">
+      <span class="ing-breakdown-label">Labor cost per pasta</span><span class="ing-breakdown-value" id="ir-laborcost">$0.00</span>
+    </div>
+    <div class="ing-breakdown-row">
+      <span class="ing-breakdown-label">Total cost per pasta</span><span class="ing-breakdown-value" id="ir-costperunit">$0.00</span>
+    </div>
+    <div class="ing-breakdown-row">
+      <span class="ing-breakdown-label">Markup (<span id="ir-markup">40</span>%)</span><span class="ing-breakdown-value" id="ir-markupamt">$0.00</span>
+    </div>
+    <div class="ing-breakdown-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.2);">
+      <span style="color:#fff;font-weight:700;font-family:Playfair Display,serif;font-size:15px;">Suggested retail per pasta</span>
+      <span style="font-family:Playfair Display,serif;font-size:20px;font-weight:900;color:var(--tan-light);" id="ir-retail">$0.00</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─── PRINT SHEET ─── -->
+<div class="tab-content" id="tab-printsheet">
+  <div class="print-card" id="printSheet">
+    <div class="print-header-row">
+      <div><div class="print-title">The Kilted Farmers</div><div class="print-sub">Contributionist Distribution Statement</div></div>
+      <div class="print-period" id="p-period">—</div>
+    </div>
+    <div class="print-meta">
+      <div class="print-meta-item"><span class="print-meta-label">Gross Revenue</span><span class="print-meta-value" id="p-revenue">$0.00</span></div>
+      <div class="print-meta-item"><span class="print-meta-label">Total Hours</span><span class="print-meta-value" id="p-hours">0 hrs</span></div>
+      <div class="print-meta-item"><span class="print-meta-label">Total Expenses</span><span class="print-meta-value" id="p-expenses">$0.00</span></div>
+      <div class="print-meta-item"><span class="print-meta-label">Distributable Pool</span><span class="print-meta-value" id="p-pool">$0.00</span></div>
+    </div>
+    <div id="p-expense-detail" style="display:none;margin-bottom:11px;">
+      <div style="font-size:10px;color:var(--mid);font-weight:600;margin-bottom:5px;letter-spacing:1px;">EXPENSES THIS PERIOD</div>
+      <div class="expense-chips" id="p-expense-chips"></div>
+    </div>
+    <div class="ct-box"><span class="ct-label">Common Table Contribution (8%)</span><span class="ct-value" id="p-ct">$0.00</span></div>
+    <table class="dist-table">
+      <thead><tr><th>Member</th><th>Role</th><th>Hours</th><th>% of Total</th><th>Hourly Rate</th><th>Distribution</th></tr></thead>
+      <tbody id="p-tbody"></tbody>
+      <tfoot id="p-tfoot"></tfoot>
+    </table>
+    <div class="sig-row" id="p-sigs"></div>
+  </div>
+  <div class="actions">
+    <button class="btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+</div>
+
+<!-- ─── HISTORY ─── -->
+<div class="tab-content" id="tab-history">
+  <div style="margin-top:4px;" class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Period History</div>
+    <div class="card-sub">All saved pay periods. Click any period to view full details and receipts.</div>
+    <div id="historyStatus" class="status-bar"></div>
+    <div id="historyList"><p style="color:var(--mid);font-size:13px;">Loading...</p></div>
+  </div>
+</div>
+
+</div><!-- end main -->
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('modalOverlay').classList.remove('open')">×</button>
+    <div class="modal-title" id="modalTitle">Period Detail</div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="globalToast"></div>
+<div class="footer">
+  The Kilted Farmers LLC — Concord, Michigan &nbsp;·&nbsp; Contributionist Distribution Model &nbsp;·&nbsp; Common Table: 8%
+</div>
+
+<script>
+const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
+const SUPABASE_KEY='sb_publishable_egT53Ss4s2k3c3g1D0gU-w_F3zf7OtU';
+const BUCKET='kf-receipts';
+const CT=0.08;
+
+async function sb(path,opts={}){
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
+    ...opts
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.message||JSON.stringify(data));
+  return data;
+}
+
+async function uploadReceipt(file,expId){
+  const ext=file.name.split('.').pop();
+  const path=`expense-${expId}-${Date.now()}.${ext}`;
+  const res=await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`,{
+    method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':file.type},body:file
+  });
+  if(!res.ok)throw new Error('Upload failed');
+  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+}
+
+// ─── STATE ───
+let expenses=[
+  {id:1,name:'Ingredients',amount:'',receiptUrl:'',receiptFile:null},
+  {id:2,name:'Packaging',amount:'',receiptUrl:'',receiptFile:null},
+  {id:3,name:'Kitchen Rental',amount:'',receiptUrl:'',receiptFile:null},
+  {id:4,name:'Market Fees',amount:'',receiptUrl:'',receiptFile:null},
+];
+let members=[
+  {id:1,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
+  {id:2,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
+];
+let bulkIngs=[
+  {id:1,name:'Semolina Flour',cost:'',yield:'400'},
+  {id:2,name:'Eggs (dozen)',cost:'',yield:'6'},
+];
+let specIngs=[
+  {id:1,name:'Squid Ink',cost:'',purchaseSize:'2',usedPer:'0.5',unit:'ml'},
+  {id:2,name:'Garlic',cost:'',purchaseSize:'16',usedPer:'2',unit:'oz'},
+];
+let expCounter=20,memberCounter=20,ingCounter=20;
+
+function fmt(n){return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtS(n){return n>=1000?'$'+(n/1000).toFixed(1)+'k':'$'+Math.round(n);}
+
+// ─── TOAST ───
+let toastTimer=null;
+function toast(msg,isError=false){
+  const el=document.getElementById('globalToast');
+  el.textContent=msg;
+  el.className='toast'+(isError?' error':'');
+  requestAnimationFrame(()=>{el.classList.add('show');});
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{el.classList.remove('show');},2500);
+}
+
+// ─── AUTO PERIOD ───
+function getCurrentPeriodLabel(){
+  const now=new Date();
+  return now.toLocaleString('en-US',{month:'long',year:'numeric'});
+}
+function setCurrentPeriod(){
+  const label=getCurrentPeriodLabel();
+  document.getElementById('periodDate').value=label;
+  document.getElementById('periodType').value='Monthly';
+}
+
+// ─── TABS ───
+function switchTab(id,el){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  el.classList.add('active');
+  if(id==='printsheet')buildPrintSheet();
+  if(id==='history')loadHistory();
+  if(id==='revenue')loadRevLog();
+}
+
+// ─── EXPENSES ───
+function renderExpenses(){
+  const list=document.getElementById('expenseList');
+  list.innerHTML='';
+  expenses.forEach(e=>{
+    const d=document.createElement('div');
+    d.className='row-flex';
+    const hasR=e.receiptUrl||e.receiptFile;
+    d.innerHTML=`
+      <input class="inp inp-name" type="text" placeholder="Expense name" value="${e.name}" oninput="updateExp(${e.id},'name',this.value);scheduleExpenseSave()">
+      <input class="inp inp-amt" type="number" placeholder="0.00" value="${e.amount}" min="0" step="0.01" oninput="updateExp(${e.id},'amount',this.value);scheduleExpenseSave()">
+      <button class="receipt-btn ${hasR?'has-receipt':''}" onclick="document.getElementById('rf-${e.id}').click()">${hasR?'✓ Receipt':'📎 Receipt'}</button>
+      <input type="file" id="rf-${e.id}" style="display:none;" accept="image/*,.pdf" onchange="handleReceipt(${e.id},this)">
+      <button class="remove-btn" onclick="removeExp(${e.id})">×</button>`;
+    list.appendChild(d);
+    if(e.receiptUrl){
+      const p=document.createElement('div');p.className='receipt-preview';
+      const isImg=e.receiptUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+      p.innerHTML=isImg?`<img class="receipt-thumb" src="${e.receiptUrl}" onclick="window.open('${e.receiptUrl}','_blank')">`:`<a href="${e.receiptUrl}" target="_blank" style="color:var(--blue);font-size:12px;">📄 View Receipt</a>`;
+      d.after(p);
+    }
+  });
+}
+function addExpense(){expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',receiptFile:null});renderExpenses();calculate();}
+function removeExp(id){expenses=expenses.filter(e=>e.id!==id);renderExpenses();calculate();}
+function updateExp(id,f,v){const e=expenses.find(e=>e.id===id);if(e){e[f]=v;}calculate();}
+function handleReceipt(id,input){const e=expenses.find(e=>e.id===id);if(e&&input.files[0]){e.receiptFile=input.files[0];e.receiptUrl='';renderExpenses();}}
+
+// ─── TEAM ───
+function renderTeam(){
+  const tbody=document.getElementById('teamBody');tbody.innerHTML='';
+  members.forEach(m=>{
+    const hrs=getMemberHours(m);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input class="member-name-input" type="text" value="${m.name}" placeholder="Name" oninput="updateMember(${m.id},'name',this.value)"></td>
+      <td><select class="role-select" onchange="updateMember(${m.id},'role',this.value)"><option ${m.role==='Steward'?'selected':''}>Steward</option><option ${m.role==='Contributor'?'selected':''}>Contributor</option></select></td>
+      <td style="text-align:center;"><input class="member-hours-input" type="number" value="${m.manualHours}" placeholder="0" min="0" step="0.5" oninput="updateMember(${m.id},'manualHours',this.value);scheduleHoursSave()" title="Manual override — or use Time Clock"></td>
+      <td style="text-align:right;"><div class="member-share" id="share-${m.id}">—</div><div class="member-pct" id="pct-${m.id}">${hrs.toFixed(2)} hrs</div></td>
+      <td>${members.length>1?`<button class="remove-btn" onclick="removeMember(${m.id})">×</button>`:''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function addMember(){
+  const m={id:++memberCounter,name:'',role:'Contributor',manualHours:'',punches:[],dailyEntries:[],dbId:null};
+  members.push(m);
+  renderTeam();renderClock();calculate();
+  try{
+    const[row]=await sb('kf_team_members',{method:'POST',body:JSON.stringify({name:'',role:'Contributor',sort_order:members.length})});
+    m.dbId=row.id;
+  }catch(e){console.warn('Could not save new member:',e);}
+}
+
+async function removeMember(id){
+  const m=members.find(m=>m.id===id);
+  members=members.filter(m=>m.id!==id);
+  renderTeam();renderClock();calculate();
+  if(m&&m.dbId){
+    try{await sb('kf_team_members?id=eq.'+m.dbId,{method:'DELETE',headers:{'Prefer':''}});}
+    catch(e){console.warn('Could not remove member:',e);}
+  }
+}
+
+async function updateMember(id,f,v){
+  const m=members.find(m=>m.id===id);
+  if(m){m[f]=v;}
+  renderTeam();renderClock();calculate();
+  // Save name/role changes to db
+  if(m&&m.dbId&&(f==='name'||f==='role')){
+    try{await sb('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
+    catch(e){console.warn('Could not update member:',e);}
+  }
+}
+
+async function loadTeamMembers(){
+  try{
+    let rows=await sb('kf_team_members?active=eq.true&order=sort_order.asc,created_at.asc');
+    // Seed founders if table is empty
+    if(!rows.length){
+      const seeds=[{name:'Justin',role:'Steward',sort_order:1},{name:'Jessica',role:'Steward',sort_order:2}];
+      rows=await sb('kf_team_members',{method:'POST',body:JSON.stringify(seeds)});
+    }
+    members=rows.map(r=>({
+      id:++memberCounter,
+      dbId:r.id,
+      name:r.name||'',
+      role:r.role||'Steward',
+      manualHours:'',
+      punches:[],
+      dailyEntries:[]
+    }));
+    renderTeam();renderClock();calculate();
+  }catch(e){
+    console.warn('Could not load team:',e);
+    renderTeam();renderClock();calculate();
+  }
+}
+
+function getMemberHours(m){
+  if(m.manualHours!==''&&parseFloat(m.manualHours)>=0)return parseFloat(m.manualHours)||0;
+  let t=0;
+  m.punches.forEach(p=>{if(p.in&&p.out){const d=(new Date(p.out)-new Date(p.in))/3600000;if(d>0)t+=d;}});
+  m.dailyEntries.forEach(d=>{t+=parseFloat(d.hours)||0;});
+  return t;
+}
+
+// ─── CLOCK ───
+function renderClock(){
+  const sec=document.getElementById('clockSection');sec.innerHTML='';
+  members.forEach(m=>{
+    const total=getMemberHours(m);
+    const div=document.createElement('div');div.className='clock-member-card';
+    div.innerHTML=`
+      <div class="clock-member-header" onclick="toggleClock(${m.id})">
+        <div class="clock-member-name">${m.name||'Unnamed'} <span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></div>
+        <div class="clock-member-total">${total.toFixed(2)} hrs</div>
+      </div>
+      <div class="clock-body" id="clock-body-${m.id}">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);margin-bottom:8px;font-weight:600;">Clock In / Out</div>
+        <div class="clock-inout">
+          <input type="datetime-local" class="clock-time-input" id="cin-${m.id}">
+          <button class="clock-btn clock-btn-in" onclick="clockIn(${m.id})">Clock In</button>
+          <input type="datetime-local" class="clock-time-input" id="cout-${m.id}">
+          <button class="clock-btn clock-btn-out" onclick="clockOut(${m.id})">Clock Out</button>
+        </div>
+        <div id="punchlog-${m.id}"></div>
+        <div class="daily-section">
+          <div class="daily-section-label">Daily Hour Entries</div>
+          <div id="daily-${m.id}"></div>
+          <button class="add-btn" style="margin-top:4px;" onclick="addDaily(${m.id})">+ Add Day</button>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--mid);">Or enter total hours manually in the <strong>Team</strong> tab to override.</div>
+      </div>`;
+    sec.appendChild(div);
+    renderPunchLog(m.id);renderDailyEntries(m.id);
+  });
+}
+function toggleClock(id){document.getElementById('clock-body-'+id).classList.toggle('open');}
+function clockIn(id){
+  const m=members.find(m=>m.id===id);const val=document.getElementById('cin-'+id).value;
+  if(!val){alert('Select a clock-in time.');return;}
+  m.punches.push({in:val,out:null});renderPunchLog(id);renderTeam();calculate();
+}
+function clockOut(id){
+  const m=members.find(m=>m.id===id);const val=document.getElementById('cout-'+id).value;
+  if(!val){alert('Select a clock-out time.');return;}
+  const open=m.punches.find(p=>!p.out);
+  if(open){open.out=val;}else{m.punches.push({in:val,out:val});}
+  renderPunchLog(id);renderTeam();calculate();
+}
+function renderPunchLog(id){
+  const m=members.find(m=>m.id===id);const log=document.getElementById('punchlog-'+id);
+  if(!log||!m.punches.length){if(log)log.innerHTML='';return;}
+  log.innerHTML=m.punches.map((p,i)=>{
+    const inT=p.in?new Date(p.in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
+    const outT=p.out?new Date(p.out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';
+    let dur='';if(p.in&&p.out){const h=(new Date(p.out)-new Date(p.in))/3600000;dur=h>0?h.toFixed(2)+' hrs':'';}
+    return `<div class="punch-entry"><span class="punch-time">${inT}</span><span>→</span><span class="punch-time">${outT}</span><span class="punch-dur">${dur}</span><button class="remove-btn" style="width:20px;height:20px;font-size:11px;" onclick="removePunch(${id},${i})">×</button></div>`;
+  }).join('');
+}
+function removePunch(mid,idx){const m=members.find(m=>m.id===mid);m.punches.splice(idx,1);renderPunchLog(mid);renderTeam();calculate();}
+function addDaily(id){const m=members.find(m=>m.id===id);m.dailyEntries.push({date:'',hours:'',note:''});renderDailyEntries(id);}
+function renderDailyEntries(id){
+  const m=members.find(m=>m.id===id);const el=document.getElementById('daily-'+id);if(!el)return;
+  el.innerHTML=m.dailyEntries.map((d,i)=>`
+    <div class="daily-row">
+      <input class="daily-date" type="date" value="${d.date}" onchange="updateDaily(${id},${i},'date',this.value)">
+      <input class="daily-hours" type="number" placeholder="hrs" value="${d.hours}" min="0" step="0.5" oninput="updateDaily(${id},${i},'hours',this.value)">
+      <input class="daily-note" type="text" placeholder="Notes" value="${d.note}" oninput="updateDaily(${id},${i},'note',this.value)">
+      <button class="remove-btn" onclick="removeDaily(${id},${i})">×</button>
+    </div>`).join('');
+}
+function updateDaily(mid,idx,f,v){const m=members.find(m=>m.id===mid);m.dailyEntries[idx][f]=v;renderTeam();calculate();}
+function removeDaily(mid,idx){const m=members.find(m=>m.id===mid);m.dailyEntries.splice(idx,1);renderDailyEntries(mid);renderTeam();calculate();}
+
+// ─── CALCULATE ───
+function calculate(){
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;
+  const ct=Math.max(0,afterExp*CT);
+  const pool=Math.max(0,afterExp-ct);
+  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+  document.getElementById('s-revenue').textContent=fmtS(revenue);
+  document.getElementById('s-expenses').textContent=fmtS(totalExp);
+  document.getElementById('s-pool').textContent=fmtS(pool);
+  document.getElementById('b-revenue').textContent=fmt(revenue);
+  document.getElementById('b-expenses').textContent='— '+fmt(totalExp);
+  document.getElementById('b-ct').textContent='— '+fmt(ct);
+  document.getElementById('b-pool').textContent=fmt(pool);
+  members.forEach(m=>{
+    const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;const share=pool*pct;
+    const sel=document.getElementById('share-'+m.id);const pel=document.getElementById('pct-'+m.id);
+    if(sel)sel.textContent=fmt(share);if(pel)pel.textContent=hrs.toFixed(2)+' hrs';
+  });
+}
+
+// ─── REVENUE LOG ───
+async function logRevenue(){
+  const status=document.getElementById('revStatus');
+  const amount=parseFloat(document.getElementById('revAmount').value)||0;
+  const source=document.getElementById('revSource').value;
+  const reporter=document.getElementById('revReporter').value.trim();
+  const notes=document.getElementById('revNotes').value.trim();
+  const periodLabel=document.getElementById('periodDate').value.trim();
+  if(!amount){status.className='status-bar error';status.textContent='Please enter an amount.';return;}
+  if(!reporter){status.className='status-bar error';status.textContent='Please enter your name.';return;}
+  if(!periodLabel){status.className='status-bar error';status.textContent='Enter a period label in the Distribution tab first (e.g. "May 2026").';return;}
+  status.className='status-bar loading';status.textContent='Saving...';
+  try{
+    await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify({period_label:periodLabel,amount,source,reported_by:reporter,notes:notes||null})});
+    document.getElementById('revAmount').value='';
+    document.getElementById('revNotes').value='';
+    status.className='status-bar success';status.textContent=`✓ ${fmt(amount)} from ${source} logged.`;toast(`✓ ${fmt(amount)} logged — ${source}`);
+    loadRevLog();
+    await autoFetchRevenue(periodLabel);
+    calculate();
+    scheduleExpenseSave();
+  }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;toast('Save failed',true);}
+}
+
+async function loadRevLog(){
+  const periodLabel=document.getElementById('periodDate').value.trim();
+  const content=document.getElementById('revLogContent');
+  if(!periodLabel){content.innerHTML='<p style="color:var(--mid);font-size:13px;">Enter a period label in the Distribution tab first.</p>';return;}
+  content.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
+  try{
+    const entries=await sb(`kf_revenue_entries?period_label=eq.${encodeURIComponent(periodLabel)}&order=created_at.asc`);
+    if(!entries.length){content.innerHTML='<p style="color:var(--mid);font-size:13px;">No entries yet for "'+periodLabel+'". Log your first one above.</p>';return;}
+    const total=entries.reduce((s,e)=>s+(e.amount||0),0);
+    let html=`<table class="rev-log-table"><thead><tr><th>Time</th><th>Source</th><th>Amount</th><th>Reported By</th><th>Notes</th></tr></thead><tbody>`;
+    entries.forEach(e=>{
+      const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+      html+=`<tr><td>${t}</td><td><span class="source-badge">${e.source}</span></td><td class="rev-amount">${fmt(e.amount||0)}</td><td>${e.reported_by||'—'}</td><td style="color:var(--mid);font-size:12px;">${e.notes||''}</td></tr>`;
+    });
+    html+=`</tbody><tfoot><tr class="rev-total-row"><td colspan="2">Period Total</td><td>${fmt(total)}</td><td colspan="2"></td></tr></tfoot></table>`;
+    content.innerHTML=html;
+  }catch(err){content.innerHTML=`<p style="color:var(--red);font-size:13px;">Error: ${err.message}</p>`;}
+}
+
+async function pullFromRevLog(){
+  const periodLabel=document.getElementById('periodDate').value.trim();
+  if(!periodLabel){toast('Enter a period label first.',true);return;}
+  try{
+    const entries=await sb('kf_revenue_entries?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.asc');
+    const total=entries.reduce((s,e)=>s+(e.amount||0),0);
+    document.getElementById('revenue').value=total.toFixed(2);
+    calculate();
+    toast('Revenue updated: '+fmt(total));
+    scheduleExpenseSave();
+  }catch(err){toast('Error: '+err.message,true);}
+}
+
+// ─── INGREDIENT CALCULATOR ───
+function renderBulkIngs(){
+  const list=document.getElementById('bulkIngList');
+  if(!list)return;
+  list.innerHTML='';
+  bulkIngs.forEach(i=>{
+    const d=document.createElement('div');
+    d.style.cssText='display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;';
+    d.innerHTML=`
+      <input class="inp inp-name" type="text" placeholder="e.g. Semolina (50lb bag)" value="${i.name}" oninput="updateBulk(${i.id},'name',this.value)">
+      <input class="inp inp-amt" type="number" placeholder="Cost $" value="${i.cost}" min="0" step="0.01" oninput="updateBulk(${i.id},'cost',this.value)">
+      <input class="inp inp-sm" type="number" placeholder="# pastas" value="${i.yield}" min="1" step="1" oninput="updateBulk(${i.id},'yield',this.value)" title="How many individual pasta orders does this purchase yield?">
+      <button class="remove-btn" onclick="removeBulk(${i.id})">x</button>`;
+    list.appendChild(d);
+  });
+  calcIngredients();
+}
+
+function addBulkIng(){bulkIngs.push({id:++ingCounter,name:'',cost:'',yield:''});renderBulkIngs();}
+function removeBulk(id){bulkIngs=bulkIngs.filter(i=>i.id!==id);renderBulkIngs();}
+function updateBulk(id,f,v){const i=bulkIngs.find(i=>i.id===id);if(i){i[f]=v;}calcIngredients();}
+
+function renderSpecIngs(){
+  const list=document.getElementById('specIngList');
+  if(!list)return;
+  list.innerHTML='';
+  const units=['g','oz','ml','tsp','tbsp','cup','lb'];
+  specIngs.forEach(i=>{
+    const d=document.createElement('div');
+    d.style.cssText='display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;';
+    const unitOpts=units.map(u=>`<option ${i.unit===u?'selected':''}>${u}</option>`).join('');
+    d.innerHTML=`
+      <input class="inp inp-name" type="text" placeholder="e.g. Squid Ink" value="${i.name}" oninput="updateSpec(${i.id},'name',this.value)">
+      <input class="inp inp-amt" type="number" placeholder="Cost $" value="${i.cost}" min="0" step="0.01" oninput="updateSpec(${i.id},'cost',this.value)" title="What you paid for this purchase">
+      <input class="inp inp-sm" type="number" placeholder="Size" value="${i.purchaseSize}" min="0" step="0.01" oninput="updateSpec(${i.id},'purchaseSize',this.value)" title="Total size of the purchase (in your chosen unit)">
+      <input class="inp inp-sm" type="number" placeholder="Per pasta" value="${i.usedPer}" min="0" step="0.001" oninput="updateSpec(${i.id},'usedPer',this.value)" title="Amount used per individual pasta order">
+      <select class="role-select" style="font-size:12px;" onchange="updateSpec(${i.id},'unit',this.value)">${unitOpts}</select>
+      <button class="remove-btn" onclick="removeSpec(${i.id})">x</button>`;
+    list.appendChild(d);
+  });
+  calcIngredients();
+}
+
+function addSpecIng(){specIngs.push({id:++ingCounter,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'});renderSpecIngs();}
+function removeSpec(id){specIngs=specIngs.filter(i=>i.id!==id);renderSpecIngs();}
+function updateSpec(id,f,v){const i=specIngs.find(i=>i.id===id);if(i){i[f]=v;}calcIngredients();}
+
+function calcIngredients(){
+  const batchSize=parseFloat(document.getElementById('batchSize').value)||1;
+  const markupPct=parseFloat(document.getElementById('markupPct').value)||0;
+  const laborRate=parseFloat(document.getElementById('laborRate').value)||0;
+  const batchHours=parseFloat(document.getElementById('batchHours').value)||0;
+
+  // Bulk cost per pasta
+  let bulkCostPerPasta=0;
+  let bulkBreakdown='';
+  bulkIngs.forEach(i=>{
+    const cost=parseFloat(i.cost)||0;
+    const yld=parseFloat(i.yield)||1;
+    const cpp=cost/yld;
+    bulkCostPerPasta+=cpp;
+    if(i.name||cost){
+      bulkBreakdown+=`<div class="ing-breakdown-row"><span class="ing-breakdown-label">${i.name||'Unnamed'} (${fmt(cost)} / ${yld} pastas)</span><span class="ing-breakdown-value">${fmt(cpp)}/pasta</span></div>`;
+    }
+  });
+
+  // Specialty cost per pasta
+  let specCostPerPasta=0;
+  let specBreakdown='';
+  specIngs.forEach(i=>{
+    const cost=parseFloat(i.cost)||0;
+    const pSize=parseFloat(i.purchaseSize)||1;
+    const used=parseFloat(i.usedPer)||0;
+    const costPerUnit=cost/pSize;
+    const cpp=costPerUnit*used;
+    specCostPerPasta+=cpp;
+    if(i.name||cost){
+      specBreakdown+=`<div class="ing-breakdown-row"><span class="ing-breakdown-label">${i.name||'Unnamed'} (${used}${i.unit} @ ${fmt(costPerUnit)}/${i.unit})</span><span class="ing-breakdown-value">${fmt(cpp)}/pasta</span></div>`;
+    }
+  });
+
+  const laborCostPerPasta=batchHours>0&&batchSize>0?(laborRate*batchHours)/batchSize:0;
+  const totalCostPerPasta=bulkCostPerPasta+specCostPerPasta+laborCostPerPasta;
+  const batchTotalCost=totalCostPerPasta*batchSize;
+  const markupAmt=totalCostPerPasta*(markupPct/100);
+  const retail=totalCostPerPasta+markupAmt;
+
+  // Render breakdown sections
+  const bulkEl=document.getElementById('ir-bulk-breakdown');
+  const specEl=document.getElementById('ir-spec-breakdown');
+  if(bulkEl){
+    bulkEl.innerHTML=bulkBreakdown?`<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px;margin-top:2px;">BULK</div>${bulkBreakdown}`:'';
+  }
+  if(specEl){
+    specEl.innerHTML=specBreakdown?`<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px;margin-top:8px;">SPECIALTY</div>${specBreakdown}`:'';
+  }
+
+  document.getElementById('ir-perunit').textContent=fmt(totalCostPerPasta);
+  document.getElementById('ir-total').textContent=fmt(batchTotalCost);
+  document.getElementById('ir-price').textContent=fmt(retail);
+  document.getElementById('ir-laborcost').textContent=fmt(laborCostPerPasta);
+  document.getElementById('ir-costperunit').textContent=fmt(totalCostPerPasta);
+  document.getElementById('ir-markup').textContent=markupPct;
+  document.getElementById('ir-markupamt').textContent=fmt(markupAmt);
+  document.getElementById('ir-retail').textContent=fmt(retail);
+}
+
+// ─── SAVE PERIOD ───// ─── SAVE PERIOD ───
+async function savePeriod(){
+  const btn=document.getElementById('savePeriodBtn');const status=document.getElementById('distStatus');
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const periodType=document.getElementById('periodType').value;
+  const periodLabel=document.getElementById('periodDate').value;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;const ct=Math.max(0,afterExp*CT);const pool=Math.max(0,afterExp-ct);
+  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+  if(!revenue){status.className='status-bar error';status.textContent='Please enter a revenue amount.';return;}
+  if(!periodLabel){status.className='status-bar error';status.textContent='Please enter a period label.';return;}
+  btn.disabled=true;btn.textContent='Saving...';
+  status.className='status-bar loading';status.textContent='Uploading receipts and saving...';
+  try{
+    for(const e of expenses){if(e.receiptFile&&!e.receiptUrl){e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);e.receiptFile=null;renderExpenses();}}
+    const [period]=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:periodType,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+    const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:period.id,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
+    if(expRows.length)await sb('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
+    const distRows=members.map(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;return{period_id:period.id,member_name:m.name,role:m.role,hours:hrs,percentage:parseFloat((pct*100).toFixed(2)),distribution:parseFloat((pool*pct).toFixed(2))};});
+    if(distRows.length)await sb('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
+    const timeRows=[];
+    members.forEach(m=>{
+      m.punches.forEach(p=>{if(p.in)timeRows.push({period_id:period.id,member_name:m.name,entry_type:'punch',clock_in:p.in,clock_out:p.out||null,hours:p.in&&p.out?parseFloat(((new Date(p.out)-new Date(p.in))/3600000).toFixed(2)):null});});
+      m.dailyEntries.forEach(d=>{if(d.hours)timeRows.push({period_id:period.id,member_name:m.name,entry_type:'daily',entry_date:d.date||null,hours:parseFloat(d.hours)||0,notes:d.note||null});});
+    });
+    if(timeRows.length)await sb('kf_time_entries',{method:'POST',body:JSON.stringify(timeRows)});
+    status.className='status-bar success';status.textContent=`✓ Period "${periodLabel}" saved. View it in the History tab.`;
+  }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;}
+  btn.disabled=false;btn.textContent='💾 Save This Period';
+}
+
+// ─── HISTORY ───
+async function loadHistory(){
+  const list=document.getElementById('historyList');const status=document.getElementById('historyStatus');
+  list.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
+  try{
+    const periods=await sb('kf_pay_periods?select=*&order=created_at.desc');
+    if(!periods.length){list.innerHTML='<p style="color:var(--mid);font-size:13px;">No saved periods yet.</p>';return;}
+    list.innerHTML='';
+    periods.forEach(p=>{
+      const d=new Date(p.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const div=document.createElement('div');div.className='history-item';
+      div.innerHTML=`<div class="history-item-header"><div><div class="history-item-title">${p.period_type} — ${p.period_label}</div><div class="history-item-date">Saved ${d}</div></div><div class="history-item-pool">${fmt(p.distributable_pool||0)}</div></div><div class="history-item-meta"><span>Revenue: ${fmt(p.gross_revenue||0)}</span><span>Expenses: ${fmt(p.total_expenses||0)}</span><span>Common Table: ${fmt(p.common_table||0)}</span><span>Hours: ${(p.total_hours||0).toFixed(2)}</span></div>`;
+      div.onclick=()=>viewPeriod(p.id,`${p.period_type} — ${p.period_label}`);
+      list.appendChild(div);
+    });
+  }catch(err){list.innerHTML='';status.className='status-bar error';status.textContent='Error: '+err.message;}
+}
+
+async function viewPeriod(id,title){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML='<p style="color:var(--mid);">Loading...</p>';
+  document.getElementById('modalOverlay').classList.add('open');
+  try{
+    const[exps,dists,times]=await Promise.all([
+      sb(`kf_expenses?period_id=eq.${id}&select=*`),
+      sb(`kf_distributions?period_id=eq.${id}&select=*`),
+      sb(`kf_time_entries?period_id=eq.${id}&select=*`)
+    ]);
+    let html='';
+    if(exps.length){
+      html+='<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:7px;">EXPENSES & RECEIPTS</div><div class="expense-chips">';
+      exps.forEach(e=>{html+=`<span class="expense-chip">${e.name}: ${fmt(e.amount||0)}${e.receipt_url?` <a href="${e.receipt_url}" target="_blank" style="color:var(--blue);">${e.receipt_url.match(/\.(jpg|jpeg|png|gif|webp)$/i)?'🖼':'📄'}</a>`:''}</span>`;});
+      html+='</div>';
+      const imgs=exps.filter(e=>e.receipt_url&&e.receipt_url.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+      if(imgs.length){html+='<div class="receipt-preview" style="margin-bottom:14px;">';imgs.forEach(e=>{html+=`<img class="receipt-thumb" src="${e.receipt_url}" onclick="window.open('${e.receipt_url}','_blank')" title="${e.name}">`;});html+='</div>';}
+    }
+    if(dists.length){
+      html+='<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:7px;margin-top:12px;">DISTRIBUTIONS</div>';
+      html+='<table class="dist-table" style="margin-bottom:14px;"><thead><tr><th>Member</th><th>Role</th><th>Hours</th><th>%</th><th>Distribution</th></tr></thead><tbody>';
+      dists.forEach(d=>{html+=`<tr><td>${d.member_name}</td><td><span class="role-badge ${d.role==='Steward'?'role-steward':'role-contributor'}">${d.role}</span></td><td style="text-align:center;">${(d.hours||0).toFixed(2)}</td><td style="text-align:center;">${(d.percentage||0).toFixed(1)}%</td><td>${fmt(d.distribution||0)}</td></tr>`;});
+      html+='</tbody></table>';
+    }
+    if(times.length){
+      html+='<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:7px;">TIME LOG</div>';
+      const byMember={};times.forEach(t=>{if(!byMember[t.member_name])byMember[t.member_name]=[];byMember[t.member_name].push(t);});
+      Object.entries(byMember).forEach(([name,entries])=>{
+        html+=`<div style="font-weight:700;font-size:12px;margin-bottom:3px;">${name}</div><div style="padding-left:10px;margin-bottom:9px;">`;
+        entries.forEach(e=>{
+          if(e.entry_type==='punch'){const inT=e.clock_in?new Date(e.clock_in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';const outT=e.clock_out?new Date(e.clock_out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';html+=`<div style="font-size:12px;color:var(--mid);padding:2px 0;border-bottom:1px dotted var(--rule);">${inT} → ${outT} <span style="color:var(--green);font-weight:600;">${(e.hours||0).toFixed(2)} hrs</span></div>`;}
+          else{html+=`<div style="font-size:12px;color:var(--mid);padding:2px 0;border-bottom:1px dotted var(--rule);">${e.entry_date||'—'}: <span style="color:var(--green);font-weight:600;">${e.hours||0} hrs</span>${e.notes?' — '+e.notes:''}</div>`;}
+        });
+        html+='</div>';
+      });
+    }
+    document.getElementById('modalBody').innerHTML=html||'<p style="color:var(--mid);">No detail records found.</p>';
+  }catch(err){document.getElementById('modalBody').innerHTML=`<p style="color:var(--red);">Error: ${err.message}</p>`;}
+}
+
+function closeModal(e){if(e.target===document.getElementById('modalOverlay'))document.getElementById('modalOverlay').classList.remove('open');}
+
+// ─── PRINT ───
+function buildPrintSheet(){
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;const ct=Math.max(0,afterExp*CT);const pool=Math.max(0,afterExp-ct);
+  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);const hrRate=totalHours>0?pool/totalHours:0;
+  const period=document.getElementById('periodType').value;const date=document.getElementById('periodDate').value;
+  document.getElementById('p-period').textContent=period+(date?' — '+date:'');
+  document.getElementById('p-revenue').textContent=fmt(revenue);
+  document.getElementById('p-hours').textContent=totalHours.toFixed(2)+' hrs';
+  document.getElementById('p-expenses').textContent=fmt(totalExp);
+  document.getElementById('p-pool').textContent=fmt(pool);
+  document.getElementById('p-ct').textContent=fmt(ct);
+  const valid=expenses.filter(e=>e.name||e.amount);
+  document.getElementById('p-expense-chips').innerHTML=valid.map(e=>`<span class="expense-chip">${e.name||'Unnamed'}: ${fmt(parseFloat(e.amount)||0)}${e.receiptUrl?` <a href="${e.receiptUrl}" target="_blank" style="color:var(--blue);">📄</a>`:''}</span>`).join('');
+  document.getElementById('p-expense-detail').style.display=valid.length?'block':'none';
+  const pb=document.getElementById('p-tbody');const pf=document.getElementById('p-tfoot');pb.innerHTML='';let tot=0;
+  members.forEach(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;const share=pool*pct;tot+=share;const tr=document.createElement('tr');tr.innerHTML=`<td>${m.name||'—'}</td><td><span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></td><td style="text-align:center;">${hrs.toFixed(2)}</td><td style="text-align:center;">${(pct*100).toFixed(1)}%</td><td style="text-align:center;">${fmt(hrRate)}/hr</td><td>${fmt(share)}</td>`;pb.appendChild(tr);});
+  pf.innerHTML=`<tr class="total-row"><td>Total</td><td></td><td style="text-align:center;">${totalHours.toFixed(2)}</td><td style="text-align:center;">100%</td><td style="text-align:center;">—</td><td>${fmt(tot)}</td></tr>`;
+  document.getElementById('p-sigs').innerHTML=members.map(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;return`<div class="sig-block"><div class="sig-line"></div><div>${m.name||'Member'} (${m.role}) — ${fmt(pool*pct)} received</div></div>`;}).join('');
+}
+
+// ─── RESET ───
+function resetAll(){
+  if(!confirm('Reset all values for this period?'))return;
+  document.getElementById('revenue').value='';
+  document.getElementById('periodDate').value='';
+  document.getElementById('distStatus').className='status-bar';
+  expenses=[{id:1,name:'Ingredients',amount:'',receiptUrl:'',receiptFile:null},{id:2,name:'Packaging',amount:'',receiptUrl:'',receiptFile:null},{id:3,name:'Kitchen Rental',amount:'',receiptUrl:'',receiptFile:null},{id:4,name:'Market Fees',amount:'',receiptUrl:'',receiptFile:null}];
+  members=[{id:1,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},{id:2,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]}];
+  renderExpenses();renderTeam();renderClock();calculate();
+}
+
+// ─── INIT ───
+// ─── AUTO INIT ───
+async function autoInit(){
+  setCurrentPeriod();
+  renderExpenses();
+  renderBulkIngs();
+  renderSpecIngs();
+  await loadTeamMembers();
+  await autoLoadCurrentPeriod();
+}
+
+async function autoLoadCurrentPeriod(){
+  const label=getCurrentPeriodLabel();
+  try{
+    // Load saved period for this month if exists
+    const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    if(periods.length){
+      const p=periods[0];
+      if(p.gross_revenue) document.getElementById('revenue').value=p.gross_revenue;
+      // Load expenses for this period
+      const exps=await sb('kf_expenses?period_id=eq.'+p.id+'&select=*');
+      if(exps.length){
+        expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount||'',receiptUrl:e.receipt_url||'',receiptFile:null,dbId:e.id,periodId:p.id}));
+        expCounter=expenses.length+1;
+        renderExpenses();
+      }
+      toast('Loaded '+label+' period data');
+    }
+    // Always pull latest revenue log total
+    await autoFetchRevenue(label);
+    calculate();
+  }catch(e){
+    console.warn('Auto-load error:',e);
+    calculate();
+  }
+}
+
+async function autoFetchRevenue(label){
+  try{
+    const entries=await sb('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
+    if(entries.length){
+      const total=entries.reduce((s,e)=>s+(e.amount||0),0);
+      document.getElementById('revenue').value=total.toFixed(2);
+      calculate();
+    }
+  }catch(e){console.warn('Revenue fetch error:',e);}
+}
+
+// ─── AUTO-SAVE EXPENSES ───
+let expSaveTimer=null;
+function scheduleExpenseSave(){
+  if(expSaveTimer)clearTimeout(expSaveTimer);
+  expSaveTimer=setTimeout(autoSaveExpenses,1200);
+}
+
+async function autoSaveExpenses(){
+  const periodLabel=document.getElementById('periodDate').value;
+  if(!periodLabel)return;
+  try{
+    // Upload any pending receipts
+    for(const e of expenses){
+      if(e.receiptFile&&!e.receiptUrl){
+        e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);
+        e.receiptFile=null;
+        renderExpenses();
+      }
+    }
+    // Find or create period record
+    let periodId=window._currentPeriodId;
+    if(!periodId){
+      const revenue=parseFloat(document.getElementById('revenue').value)||0;
+      const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      const afterExp=revenue-totalExp;
+      const ct=Math.max(0,afterExp*CT);
+      const pool=Math.max(0,afterExp-ct);
+      const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
+      if(existing.length){
+        periodId=existing[0].id;
+        await sb('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+      } else {
+        const[p]=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:document.getElementById('periodType').value,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+        periodId=p.id;
+      }
+      window._currentPeriodId=periodId;
+    }
+    // Save expenses — delete old ones and reinsert
+    await sb('kf_expenses?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
+    const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:periodId,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
+    if(expRows.length) await sb('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
+    toast('Expenses saved');
+  }catch(e){toast('Save failed: '+e.message,true);}
+}
+
+// ─── AUTO-SAVE HOURS ───
+let hoursSaveTimer=null;
+function scheduleHoursSave(){
+  if(hoursSaveTimer)clearTimeout(hoursSaveTimer);
+  hoursSaveTimer=setTimeout(autoSaveHours,1200);
+}
+
+async function autoSaveHours(){
+  const periodLabel=document.getElementById('periodDate').value;
+  if(!periodLabel)return;
+  try{
+    let periodId=window._currentPeriodId;
+    if(!periodId){
+      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
+      if(existing.length){periodId=existing[0].id;window._currentPeriodId=periodId;}
+      else return;
+    }
+    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+    // Save distributions
+    await sb('kf_distributions?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
+    const revenue=parseFloat(document.getElementById('revenue').value)||0;
+    const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+    const afterExp=revenue-totalExp;
+    const ct=Math.max(0,afterExp*CT);
+    const pool=Math.max(0,afterExp-ct);
+    const distRows=members.map(m=>{
+      const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;
+      return{period_id:periodId,member_name:m.name,role:m.role,hours:hrs,percentage:parseFloat((pct*100).toFixed(2)),distribution:parseFloat((pool*pct).toFixed(2))};
+    });
+    if(distRows.length) await sb('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
+    await sb('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({total_hours:totalHours,distributable_pool:pool,common_table:ct})});
+    toast('Hours saved');
+  }catch(e){toast('Hours save failed',true);}
+}
+
+autoInit();
+</script>
+</body>
+</html>
