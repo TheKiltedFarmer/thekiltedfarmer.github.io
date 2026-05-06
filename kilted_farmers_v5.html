@@ -241,6 +241,14 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
   .print-meta,.sig-row{grid-template-columns:1fr;}
   .rev-entry-form{grid-template-columns:1fr 1fr;}
   .ing-result-grid{grid-template-columns:1fr 1fr;}
+  .row-flex{flex-wrap:wrap;}
+  .inp-name{min-width:100%;order:1;}
+  .inp-amt{flex:1;order:2;}
+  .receipt-btn{order:3;}
+  .row-flex .remove-btn{order:4;}
+  .rev-entry-form{grid-template-columns:1fr 1fr;}
+  .ing-result-grid{grid-template-columns:1fr 1fr;}
+  .tab{padding:10px 11px;font-size:12px;}
 }
 </style>
 </head>
@@ -309,7 +317,7 @@ if(sessionStorage.getItem('kf_auth')==='1'){
 
 <!-- ─── DISTRIBUTION ─── -->
 <div class="tab-content active" id="tab-distribution">
-  <div id="distStatus" class="status-bar"></div>
+  <div id="distStatus" class="status-bar" onclick="this.className='status-bar';this.textContent='';" style="cursor:pointer;" title="Tap to dismiss"></div>
   <div class="period-bar" style="margin-top:4px;">
     <span class="period-label">Pay Period:</span>
     <select class="period-select" id="periodType" onchange="calculate()">
@@ -1001,6 +1009,7 @@ function calcIngredients(){
 // ─── SAVE PERIOD ───// ─── SAVE PERIOD ───
 async function savePeriod(){
   const btn=document.getElementById('savePeriodBtn');const status=document.getElementById('distStatus');
+  function clearStatus(){setTimeout(()=>{status.className='status-bar';status.textContent='';},4000);}
   const revenue=parseFloat(document.getElementById('revenue').value)||0;
   const periodType=document.getElementById('periodType').value;
   const periodLabel=document.getElementById('periodDate').value;
@@ -1024,8 +1033,8 @@ async function savePeriod(){
       m.dailyEntries.forEach(d=>{if(d.hours)timeRows.push({period_id:period.id,member_name:m.name,entry_type:'daily',entry_date:d.date||null,hours:parseFloat(d.hours)||0,notes:d.note||null});});
     });
     if(timeRows.length)await sb('kf_time_entries',{method:'POST',body:JSON.stringify(timeRows)});
-    status.className='status-bar success';status.textContent=`✓ Period "${periodLabel}" saved. View it in the History tab.`;
-  }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;}
+    status.className='status-bar success';status.textContent=`✓ Period "${periodLabel}" saved. View it in the History tab.`;toast('✓ Period saved');clearStatus();
+  }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;clearStatus();}
   btn.disabled=false;btn.textContent='💾 Save This Period';
 }
 
@@ -1184,9 +1193,13 @@ async function autoSaveExpenses(){
     // Upload any pending receipts
     for(const e of expenses){
       if(e.receiptFile&&!e.receiptUrl){
-        e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);
-        e.receiptFile=null;
-        renderExpenses();
+        try{
+          e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);
+          e.receiptFile=null;
+          renderExpenses();
+        }catch(uploadErr){
+          toast('Receipt needs site hosting to upload',false);
+        }
       }
     }
     // Find or create period record
@@ -1213,7 +1226,7 @@ async function autoSaveExpenses(){
     const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:periodId,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
     if(expRows.length) await sb('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
     toast('Expenses saved');
-  }catch(e){toast('Save failed: '+e.message,true);}
+  }catch(e){if(!e.message.includes('Upload'))toast('Save failed: '+e.message,true);else toast('Receipt upload works after hosting on your site',false);}
 }
 
 // ─── AUTO-SAVE HOURS ───
