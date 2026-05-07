@@ -254,47 +254,35 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 </head>
 <body>
 
-<!-- PASSWORD GATE -->
-<div id="passwordGate" style="position:fixed;inset:0;background:var(--green-dark);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;">
+
+<!-- AUTH GATE -->
+<div id="authGate" style="position:fixed;inset:0;background:var(--green-dark);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;">
   <div style="text-align:center;padding:40px 32px;background:rgba(255,255,255,0.05);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:360px;width:90%;">
     <div style="font-size:12px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;margin-bottom:10px;font-family:Source Sans 3,sans-serif;">The Kilted Farmers</div>
     <div style="font-family:Playfair Display,serif;font-size:28px;font-weight:900;color:#fff;margin-bottom:6px;">Operations Hub</div>
-    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:28px;">Team access only</div>
-    <input type="password" id="passwordInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPassword()"
-      style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-family:Source Sans 3,sans-serif;font-size:15px;margin-bottom:10px;text-align:center;letter-spacing:2px;">
-    <div id="passwordError" style="color:#ff9f9f;font-size:13px;margin-bottom:10px;min-height:18px;font-family:Source Sans 3,sans-serif;"></div>
-    <button onclick="checkPassword()"
-      style="width:100%;padding:12px;background:var(--tan);color:#fff;border:none;border-radius:8px;font-family:Source Sans 3,sans-serif;font-size:14px;font-weight:600;cursor:pointer;">
-      Enter
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:28px;">Sign in to continue</div>
+    <input type="email" id="authEmail" placeholder="Email address" onkeydown="if(event.key==='Enter')document.getElementById('authPassword').focus()"
+      style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-family:Source Sans 3,sans-serif;font-size:14px;margin-bottom:10px;text-align:center;">
+    <input type="password" id="authPassword" placeholder="Password" onkeydown="if(event.key==='Enter')signIn()"
+      style="width:100%;padding:12px 16px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-family:Source Sans 3,sans-serif;font-size:14px;margin-bottom:10px;text-align:center;">
+    <div id="authError" style="color:#ff9f9f;font-size:13px;margin-bottom:10px;min-height:18px;font-family:Source Sans 3,sans-serif;"></div>
+    <button onclick="signIn()" id="signInBtn"
+      style="width:100%;padding:12px;background:var(--tan);color:#fff;border:none;border-radius:8px;font-family:Source Sans 3,sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+      Sign In
     </button>
+    <div id="authForgot" style="font-size:12px;color:rgba(255,255,255,0.4);cursor:pointer;text-decoration:underline;" onclick="sendReset()">Forgot password?</div>
   </div>
   <div style="margin-top:20px;font-size:11px;color:rgba(255,255,255,0.2);font-family:Source Sans 3,sans-serif;">Concord, Michigan</div>
 </div>
 
-<script>
-const PW_HASH='f7a7da26ecb30f0ce23764651a08414223e2d42e35ddd240218ee05ba02a270d';
-async function hashStr(str){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-async function checkPassword(){
-  const val=document.getElementById('passwordInput').value;
-  const hash=await hashStr(val);
-  if(hash===PW_HASH){
-    sessionStorage.setItem('kf_auth','1');
-    document.getElementById('passwordGate').style.display='none';
-    document.getElementById('passwordInput').value='';
-  } else {
-    document.getElementById('passwordError').textContent='Incorrect password. Try again.';
-    document.getElementById('passwordInput').value='';
-    document.getElementById('passwordInput').focus();
-  }
-}
-// Auto-bypass if already authenticated this session
-if(sessionStorage.getItem('kf_auth')==='1'){
-  document.getElementById('passwordGate').style.display='none';
-}
-</script>
+<!-- USER BAR -->
+<div id="userBar" style="display:none;background:var(--green-dark);padding:8px 20px;display:none;justify-content:space-between;align-items:center;max-width:960px;margin:0 auto;">
+  <div style="font-size:12px;color:rgba(255,255,255,0.6);font-family:Source Sans 3,sans-serif;">
+    Signed in as <span id="userNameDisplay" style="color:#fff;font-weight:600;"></span>
+    <span id="userRoleDisplay" style="margin-left:6px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--tan-light);"></span>
+  </div>
+  <button onclick="signOut()" style="font-size:12px;color:rgba(255,255,255,0.5);background:transparent;border:none;cursor:pointer;font-family:Source Sans 3,sans-serif;">Sign out</button>
+</div>
 
 <div class="header">
   <div class="header-kilt">The Kilted Farmers</div>
@@ -568,7 +556,120 @@ const SUPABASE_KEY='sb_publishable_egT53Ss4s2k3c3g1D0gU-w_F3zf7OtU';
 const BUCKET='kf-receipts';
 const CT=0.08;
 
-async function sb(path,opts={}){
+// ─── AUTH STATE ───
+let currentUser = null;
+let currentProfile = null;
+
+async function signIn(){
+  const btn=document.getElementById('signInBtn');
+  const errEl=document.getElementById('authError');
+  const email=document.getElementById('authEmail').value.trim();
+  const password=document.getElementById('authPassword').value;
+  if(!email||!password){errEl.textContent='Please enter email and password.';return;}
+  btn.textContent='Signing in...';btn.disabled=true;errEl.textContent='';
+  try{
+    const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{
+      method:'POST',
+      headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({email,password})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error_description||data.msg||'Sign in failed');
+    currentUser=data.user;
+    window._authToken=data.access_token;
+    await loadProfile();
+    document.getElementById('authGate').style.display='none';
+    document.getElementById('userBar').style.display='flex';
+    document.getElementById('userNameDisplay').textContent=currentProfile.name||email.split('@')[0];
+    document.getElementById('userRoleDisplay').textContent=currentProfile.role||'Contributor';
+    applyRoleAccess();
+    // autoInit called after login
+  }catch(e){
+    errEl.textContent=e.message;
+    btn.textContent='Sign In';btn.disabled=false;
+  }
+}
+
+async function loadProfile(){
+  try{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/kf_user_profiles?id=eq.'+currentUser.id+'&select=*',{
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken}
+    });
+    const data=await res.json();
+    if(data.length){
+      currentProfile=data[0];
+    } else {
+      // Create profile on first login
+      const name=currentUser.user_metadata?.name||currentUser.email.split('@')[0];
+      const ins=await fetch(SUPABASE_URL+'/rest/v1/kf_user_profiles',{
+        method:'POST',
+        headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=representation'},
+        body:JSON.stringify({id:currentUser.id,name,role:'Contributor'})
+      });
+      currentProfile=(await ins.json())[0]||{name,role:'Contributor'};
+    }
+  }catch(e){currentProfile={name:currentUser.email.split('@')[0],role:'Contributor'};}
+}
+
+function applyRoleAccess(){
+  const role=currentProfile?.role||'Contributor';
+  const isFounder=currentProfile?.name==='Justin'||currentProfile?.name==='Jessica';
+  const isSteward=role==='Steward'||role==='Founder'||isFounder;
+
+  // Tab visibility — contributors see all tabs
+  // But Distribution save and History edit are restricted
+  if(!isSteward){
+    // Hide save period button for contributors
+    const saveBtn=document.getElementById('savePeriodBtn');
+    if(saveBtn){saveBtn.style.display='none';}
+    // Make distribution inputs read-only
+    const revenue=document.getElementById('revenue');
+    if(revenue){revenue.readOnly=true;revenue.style.opacity='0.7';}
+    // Hide add expense button
+    const addExp=document.querySelector('#tab-distribution .add-btn');
+  }
+
+  // Pre-fill reporter name in revenue log
+  const reporter=document.getElementById('revReporter');
+  if(reporter&&currentProfile?.name){reporter.value=currentProfile.name;}
+}
+
+async function signOut(){
+  try{
+    await fetch(SUPABASE_URL+'/auth/v1/logout',{
+      method:'POST',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken}
+    });
+  }catch(e){}
+  currentUser=null;currentProfile=null;window._authToken=null;
+  document.getElementById('authGate').style.display='flex';
+  document.getElementById('userBar').style.display='none';
+}
+
+async function sendReset(){
+  const email=document.getElementById('authEmail').value.trim();
+  if(!email){document.getElementById('authError').textContent='Enter your email first.';return;}
+  await fetch(SUPABASE_URL+'/auth/v1/recover',{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({email})
+  });
+  document.getElementById('authError').style.color='#b7dcc8';
+  document.getElementById('authError').textContent='Password reset email sent.';
+}
+
+async function sbAuth(path,opts={}){
+  const token=window._authToken||SUPABASE_KEY;
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
+    ...opts
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.message||JSON.stringify(data));
+  return data;
+}
+
+async function sb(path,opts={}){// legacy wrapper
   const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{
     headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
     ...opts
@@ -694,7 +795,7 @@ async function addMember(){
   members.push(m);
   renderTeam();renderClock();calculate();
   try{
-    const[row]=await sb('kf_team_members',{method:'POST',body:JSON.stringify({name:'',role:'Contributor',sort_order:members.length})});
+    const[row]=await sbAuth('kf_team_members',{method:'POST',body:JSON.stringify({name:'',role:'Contributor',sort_order:members.length})});
     m.dbId=row.id;
   }catch(e){console.warn('Could not save new member:',e);}
 }
@@ -704,7 +805,7 @@ async function removeMember(id){
   members=members.filter(m=>m.id!==id);
   renderTeam();renderClock();calculate();
   if(m&&m.dbId){
-    try{await sb('kf_team_members?id=eq.'+m.dbId,{method:'DELETE',headers:{'Prefer':''}});}
+    try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'DELETE',headers:{'Prefer':''}});}
     catch(e){console.warn('Could not remove member:',e);}
   }
 }
@@ -715,18 +816,18 @@ async function updateMember(id,f,v){
   renderTeam();renderClock();calculate();
   // Save name/role changes to db
   if(m&&m.dbId&&(f==='name'||f==='role')){
-    try{await sb('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
+    try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
     catch(e){console.warn('Could not update member:',e);}
   }
 }
 
 async function loadTeamMembers(){
   try{
-    let rows=await sb('kf_team_members?active=eq.true&order=sort_order.asc,created_at.asc');
+    let rows=await sbAuth('kf_team_members?active=eq.true&order=sort_order.asc,created_at.asc');
     // Seed founders if table is empty
     if(!rows.length){
       const seeds=[{name:'Justin',role:'Steward',sort_order:1},{name:'Jessica',role:'Steward',sort_order:2}];
-      rows=await sb('kf_team_members',{method:'POST',body:JSON.stringify(seeds)});
+      rows=await sbAuth('kf_team_members',{method:'POST',body:JSON.stringify(seeds)});
     }
     members=rows.map(r=>({
       id:++memberCounter,
@@ -848,7 +949,7 @@ async function logRevenue(){
   const status=document.getElementById('revStatus');
   const amount=parseFloat(document.getElementById('revAmount').value)||0;
   const source=document.getElementById('revSource').value;
-  const reporter=document.getElementById('revReporter').value.trim();
+  const reporter=document.getElementById('revReporter').value.trim()||(currentProfile?.name||'');
   const notes=document.getElementById('revNotes').value.trim();
   const periodLabel=document.getElementById('periodDate').value.trim();
   if(!amount){status.className='status-bar error';status.textContent='Please enter an amount.';return;}
@@ -856,7 +957,7 @@ async function logRevenue(){
   if(!periodLabel){status.className='status-bar error';status.textContent='Enter a period label in the Distribution tab first (e.g. "May 2026").';return;}
   status.className='status-bar loading';status.textContent='Saving...';
   try{
-    await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify({period_label:periodLabel,amount,source,reported_by:reporter,notes:notes||null})});
+    await sbAuth('kf_revenue_entries',{method:'POST',body:JSON.stringify({period_label:periodLabel,amount,source,reported_by:reporter,notes:notes||null})});
     document.getElementById('revAmount').value='';
     document.getElementById('revNotes').value='';
     status.className='status-bar success';status.textContent=`✓ ${fmt(amount)} from ${source} logged.`;toast(`✓ ${fmt(amount)} logged — ${source}`);
@@ -873,7 +974,7 @@ async function loadRevLog(){
   if(!periodLabel){content.innerHTML='<p style="color:var(--mid);font-size:13px;">Enter a period label in the Distribution tab first.</p>';return;}
   content.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
   try{
-    const entries=await sb(`kf_revenue_entries?period_label=eq.${encodeURIComponent(periodLabel)}&order=created_at.asc`);
+    const entries=await sbAuth(`kf_revenue_entries?period_label=eq.${encodeURIComponent(periodLabel)}&order=created_at.asc`);
     if(!entries.length){content.innerHTML='<p style="color:var(--mid);font-size:13px;">No entries yet for "'+periodLabel+'". Log your first one above.</p>';return;}
     const total=entries.reduce((s,e)=>s+(e.amount||0),0);
     let html=`<table class="rev-log-table"><thead><tr><th>Time</th><th>Source</th><th>Amount</th><th>Reported By</th><th>Notes</th></tr></thead><tbody>`;
@@ -890,7 +991,7 @@ async function pullFromRevLog(){
   const periodLabel=document.getElementById('periodDate').value.trim();
   if(!periodLabel){toast('Enter a period label first.',true);return;}
   try{
-    const entries=await sb('kf_revenue_entries?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.asc');
+    const entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.asc');
     const total=entries.reduce((s,e)=>s+(e.amount||0),0);
     document.getElementById('revenue').value=total.toFixed(2);
     calculate();
@@ -1022,17 +1123,17 @@ async function savePeriod(){
   status.className='status-bar loading';status.textContent='Uploading receipts and saving...';
   try{
     for(const e of expenses){if(e.receiptFile&&!e.receiptUrl){e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);e.receiptFile=null;renderExpenses();}}
-    const [period]=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:periodType,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+    const [period]=await sbAuth('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:periodType,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
     const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:period.id,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
-    if(expRows.length)await sb('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
+    if(expRows.length)await sbAuth('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
     const distRows=members.map(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;return{period_id:period.id,member_name:m.name,role:m.role,hours:hrs,percentage:parseFloat((pct*100).toFixed(2)),distribution:parseFloat((pool*pct).toFixed(2))};});
-    if(distRows.length)await sb('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
+    if(distRows.length)await sbAuth('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
     const timeRows=[];
     members.forEach(m=>{
       m.punches.forEach(p=>{if(p.in)timeRows.push({period_id:period.id,member_name:m.name,entry_type:'punch',clock_in:p.in,clock_out:p.out||null,hours:p.in&&p.out?parseFloat(((new Date(p.out)-new Date(p.in))/3600000).toFixed(2)):null});});
       m.dailyEntries.forEach(d=>{if(d.hours)timeRows.push({period_id:period.id,member_name:m.name,entry_type:'daily',entry_date:d.date||null,hours:parseFloat(d.hours)||0,notes:d.note||null});});
     });
-    if(timeRows.length)await sb('kf_time_entries',{method:'POST',body:JSON.stringify(timeRows)});
+    if(timeRows.length)await sbAuth('kf_time_entries',{method:'POST',body:JSON.stringify(timeRows)});
     status.className='status-bar success';status.textContent=`✓ Period "${periodLabel}" saved. View it in the History tab.`;toast('✓ Period saved');clearStatus();
   }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;clearStatus();}
   btn.disabled=false;btn.textContent='💾 Save This Period';
@@ -1043,7 +1144,7 @@ async function loadHistory(){
   const list=document.getElementById('historyList');const status=document.getElementById('historyStatus');
   list.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
   try{
-    const periods=await sb('kf_pay_periods?select=*&order=created_at.desc');
+    const periods=await sbAuth('kf_pay_periods?select=*&order=created_at.desc');
     if(!periods.length){list.innerHTML='<p style="color:var(--mid);font-size:13px;">No saved periods yet.</p>';return;}
     list.innerHTML='';
     periods.forEach(p=>{
@@ -1062,9 +1163,9 @@ async function viewPeriod(id,title){
   document.getElementById('modalOverlay').classList.add('open');
   try{
     const[exps,dists,times]=await Promise.all([
-      sb(`kf_expenses?period_id=eq.${id}&select=*`),
-      sb(`kf_distributions?period_id=eq.${id}&select=*`),
-      sb(`kf_time_entries?period_id=eq.${id}&select=*`)
+      sbAuth(`kf_expenses?period_id=eq.${id}&select=*`),
+      sbAuth(`kf_distributions?period_id=eq.${id}&select=*`),
+      sbAuth(`kf_time_entries?period_id=eq.${id}&select=*`)
     ]);
     let html='';
     if(exps.length){
@@ -1146,12 +1247,12 @@ async function autoLoadCurrentPeriod(){
   const label=getCurrentPeriodLabel();
   try{
     // Load saved period for this month if exists
-    const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
     if(periods.length){
       const p=periods[0];
       if(p.gross_revenue) document.getElementById('revenue').value=p.gross_revenue;
       // Load expenses for this period
-      const exps=await sb('kf_expenses?period_id=eq.'+p.id+'&select=*');
+      const exps=await sbAuth('kf_expenses?period_id=eq.'+p.id+'&select=*');
       if(exps.length){
         expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount||'',receiptUrl:e.receipt_url||'',receiptFile:null,dbId:e.id,periodId:p.id}));
         expCounter=expenses.length+1;
@@ -1170,7 +1271,7 @@ async function autoLoadCurrentPeriod(){
 
 async function autoFetchRevenue(label){
   try{
-    const entries=await sb('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
+    const entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
     if(entries.length){
       const total=entries.reduce((s,e)=>s+(e.amount||0),0);
       document.getElementById('revenue').value=total.toFixed(2);
@@ -1211,20 +1312,20 @@ async function autoSaveExpenses(){
       const ct=Math.max(0,afterExp*CT);
       const pool=Math.max(0,afterExp-ct);
       const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
+      const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
       if(existing.length){
         periodId=existing[0].id;
-        await sb('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+        await sbAuth('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
       } else {
-        const[p]=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:document.getElementById('periodType').value,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
+        const[p]=await sbAuth('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:document.getElementById('periodType').value,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
         periodId=p.id;
       }
       window._currentPeriodId=periodId;
     }
     // Save expenses — delete old ones and reinsert
-    await sb('kf_expenses?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
+    await sbAuth('kf_expenses?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
     const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:periodId,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
-    if(expRows.length) await sb('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
+    if(expRows.length) await sbAuth('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
     toast('Expenses saved');
   }catch(e){if(!e.message.includes('Upload'))toast('Save failed: '+e.message,true);else toast('Receipt upload works after hosting on your site',false);}
 }
@@ -1242,13 +1343,13 @@ async function autoSaveHours(){
   try{
     let periodId=window._currentPeriodId;
     if(!periodId){
-      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
+      const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
       if(existing.length){periodId=existing[0].id;window._currentPeriodId=periodId;}
       else return;
     }
     const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
     // Save distributions
-    await sb('kf_distributions?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
+    await sbAuth('kf_distributions?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
     const revenue=parseFloat(document.getElementById('revenue').value)||0;
     const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
     const afterExp=revenue-totalExp;
@@ -1258,13 +1359,13 @@ async function autoSaveHours(){
       const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;
       return{period_id:periodId,member_name:m.name,role:m.role,hours:hrs,percentage:parseFloat((pct*100).toFixed(2)),distribution:parseFloat((pool*pct).toFixed(2))};
     });
-    if(distRows.length) await sb('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
-    await sb('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({total_hours:totalHours,distributable_pool:pool,common_table:ct})});
+    if(distRows.length) await sbAuth('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
+    await sbAuth('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({total_hours:totalHours,distributable_pool:pool,common_table:ct})});
     toast('Hours saved');
   }catch(e){toast('Hours save failed',true);}
 }
 
-autoInit();
+// autoInit called after login
 </script>
 </body>
 </html>
