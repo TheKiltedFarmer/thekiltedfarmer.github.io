@@ -2011,6 +2011,9 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
   const [myVotes, setMyVotes] = useState({});
   // Spotlight bills that user explicitly chose to expand (overrides auto-collapse)
   const [expandedSpotlights, setExpandedSpotlights] = useState(new Set());
+  // ── Activity stream ────────────────────────────────────────────
+  const [activityStream, setActivityStream] = useState([]);
+  const [activityStreamLoading, setActivityStreamLoading] = useState(true);
   const [zipStats, setZipStats] = useState({newBills:0, upcomingVotes:0, newNeighbors:0});
   const [newNeighbors, setNewNeighbors] = useState([]);
   const [myConnections, setMyConnections] = useState(new Set());
@@ -2029,6 +2032,218 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
 
   // ── Load everything on mount ─────────────────────────────────────
   useEffect(()=>{ loadFeed(); },[userZip, user?.id]);
+
+  // ── Activity stream loader ─────────────────────────────────────
+  // Fetches recent activity across the platform: chat messages, bill votes,
+  // new events, RSVPs, new resources, new ideas, comments. Each query runs
+  // independently and defensively — if one fails (RLS/missing table), the
+  // others still populate the stream.
+  useEffect(()=>{
+    let mounted = true;
+    const since = new Date(Date.now() - 7*86400000).toISOString(); // last 7 days
+    const limit = 10;
+
+    const run = async()=>{
+      setActivityStreamLoading(true);
+      const results = [];
+
+      // Helper: safe wrapper that swallows errors
+      const safe = async(fn, label)=>{
+        try { return await fn(); }
+        catch(e) { console.warn('[activity] '+label+' failed:', e?.message); return null; }
+      };
+
+      // 1. Recent community chat messages (excluding own)
+      await safe(async()=>{
+        const {data} = await sb.from('community_chat')
+          .select('id,room_id,user_id,display_name,content,created_at,parent_message_id,shared_event_id')
+          .gte('created_at', since)
+          .order('created_at',{ascending:false}).limit(limit);
+        (data||[]).forEach(m=>{
+          if(m.user_id === user?.id) return; // skip own actions
+          // Skip group rooms (they start with 'group-') in the public stream
+          // ZIP rooms (numeric) and 'general' are public-ish
+          const isZipRoom = /^\d{5}$/.test(m.room_id);
+          const isGeneral = m.room_id === 'general';
+          if(!isZipRoom && !isGeneral) return;
+          results.push({
+            id: 'chat-'+m.id,
+            type: 'chat',
+            actor_id: m.user_id,
+            actor_name: m.display_name,
+            verb: m.parent_message_id ? 'replied in' : (m.shared_event_id ? 'shared an event in' : 'posted in'),
+            target_label: isGeneral ? 'community chat' : (m.room_id+' chat'),
+            preview: (m.content||'').slice(0, 80),
+            created_at: m.created_at,
+            link_tab: 'connect'
+          });
+        });
+      }, 'chat');
+
+      // 2. New bill votes
+      await safe(async()=>{
+        const {data} = await sb.from('user_votes')
+          .select('id,user_id,bill_id,choice,created_at,is_private')
+          .gte('created_at', since)
+          .eq('is_private', false)
+          .order('created_at',{ascending:false}).limit(limit);
+        if(!data || data.length === 0) return;
+        // Look up display names + bill titles
+        const userIds = [...new Set(data.map(v=>v.user_id))];
+        const billIds = [...new Set(data.map(v=>v.bill_id))];
+        const [profilesRes, billsRes] = await Promise.all([
+          sb.from('profiles').select('id,display_name').in('id', userIds),
+          sb.from('bills').select('id,title').in('id', billIds)
+        ]);
+        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
+        const billMap = {}; (billsRes.data||[]).forEach(b=>billMap[b.id]=b);
+        data.forEach(v=>{
+          if(v.user_id === user?.id) return;
+          const prof = profMap[v.user_id];
+          const bill = billMap[v.bill_id];
+          if(!prof || !bill) return;
+          const choiceLabel = v.choice === 'yes' ? 'agreed with' : v.choice === 'no' ? 'disagreed with' : 'is undecided on';
+          results.push({
+            id: 'vote-'+v.id,
+            type: 'vote',
+            actor_id: v.user_id,
+            actor_name: prof.display_name,
+            verb: choiceLabel,
+            target_label: bill.title.length > 60 ? bill.title.slice(0,60)+'…' : bill.title,
+            preview: null,
+            created_at: v.created_at,
+            link_tab: 'civic',
+            link_ctx: {billId: v.bill_id}
+          });
+        });
+      }, 'votes');
+
+      // 3. New events created
+      await safe(async()=>{
+        const {data} = await sb.from('events')
+          .select('id,title,created_by,event_date,created_at')
+          .gte('created_at', since)
+          .eq('approved', true)
+          .is('deleted_at', null)
+          .order('created_at',{ascending:false}).limit(limit);
+        if(!data || data.length === 0) return;
+        const userIds = [...new Set(data.map(e=>e.created_by).filter(Boolean))];
+        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
+        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
+        data.forEach(e=>{
+          if(e.created_by === user?.id) return;
+          const prof = profMap[e.created_by];
+          results.push({
+            id: 'event-'+e.id,
+            type: 'event',
+            actor_id: e.created_by,
+            actor_name: prof?.display_name || 'A neighbor',
+            verb: 'added an event:',
+            target_label: e.title,
+            preview: null,
+            created_at: e.created_at,
+            link_tab: 'civic',
+            link_ctx: {eventId: e.id}
+          });
+        });
+      }, 'events');
+
+      // 4. New resources added
+      await safe(async()=>{
+        const {data} = await sb.from('community_resources')
+          .select('id,name,created_by,resource_type,created_at')
+          .gte('created_at', since)
+          .is('deleted_at', null)
+          .order('created_at',{ascending:false}).limit(limit);
+        if(!data || data.length === 0) return;
+        const userIds = [...new Set(data.map(r=>r.created_by).filter(Boolean))];
+        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
+        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
+        data.forEach(r=>{
+          if(r.created_by === user?.id) return;
+          const prof = profMap[r.created_by];
+          results.push({
+            id: 'resource-'+r.id,
+            type: 'resource',
+            actor_id: r.created_by,
+            actor_name: prof?.display_name || 'A neighbor',
+            verb: 'added a resource:',
+            target_label: r.name,
+            preview: null,
+            created_at: r.created_at,
+            link_tab: 'resources'
+          });
+        });
+      }, 'resources');
+
+      // 5. New community ideas
+      await safe(async()=>{
+        const {data} = await sb.from('community_ideas')
+          .select('id,title,created_by,created_at')
+          .gte('created_at', since)
+          .order('created_at',{ascending:false}).limit(limit);
+        if(!data || data.length === 0) return;
+        const userIds = [...new Set(data.map(i=>i.created_by).filter(Boolean))];
+        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
+        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
+        data.forEach(i=>{
+          if(i.created_by === user?.id) return;
+          const prof = profMap[i.created_by];
+          results.push({
+            id: 'idea-'+i.id,
+            type: 'idea',
+            actor_id: i.created_by,
+            actor_name: prof?.display_name || 'A neighbor',
+            verb: 'proposed an idea:',
+            target_label: i.title,
+            preview: null,
+            created_at: i.created_at,
+            link_tab: 'civic'
+          });
+        });
+      }, 'ideas');
+
+      // 6. Bill comments
+      await safe(async()=>{
+        const {data} = await sb.from('bill_comments')
+          .select('id,bill_id,user_id,display_name,content,created_at')
+          .gte('created_at', since)
+          .order('created_at',{ascending:false}).limit(limit);
+        if(!data || data.length === 0) return;
+        const billIds = [...new Set(data.map(c=>c.bill_id))];
+        const billsRes = await sb.from('bills').select('id,title').in('id', billIds);
+        const billMap = {}; (billsRes.data||[]).forEach(b=>billMap[b.id]=b);
+        data.forEach(c=>{
+          if(c.user_id === user?.id) return;
+          const bill = billMap[c.bill_id];
+          if(!bill) return;
+          results.push({
+            id: 'comment-'+c.id,
+            type: 'comment',
+            actor_id: c.user_id,
+            actor_name: c.display_name || 'A neighbor',
+            verb: 'commented on',
+            target_label: bill.title.length > 50 ? bill.title.slice(0,50)+'…' : bill.title,
+            preview: (c.content||'').slice(0, 80),
+            created_at: c.created_at,
+            link_tab: 'civic',
+            link_ctx: {billId: c.bill_id}
+          });
+        });
+      }, 'comments');
+
+      if(!mounted) return;
+      // Sort all events by recency, dedupe by id, take top 15
+      const sorted = results
+        .filter(Boolean)
+        .sort((a,b)=>new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 15);
+      setActivityStream(sorted);
+      setActivityStreamLoading(false);
+    };
+    run();
+    return ()=>{ mounted = false; };
+  },[user?.id]);
 
   const loadFeed = async()=>{
     setLoading(true);
@@ -2489,7 +2704,50 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
     h('style',null, '@keyframes tpv-pulse{0%,100%{opacity:1}50%{opacity:.5}}@keyframes tpv-fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.tpv-scroll::-webkit-scrollbar{height:6px}.tpv-scroll::-webkit-scrollbar-thumb{background:#d4cdb8;border-radius:3px}'),
 
     // ── Featured Poll ──────────────────────────────────────────────
-    featuredBill && renderPollCard({bill: featuredBill, featured: true}),
+    // ── Featured Bill (REMOVED from home) ────────────────────────────
+    // Bills feed has moved to Civic → Bills tab. Home page now focuses on
+    // community pulse, activity, and quick actions.
+
+    // ── Community Pulse Card ──────────────────────────────────────
+    // Top-of-page snapshot of community vitality.
+    h('div',{style:{background:'linear-gradient(135deg, '+NAVY+' 0%, #2a2a4e 100%)',
+      color:'#fff',borderRadius:8,padding:'18px 22px',marginBottom:18,
+      borderLeft:'4px solid '+GOLD,position:'relative',overflow:'hidden'}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:12}},
+        h('span',{style:{width:8,height:8,borderRadius:'50%',
+          background: activityStream.length > 5 ? '#4ade80' : (activityStream.length > 0 ? '#fbbf24' : '#94a3b8'),
+          display:'inline-block',animation:'tpv-pulse 2s infinite'}}),
+        h('span',{style:{fontFamily:FONT_D,fontSize:11,fontWeight:700,color:GOLD,
+          letterSpacing:'.15em',textTransform:'uppercase'}},
+          activityStream.length > 5 ? 'Active community' :
+          activityStream.length > 0 ? 'Quiet week' : 'Just getting started')
+      ),
+      h('div',{style:{fontFamily:FONT_D,fontSize:18,fontWeight:900,color:'#fff',
+        marginBottom:6,letterSpacing:'-.01em'}},
+        userZip ? ('Welcome back to '+userZip) : 'Welcome to The People\'s Voice'),
+      h('div',{style:{fontFamily:FONT_B,fontSize:13,color:'#d8d3c4',lineHeight:1.55,marginBottom:14}},
+        activityStream.length > 5
+          ? 'Your neighbors have been busy. ' + activityStream.length + ' actions in the last week.'
+          : activityStream.length > 0
+            ? activityStream.length + ' action' + (activityStream.length===1?'':'s') + ' from your community this week.'
+            : 'Be the first to spark a conversation, post an event, or weigh in on local legislation.'
+      ),
+      // Quick stat chips
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        memberCount && h('div',{style:{background:'rgba(255,255,255,.08)',padding:'5px 10px',
+          borderRadius:14,fontSize:11,fontFamily:FONT_B,color:'#fff'}},
+          h('b',{style:{color:GOLD}}, memberCount), ' members'),
+        zipStats.newBills > 0 && h('div',{style:{background:'rgba(255,255,255,.08)',padding:'5px 10px',
+          borderRadius:14,fontSize:11,fontFamily:FONT_B,color:'#fff'}},
+          h('b',{style:{color:GOLD}}, zipStats.newBills), ' new bills'),
+        zipStats.upcomingVotes > 0 && h('div',{style:{background:'rgba(255,255,255,.08)',padding:'5px 10px',
+          borderRadius:14,fontSize:11,fontFamily:FONT_B,color:'#fff'}},
+          h('b',{style:{color:GOLD}}, zipStats.upcomingVotes), ' upcoming events'),
+        zipStats.newNeighbors > 0 && h('div',{style:{background:'rgba(255,255,255,.08)',padding:'5px 10px',
+          borderRadius:14,fontSize:11,fontFamily:FONT_B,color:'#fff'}},
+          h('b',{style:{color:GOLD}}, zipStats.newNeighbors), ' new neighbors')
+      )
+    ),
 
     // ── ZIP Stats Strip ────────────────────────────────────────────
     userZip && h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:1,
@@ -2546,6 +2804,57 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       )
     ),
 
+    // ── Quick Actions ────────────────────────────────────────────
+    // Small interactive widgets nudging civic engagement.
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',
+      gap:10,marginBottom:18}},
+      // Vote on bills
+      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
+          padding:'14px 14px',textAlign:'left',cursor:'pointer',
+          display:'flex',flexDirection:'column',gap:4,
+          transition:'all .15s ease'}},
+        h('div',{style:{fontSize:20,marginBottom:4}}, '🗳️'),
+        h('div',{style:{fontFamily:FONT_D,fontSize:13,fontWeight:700,color:NAVY}},
+          'Vote on bills'),
+        h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
+          'Real legislation. Your voice counts.')
+      ),
+      // Discover events
+      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
+          padding:'14px 14px',textAlign:'left',cursor:'pointer',
+          display:'flex',flexDirection:'column',gap:4}},
+        h('div',{style:{fontSize:20,marginBottom:4}}, '📅'),
+        h('div',{style:{fontFamily:FONT_D,fontSize:13,fontWeight:700,color:NAVY}},
+          'Local events'),
+        h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
+          'Markets, town halls, volunteer days.')
+      ),
+      // Connect with neighbors
+      h('button',{onClick:()=>onNavigate && onNavigate('connect'),
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
+          padding:'14px 14px',textAlign:'left',cursor:'pointer',
+          display:'flex',flexDirection:'column',gap:4}},
+        h('div',{style:{fontSize:20,marginBottom:4}}, '💬'),
+        h('div',{style:{fontFamily:FONT_D,fontSize:13,fontWeight:700,color:NAVY}},
+          'Chat with neighbors'),
+        h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
+          'Your ZIP code\'s community room.')
+      ),
+      // Submit an idea / propose a bill
+      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+        style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
+          padding:'14px 14px',textAlign:'left',cursor:'pointer',
+          display:'flex',flexDirection:'column',gap:4}},
+        h('div',{style:{fontSize:20,marginBottom:4}}, '💡'),
+        h('div',{style:{fontFamily:FONT_D,fontSize:13,fontWeight:700,color:NAVY}},
+          'Civic Voice'),
+        h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
+          'Propose a project or improvement.')
+      )
+    ),
+
     // ── Section Header ─────────────────────────────────────────────
     h('div',{style:{display:'flex',alignItems:'baseline',justifyContent:'space-between',
       padding:'14px 4px 10px',borderBottom:'2px solid '+NAVY,marginBottom:16}},
@@ -2553,6 +2862,60 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         'This Week in Jackson County'),
       h('span',{style:{fontSize:11,color:MUTED,textTransform:'uppercase',
         letterSpacing:'.12em',fontFamily:FONT_D,fontWeight:700}}, 'Live feed')
+    ),
+
+    // ── Activity Stream ───────────────────────────────────────────
+    // Real-time pulse of what's happening across the platform.
+    h('div',{style:{background:'#fff',borderRadius:6,padding:'16px 18px',
+      marginBottom:14,border:'1px solid #e5dece'}},
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+        h('div',{style:{fontFamily:FONT_D,fontSize:11,fontWeight:700,color:MUTED,
+          letterSpacing:'.15em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:8}},
+          h('span',{style:{width:7,height:7,borderRadius:'50%',background:GREEN,
+            display:'inline-block',animation:'tpv-pulse 2s infinite'}}),
+          '⚡ Activity Stream'),
+        h('span',{style:{fontSize:10,color:MUTED,fontFamily:FONT_B,fontStyle:'italic'}},
+          activityStream.length > 0 ? 'last 7 days' : '')
+      ),
+      activityStreamLoading && h('div',{style:{padding:20,textAlign:'center',color:MUTED,
+        fontStyle:'italic',fontSize:13,fontFamily:FONT_B}}, 'Loading activity…'),
+      !activityStreamLoading && activityStream.length === 0 && h('div',{style:{padding:24,textAlign:'center'}},
+        h('div',{style:{fontSize:32,marginBottom:8}},'🌱'),
+        h('div',{style:{fontFamily:FONT_D,fontSize:14,fontWeight:700,color:NAVY,marginBottom:4}},
+          'A quiet week in the community'),
+        h('div',{style:{fontSize:12,color:MUTED,fontFamily:FONT_B,fontStyle:'italic'}},
+          'Be the first to start a conversation, vote on a bill, or post an event.')
+      ),
+      !activityStreamLoading && activityStream.map((a,i)=>{
+        const iconFor = {
+          chat: '💬', vote: '🗳️', event: '📅', resource: '📍',
+          idea: '💡', comment: '💭', rsvp: '✓'
+        }[a.type] || '•';
+        return h('div',{key:a.id, style:{display:'flex',gap:10,padding:'9px 0',
+          borderBottom: i < activityStream.length-1 ? '1px solid #f0ece0' : 'none',
+          alignItems:'flex-start'}},
+          h('div',{style:{fontSize:16,flexShrink:0,marginTop:1,opacity:.85}}, iconFor),
+          h('div',{style:{flex:1,minWidth:0}},
+            h('div',{style:{fontSize:13,color:INK,fontFamily:FONT_B,lineHeight:1.45}},
+              h('b',{style:{color:NAVY}}, a.actor_name || 'A neighbor'), ' ',
+              h('span',{style:{color:MUTED}}, a.verb), ' ',
+              h('b',{style:{color:NAVY}}, a.target_label || '')
+            ),
+            a.preview && h('div',{style:{fontSize:12,color:MUTED,fontFamily:FONT_B,
+              fontStyle:'italic',marginTop:3,lineHeight:1.5}},
+              '"', a.preview, '"'),
+            h('div',{style:{fontSize:11,color:MUTED,fontFamily:FONT_B,marginTop:3}},
+              timeAgo(a.created_at))
+          ),
+          a.link_tab && h('button',{
+            onClick:()=>onNavigate && onNavigate(a.link_tab, a.link_ctx),
+            style:{background:'transparent',border:'1px solid #d4cdb8',color:NAVY,
+              padding:'4px 10px',borderRadius:12,fontSize:10,fontFamily:FONT_D,
+              fontWeight:700,letterSpacing:'.04em',cursor:'pointer',flexShrink:0,
+              alignSelf:'center'}
+          }, 'View →')
+        );
+      })
     ),
 
     // ── Community Chat Preview ─────────────────────────────────────
@@ -2582,8 +2945,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       ))
     ),
 
-    // ── Secondary Poll ─────────────────────────────────────────────
-    secondaryBill && secondaryBill.id !== featuredBill?.id && renderPollCard({bill: secondaryBill, featured: false}),
+    // ── Secondary Bill (REMOVED from home) ───────────────────────────
+    // Bills are now exclusively in Civic → Bills tab.
 
     // ── Top Contributor Spotlight ──────────────────────────────────
     topContributor && h('div',{style:{background:NAVY,color:'#fff',borderRadius:6,
