@@ -2112,7 +2112,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
             target_label: bill.title.length > 60 ? bill.title.slice(0,60)+'…' : bill.title,
             preview: null,
             created_at: v.created_at,
-            link_tab: 'civic',
+            link_tab: 'bills',
             link_ctx: {billId: v.bill_id}
           });
         });
@@ -2142,7 +2142,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
             target_label: e.title,
             preview: null,
             created_at: e.created_at,
-            link_tab: 'civic',
+            link_tab: 'events',
             link_ctx: {eventId: e.id}
           });
         });
@@ -2198,7 +2198,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
             target_label: i.title,
             preview: null,
             created_at: i.created_at,
-            link_tab: 'civic'
+            link_tab: 'proposals'
           });
         });
       }, 'ideas');
@@ -2226,7 +2226,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
             target_label: bill.title.length > 50 ? bill.title.slice(0,50)+'…' : bill.title,
             preview: (c.content||'').slice(0, 80),
             created_at: c.created_at,
-            link_tab: 'civic',
+            link_tab: 'bills',
             link_ctx: {billId: c.bill_id}
           });
         });
@@ -2808,8 +2808,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
     // Small interactive widgets nudging civic engagement.
     h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',
       gap:10,marginBottom:18}},
-      // Vote on bills
-      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+      // Vote on bills → Civic → Bills
+      h('button',{onClick:()=>onNavigate && onNavigate('bills'),
         style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
           padding:'14px 14px',textAlign:'left',cursor:'pointer',
           display:'flex',flexDirection:'column',gap:4,
@@ -2820,8 +2820,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
           'Real legislation. Your voice counts.')
       ),
-      // Discover events
-      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+      // Local events → Community → Events
+      h('button',{onClick:()=>onNavigate && onNavigate('events'),
         style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
           padding:'14px 14px',textAlign:'left',cursor:'pointer',
           display:'flex',flexDirection:'column',gap:4}},
@@ -2831,7 +2831,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
           'Markets, town halls, volunteer days.')
       ),
-      // Connect with neighbors
+      // Chat with neighbors → Community → Connect
       h('button',{onClick:()=>onNavigate && onNavigate('connect'),
         style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
           padding:'14px 14px',textAlign:'left',cursor:'pointer',
@@ -2842,8 +2842,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,lineHeight:1.4}},
           'Your ZIP code\'s community room.')
       ),
-      // Submit an idea / propose a bill
-      h('button',{onClick:()=>onNavigate && onNavigate('civic'),
+      // Civic Voice → Civic → Civic Voice (proposals subtab)
+      h('button',{onClick:()=>onNavigate && onNavigate('proposals'),
         style:{background:'#fff',border:'1px solid #e5dece',borderRadius:6,
           padding:'14px 14px',textAlign:'left',cursor:'pointer',
           display:'flex',flexDirection:'column',gap:4}},
