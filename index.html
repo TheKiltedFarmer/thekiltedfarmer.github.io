@@ -9997,15 +9997,42 @@ function CorrectionsQueue({user, profile, onToast}) {
   useEffect(load,[]);
 
   const approve = async(c)=>{
-    // Apply suggested_value to the target record
-    const {error: updateErr} = await sb.from(c.content_type)
-      .update(c.suggested_value).eq('id', c.content_id);
-    if(updateErr) { onToast('Error applying: ' + updateErr.message); return; }
-    await sb.from('content_corrections').update({
+    // Apply suggested_value to the target record.
+    // Use .select() so we get the affected rows back and can detect silent RLS blocks.
+    const {data: updatedRows, error: updateErr} = await sb.from(c.content_type)
+      .update(c.suggested_value)
+      .eq('id', c.content_id)
+      .select();
+    if(updateErr) {
+      onToast('Error applying: ' + updateErr.message);
+      console.error('[CorrectionsQueue] update error', updateErr);
+      return;
+    }
+    if(!updatedRows || updatedRows.length === 0) {
+      // RLS blocked the update OR the target row no longer exists
+      onToast('Could not apply: target row not found or you don\'t have permission to edit it. Check RLS on ' + c.content_type + '.');
+      console.error('[CorrectionsQueue] update returned 0 rows', {
+        table: c.content_type,
+        target_id: c.content_id,
+        suggested: c.suggested_value
+      });
+      return;
+    }
+    const {data: resolvedRows, error: resolveErr} = await sb.from('content_corrections').update({
       status:'approved',
       resolved_by: user.id,
       resolved_at: new Date().toISOString(),
-    }).eq('id', c.id);
+    }).eq('id', c.id).select();
+    if(resolveErr) {
+      onToast('Applied to record but could not mark correction resolved: ' + resolveErr.message);
+      console.error('[CorrectionsQueue] resolve error', resolveErr);
+      return;
+    }
+    if(!resolvedRows || resolvedRows.length === 0) {
+      onToast('Applied to record but correction stayed pending — RLS may be blocking the resolve update.');
+      console.error('[CorrectionsQueue] resolve returned 0 rows');
+      return;
+    }
     onToast('✓ Correction applied.');
     setPending(p=>p.filter(x=>x.id!==c.id));
   };
