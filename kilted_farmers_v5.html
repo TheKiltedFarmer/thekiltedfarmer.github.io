@@ -222,6 +222,53 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 
 .footer{text-align:center;font-size:11px;color:var(--mid);padding:16px;border-top:1px solid var(--rule);}
 
+/* DASHBOARD */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+@media(max-width:640px){.dash-grid{grid-template-columns:1fr;}}
+.dash-card{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
+.dash-card.lake{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+.dash-card.full{grid-column:1/-1;}
+.dash-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--mid);margin-bottom:6px;}
+.dash-card.lake .dash-label{color:rgba(255,255,255,0.55);}
+.dash-amount{font-family:'Playfair Display',serif;font-size:32px;font-weight:900;color:var(--green-dark);}
+.dash-card.lake .dash-amount{color:#fff;}
+.dash-amount.accent{color:var(--tan);}
+.dash-sub{font-size:12px;color:var(--mid);margin-top:4px;}
+.dash-card.lake .dash-sub{color:rgba(255,255,255,0.5);}
+
+/* RIVER */
+.river-section{margin-bottom:20px;}
+.river-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--mid);margin-bottom:10px;font-weight:600;display:flex;align-items:center;gap:8px;}
+.river-label::after{content:'';flex:1;height:1px;background:var(--rule);}
+.river-entry{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fff;border:1px solid var(--rule);border-radius:8px;margin-bottom:6px;}
+.river-entry-left{display:flex;flex-direction:column;gap:2px;}
+.river-entry-name{font-size:13px;font-weight:600;color:var(--ink);}
+.river-entry-meta{font-size:11px;color:var(--mid);}
+.river-entry-amount{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--green-dark);}
+.river-entry-amount.neg{color:var(--red);}
+.stream-entry{display:flex;justify-content:space-between;align-items:center;padding:8px 14px 8px 28px;background:var(--cream);border:1px solid var(--rule);border-radius:8px;margin-bottom:5px;position:relative;}
+.stream-entry::before{content:'';position:absolute;left:14px;top:50%;width:8px;height:1px;background:var(--rule);}
+.stream-entry-name{font-size:12px;color:var(--mid);}
+.stream-entry-amount{font-size:13px;font-weight:600;color:var(--red);}
+
+/* MEMBER SHARES */
+.share-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--cream-dark);}
+.share-row:last-child{border-bottom:none;}
+.share-avatar{width:36px;height:36px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;}
+.share-info{flex:1;}
+.share-name{font-size:14px;font-weight:600;color:var(--ink);}
+.share-hrs{font-size:11px;color:var(--mid);}
+.share-bar-wrap{flex:1;background:var(--cream-dark);border-radius:4px;height:6px;overflow:hidden;}
+.share-bar{height:100%;background:var(--green);border-radius:4px;transition:width 0.4s ease;}
+.share-amount{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--green-dark);min-width:80px;text-align:right;}
+.share-pct{font-size:11px;color:var(--mid);min-width:36px;text-align:right;}
+
+.dash-refresh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.dash-period{font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--green-dark);}
+.dash-updated{font-size:11px;color:var(--mid);}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green-light);margin-right:4px;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.open{display:flex;}
 .modal{background:#fff;border-radius:12px;max-width:680px;width:95%;max-height:90vh;overflow-y:auto;padding:24px;}
@@ -311,7 +358,8 @@ document.addEventListener('DOMContentLoaded',function(){
 </div>
 
 <div class="tab-bar">
-  <div class="tab active" onclick="switchTab('distribution',this)">Distribution</div>
+  <div class="tab active" onclick="switchTab('dashboard',this)">Dashboard</div>
+  <div class="tab" onclick="switchTab('distribution',this)">Distribution</div>
   <div class="tab" onclick="switchTab('revenue',this)">Revenue Log</div>
   <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
   <div class="tab" onclick="switchTab('team',this)">Team</div>
@@ -322,8 +370,63 @@ document.addEventListener('DOMContentLoaded',function(){
 
 <div class="main">
 
+<!-- ─── DASHBOARD ─── -->
+<div class="tab-content active" id="tab-dashboard">
+  <div class="dash-refresh" style="margin-top:8px;">
+    <div>
+      <div class="dash-period" id="dash-period-label">Loading...</div>
+      <div class="dash-updated"><span class="live-dot"></span><span id="dash-updated-time">Updating...</span></div>
+    </div>
+    <button class="add-btn" style="margin-top:0;" onclick="refreshDashboard()">↻ Refresh</button>
+  </div>
+
+  <!-- LAKE: THE POOL -->
+  <div class="dash-grid" style="margin-bottom:16px;">
+    <div class="dash-card lake">
+      <div class="dash-label">Distributable Pool</div>
+      <div class="dash-amount" id="dash-pool">$0</div>
+      <div class="dash-sub" id="dash-pool-sub">After expenses &amp; Common Table</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-label">Common Table (8%)</div>
+      <div class="dash-amount accent" id="dash-ct">$0</div>
+      <div class="dash-sub">Collective reinvestment fund</div>
+    </div>
+  </div>
+
+  <!-- RIVERS: REVENUE -->
+  <div class="river-section">
+    <div class="river-label">Revenue Streams</div>
+    <div id="dash-revenue-list"><div style="color:var(--mid);font-size:13px;padding:10px 0;">Loading revenue...</div></div>
+    <div class="river-entry" style="background:var(--cream);border-style:dashed;margin-top:4px;">
+      <div class="river-entry-left">
+        <div class="river-entry-name" style="color:var(--green-dark);">Total Revenue</div>
+      </div>
+      <div class="river-entry-amount" id="dash-total-revenue">$0.00</div>
+    </div>
+  </div>
+
+  <!-- STREAMS: EXPENSES -->
+  <div class="river-section">
+    <div class="river-label">Expenses</div>
+    <div id="dash-expense-list"><div style="color:var(--mid);font-size:13px;padding:10px 0;">Loading expenses...</div></div>
+    <div class="river-entry" style="background:var(--cream);border-style:dashed;margin-top:4px;">
+      <div class="river-entry-left">
+        <div class="river-entry-name" style="color:var(--red);">Total Expenses</div>
+      </div>
+      <div class="river-entry-amount neg" id="dash-total-expenses">$0.00</div>
+    </div>
+  </div>
+
+  <!-- MEMBER SHARES -->
+  <div class="dash-card full" style="margin-bottom:20px;">
+    <div class="dash-label" style="margin-bottom:14px;">Member Shares — Based on Hours This Period</div>
+    <div id="dash-member-shares"><div style="color:var(--mid);font-size:13px;">Loading...</div></div>
+  </div>
+</div>
+
 <!-- ─── DISTRIBUTION ─── -->
-<div class="tab-content active" id="tab-distribution">
+<div class="tab-content" id="tab-distribution">
   <div id="distStatus" class="status-bar" onclick="this.className='status-bar';this.textContent='';" style="cursor:pointer;" title="Tap to dismiss"></div>
   <div class="period-bar" style="margin-top:4px;">
     <span class="period-label">Pay Period:</span>
@@ -834,6 +937,10 @@ function switchTab(id,el){
   if(id==='printsheet')buildPrintSheet();
   if(id==='history')loadHistory();
   if(id==='revenue')loadRevLog();
+  if(id==='dashboard')refreshDashboard();
+  // Auto-refresh dashboard every 60s when on it
+  if(dashInterval)clearInterval(dashInterval);
+  if(id==='dashboard')dashInterval=setInterval(refreshDashboard,60000);
 }
 
 // ─── EXPENSES ───
@@ -1083,6 +1190,7 @@ async function logRevenue(){
     await autoFetchRevenue(periodLabel);
     calculate();
     scheduleExpenseSave();
+    refreshDashboard();
   }catch(err){status.className='status-bar error';status.textContent='Error: '+err.message;toast('Save failed',true);}
 }
 
@@ -1351,6 +1459,113 @@ function resetAll(){
 }
 
 // ─── INIT ───
+// ─── DASHBOARD ───
+async function refreshDashboard(){
+  const label=getCurrentPeriodLabel();
+  document.getElementById('dash-period-label').textContent=label;
+
+  try{
+    // Revenue entries
+    const allEntries=await sbAuth('kf_revenue_entries?order=created_at.desc&limit=200');
+    const now=new Date();
+    const monthStr=now.toLocaleString('en-US',{month:'long'});
+    const yearStr=String(now.getFullYear());
+    const entries=allEntries.filter(e=>e.period_label&&(e.period_label===label||(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr))));
+    const totalRevenue=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+
+    // Revenue list
+    const revList=document.getElementById('dash-revenue-list');
+    if(entries.length){
+      // Group by source
+      const bySource={};
+      entries.forEach(e=>{
+        if(!bySource[e.source])bySource[e.source]=[];
+        bySource[e.source].push(e);
+      });
+      revList.innerHTML=Object.entries(bySource).map(([source,items])=>{
+        const total=items.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+        const details=items.map(e=>{
+          const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+          return `<div class="stream-entry"><span class="stream-entry-name">${t} — ${e.reported_by||''}${e.notes?' · '+e.notes:''}</span><span class="stream-entry-amount" style="color:var(--green-dark);">${fmt(parseFloat(e.amount)||0)}</span></div>`;
+        }).join('');
+        return `<div class="river-entry"><div class="river-entry-left"><div class="river-entry-name">${source}</div><div class="river-entry-meta">${items.length} ${items.length===1?'entry':'entries'}</div></div><div class="river-entry-amount">${fmt(total)}</div></div>${details}`;
+      }).join('');
+    } else {
+      revList.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No revenue logged yet this period.</div>';
+    }
+    document.getElementById('dash-total-revenue').textContent=fmt(totalRevenue);
+
+    // Expenses — from saved period or current session
+    let expenseTotal=0;
+    const expList=document.getElementById('dash-expense-list');
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    let dbExpenses=[];
+    if(periods.length){
+      dbExpenses=await sbAuth('kf_expenses?period_id=eq.'+periods[0].id+'&select=*&order=created_at.asc');
+    }
+    // Merge with session expenses
+    const displayExpenses=dbExpenses.length?dbExpenses:expenses.filter(e=>e.name||e.amount);
+    if(displayExpenses.length){
+      expList.innerHTML=displayExpenses.map(e=>{
+        const amt=parseFloat(e.amount||e.amount)||0;
+        expenseTotal+=amt;
+        return `<div class="stream-entry"><span class="stream-entry-name">${e.name||'Unnamed'}</span><span class="stream-entry-amount">— ${fmt(amt)}</span></div>`;
+      }).join('');
+    } else {
+      expList.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No expenses recorded yet.</div>';
+    }
+    document.getElementById('dash-total-expenses').textContent=fmt(expenseTotal);
+
+    // Pool calc
+    const afterExp=totalRevenue-expenseTotal;
+    const ct=Math.max(0,afterExp*CT);
+    const pool=Math.max(0,afterExp-ct);
+    document.getElementById('dash-pool').textContent=fmt(pool);
+    document.getElementById('dash-ct').textContent=fmt(ct);
+    document.getElementById('dash-pool-sub').textContent='From $'+totalRevenue.toFixed(2)+' revenue after expenses';
+
+    // Also update revenue on Distribution tab
+    document.getElementById('revenue').value=totalRevenue.toFixed(2);
+    calculate();
+
+    // Member shares
+    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+    const sharesEl=document.getElementById('dash-member-shares');
+    if(members.length){
+      sharesEl.innerHTML=members.map(m=>{
+        const hrs=getMemberHours(m);
+        const pct=totalHours>0?hrs/totalHours:0;
+        const share=pool*pct;
+        const initial=(m.name||'?')[0].toUpperCase();
+        const barWidth=totalHours>0?Math.round(pct*100):0;
+        return `<div class="share-row">
+          <div class="share-avatar" style="background:${m.role==='Steward'?'var(--green)':'var(--tan)'};">${initial}</div>
+          <div class="share-info">
+            <div class="share-name">${m.name||'Member'} <span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></div>
+            <div class="share-hrs">${hrs.toFixed(2)} hrs this period</div>
+          </div>
+          <div class="share-bar-wrap"><div class="share-bar" style="width:${barWidth}%"></div></div>
+          <div class="share-pct">${(pct*100).toFixed(1)}%</div>
+          <div class="share-amount">${fmt(share)}</div>
+        </div>`;
+      }).join('');
+    } else {
+      sharesEl.innerHTML='<div style="color:var(--mid);font-size:13px;">No team members loaded.</div>';
+    }
+
+    // Update timestamp
+    const now2=new Date();
+    document.getElementById('dash-updated-time').textContent='Updated '+now2.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+
+  }catch(e){
+    console.warn('Dashboard error:',e.message);
+    document.getElementById('dash-updated-time').textContent='Error loading — tap refresh';
+  }
+}
+
+// Auto-refresh dashboard every 60 seconds when on that tab
+let dashInterval=null;
+
 // ─── RECIPES ───
 async function loadRecipeList(){
   try{
