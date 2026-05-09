@@ -707,19 +707,22 @@ async function sendReset(){
 }
 
 async function sbAuth(path,opts={}){
-  // Use JWT token if available, fall back to API key
-  const authHeader=window._authToken
-    ?'Bearer '+window._authToken
-    :'Bearer '+SUPABASE_KEY;
+  // Per Supabase docs: publishable key must NOT be used as Bearer token.
+  // When user is logged in, use their JWT session token as Bearer.
+  // When not logged in, omit Authorization or set it equal to apikey.
+  const headers={
+    'apikey':SUPABASE_KEY,
+    'Content-Type':'application/json',
+    'Prefer':'return=representation',
+    ...(opts.headers||{})
+  };
+  // Only add Authorization if we have a real JWT session token
+  if(window._authToken){
+    headers['Authorization']='Bearer '+window._authToken;
+  }
   const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{
-    headers:{
-      'apikey':SUPABASE_KEY,
-      'Authorization':authHeader,
-      'Content-Type':'application/json',
-      'Prefer':'return=representation',
-      ...(opts.headers||{})
-    },
-    ...opts
+    ...opts,
+    headers
   });
   let data;
   try{data=await res.json();}catch(e){data=[];}
