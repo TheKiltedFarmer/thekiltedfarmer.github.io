@@ -345,7 +345,10 @@ document.addEventListener('DOMContentLoaded',function(){
         <span class="currency-prefix">$</span>
         <input type="number" class="big-input" id="revenue" placeholder="0.00" oninput="calculate()" min="0" step="0.01">
       </div>
-      <div style="margin-top:6px;font-size:12px;color:var(--mid);">Auto-updated from Revenue Log each time you open the app.</div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:var(--mid);">Auto-updated from Revenue Log.</span>
+        <button class="add-btn" style="margin-top:0;" onclick="autoFetchRevenue(getCurrentPeriodLabel()).then(()=>toast('Revenue refreshed'))">↻ Refresh</button>
+      </div>
     </div>
     <div class="card">
       <div class="card-title"><div class="card-title-dot"></div>Expenses</div>
@@ -786,7 +789,7 @@ function toast(msg,isError=false){
 function getCurrentPeriodLabel(){
   const sel=document.getElementById('periodDate');
   if(sel&&sel.options&&sel.options.length>0&&sel.value){
-    return sel.value;
+    return sel.value.trim();
   }
   const now=new Date();
   return now.toLocaleString('en-US',{month:'long',year:'numeric'});
@@ -1543,12 +1546,24 @@ async function autoLoadCurrentPeriod(){
 
 async function autoFetchRevenue(label){
   try{
-    const entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
+    // Try exact label first
+    let entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
+    // If nothing found, fetch ALL recent entries and find matching ones
+    // This handles label format mismatches (e.g. "May 2026" vs "May 2026 ")
+    if(!entries||!entries.length){
+      const allEntries=await sbAuth('kf_revenue_entries?order=created_at.desc&limit=100');
+      // Try to find entries that roughly match this month/year
+      const now=new Date();
+      const monthStr=now.toLocaleString('en-US',{month:'long'});
+      const yearStr=String(now.getFullYear());
+      entries=allEntries.filter(e=>e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr));
+    }
     if(entries&&entries.length){
       const total=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
       if(total>0){
         document.getElementById('revenue').value=total.toFixed(2);
         calculate();
+        toast('Revenue: $'+total.toFixed(2));
       }
     }
   }catch(e){console.warn('Revenue fetch error:',e.message);}
