@@ -257,6 +257,24 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 
 
 <!-- AUTH GATE -->
+<script>
+// Build period dropdown immediately on page load, before login
+document.addEventListener('DOMContentLoaded',function(){
+  const sel=document.getElementById('periodDate');
+  if(!sel)return;
+  const now=new Date();
+  sel.innerHTML='';
+  for(let i=-1;i<=11;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const label=d.toLocaleString('en-US',{month:'long',year:'numeric'});
+    const opt=document.createElement('option');
+    opt.value=label;
+    opt.textContent=label;
+    if(i===0)opt.selected=true;
+    sel.appendChild(opt);
+  }
+});
+</script>
 <div id="authGate" style="position:fixed;inset:0;background:var(--green-dark);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;">
   <div style="text-align:center;padding:40px 32px;background:rgba(255,255,255,0.05);border-radius:16px;border:1px solid rgba(255,255,255,0.1);max-width:360px;width:90%;">
     <div style="font-size:12px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;margin-bottom:10px;font-family:Source Sans 3,sans-serif;">The Kilted Farmers</div>
@@ -316,6 +334,7 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
       <option value="Quarterly">Quarterly</option>
     </select>
     <select class="period-select" id="periodDate" onchange="calculate();autoLoadCurrentPeriod()" style="min-width:160px;font-weight:600;color:var(--green-dark);">
+      <option value="">Loading...</option>
     </select>
   </div>
   <div class="inputs-section">
@@ -878,11 +897,32 @@ async function removeMember(id){
 async function updateMember(id,f,v){
   const m=members.find(m=>m.id===id);
   if(m){m[f]=v;}
-  renderTeam();renderClock();calculate();
-  // Save name/role changes to db
+  // Only re-render for role changes (select), not name typing
+  if(f==='role'){renderTeam();renderClock();}
+  // Always recalculate shares
+  calculate();
+  // Update share display inline without re-rendering
+  const totalHours=members.reduce((s,m2)=>s+getMemberHours(m2),0);
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;
+  const ct=Math.max(0,afterExp*CT);
+  const pool=Math.max(0,afterExp-ct);
+  members.forEach(m2=>{
+    const hrs=getMemberHours(m2);
+    const pct=totalHours>0?hrs/totalHours:0;
+    const sel=document.getElementById('share-'+m2.id);
+    const pel=document.getElementById('pct-'+m2.id);
+    if(sel)sel.textContent=fmt(pool*pct);
+    if(pel)pel.textContent=hrs.toFixed(2)+' hrs';
+  });
+  // Save name/role changes to db with debounce
   if(m&&m.dbId&&(f==='name'||f==='role')){
-    try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
-    catch(e){console.warn('Could not update member:',e);}
+    clearTimeout(m._saveTimer);
+    m._saveTimer=setTimeout(async()=>{
+      try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
+      catch(e){console.warn('Could not update member:',e);}
+    },800);
   }
 }
 
@@ -1448,22 +1488,15 @@ async function deleteRecipe(){
 
 // ─── AUTO INIT ───
 async function autoInit(){
-  // Build dropdown first and wait for paint
-  buildPeriodDropdown();
+  // Dropdown already built by DOMContentLoaded listener
   document.getElementById('periodType').value='Monthly';
-  await new Promise(r=>requestAnimationFrame(r));
-
   renderExpenses();
   renderBulkIngs();
   renderSpecIngs();
   await loadTeamMembers();
-
-  // Small pause to ensure dropdown value is settled
-  await new Promise(r=>setTimeout(r,150));
   await autoLoadCurrentPeriod();
   await loadRecipeList();
-
-  // Safety retry for revenue
+  // Safety retry for revenue after 2s
   setTimeout(async()=>{
     const rev=parseFloat(document.getElementById('revenue').value)||0;
     if(!rev){
