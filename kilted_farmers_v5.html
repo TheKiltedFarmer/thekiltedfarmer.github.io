@@ -1042,7 +1042,6 @@ async function updateMember(id,f,v){
 async function loadTeamMembers(){
   try{
     let rows=await sbAuth('kf_team_members?active=eq.true&order=sort_order.asc,created_at.asc');
-    // Seed founders if table is empty
     if(!rows||!rows.length){
       const seeds=[{name:'Justin',role:'Steward',sort_order:1},{name:'Jessica',role:'Steward',sort_order:2}];
       rows=await sbAuth('kf_team_members',{method:'POST',body:JSON.stringify(seeds)});
@@ -1058,16 +1057,39 @@ async function loadTeamMembers(){
         dailyEntries:[]
       }));
     }
+    // Load current period time entries for each member
+    await loadCurrentPeriodHours();
     renderTeam();renderClock();calculate();
   }catch(e){
     console.warn('Could not load team:',e.message);
-    // Fall back to defaults
     members=[
       {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
       {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]}
     ];
     renderTeam();renderClock();calculate();
   }
+}
+
+async function loadCurrentPeriodHours(){
+  try{
+    const label=getCurrentPeriodLabel();
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    if(!periods.length)return;
+    const pid=periods[0].id;
+    window._currentPeriodId=pid;
+    const entries=await sbAuth('kf_time_entries?period_id=eq.'+pid+'&select=*&order=created_at.asc');
+    if(!entries.length)return;
+    // Map entries back to members
+    members.forEach(m=>{
+      const myEntries=entries.filter(e=>e.member_name===m.name);
+      m.punches=myEntries.filter(e=>e.entry_type==='punch').map(e=>({
+        in:e.clock_in,out:e.clock_out,dbId:e.id
+      }));
+      m.dailyEntries=myEntries.filter(e=>e.entry_type==='daily').map(e=>({
+        date:e.entry_date||'',hours:String(e.hours||0),note:e.notes||'',dbId:e.id
+      }));
+    });
+  }catch(e){console.warn('Could not load hours:',e.message);}
 }
 
 function getMemberHours(m){
@@ -1110,17 +1132,56 @@ function renderClock(){
   });
 }
 function toggleClock(id){document.getElementById('clock-body-'+id).classList.toggle('open');}
-function clockIn(id){
-  const m=members.find(m=>m.id===id);const val=document.getElementById('cin-'+id).value;
+async function clockIn(id){
+  const m=members.find(m=>m.id===id);
+  const val=document.getElementById('cin-'+id).value;
   if(!val){alert('Select a clock-in time.');return;}
-  m.punches.push({in:val,out:null});renderPunchLog(id);renderTeam();calculate();
+  const punch={in:val,out:null};
+  m.punches.push(punch);
+  renderPunchLog(id);calculate();
+  // Save to Supabase
+  try{
+    const pid=await ensurePeriodId();
+    if(pid){
+      const[row]=await sbAuth('kf_time_entries',{method:'POST',body:JSON.stringify({
+        period_id:pid,member_name:m.name,entry_type:'punch',clock_in:val,clock_out:null,hours:null
+      })});
+      punch.dbId=row.id;
+      toast(m.name+' clocked in');
+    }
+  }catch(e){toast('Save failed',true);}
+  refreshDashboard();
 }
-function clockOut(id){
-  const m=members.find(m=>m.id===id);const val=document.getElementById('cout-'+id).value;
+
+async function clockOut(id){
+  const m=members.find(m=>m.id===id);
+  const val=document.getElementById('cout-'+id).value;
   if(!val){alert('Select a clock-out time.');return;}
   const open=m.punches.find(p=>!p.out);
-  if(open){open.out=val;}else{m.punches.push({in:val,out:val});}
-  renderPunchLog(id);renderTeam();calculate();
+  if(open){
+    open.out=val;
+    const hrs=open.in&&open.out?parseFloat(((new Date(open.out)-new Date(open.in))/3600000).toFixed(2)):null;
+    renderPunchLog(id);calculate();
+    // Update in Supabase
+    try{
+      if(open.dbId){
+        await sbAuth('kf_time_entries?id=eq.'+open.dbId,{method:'PATCH',body:JSON.stringify({clock_out:val,hours:hrs})});
+      } else {
+        const pid=await ensurePeriodId();
+        if(pid){
+          const[row]=await sbAuth('kf_time_entries',{method:'POST',body:JSON.stringify({
+            period_id:pid,member_name:m.name,entry_type:'punch',clock_in:open.in,clock_out:val,hours:hrs
+          })});
+          open.dbId=row.id;
+        }
+      }
+      toast(m.name+' clocked out — '+hrs+' hrs');
+    }catch(e){toast('Save failed',true);}
+  } else {
+    m.punches.push({in:val,out:val});
+    renderPunchLog(id);calculate();
+  }
+  refreshDashboard();
 }
 function renderPunchLog(id){
   const m=members.find(m=>m.id===id);const log=document.getElementById('punchlog-'+id);
@@ -1144,8 +1205,49 @@ function renderDailyEntries(id){
       <button class="remove-btn" onclick="removeDaily(${id},${i})">×</button>
     </div>`).join('');
 }
-function updateDaily(mid,idx,f,v){const m=members.find(m=>m.id===mid);m.dailyEntries[idx][f]=v;renderTeam();calculate();}
-function removeDaily(mid,idx){const m=members.find(m=>m.id===mid);m.dailyEntries.splice(idx,1);renderDailyEntries(mid);renderTeam();calculate();}
+function updateDaily(mid,idx,f,v){
+  const m=members.find(m=>m.id===mid);
+  m.dailyEntries[idx][f]=v;
+  calculate();
+  // Auto-save after short delay
+  clearTimeout(m._dailyTimer);
+  m._dailyTimer=setTimeout(()=>saveDailyEntry(mid,idx),1000);
+}
+
+async function saveDailyEntry(mid,idx){
+  const m=members.find(m=>m.id===mid);
+  if(!m||!m.dailyEntries[idx])return;
+  const d=m.dailyEntries[idx];
+  if(!d.hours)return;
+  try{
+    const pid=await ensurePeriodId();
+    if(!pid)return;
+    if(d.dbId){
+      await sbAuth('kf_time_entries?id=eq.'+d.dbId,{method:'PATCH',body:JSON.stringify({
+        entry_date:d.date||null,hours:parseFloat(d.hours)||0,notes:d.note||null
+      })});
+    } else {
+      const[row]=await sbAuth('kf_time_entries',{method:'POST',body:JSON.stringify({
+        period_id:pid,member_name:m.name,entry_type:'daily',
+        entry_date:d.date||null,hours:parseFloat(d.hours)||0,notes:d.note||null
+      })});
+      d.dbId=row.id;
+    }
+    toast('Hours saved');
+    refreshDashboard();
+  }catch(e){toast('Hours save failed',true);}
+}
+
+function removeDaily(mid,idx){
+  const m=members.find(m=>m.id===mid);
+  const d=m.dailyEntries[idx];
+  if(d&&d.dbId){
+    sbAuth('kf_time_entries?id=eq.'+d.dbId,{method:'DELETE',headers:{'Prefer':''}}).catch(e=>console.warn(e));
+  }
+  m.dailyEntries.splice(idx,1);
+  renderDailyEntries(mid);calculate();
+  refreshDashboard();
+}
 
 // ─── CALCULATE ───
 function calculate(){
@@ -1565,6 +1667,34 @@ async function refreshDashboard(){
 
 // Auto-refresh dashboard every 60 seconds when on that tab
 let dashInterval=null;
+
+// ─── ENSURE PERIOD EXISTS ───
+async function ensurePeriodId(){
+  if(window._currentPeriodId)return window._currentPeriodId;
+  const label=getCurrentPeriodLabel();
+  if(!label)return null;
+  try{
+    const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    if(existing.length){
+      window._currentPeriodId=existing[0].id;
+      return existing[0].id;
+    }
+    const revenue=parseFloat(document.getElementById('revenue').value)||0;
+    const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+    const afterExp=revenue-totalExp;
+    const ct=Math.max(0,afterExp*CT);
+    const pool=Math.max(0,afterExp-ct);
+    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+    const[p]=await sbAuth('kf_pay_periods',{method:'POST',body:JSON.stringify({
+      period_type:document.getElementById('periodType').value,
+      period_label:label,gross_revenue:revenue,
+      total_expenses:totalExp,common_table:ct,
+      distributable_pool:pool,total_hours:totalHours
+    })});
+    window._currentPeriodId=p.id;
+    return p.id;
+  }catch(e){console.warn('ensurePeriodId failed:',e.message);return null;}
+}
 
 // ─── RECIPES ───
 async function loadRecipeList(){
