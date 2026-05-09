@@ -1415,32 +1415,48 @@ async function autoInit(){
   await loadTeamMembers();
   await autoLoadCurrentPeriod();
   await loadRecipeList();
+  // Retry revenue fetch after short delay in case first attempt was too early
+  setTimeout(async()=>{
+    const rev=parseFloat(document.getElementById('revenue').value)||0;
+    if(!rev){
+      const label=getCurrentPeriodLabel();
+      await autoFetchRevenue(label);
+      calculate();
+    }
+  },1500);
 }
 
 async function autoLoadCurrentPeriod(){
   const label=getCurrentPeriodLabel();
   try{
-    // Always pull latest revenue log total first
+    // Step 1: Pull revenue log total
     await autoFetchRevenue(label);
 
-    // Load saved period expenses for this month if exists
+    // Step 2: Load saved period for this month
     const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
     if(periods.length){
       const p=periods[0];
       window._currentPeriodId=p.id;
-      // Load expenses
+
+      // Step 3: Load expenses for this period
       const exps=await sbAuth('kf_expenses?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
       if(exps.length){
-        expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount||'',receiptUrl:e.receipt_url||'',receiptFile:null,dbId:e.id,periodId:p.id}));
+        expenses=exps.map((e,i)=>({
+          id:i+1,
+          name:e.name||'',
+          amount:e.amount!=null?String(e.amount):'',
+          receiptUrl:e.receipt_url||'',
+          receiptFile:null,
+          dbId:e.id,
+          periodId:p.id
+        }));
         expCounter=expenses.length+10;
         renderExpenses();
       }
-      toast('Loaded '+label);
     }
     calculate();
   }catch(e){
     console.warn('Auto-load error:',e.message);
-    toast('Could not load period data',true);
     calculate();
   }
 }
@@ -1448,11 +1464,12 @@ async function autoLoadCurrentPeriod(){
 async function autoFetchRevenue(label){
   try{
     const entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
-    if(entries.length){
-      const total=entries.reduce((s,e)=>s+(e.amount||0),0);
-      document.getElementById('revenue').value=total.toFixed(2);
-      calculate();
-      toast('Revenue loaded: $'+total.toFixed(2));
+    if(entries&&entries.length){
+      const total=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      if(total>0){
+        document.getElementById('revenue').value=total.toFixed(2);
+        calculate();
+      }
     }
   }catch(e){console.warn('Revenue fetch error:',e.message);}
 }
