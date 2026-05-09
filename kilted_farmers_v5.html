@@ -766,7 +766,9 @@ function toast(msg,isError=false){
 // ─── AUTO PERIOD ───
 function getCurrentPeriodLabel(){
   const sel=document.getElementById('periodDate');
-  if(sel&&sel.value)return sel.value;
+  if(sel&&sel.options&&sel.options.length>0&&sel.value){
+    return sel.value;
+  }
   const now=new Date();
   return now.toLocaleString('en-US',{month:'long',year:'numeric'});
 }
@@ -775,10 +777,9 @@ function buildPeriodDropdown(){
   const sel=document.getElementById('periodDate');
   if(!sel)return;
   const now=new Date();
-  const currentLabel=now.toLocaleString('en-US',{month:'long',year:'numeric'});
   sel.innerHTML='';
-  // Build last 6 months + next month
-  for(let i=-1;i<=6;i++){
+  // Next month first, then current, then 11 months back = 13 total
+  for(let i=-1;i<=11;i++){
     const d=new Date(now.getFullYear(),now.getMonth()-i,1);
     const label=d.toLocaleString('en-US',{month:'long',year:'numeric'});
     const opt=document.createElement('option');
@@ -787,11 +788,16 @@ function buildPeriodDropdown(){
     if(i===0)opt.selected=true;
     sel.appendChild(opt);
   }
+  // Trigger calculate after building
+  calculate();
 }
 
 function setCurrentPeriod(){
-  buildPeriodDropdown();
-  document.getElementById('periodType').value='Monthly';
+  // Use requestAnimationFrame to ensure DOM is painted
+  requestAnimationFrame(()=>{
+    buildPeriodDropdown();
+    document.getElementById('periodType').value='Monthly';
+  });
 }
 
 // ─── TABS ───
@@ -1442,22 +1448,29 @@ async function deleteRecipe(){
 
 // ─── AUTO INIT ───
 async function autoInit(){
-  setCurrentPeriod();
+  // Build dropdown first and wait for paint
+  buildPeriodDropdown();
+  document.getElementById('periodType').value='Monthly';
+  await new Promise(r=>requestAnimationFrame(r));
+
   renderExpenses();
   renderBulkIngs();
   renderSpecIngs();
   await loadTeamMembers();
+
+  // Small pause to ensure dropdown value is settled
+  await new Promise(r=>setTimeout(r,150));
   await autoLoadCurrentPeriod();
   await loadRecipeList();
-  // Retry revenue fetch after short delay in case first attempt was too early
+
+  // Safety retry for revenue
   setTimeout(async()=>{
     const rev=parseFloat(document.getElementById('revenue').value)||0;
     if(!rev){
-      const label=getCurrentPeriodLabel();
-      await autoFetchRevenue(label);
+      await autoFetchRevenue(getCurrentPeriodLabel());
       calculate();
     }
-  },1500);
+  },2000);
 }
 
 async function autoLoadCurrentPeriod(){
