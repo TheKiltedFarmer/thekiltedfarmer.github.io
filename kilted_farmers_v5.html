@@ -1099,16 +1099,11 @@ async function loadTeamMembers(){
       });
       if(seedRes.ok) rows=await seedRes.json();
     }
-    // Clean up any blank/unnamed members that crept in
+    // Clean up any blank/unnamed members that crept in (safe version)
     try{
-      // Delete where name is empty string
-      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?or=(name.eq.,name.is.null)',{
+      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?name=eq.',{
         method:'DELETE',
-        headers:{
-          'apikey':SUPABASE_KEY,
-          'Authorization':window._authToken?'Bearer '+window._authToken:'',
-          'Prefer':''
-        }
+        headers:{'apikey':SUPABASE_KEY,'Authorization':window._authToken?'Bearer '+window._authToken:'','Prefer':''}
       });
     }catch(e){console.warn('Cleanup error:',e.message);}
 
