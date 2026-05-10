@@ -1055,14 +1055,15 @@ async function updateMember(id,f,v){
 }
 
 async function loadTeamMembers(){
-  // Always set defaults first so UI is never blank
-  if(!members||!members.length){
-    members=[
-      {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
-      {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]}
-    ];
-    memberCounter=10;
-  }
+  // Set defaults immediately so UI is never blank
+  members=[
+    {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
+    {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
+    {id:3,dbId:null,name:'Rochelle',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
+    {id:4,dbId:null,name:'Bev',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
+    {id:5,dbId:null,name:'Keir',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]}
+  ];
+  memberCounter=10;
   renderTeam();renderClock();
 
   // Then try to load from Supabase
@@ -1134,55 +1135,63 @@ async function loadTeamMembers(){
 
 async function loadCurrentPeriodHours(){
   try{
-    const label=getCurrentPeriodLabel();
-    // Get ALL periods for this month label, sorted newest first
-    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc');
-    if(!periods.length)return;
+    // Get current month date range
+    const now=new Date();
+    const monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
+    const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
 
-    // Use newest period as current
-    const pid=periods[0].id;
-    window._currentPeriodId=pid;
+    // Fetch all time entries for this month regardless of period_id
+    // This avoids the period_id duplication problem entirely
+    const allEntries=await sbAuth(
+      'kf_time_entries?select=*&order=id.asc'
+    );
 
-    // Collect ALL time entries across ALL period records for this month
-    // This handles the case where multiple saves created multiple period records
-    const allEntries=[];
-    for(const p of periods){
-      try{
-        const entries=await sbAuth('kf_time_entries?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
-        allEntries.push(...entries);
-      }catch(e){}
+    // Filter to current month entries
+    const monthEntries=allEntries.filter(e=>{
+      const d=e.entry_date||e.clock_in;
+      if(!d)return false;
+      const ds=d.substring(0,10);
+      return ds>=monthStart&&ds<=monthEnd;
+    });
+
+    if(!monthEntries.length){
+      // Fall back to distribution records for hours
+      const label=getCurrentPeriodLabel();
+      const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+      if(periods.length){
+        window._currentPeriodId=periods[0].id;
+        const dists=await sbAuth('kf_distributions?period_id=eq.'+periods[0].id+'&select=*');
+        members.forEach(m=>{
+          const d=dists.find(d=>d.member_name===m.name);
+          if(d&&d.hours>0)m.manualHours=String(d.hours);
+        });
+      }
+      return;
     }
 
-    if(!allEntries.length)return;
-
-    // Deduplicate entries by member+type+time to avoid double-counting
+    // Deduplicate by id (safest dedup)
     const seen=new Set();
-    const uniqueEntries=allEntries.filter(e=>{
-      const key=e.member_name+'|'+e.entry_type+'|'+(e.clock_in||e.entry_date||'')+'|'+(e.hours||'');
-      if(seen.has(key))return false;
-      seen.add(key);
+    const unique=monthEntries.filter(e=>{
+      if(seen.has(e.id))return false;
+      seen.add(e.id);
       return true;
     });
 
-    // Map entries back to members
+    // Map to members
     members.forEach(m=>{
-      const myEntries=uniqueEntries.filter(e=>e.member_name===m.name);
-      m.punches=myEntries.filter(e=>e.entry_type==='punch').map(e=>({
+      const mine=unique.filter(e=>e.member_name===m.name);
+      m.punches=mine.filter(e=>e.entry_type==='punch').map(e=>({
         in:e.clock_in,out:e.clock_out,dbId:e.id
       }));
-      m.dailyEntries=myEntries.filter(e=>e.entry_type==='daily').map(e=>({
+      m.dailyEntries=mine.filter(e=>e.entry_type==='daily').map(e=>({
         date:e.entry_date||'',hours:String(e.hours||0),note:e.notes||'',dbId:e.id
       }));
     });
 
-    // Update manual hours from distribution records if no time entries
-    const dists=await sbAuth('kf_distributions?period_id=eq.'+pid+'&select=*');
-    members.forEach(m=>{
-      const d=dists.find(d=>d.member_name===m.name);
-      if(d&&d.hours&&!getMemberHours(m)){
-        m.manualHours=String(d.hours);
-      }
-    });
+    // Set current period id from newest period for this month
+    const label=getCurrentPeriodLabel();
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    if(periods.length)window._currentPeriodId=periods[0].id;
 
   }catch(e){console.warn('Could not load hours:',e.message);}
 }
