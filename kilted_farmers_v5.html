@@ -1099,13 +1099,18 @@ async function loadTeamMembers(){
       });
       if(seedRes.ok) rows=await seedRes.json();
     }
-    // Clean up any blank members that crept in
+    // Clean up any blank/unnamed members that crept in
     try{
-      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?name=eq.&active=eq.true',{
+      // Delete where name is empty string
+      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?or=(name.eq.,name.is.null)',{
         method:'DELETE',
-        headers:{'apikey':SUPABASE_KEY,'Authorization':window._authToken?'Bearer '+window._authToken:'','Prefer':''}
+        headers:{
+          'apikey':SUPABASE_KEY,
+          'Authorization':window._authToken?'Bearer '+window._authToken:'',
+          'Prefer':''
+        }
       });
-    }catch(e){}
+    }catch(e){console.warn('Cleanup error:',e.message);}
 
     const validRows=(rows||[]).filter(r=>r.name&&r.name.trim()!=='');
     if(validRows.length){
@@ -1135,15 +1140,38 @@ async function loadTeamMembers(){
 async function loadCurrentPeriodHours(){
   try{
     const label=getCurrentPeriodLabel();
-    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    // Get ALL periods for this month label, sorted newest first
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc');
     if(!periods.length)return;
+
+    // Use newest period as current
     const pid=periods[0].id;
     window._currentPeriodId=pid;
-    const entries=await sbAuth('kf_time_entries?period_id=eq.'+pid+'&select=*&order=created_at.asc');
-    if(!entries.length)return;
+
+    // Collect ALL time entries across ALL period records for this month
+    // This handles the case where multiple saves created multiple period records
+    const allEntries=[];
+    for(const p of periods){
+      try{
+        const entries=await sbAuth('kf_time_entries?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
+        allEntries.push(...entries);
+      }catch(e){}
+    }
+
+    if(!allEntries.length)return;
+
+    // Deduplicate entries by member+type+time to avoid double-counting
+    const seen=new Set();
+    const uniqueEntries=allEntries.filter(e=>{
+      const key=e.member_name+'|'+e.entry_type+'|'+(e.clock_in||e.entry_date||'')+'|'+(e.hours||'');
+      if(seen.has(key))return false;
+      seen.add(key);
+      return true;
+    });
+
     // Map entries back to members
     members.forEach(m=>{
-      const myEntries=entries.filter(e=>e.member_name===m.name);
+      const myEntries=uniqueEntries.filter(e=>e.member_name===m.name);
       m.punches=myEntries.filter(e=>e.entry_type==='punch').map(e=>({
         in:e.clock_in,out:e.clock_out,dbId:e.id
       }));
@@ -1151,6 +1179,16 @@ async function loadCurrentPeriodHours(){
         date:e.entry_date||'',hours:String(e.hours||0),note:e.notes||'',dbId:e.id
       }));
     });
+
+    // Update manual hours from distribution records if no time entries
+    const dists=await sbAuth('kf_distributions?period_id=eq.'+pid+'&select=*');
+    members.forEach(m=>{
+      const d=dists.find(d=>d.member_name===m.name);
+      if(d&&d.hours&&!getMemberHours(m)){
+        m.manualHours=String(d.hours);
+      }
+    });
+
   }catch(e){console.warn('Could not load hours:',e.message);}
 }
 
