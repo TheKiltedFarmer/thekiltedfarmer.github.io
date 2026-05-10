@@ -991,10 +991,7 @@ async function addMember(){
   const m={id:++memberCounter,name:'',role:'Contributor',manualHours:'',punches:[],dailyEntries:[],dbId:null};
   members.push(m);
   renderTeam();renderClock();calculate();
-  try{
-    const[row]=await sbAuth('kf_team_members',{method:'POST',body:JSON.stringify({name:'',role:'Contributor',sort_order:members.length})});
-    m.dbId=row.id;
-  }catch(e){console.warn('Could not save new member:',e);}
+  // Don't save to DB until name is entered — updateMember handles that
 }
 
 async function removeMember(id){
@@ -1002,8 +999,17 @@ async function removeMember(id){
   members=members.filter(m=>m.id!==id);
   renderTeam();renderClock();calculate();
   if(m&&m.dbId){
-    try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'DELETE',headers:{'Prefer':''}});}
-    catch(e){console.warn('Could not remove member:',e);}
+    try{
+      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?id=eq.'+m.dbId,{
+        method:'DELETE',
+        headers:{
+          'apikey':SUPABASE_KEY,
+          'Authorization':window._authToken?'Bearer '+window._authToken:'',
+          'Prefer':'return=minimal'
+        }
+      });
+      toast('Member removed');
+    }catch(e){console.warn('Could not remove member:',e);}
   }
 }
 
@@ -1029,23 +1035,34 @@ async function updateMember(id,f,v){
     if(sel)sel.textContent=fmt(pool*pct);
     if(pel)pel.textContent=hrs.toFixed(2)+' hrs';
   });
-  // Save name/role changes to db with debounce
-  if(m&&m.dbId&&(f==='name'||f==='role')){
+  // Save to DB with debounce — only when name has content
+  if(m&&(f==='name'||f==='role')){
     clearTimeout(m._saveTimer);
     m._saveTimer=setTimeout(async()=>{
-      try{await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});}
-      catch(e){console.warn('Could not update member:',e);}
+      if(!m.name||m.name.trim()==='')return; // don't save unnamed
+      try{
+        if(m.dbId){
+          await sbAuth('kf_team_members?id=eq.'+m.dbId,{method:'PATCH',body:JSON.stringify({[f]:v})});
+        } else if(f==='name'&&v.trim()){
+          // First time saving this member
+          const[row]=await sbAuth('kf_team_members',{method:'POST',body:JSON.stringify({name:v.trim(),role:m.role,sort_order:members.length})});
+          m.dbId=row.id;
+          toast(v+' added to team');
+        }
+      }catch(e){console.warn('Could not update member:',e);}
     },800);
   }
 }
 
 async function loadTeamMembers(){
   // Always set defaults first so UI is never blank
-  members=[
-    {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
-    {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]}
-  ];
-  memberCounter=10;
+  if(!members||!members.length){
+    members=[
+      {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
+      {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]}
+    ];
+    memberCounter=10;
+  }
   renderTeam();renderClock();
 
   // Then try to load from Supabase
@@ -1082,18 +1099,26 @@ async function loadTeamMembers(){
       });
       if(seedRes.ok) rows=await seedRes.json();
     }
+    // Clean up any blank members that crept in
+    try{
+      await fetch(SUPABASE_URL+'/rest/v1/kf_team_members?name=eq.&active=eq.true',{
+        method:'DELETE',
+        headers:{'apikey':SUPABASE_KEY,'Authorization':window._authToken?'Bearer '+window._authToken:'','Prefer':''}
+      });
+    }catch(e){}
 
-    if(rows&&rows.length){
-      members=rows.map((r,i)=>({
+    const validRows=(rows||[]).filter(r=>r.name&&r.name.trim()!=='');
+    if(validRows.length){
+      members=validRows.map((r,i)=>({
         id:i+1,
         dbId:r.id,
-        name:r.name||'',
+        name:r.name.trim(),
         role:r.role||'Steward',
         manualHours:'',
         punches:[],
         dailyEntries:[]
       }));
-      memberCounter=rows.length+10;
+      memberCounter=validRows.length+10;
       renderTeam();renderClock();
     }
 
