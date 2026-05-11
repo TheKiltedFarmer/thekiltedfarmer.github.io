@@ -1764,22 +1764,48 @@ async function refreshDashboard(){
     }
     document.getElementById('dash-total-revenue').textContent=fmt(totalRevenue);
 
-    // Expenses — from saved period or current session
+    // Expenses — merge DB saved expenses with current session expenses
     let expenseTotal=0;
     const expList=document.getElementById('dash-expense-list');
-    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+
+    // Get all saved period records for this month
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc');
     let dbExpenses=[];
-    if(periods.length){
-      dbExpenses=await sbAuth('kf_expenses?period_id=eq.'+periods[0].id+'&select=*&order=created_at.asc');
+    for(const p of (periods||[])){
+      try{
+        const pe=await sbAuth('kf_expenses?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
+        dbExpenses.push(...pe);
+      }catch(e){}
     }
-    // Merge with session expenses
-    const displayExpenses=dbExpenses.length?dbExpenses:expenses.filter(e=>e.name||e.amount);
-    if(displayExpenses.length){
-      expList.innerHTML=displayExpenses.map(e=>{
-        const amt=parseFloat(e.amount||e.amount)||0;
+
+    // Deduplicate DB expenses by name+amount
+    const seenExp=new Set();
+    const uniqueDbExp=dbExpenses.filter(e=>{
+      const k=(e.name||'')+'|'+(e.amount||0);
+      if(seenExp.has(k))return false;
+      seenExp.add(k);
+      return true;
+    });
+
+    // Also include current session expenses not yet saved
+    const sessionExp=expenses.filter(e=>{
+      if(!e.name&&!e.amount)return false;
+      const amt=parseFloat(e.amount)||0;
+      if(amt===0&&!e.name)return false;
+      // Check if already in DB
+      const k=(e.name||'')+'|'+amt;
+      return !seenExp.has(k);
+    });
+
+    const allExpenses=[...uniqueDbExp,...sessionExp];
+
+    if(allExpenses.length){
+      expList.innerHTML=allExpenses.map(e=>{
+        const amt=parseFloat(e.amount||0);
+        if(amt===0&&!e.name)return '';
         expenseTotal+=amt;
         return `<div class="stream-entry"><span class="stream-entry-name">${e.name||'Unnamed'}</span><span class="stream-entry-amount">— ${fmt(amt)}</span></div>`;
-      }).join('');
+      }).filter(Boolean).join('');
     } else {
       expList.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No expenses recorded yet.</div>';
     }
