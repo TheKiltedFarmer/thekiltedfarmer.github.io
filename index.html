@@ -1972,7 +1972,8 @@ function NewsTab({user, rep, profile}) {
       submitted_by_name:profile?.display_name||user.email?.split('@')?.[0]||'Resident',
       upvotes:0, comment_count:0,
       approved: isVerifiedPress, // press auto-publishes; everyone else awaits review
-      created_at:new Date().toISOString()
+      created_at:new Date().toISOString(),
+      county: countyTag()
     }).select().single();
     if(!error&&data) {
       if(isVerifiedPress) {
@@ -3395,6 +3396,7 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
       source_url: sourceUrl||null,
       pending: true,
       created_at: new Date().toISOString(),
+      county: countyTag(),
     };
     const {error} = await sb.from('pending_bills').insert(submission);
     if(!error){
@@ -3520,7 +3522,7 @@ function PendingBillCard({bill, user, onCosign, onToast}) {
       // Move to live bills table
       const {cosigners:_c, cosign_count:_n, pending:_p, submitted_by_id:_s, submitted_by_name:_sn, source_url:_u, is_trusted_submission:_t, ...billData} = bill;
       billData.id = billData.id || (bill.jurisdiction.split(' ')[0].toUpperCase()+'_COMMUNITY_'+Date.now());
-      await sb.from('bills').insert({...billData, votes_yes:0, votes_no:0, votes_abstain:0});
+      await sb.from('bills').insert({...billData, votes_yes:0, votes_no:0, votes_abstain:0, county: countyTag()});
       onToast('🎉 Bill verified by the community and is now live for voting!');
     } else {
       onToast('Co-signed! '+(needed-1)+' more needed to go live.');
@@ -6982,7 +6984,23 @@ function AuthScreen({onAuth, onGuest}) {
 
   const handleSignup=async()=>{
     if(!zip.trim()){setError('ZIP code is required.');return;}
-    if(!zipValid){setError('Sorry — The People\'s Voice is currently only open to Jackson County and surrounding area residents. Your ZIP code ('+zip.trim()+') is not in our service area.');return;}
+    // Determine which county this ZIP belongs to, and which county the user
+    // is signing up under (URL).
+    const zipCounty = countyForZip(zip.trim());
+    const urlCounty = countyTag();
+    const currentCountyName = (COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY]).short;
+    if(!zipValid){
+      setError('Sorry — your ZIP code (' + zip.trim() + ') is not yet in our service area. We are currently active in: ' +
+        Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta').map(c=>c.short).join(', ') + '.');
+      return;
+    }
+    // Warn if ZIP belongs to a different county than the URL
+    if(zipCounty && zipCounty !== urlCounty) {
+      const zipCountyName = COUNTIES[zipCounty]?.short || zipCounty;
+      if(!window.confirm('Your ZIP code is in ' + zipCountyName + ' County, but you\'re signing up under ' + currentCountyName + ' County. Are you sure?')) {
+        return;
+      }
+    }
     if(!attested){setError('Please confirm the attestation to continue.');return;}
     setLoading(true);setError('');
     const displayName=name||email.split('@')[0];
@@ -7002,11 +7020,14 @@ function AuthScreen({onAuth, onGuest}) {
       // Retry profile creation up to 3 times in case of network hiccup
       let profileCreated = false;
       const accountIsOrg = ACCOUNT_TYPES[accountType]?.isOrg;
+      // County: prefer the URL county (where they're signing up), fall back to ZIP-based county
+      const profileCounty = urlCounty || zipCounty || DEFAULT_COUNTY;
       const profileFields = {
         id:data.user.id,email,display_name:displayName,
         zip,verified_method:'self-attested',reputation:0,
         show_in_directory:true,
         account_type: accountType,
+        county: profileCounty,
       };
       if(accountIsOrg && orgName.trim()) profileFields.org_name = orgName.trim();
       for(let i=0; i<3; i++) {
@@ -7032,7 +7053,8 @@ function AuthScreen({onAuth, onGuest}) {
         await sb.from('profiles').upsert({
           id:data.user.id, email:data.user.email,
           display_name:data.user.email?.split('@')[0]||'Resident',
-          zip:'', reputation:0, verified_method:'self-attested', show_in_directory:true
+          zip:'', reputation:0, verified_method:'self-attested', show_in_directory:true,
+          county: countyTag(),
         });
         const {data:newProf} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
         prof = newProf;
@@ -7440,7 +7462,7 @@ function PendingReviewQueue({onToast, setBills}) {
   const approve = async(bill) => {
     const {cosigners:_c,cosign_count:_n,pending:_p,submitted_by_id:_s,submitted_by_name:_sn,source_url:_u,is_trusted_submission:_t,...billData} = bill;
     const id = bill.jurisdiction.split(' ')[0].toUpperCase().slice(0,8)+'_COM_'+Date.now();
-    const {error} = await sb.from('bills').insert({...billData, id, votes_yes:0,votes_no:0,votes_abstain:0,created_at:new Date().toISOString()});
+    const {error} = await sb.from('bills').insert({...billData, id, votes_yes:0,votes_no:0,votes_abstain:0,created_at:new Date().toISOString(), county: countyTag()});
     if(!error){
       await sb.from('pending_bills').update({pending:false}).eq('id',bill.id);
       setPending(prev=>prev.filter(b=>b.id!==bill.id));
@@ -7864,6 +7886,7 @@ function EventsTab({user, profile, onToast}) {
         created_at: new Date().toISOString(),
         series_id: seriesId,
         recurrence_rule: recurrenceLabel,
+        county: countyTag(),
       }));
       const {data,error} = await sb.from('events').insert(rows).select();
       if(error) throw error;
@@ -8902,7 +8925,8 @@ function ExchangeTab({user, profile, onToast}) {
         posted_by_id: user.id,
         posted_by_name: profile?.display_name||user.email||'Neighbor',
         claimed: false,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        county: countyTag()
       };
       const {data,error} = await sb.from('exchange_listings').insert(payload).select().single();
       if(error) throw error;
@@ -9506,6 +9530,7 @@ function QuestionAuthorPanel({user, profile, onToast}) {
       options: opts,
       status: 'draft',
       created_by: user.id,
+      county: countyTag(),
     };
     let result;
     if(editingId) {
@@ -10363,6 +10388,7 @@ function MeetingPopulator({user, profile, onToast}) {
       confidence: 'pattern',
       status: 'draft',
       generated_by: user.id,
+      county: countyTag(),
     }));
     const {data: inserted, error} = await sb.from('meeting_drafts').insert(rows).select();
     if(error) {
@@ -10397,6 +10423,7 @@ function MeetingPopulator({user, profile, onToast}) {
       submitted_by_id: user.id,
       submitted_by_name: profile?.display_name || 'Admin',
       approved: true,
+      county: countyTag(),
     };
     const {data: event, error} = await sb.from('events').insert(eventRow).select().single();
     if(error) {
@@ -10778,6 +10805,7 @@ function ResourcesTab({user, profile, onToast, isAdmin}) {
       description:form.description.trim(), address:form.address.trim(),
       phone:form.phone.trim(), website:form.website.trim(),
       hours:form.hours.trim(), submitted_by:user?.id||null, status:'pending',
+      county: countyTag(),
     });
     if(!error){
       onToast('📍 Submitted! Admin will verify and add it to the map.');
@@ -10934,7 +10962,8 @@ function IdeasTab({user, profile, rep, onToast}) {
       ...form,
       submitted_by_id:user.id,
       submitted_by_name:profile?.display_name||user.email?.split('@')[0],
-      upvotes:1, forwarded:false, created_at:new Date().toISOString()
+      upvotes:1, forwarded:false, created_at:new Date().toISOString(),
+      county: countyTag()
     };
     const {data,error} = await sb.from('community_ideas').insert(idea).select().single();
     if(!error&&data){
@@ -11108,9 +11137,11 @@ function ResourceApprovalQueue({onToast}) {
 
   const approve = async(r)=>{
     let lat=null,lng=null;
+    const cTag = countyTag();
+    const cName = (COUNTIES[cTag] || COUNTIES[DEFAULT_COUNTY]).name; // "Jackson County" or "Calhoun County"
     if(r.address){
       try{
-        const q=encodeURIComponent(r.address+', Jackson County, Michigan');
+        const q=encodeURIComponent(r.address+', '+cName+', Michigan');
         const res=await fetch('https://nominatim.openstreetmap.org/search?q='+q+'&format=json&limit=1&countrycodes=us');
         const geo=await res.json();
         if(geo&&geo[0]){lat=parseFloat(geo[0].lat);lng=parseFloat(geo[0].lon);}
@@ -11120,6 +11151,7 @@ function ResourceApprovalQueue({onToast}) {
       name:r.name,category:r.category,address:r.address,
       description:r.description,hours:r.hours,phone:r.phone,
       website:r.website,lat,lng,verified:true,
+      county: cTag,
     });
     if(!error){
       await sb.from('resource_suggestions').update({status:'approved'}).eq('id',r.id);
