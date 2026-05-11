@@ -120,7 +120,97 @@ function resolveRoute(target){
 }
 
 // ── ZIP Codes ─────────────────────────────────────────────────────────────────
+// ── County Registry ───────────────────────────────────────────────────────────
+// Multi-county architecture. Each entry defines a deployable county scope.
+// Add a new county by adding a new entry here + creating any county-specific
+// content (RSS feeds, jurisdictions, reps) in the appropriate files.
+const COUNTIES = {
+  jackson: {
+    id: 'jackson',
+    slug: 'jackson',
+    name: 'Jackson County',
+    state: 'Michigan',
+    displayName: 'Jackson County, Michigan',
+    short: 'Jackson',
+    timezone: 'America/Detroit',
+    description: 'Civic engagement platform for Jackson County, MI residents.',
+    primaryCity: 'Jackson',
+    launched: '2026-01-01',
+    status: 'active',
+    // Default ZIP if user signup doesn't specify
+    defaultZip: '49201',
+    // Color accent for branding (matches existing theme)
+    accentColor: '#f0c040',
+  },
+  calhoun: {
+    id: 'calhoun',
+    slug: 'calhoun',
+    name: 'Calhoun County',
+    state: 'Michigan',
+    displayName: 'Calhoun County, Michigan',
+    short: 'Calhoun',
+    timezone: 'America/Detroit',
+    description: 'Civic engagement platform for Calhoun County, MI residents.',
+    primaryCity: 'Battle Creek',
+    launched: '2026-05-07',
+    status: 'beta', // 'active' | 'beta' | 'coming-soon'
+    defaultZip: '49014',
+    accentColor: '#f0c040',
+  },
+};
+
+// Default county for backward compatibility — used when URL has no county prefix
+// and when existing data has no county field set.
+const DEFAULT_COUNTY = 'jackson';
+
+// Parse the current county from the URL. Path like /jackson or /calhoun.
+// Falls back to DEFAULT_COUNTY if nothing matches.
+function getCountyFromUrl() {
+  if(typeof window === 'undefined') return DEFAULT_COUNTY;
+
+  // GitHub Pages 404.html redirect pattern: a request to /jackson lands on
+  // 404.html, which stores the original path in sessionStorage and redirects
+  // to /. We read that here to recover the requested county.
+  let path = window.location.pathname || '/';
+  try {
+    const stored = sessionStorage.getItem('tpv_original_path');
+    if(stored) {
+      // Replace the URL with the original requested path so the user sees
+      // /jackson in their address bar, not /
+      sessionStorage.removeItem('tpv_original_path');
+      window.history.replaceState({}, '', stored);
+      path = stored;
+    }
+  } catch(e) { /* sessionStorage may be unavailable */ }
+
+  // Strip leading slash, take first segment
+  const seg = path.replace(/^\/+/, '').split('/')[0].split('?')[0].toLowerCase();
+  if(seg && COUNTIES[seg]) return seg;
+  return null; // null means "no county in URL" — caller decides what to do
+}
+
+// Get the current county object (with all its metadata)
+function getCurrentCounty() {
+  const fromUrl = getCountyFromUrl();
+  if(fromUrl) return COUNTIES[fromUrl];
+  return COUNTIES[DEFAULT_COUNTY];
+}
+
+// Module-level cache of current county id. The App sets this on every render
+// so deep component code can call countyTag() without prop-drilling.
+let __CURRENT_COUNTY_ID = DEFAULT_COUNTY;
+function setCountyTag(id) { __CURRENT_COUNTY_ID = id || DEFAULT_COUNTY; }
+function countyTag() { return __CURRENT_COUNTY_ID; }
+
+// Build a URL for a given county slug
+function countyUrl(slug, path) {
+  const origin = (typeof window !== 'undefined' ? window.location.origin : '');
+  const p = path && path !== '/' ? path : '';
+  return origin + '/' + slug + p;
+}
+
 const ZIP_COMMUNITY = {
+  // ── Jackson County ────────────────────────────────────────────
   // Jackson City
   "49201":"Jackson","49202":"Jackson","49203":"Jackson","49204":"Jackson",
   // Jackson County townships and villages
@@ -134,7 +224,49 @@ const ZIP_COMMUNITY = {
   "49284":"Springport","49285":"Summit Township",
   // Adjacent areas that cross county lines
   "49224":"Albion area","48827":"Eaton Rapids area","48158":"Manchester area",
+
+  // ── Calhoun County ────────────────────────────────────────────
+  // Battle Creek (primary city)
+  "49014":"Battle Creek","49015":"Battle Creek","49016":"Battle Creek",
+  "49017":"Battle Creek","49037":"Battle Creek",
+  // Calhoun County townships and villages
+  "49012":"Athens","49020":"Burlington","49021":"Ceresco",
+  "49029":"East Leroy","49033":"Fulton","49034":"Galesburg",
+  "49050":"Hickory Corners","49058":"Hastings area","49068":"Marshall",
+  "49070":"Mendon area","49076":"Olivet area","49092":"Tekonsha",
+  "49096":"Webberville area","49099":"Union City",
+  // Albion is technically Calhoun but borders Jackson
+  // (already mapped above; same ZIP 49224 is shared and primary use is Albion)
 };
+
+// Map each ZIP code to its county. This is the authoritative source for
+// "which county does this ZIP belong to" used throughout the platform.
+const ZIP_TO_COUNTY = {
+  // Jackson County ZIPs
+  "49201":"jackson","49202":"jackson","49203":"jackson","49204":"jackson",
+  "49230":"jackson","49233":"jackson","49234":"jackson","49237":"jackson",
+  "49240":"jackson","49241":"jackson","49245":"jackson","49246":"jackson",
+  "49249":"jackson","49250":"jackson","49251":"jackson","49252":"jackson",
+  "49254":"jackson","49259":"jackson","49261":"jackson","49263":"jackson",
+  "49264":"jackson","49269":"jackson","49272":"jackson","49277":"jackson",
+  "49283":"jackson","49284":"jackson","49285":"jackson",
+  // Cross-boundary
+  "49224":"calhoun", // Albion is in Calhoun
+  "48827":"jackson","48158":"jackson",
+
+  // Calhoun County ZIPs
+  "49014":"calhoun","49015":"calhoun","49016":"calhoun","49017":"calhoun",
+  "49037":"calhoun","49012":"calhoun","49020":"calhoun","49021":"calhoun",
+  "49029":"calhoun","49033":"calhoun","49034":"calhoun","49050":"calhoun",
+  "49058":"calhoun","49068":"calhoun","49070":"calhoun","49076":"calhoun",
+  "49092":"calhoun","49096":"calhoun","49099":"calhoun",
+};
+
+// Lookup: which county does a ZIP belong to? Returns county slug or null.
+function countyForZip(zip) {
+  if(!zip) return null;
+  return ZIP_TO_COUNTY[String(zip).trim()] || null;
+}
 const VALID_ZIPS = Object.keys(ZIP_COMMUNITY);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1767,6 +1899,7 @@ async function fetchAndPublishRss(user, existingStories, onProgress, onFeedResul
           submitted_by_name: 'Auto-fetch (' + feed.name + ')',
           upvotes: 0, comment_count: 0, approved: true,
           created_at: new Date().toISOString(),
+          county: countyTag(),
         });
 
         if (insertErr) {
@@ -6744,6 +6877,58 @@ function RepContactTracker({bill, user}) {
 }
 
 // ── Auth Screen ───────────────────────────────────────────────────────────────
+// ── County Picker Landing ────────────────────────────────────────────────────
+// Shown when user visits the root URL (thepeoplesvoices.org) with no /county
+// path. Lets them pick which county to enter.
+function CountyPickerLanding({onPick}) {
+  const list = Object.values(COUNTIES);
+  return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',color:'#fff',
+    display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+    padding:'40px 20px',boxSizing:'border-box'}},
+    h('div',{style:{maxWidth:560,width:'100%',textAlign:'center'}},
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,
+        color:'#f0c040',margin:'0 0 8px',letterSpacing:'-.02em'}},
+        "The People's Voice"),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#8899aa',
+        marginBottom:32,fontStyle:'italic'}},
+        'Civic engagement platform · Pick your community'),
+
+      h('div',{style:{display:'grid',gap:14,marginBottom:24}},
+        list.map(c=>h('button',{key:c.id, onClick:()=>onPick(c.id),
+          disabled: c.status==='coming-soon',
+          style:{background:'rgba(255,255,255,.05)',
+            border:'1px solid '+(c.status==='active'?'#f0c040':'rgba(255,255,255,.15)'),
+            borderRadius:8,padding:'20px 24px',textAlign:'left',cursor: c.status==='coming-soon'?'default':'pointer',
+            transition:'all .15s ease',
+            opacity: c.status==='coming-soon' ? .4 : 1}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,
+              color:'#fff'}}, c.name),
+            c.status==='beta' && h('span',{style:{background:'#f0c040',color:'#1a1a2e',
+              fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:12,
+              letterSpacing:'.08em'}}, 'BETA'),
+            c.status==='active' && h('span',{style:{color:'#4ade80',fontSize:11,
+              fontWeight:700,letterSpacing:'.08em'}}, '● ACTIVE'),
+            c.status==='coming-soon' && h('span',{style:{color:'#888',fontSize:10,
+              fontWeight:700,letterSpacing:'.08em'}}, 'COMING SOON')
+          ),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#8899aa',
+            marginBottom:8}}, c.description),
+          h('div',{style:{fontFamily:"'Lora',serif",fontSize:11,color:'#6a7888'}},
+            c.state + ' · ' + c.primaryCity + ' area')
+        ))
+      ),
+
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#6a7888',
+        lineHeight:1.6,marginTop:32}},
+        "Don't see your county yet? ",
+        h('a',{href:'mailto:hello@thepeoplesvoices.org',
+          style:{color:'#f0c040',textDecoration:'none'}}, 'Let us know'),
+        " — we're expanding county by county based on community demand.")
+    )
+  );
+}
+
 function AuthScreen({onAuth, onGuest}) {
   const [mode,setMode]=useState('login');
   const [email,setEmail]=useState('');
@@ -12177,6 +12362,15 @@ function App() {
   const [user,setUser]=useState(null);
   const [profile,setProfile]=useState(null);
   const [rep,setRep]=useState(0);
+  // ── Current county ──────────────────────────────────────────────
+  // Determined from URL path (/jackson, /calhoun) on first load. Stored in
+  // state so components can react to changes (county picker). Defaults to
+  // null when URL has no /county prefix — in that case we show a picker.
+  const [currentCountyId, setCurrentCountyId] = useState(()=>getCountyFromUrl());
+  const currentCounty = currentCountyId ? COUNTIES[currentCountyId] : null;
+  // Sync the module-level tag so deep code can write county-scoped inserts
+  // without prop-drilling currentCountyId everywhere.
+  setCountyTag(currentCountyId || DEFAULT_COUNTY);
   // Hierarchical routing: hub + sub-tab. Legacy 'mainTab' values still flow through resolveRoute.
   const [hub, setHub] = useState('home'); // home | civic | community | map | resources | admin
   const [subTab, setSubTab] = useState('feed');
@@ -12452,6 +12646,24 @@ function App() {
   const [keywordSearch,setKeywordSearch]=useState('');
 
   if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
+
+  // County picker: if no county in URL and not opted-out via ?nopicker, show
+  // a landing page where the user picks their county.
+  if(!currentCountyId) {
+    const search = (typeof window !== 'undefined' ? window.location.search : '') || '';
+    if(!search.includes('nopicker')) {
+      return h(CountyPickerLanding, {
+        onPick: (slug)=>{
+          // Update URL to /slug and re-load to apply
+          if(typeof window !== 'undefined') {
+            window.history.replaceState({}, '', '/'+slug+window.location.search+window.location.hash);
+          }
+          setCurrentCountyId(slug);
+        }
+      });
+    }
+  }
+
   if(!user&&!guestMode)return h(AuthScreen,{onAuth:handleAuth,onGuest:()=>setGuestMode(true)});
 
   const repInfo=repLevel(rep);
@@ -12550,7 +12762,14 @@ function App() {
     h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
       h('div',{style:{maxWidth:900,margin:'0 auto',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}},
         h('div',null,
-          h('div',{style:{fontSize:9,color:'#8899aa',letterSpacing:2,textTransform:'uppercase',marginBottom:1}},"Civic Engagement Platform"),
+          h('div',{style:{fontSize:9,color:'#8899aa',letterSpacing:2,textTransform:'uppercase',marginBottom:1,display:'flex',alignItems:'center',gap:6}},
+            'Civic Engagement Platform',
+            currentCounty && h('span',{style:{color:'#f0c040',fontWeight:700}},
+              ' · ' + currentCounty.short.toUpperCase() + ' COUNTY'),
+            currentCounty && currentCounty.status==='beta' && h('span',{
+              style:{background:'#f0c040',color:'#1a1a2e',fontSize:8,padding:'1px 5px',
+                borderRadius:8,fontWeight:700,letterSpacing:1}},'BETA')
+          ),
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
         ),
         h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
@@ -12606,6 +12825,35 @@ function App() {
         )
       )
     ),
+
+    // Cross-county visitor banner — shown when the user is viewing a county
+    // that isn't their home county.
+    (()=>{
+      if(!currentCounty || !profile) return null;
+      const homeCounty = profile.county || DEFAULT_COUNTY;
+      if(homeCounty === currentCountyId) return null;
+      const home = COUNTIES[homeCounty];
+      if(!home) return null;
+      return h('div',{style:{background:'#fff8e7',borderBottom:'1px solid #f0c040',
+        padding:'8px 14px'}},
+        h('div',{style:{maxWidth:900,margin:'0 auto',display:'flex',
+          alignItems:'center',gap:10,fontSize:12,
+          fontFamily:"'Lora',serif",color:'#8a6000',flexWrap:'wrap'}},
+          h('span',null, '👋 You\'re visiting ', h('b',null, currentCounty.short),
+            '. Your home community is ', h('b',null, home.short), '.'),
+          h('button',{onClick:()=>{
+            if(typeof window !== 'undefined') {
+              window.location.href = '/' + homeCounty;
+            }
+          },
+            style:{background:'#1a1a2e',color:'#f0c040',border:'none',
+              padding:'4px 12px',borderRadius:12,fontSize:11,
+              fontFamily:"'Playfair Display',serif",fontWeight:700,cursor:'pointer',
+              letterSpacing:'.04em'}},
+            'Go home →')
+        )
+      );
+    })(),
 
     // Sub-tab row — lighter editorial band, only shown for hubs with multiple subs
     (()=>{
