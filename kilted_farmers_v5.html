@@ -1996,11 +1996,9 @@ function drawRiver(revEntries, expenseList, pool, ct){
   const svg=document.getElementById('riverSvg');
   if(!svg)return;
 
-  // Canvas
-  const W=700, H=260;
-  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const W=700,H=220;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
 
-  // Group revenue by source
   const bySource={};
   revEntries.forEach(e=>{
     if(!bySource[e.source])bySource[e.source]=0;
@@ -2011,459 +2009,81 @@ function drawRiver(revEntries, expenseList, pool, ct){
   const validExp=expenseList.filter(e=>parseFloat(e.amount||0)>0);
   const totalExp=Math.max(validExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0),1);
 
-  // Layout constants
-  const riverY=H/2;           // centre line of main river
-  const mainW=18;              // base river width
-  const poolCX=W-70, poolCY=riverY; // pool centre
-  const poolRX=52, poolRY=52;
+  // Layout
+  const midY=H/2;
+  const riverStartX=sources.length?140:60;
+  const riverEndX=W-110;
+  const poolCX=W-65;
+  const poolCY=midY;
+  const poolR=48;
+  const mainStroke=16;
 
-  // Main river starts at x=160 (after tributaries merge)
-  const riverStartX=160;
-  const expEndX=poolCX-poolRX-10; // where expenses branch off before pool
+  let h='<defs>';
+  h+='<linearGradient id="rg2" x1="0%" y1="0%" x2="100%" y2="0%">';
+  h+='<stop offset="0%" stop-color="#74C69D" stop-opacity="0.95"/>';
+  h+='<stop offset="100%" stop-color="#1B4332" stop-opacity="1"/>';
+  h+='</linearGradient>';
+  h+='<radialGradient id="pg2" cx="40%" cy="35%" r="65%">';
+  h+='<stop offset="0%" stop-color="#52B788"/>';
+  h+='<stop offset="100%" stop-color="#1B4332"/>';
+  h+='</radialGradient>';
+  h+='<filter id="gs"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  h+='</defs>';
 
-  let h='';
+  // ── MAIN RIVER CHANNEL ──
+  h+='<path d="M '+riverStartX+' '+midY+' L '+riverEndX+' '+midY+'" ';
+  h+='fill="none" stroke="url(#rg2)" stroke-width="'+mainStroke+'" stroke-linecap="round" filter="url(#gs)"/>';
 
-  // ── GRADIENT DEFS update ──
-  h+=`<defs>
-    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#74C69D" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#2D6A4F" stop-opacity="1"/>
-    </linearGradient>
-    <radialGradient id="pg" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#40916C"/>
-      <stop offset="100%" stop-color="#1B4332"/>
-    </radialGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>`;
-
-  // ── REVENUE TRIBUTARIES flowing INTO main river ──
-  const srcColors=['#52B788','#40916C','#74C69D','#2D6A4F','#95D5B2'];
-  const mergeX=riverStartX;
-
+  // ── REVENUE TRIBUTARIES ──
+  const srcColors=['#52B788','#40916C','#95D5B2','#2D6A4F','#B7E4C7'];
   if(sources.length===0){
-    // Empty state — thin dashed river
-    h+=`<path d="M 20 ${riverY} C 80 ${riverY} 120 ${riverY} ${mergeX} ${riverY}" fill="none" stroke="#ccc" stroke-width="3" stroke-dasharray="6,4"/>`;
-    h+=`<text x="90" y="${riverY-12}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb">No revenue logged this week</text>`;
+    h+='<text x="'+(riverStartX-10)+'" y="'+(midY-18)+'" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb">No revenue this week</text>';
   } else {
-    sources.forEach(([source,amt],i)=>{
+    const spacing=Math.min(44,160/Math.max(sources.length,1));
+    sources.forEach(([src,amt],i)=>{
       const frac=amt/totalRev;
-      const sw=Math.max(3,Math.round(frac*28));
-      // Each trib starts top-left, spaced vertically
-      const spacing=Math.min(50,(H-60)/Math.max(sources.length,1));
-      const startY=riverY-((sources.length-1)*spacing/2)+(i*spacing);
-      const startX=16;
-      // Curve from startX,startY to mergeX,riverY
-      const cp1x=startX+60, cp1y=startY;
-      const cp2x=mergeX-30, cp2y=riverY;
-      h+=`<path d="M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${mergeX} ${riverY}"
-        fill="none" stroke="${srcColors[i%srcColors.length]}" stroke-width="${sw}"
-        stroke-linecap="round" opacity="0.85" filter="url(#glow)"/>`;
-      // Source label
-      h+=`<text x="${startX+4}" y="${startY-sw/2-5}" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">${source}</text>`;
-      h+=`<text x="${startX+4}" y="${startY-sw/2-5+12}" font-family="Playfair Display,serif" font-size="10" fill="#40916C" font-weight="700">$${amt.toLocaleString('en-US',{maximumFractionDigits:0})}</text>`;
+      const sw=Math.max(4,Math.round(frac*20));
+      const totalH=(sources.length-1)*spacing;
+      const ty=midY-totalH/2+i*spacing;
+      const tx=14;
+      // Curve from tx,ty into riverStartX,midY
+      const cp1x=tx+50,cp1y=ty;
+      const cp2x=riverStartX-20,cp2y=midY;
+      h+='<path d="M '+tx+' '+ty+' C '+cp1x+' '+cp1y+' '+cp2x+' '+cp2y+' '+riverStartX+' '+midY+'" ';
+      h+='fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.9" filter="url(#gs)"/>';
+      // Label above trib
+      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2-4)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">'+src+'</text>';
+      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2+8)+'" font-family="Playfair Display,serif" font-size="10" fill="#40916C">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
     });
   }
 
-  // ── MAIN RIVER (mergeX → expEndX) ──
-  h+=`<path d="M ${mergeX} ${riverY} L ${expEndX} ${riverY}"
-    fill="none" stroke="url(#rg)" stroke-width="${mainW+6}"
-    stroke-linecap="butt" opacity="0.9" filter="url(#glow)"/>`;
-
-  // ── EXPENSE STREAMS branching DOWN from main river ──
-  const expColors=['#E07B6A','#C0392B','#E8967A','#B03A2E','#F1948A'];
+  // ── EXPENSE STREAMS (drain downward from river) ──
+  const expColors=['#D96B5A','#B03A2E','#E8967A','#922B21','#F1948A'];
+  const expZoneStart=riverStartX+40;
+  const expZoneEnd=riverEndX-40;
+  const expSpacing=validExp.length>1?(expZoneEnd-expZoneStart)/(validExp.length-1):0;
   validExp.forEach((e,i)=>{
     const frac=parseFloat(e.amount||0)/totalExp;
-    const sw=Math.max(2,Math.round(frac*16));
-    // Space evenly along river
-    const segment=(expEndX-mergeX);
-    const ex=mergeX+30+(i*(segment-60)/Math.max(validExp.length,1));
-    const ey=riverY+mainW/2; // starts at bottom of river
-    const endY=riverY+55+i*10;
-    // Curve down
-    h+=`<path d="M ${ex} ${ey} C ${ex} ${ey+20} ${ex+10} ${endY-10} ${ex+14} ${endY}"
-      fill="none" stroke="${expColors[i%expColors.length]}" stroke-width="${sw}"
-      stroke-linecap="round" opacity="0.8"/>`;
-    // Expense label
-    const name=(e.name||'Expense').substring(0,14);
-    h+=`<text x="${ex+18}" y="${endY-2}" font-family="Source Sans 3,sans-serif" font-size="9" fill="${expColors[i%expColors.length]}" font-weight="700">${name}</text>`;
-    h+=`<text x="${ex+18}" y="${endY+10}" font-family="Playfair Display,serif" font-size="9" fill="${expColors[i%expColors.length]}">-$${parseFloat(e.amount||0).toFixed(0)}</text>`;
+    const sw=Math.max(3,Math.round(frac*14));
+    const ex=validExp.length===1?(expZoneStart+expZoneEnd)/2:expZoneStart+i*expSpacing;
+    const ey1=midY+mainStroke/2;
+    const ey2=midY+52+i*8;
+    h+='<path d="M '+ex+' '+ey1+' C '+ex+' '+(ey1+18)+' '+(ex+8)+' '+(ey2-8)+' '+(ex+10)+' '+ey2+'" ';
+    h+='fill="none" stroke="'+expColors[i%expColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.85"/>';
+    const name=(e.name||'Expense').substring(0,13);
+    h+='<text x="'+(ex+14)+'" y="'+(ey2-1)+'" font-family="Source Sans 3,sans-serif" font-size="9" fill="'+expColors[i%expColors.length]+'" font-weight="700">'+name+'</text>';
+    h+='<text x="'+(ex+14)+'" y="'+(ey2+11)+'" font-family="Playfair Display,serif" font-size="9" fill="'+expColors[i%expColors.length]+'">-$'+parseFloat(e.amount||0).toFixed(0)+'</text>';
   });
 
-  // ── RIVER INTO POOL ──
-  h+=`<path d="M ${expEndX} ${riverY} C ${expEndX+20} ${riverY} ${poolCX-poolRX} ${riverY} ${poolCX-poolRX+4} ${riverY}"
-    fill="none" stroke="url(#rg)" stroke-width="${mainW+6}" stroke-linecap="round" opacity="0.9"/>`;
+  // ── RIVER FLOWS INTO POOL ──
+  h+='<path d="M '+riverEndX+' '+midY+' Q '+(riverEndX+20)+' '+midY+' '+(poolCX-poolR)+' '+midY+'" ';
+  h+='fill="none" stroke="#1B4332" stroke-width="'+(mainStroke-2)+'" stroke-linecap="round" opacity="0.95"/>';
 
   // ── THE POOL ──
-  h+=`<ellipse cx="${poolCX}" cy="${poolCY}" rx="${poolRX}" ry="${poolRY}"
-    fill="url(#pg)" opacity="0.95" filter="url(#glow)"/>`;
-  // Pool label
-  h+=`<text x="${poolCX}" y="${poolCY-18}" text-anchor="middle"
-    font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.65)" letter-spacing="2">THE POOL</text>`;
-  h+=`<text x="${poolCX}" y="${poolCY+5}" text-anchor="middle"
-    font-family="Playfair Display,serif" font-size="17" font-weight="900" fill="#fff">$${pool.toLocaleString('en-US',{maximumFractionDigits:0})}</text>`;
-  h+=`<text x="${poolCX}" y="${poolCY+22}" text-anchor="middle"
-    font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.5)">CT $${ct.toFixed(0)} aside</text>`;
+  h+='<circle cx="'+poolCX+'" cy="'+poolCY+'" r="'+poolR+'" fill="url(#pg2)" filter="url(#gs)"/>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY-16)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.6)" letter-spacing="1.5">THE POOL</text>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY+4)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="18" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY+20)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.45)">CT $'+ct.toFixed(0)+' aside</text>';
 
   svg.innerHTML=h;
 }
-
-// Auto-refresh dashboard every 60 seconds when on that tab
-let dashInterval=null;
-
-// ─── ADMIN ───
-async function adminCall(action, extra={}) {
-  const res = await fetch(ADMIN_WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, callerToken: window._authToken, ...extra })
-  });
-  return await res.json();
-}
-
-async function adminCreateUser() {
-  const name = document.getElementById('newUserName').value.trim();
-  const email = document.getElementById('newUserEmail').value.trim();
-  const password = document.getElementById('newUserPassword').value.trim();
-  const role = document.getElementById('newUserRole').value;
-  const status = document.getElementById('adminCreateStatus');
-
-  if (!name || !email || !password) {
-    status.className = 'status-bar error';
-    status.textContent = 'Name, email and password are all required.';
-    return;
-  }
-  if (password.length < 6) {
-    status.className = 'status-bar error';
-    status.textContent = 'Password must be at least 6 characters.';
-    return;
-  }
-
-  status.className = 'status-bar loading';
-  status.textContent = 'Creating login for ' + name + '...';
-
-  const result = await adminCall('create_user', { name, email, password, role });
-  if (result.success) {
-    status.className = 'status-bar success';
-    status.textContent = '✓ Login created for ' + name + '. They can now sign in at thepeoplesvoices.org/kilted_farmers_v5.html';
-    document.getElementById('newUserName').value = '';
-    document.getElementById('newUserEmail').value = '';
-    document.getElementById('newUserPassword').value = '';
-    setTimeout(() => { status.className = 'status-bar'; }, 5000);
-    adminLoadUsers();
-  } else {
-    status.className = 'status-bar error';
-    status.textContent = 'Error: ' + (result.error || 'Unknown error');
-  }
-}
-
-async function adminLoadUsers() {
-  const list = document.getElementById('adminUserList');
-  if (!list) return;
-  list.innerHTML = '<p style="color:var(--mid);font-size:13px;">Loading...</p>';
-  const result = await adminCall('list_users');
-  if (!result.users) {
-    list.innerHTML = '<p style="color:var(--red);font-size:13px;">Could not load users. Worker may not be deployed yet.</p>';
-    return;
-  }
-  list.innerHTML = result.users.map(u => `
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--cream-dark);">
-      <div style="flex:1;">
-        <div style="font-weight:700;font-size:14px;">${u.name||'—'} ${u.banned?'<span style="color:var(--red);font-size:11px;">(inactive)</span>':''}</div>
-        <div style="font-size:12px;color:var(--mid);">${u.email}</div>
-        <div style="font-size:11px;color:var(--mid);">Last sign in: ${u.last_sign_in?new Date(u.last_sign_in).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'Never'}</div>
-      </div>
-      <select onchange="adminUpdateRole('${u.id}','${u.name}',this.value)" style="padding:4px 8px;border:1.5px solid var(--rule);border-radius:5px;font-size:12px;background:var(--cream);">
-        <option ${u.role==='Contributor'?'selected':''}>Contributor</option>
-        <option ${u.role==='Steward'?'selected':''}>Steward</option>
-      </select>
-      <button onclick="adminResetPassword('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--tan);border-radius:6px;background:transparent;color:var(--tan);font-size:12px;cursor:pointer;">Reset PW</button>
-      ${!u.banned
-        ? `<button onclick="adminDeactivate('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--red);border-radius:6px;background:transparent;color:var(--red);font-size:12px;cursor:pointer;">Deactivate</button>`
-        : `<button onclick="adminReactivate('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--green);border-radius:6px;background:transparent;color:var(--green);font-size:12px;cursor:pointer;">Reactivate</button>`
-      }
-    </div>
-  `).join('');
-}
-
-async function adminUpdateRole(userId, name, role) {
-  const result = await adminCall('update_role', { userId, role, name });
-  if (result.success) toast('Role updated for ' + name);
-  else toast('Failed to update role', true);
-}
-
-async function adminResetPassword(userId, name) {
-  const pw = prompt('Enter new password for ' + name + ' (min 6 characters):');
-  if (!pw || pw.length < 6) { toast('Password too short', true); return; }
-  const result = await adminCall('update_password', { userId, password: pw });
-  if (result.success) toast('Password updated for ' + name);
-  else toast('Failed to update password', true);
-}
-
-async function adminDeactivate(userId, name) {
-  if (!confirm('Deactivate ' + name + '? They will not be able to sign in.')) return;
-  const result = await adminCall('deactivate_user', { userId, name });
-  if (result.success) { toast(name + ' deactivated'); adminLoadUsers(); }
-  else toast('Failed to deactivate', true);
-}
-
-async function adminReactivate(userId, name) {
-  const result = await adminCall('reactivate_user', { userId, name });
-  if (result.success) { toast(name + ' reactivated'); adminLoadUsers(); }
-  else toast('Failed to reactivate', true);
-}
-
-// ─── CSV EXPORT ───
-async function exportCSV(){
-  const label=getCurrentPeriodLabel();
-  const periodType=document.getElementById('periodType').value;
-  const revenue=parseFloat(document.getElementById('revenue').value)||0;
-  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-  const afterExp=revenue-totalExp;
-  const ct=Math.max(0,afterExp*CT);
-  const pool=Math.max(0,afterExp-ct);
-  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-  const hourlyRate=totalHours>0?pool/totalHours:0;
-  const NL='\n';
-  const rows=[];
-  rows.push('THE KILTED FARMERS LLC — DISTRIBUTION STATEMENT');
-  rows.push('Period,'+periodType+' — '+label);
-  rows.push('Generated,'+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
-  rows.push('');
-  rows.push('REVENUE');
-  rows.push('Source,Amount,Reported By,Notes,Date');
-  try{
-    const allRev=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
-    const now=new Date();
-    const monthStr=now.toLocaleString('en-US',{month:'long'});
-    const yearStr=String(now.getFullYear());
-    const revEntries=allRev.filter(e=>e.period_label===label||(e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)));
-    revEntries.forEach(e=>{
-      const d=new Date(e.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      rows.push('"'+(e.source||'')+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.reported_by||'')+'","'+((e.notes||'').replace(/"/g,"'"))+'","'+d+'"');
-    });
-  }catch(err){}
-  rows.push('"TOTAL REVENUE","'+revenue.toFixed(2)+'","","",""');
-  rows.push('');
-  rows.push('EXPENSES');
-  rows.push('Description,Amount,Receipt');
-  expenses.filter(e=>e.name||e.amount).forEach(e=>{
-    rows.push('"'+((e.name||'').replace(/"/g,"'"))+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.receiptUrl||'')+'"');
-  });
-  rows.push('"TOTAL EXPENSES","'+totalExp.toFixed(2)+'",""');
-  rows.push('');
-  rows.push('COMMON TABLE');
-  rows.push('"Common Table (8%)","'+ct.toFixed(2)+'"');
-  rows.push('');
-  rows.push('DISTRIBUTABLE POOL');
-  rows.push('"Distributable Pool","'+pool.toFixed(2)+'"');
-  rows.push('"Total Hours Worked","'+totalHours.toFixed(2)+'"');
-  rows.push('"Effective Hourly Rate","'+hourlyRate.toFixed(2)+'"');
-  rows.push('');
-  rows.push('DISTRIBUTIONS');
-  rows.push('Member,Role,Hours,Percentage,Distribution,Effective Rate');
-  members.forEach(m=>{
-    const hrs=getMemberHours(m);
-    const pct=totalHours>0?hrs/totalHours:0;
-    const share=pool*pct;
-    const rate=hrs>0?share/hrs:0;
-    rows.push('"'+(m.name||'')+'","'+(m.role||'')+'","'+hrs.toFixed(2)+'","'+(pct*100).toFixed(2)+'%","'+share.toFixed(2)+'","'+rate.toFixed(2)+'"');
-  });
-  rows.push('');
-  rows.push('TIME LOG');
-  rows.push('Member,Type,Date/Clock In,Clock Out,Hours,Notes');
-  members.forEach(m=>{
-    m.punches.forEach(p=>{
-      const inT=p.in?new Date(p.in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
-      const outT=p.out?new Date(p.out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';
-      const hrs=p.in&&p.out?((new Date(p.out)-new Date(p.in))/3600000).toFixed(2):'';
-      rows.push('"'+(m.name)+'","Punch","'+inT+'","'+outT+'","'+hrs+'",""');
-    });
-    m.dailyEntries.forEach(d=>{
-      rows.push('"'+(m.name)+'","Daily","'+(d.date||'')+'","","'+(d.hours||0)+'","'+((d.note||'').replace(/"/g,"'"))+'"');
-    });
-  });
-  const csv=rows.join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download='KiltedFarmers_'+label.replace(/\s+/g,'_')+'_'+periodType+'.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('CSV exported');
-}
-
-
-async function autoInit(){
-  // Dropdown already built by DOMContentLoaded listener
-  document.getElementById('periodType').value='Monthly';
-  renderExpenses();
-  renderBulkIngs();
-  renderSpecIngs();
-  await loadTeamMembers();
-  await autoLoadCurrentPeriod();
-  await loadRecipeList();
-  // Safety retry for revenue after 2s
-  setTimeout(async()=>{
-    const rev=parseFloat(document.getElementById('revenue').value)||0;
-    if(!rev){
-      await autoFetchRevenue(getCurrentPeriodLabel());
-      calculate();
-    }
-  },2000);
-}
-
-async function autoLoadCurrentPeriod(){
-  const label=getCurrentPeriodLabel();
-  try{
-    // Step 1: Pull revenue log total
-    await autoFetchRevenue(label);
-
-    // Step 2: Load saved period for this month
-    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-    if(periods.length){
-      const p=periods[0];
-      window._currentPeriodId=p.id;
-
-      // Step 3: Load expenses for this period
-      const exps=await sbAuth('kf_expenses?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
-      if(exps.length){
-        expenses=exps.map((e,i)=>({
-          id:i+1,
-          name:e.name||'',
-          amount:e.amount!=null?String(e.amount):'',
-          receiptUrl:e.receipt_url||'',
-          receiptFile:null,
-          dbId:e.id,
-          periodId:p.id
-        }));
-        expCounter=expenses.length+10;
-        renderExpenses();
-      }
-    }
-    calculate();
-  }catch(e){
-    console.warn('Auto-load error:',e.message);
-    calculate();
-  }
-}
-
-async function autoFetchRevenue(label){
-  try{
-    // Try exact label first
-    let entries=await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.asc');
-    // If nothing found, fetch ALL recent entries and find matching ones
-    // This handles label format mismatches (e.g. "May 2026" vs "May 2026 ")
-    if(!entries||!entries.length){
-      const allEntries=await sbAuth('kf_revenue_entries?order=created_at.desc&limit=100');
-      // Try to find entries that roughly match this month/year
-      const now=new Date();
-      const monthStr=now.toLocaleString('en-US',{month:'long'});
-      const yearStr=String(now.getFullYear());
-      entries=allEntries.filter(e=>e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr));
-    }
-    if(entries&&entries.length){
-      const total=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-      if(total>0){
-        document.getElementById('revenue').value=total.toFixed(2);
-        calculate();
-        toast('Revenue: $'+total.toFixed(2));
-      }
-    }
-  }catch(e){console.warn('Revenue fetch error:',e.message);}
-}
-
-// ─── AUTO-SAVE EXPENSES ───
-let expSaveTimer=null;
-function scheduleExpenseSave(){
-  if(expSaveTimer)clearTimeout(expSaveTimer);
-  expSaveTimer=setTimeout(autoSaveExpenses,1200);
-}
-
-async function autoSaveExpenses(){
-  const periodLabel=document.getElementById('periodDate').value;
-  if(!periodLabel)return;
-  try{
-    // Upload any pending receipts
-    for(const e of expenses){
-      if(e.receiptFile&&!e.receiptUrl){
-        try{
-          e.receiptUrl=await uploadReceipt(e.receiptFile,e.id);
-          e.receiptFile=null;
-          renderExpenses();
-        }catch(uploadErr){
-          toast('Receipt needs site hosting to upload',false);
-        }
-      }
-    }
-    // Find or create period record
-    let periodId=window._currentPeriodId;
-    if(!periodId){
-      const revenue=parseFloat(document.getElementById('revenue').value)||0;
-      const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-      const afterExp=revenue-totalExp;
-      const ct=Math.max(0,afterExp*CT);
-      const pool=Math.max(0,afterExp-ct);
-      const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-      const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
-      if(existing.length){
-        periodId=existing[0].id;
-        await sbAuth('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
-      } else {
-        const[p]=await sbAuth('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:document.getElementById('periodType').value,period_label:periodLabel,gross_revenue:revenue,total_expenses:totalExp,common_table:ct,distributable_pool:pool,total_hours:totalHours})});
-        periodId=p.id;
-      }
-      window._currentPeriodId=periodId;
-    }
-    // Save expenses — delete old ones and reinsert
-    await sbAuth('kf_expenses?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
-    const expRows=expenses.filter(e=>e.name||e.amount).map(e=>({period_id:periodId,name:e.name,amount:parseFloat(e.amount)||0,receipt_url:e.receiptUrl||null}));
-    if(expRows.length) await sbAuth('kf_expenses',{method:'POST',body:JSON.stringify(expRows)});
-    toast('Expenses saved');
-  }catch(e){if(!e.message.includes('Upload'))toast('Save failed: '+e.message,true);else toast('Receipt upload works after hosting on your site',false);}
-}
-
-// ─── AUTO-SAVE HOURS ───
-let hoursSaveTimer=null;
-function scheduleHoursSave(){
-  if(hoursSaveTimer)clearTimeout(hoursSaveTimer);
-  hoursSaveTimer=setTimeout(autoSaveHours,1200);
-}
-
-async function autoSaveHours(){
-  const periodLabel=document.getElementById('periodDate').value;
-  if(!periodLabel)return;
-  try{
-    let periodId=window._currentPeriodId;
-    if(!periodId){
-      const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(periodLabel)+'&order=created_at.desc&limit=1');
-      if(existing.length){periodId=existing[0].id;window._currentPeriodId=periodId;}
-      else return;
-    }
-    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-    // Save distributions
-    await sbAuth('kf_distributions?period_id=eq.'+periodId,{method:'DELETE',headers:{'Prefer':''}});
-    const revenue=parseFloat(document.getElementById('revenue').value)||0;
-    const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    const afterExp=revenue-totalExp;
-    const ct=Math.max(0,afterExp*CT);
-    const pool=Math.max(0,afterExp-ct);
-    const distRows=members.map(m=>{
-      const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;
-      return{period_id:periodId,member_name:m.name,role:m.role,hours:hrs,percentage:parseFloat((pct*100).toFixed(2)),distribution:parseFloat((pool*pct).toFixed(2))};
-    });
-    if(distRows.length) await sbAuth('kf_distributions',{method:'POST',body:JSON.stringify(distRows)});
-    await sbAuth('kf_pay_periods?id=eq.'+periodId,{method:'PATCH',body:JSON.stringify({total_hours:totalHours,distributable_pool:pool,common_table:ct})});
-    toast('Hours saved');
-  }catch(e){toast('Hours save failed',true);}
-}
-
-// autoInit called after login
-</script>
-</body>
-</html>
