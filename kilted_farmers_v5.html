@@ -527,7 +527,8 @@ document.addEventListener('DOMContentLoaded',function(){
   </div>
   <div class="actions">
     <button class="btn-tan" id="savePeriodBtn" onclick="savePeriod()">💾 Save This Period</button>
-    <button class="btn-secondary" onclick="resetAll()">↺ Reset</button>
+    <button class="btn-secondary" onclick="resetAll()">↺ Reset Local</button>
+    <button class="btn-secondary" style="border-color:var(--red);color:var(--red);" onclick="clearPeriodData()">🗑 Clear Period Data</button>
   </div>
 </div>
 
@@ -1753,6 +1754,62 @@ function buildPrintSheet(){
   members.forEach(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;const share=pool*pct;tot+=share;const tr=document.createElement('tr');tr.innerHTML=`<td>${m.name||'—'}</td><td><span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></td><td style="text-align:center;">${hrs.toFixed(2)}</td><td style="text-align:center;">${(pct*100).toFixed(1)}%</td><td style="text-align:center;">${fmt(hrRate)}/hr</td><td>${fmt(share)}</td>`;pb.appendChild(tr);});
   pf.innerHTML=`<tr class="total-row"><td>Total</td><td></td><td style="text-align:center;">${totalHours.toFixed(2)}</td><td style="text-align:center;">100%</td><td style="text-align:center;">—</td><td>${fmt(tot)}</td></tr>`;
   document.getElementById('p-sigs').innerHTML=members.map(m=>{const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;return`<div class="sig-block"><div class="sig-line"></div><div>${m.name||'Member'} (${m.role}) — ${fmt(pool*pct)} received</div></div>`;}).join('');
+}
+
+// ─── CLEAR PERIOD DATA ───
+async function clearPeriodData(){
+  const label=getCurrentPeriodLabel();
+  if(!confirm('This will permanently delete ALL saved data for "'+label+'" including revenue entries, expenses, time entries and distributions. This cannot be undone. Are you sure?'))return;
+
+  const status=document.getElementById('distStatus');
+  status.className='status-bar loading';
+  status.textContent='Clearing period data...';
+
+  try{
+    // Get all period records for this label
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&select=id');
+
+    // Delete time entries, expenses, distributions for each period
+    for(const p of periods){
+      await sbAuth('kf_time_entries?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
+      await sbAuth('kf_expenses?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
+      await sbAuth('kf_distributions?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
+    }
+
+    // Delete the period records themselves
+    await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label),{method:'DELETE',headers:{'Prefer':''}});
+
+    // Delete revenue entries for this period
+    const monthStr=new Date().toLocaleString('en-US',{month:'long'});
+    const yearStr=String(new Date().getFullYear());
+    const revEntries=await sbAuth('kf_revenue_entries?select=id');
+    const toDelete=revEntries.filter(e=>{
+      // We can't filter by period_label here easily so get all and filter
+      return true;
+    });
+    await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label),{method:'DELETE',headers:{'Prefer':''}});
+
+    // Reset local state
+    window._currentPeriodId=null;
+    document.getElementById('revenue').value='';
+    expenses=[
+      {id:1,name:'Ingredients',amount:'',receiptUrl:'',receiptFile:null},
+      {id:2,name:'Packaging',amount:'',receiptUrl:'',receiptFile:null},
+      {id:3,name:'Kitchen Rental',amount:'',receiptUrl:'',receiptFile:null},
+      {id:4,name:'Market Fees',amount:'',receiptUrl:'',receiptFile:null},
+    ];
+    members.forEach(m=>{m.manualHours='';m.punches=[];m.dailyEntries=[];});
+    renderExpenses();renderTeam();renderClock();calculate();
+
+    status.className='status-bar success';
+    status.textContent='✓ Period data cleared. Starting fresh.';
+    toast('Period data cleared');
+    setTimeout(()=>{status.className='status-bar';},4000);
+    refreshDashboard();
+  }catch(e){
+    status.className='status-bar error';
+    status.textContent='Error clearing: '+e.message;
+  }
 }
 
 // ─── RESET ───
