@@ -1985,14 +1985,13 @@ async function refreshDashboard(){
 }
 
 // ─── RIVER SVG VISUALIZATION ───
-function drawRiver(revEntries, expenses, pool, ct){
+function drawRiver(revEntries, expenseList, pool, ct){
   const svg=document.getElementById('riverSvg');
   if(!svg)return;
 
-  const W=700,H=300;
-  const riverY=H/2;
-  const riverH=44;
-  const poolX=W-110,poolY=riverY-60,poolW=90,poolH=120;
+  // Canvas
+  const W=700, H=260;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
 
   // Group revenue by source
   const bySource={};
@@ -2001,59 +2000,107 @@ function drawRiver(revEntries, expenses, pool, ct){
     bySource[e.source]+=parseFloat(e.amount)||0;
   });
   const sources=Object.entries(bySource).filter(([,v])=>v>0);
-  const totalRev=sources.reduce((s,[,v])=>s+v,0)||1;
+  const totalRev=Math.max(sources.reduce((s,[,v])=>s+v,0),1);
+  const validExp=expenseList.filter(e=>parseFloat(e.amount||0)>0);
+  const totalExp=Math.max(validExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0),1);
 
-  // Group expenses
-  const expGroups=expenses.filter(e=>parseFloat(e.amount||0)>0);
-  const totalExp=expGroups.reduce((s,e)=>s+(parseFloat(e.amount||0)),0)||0;
+  // Layout constants
+  const riverY=H/2;           // centre line of main river
+  const mainW=18;              // base river width
+  const poolCX=W-70, poolCY=riverY; // pool centre
+  const poolRX=52, poolRY=52;
 
-  let html='';
+  // Main river starts at x=160 (after tributaries merge)
+  const riverStartX=160;
+  const expEndX=poolCX-poolRX-10; // where expenses branch off before pool
 
-  // ── Main river body ──
-  html+=`<path d="M 60 ${riverY-riverH/2} Q 200 ${riverY-riverH/2-8} ${poolX} ${poolY+20}" fill="none" stroke="url(#riverGrad)" stroke-width="${riverH}" stroke-linecap="round" opacity="0.85" filter="url(#glow)"/>`;
+  let h='';
 
-  // ── Revenue tributaries (top) ──
-  const srcColors=['#52B788','#2D6A4F','#74C69D','#40916C','#1B4332'];
-  sources.forEach(([source,amt],i)=>{
-    const frac=amt/totalRev;
-    const tx=50+i*18;
-    const ty=riverY-riverH/2-60-i*22;
-    const cx=tx+40,cy=riverY-riverH/4;
-    const sw=Math.max(3,Math.round(frac*22));
-    html+=`<path d="M ${tx} ${ty} Q ${cx} ${ty} ${cx} ${cy}" fill="none" stroke="${srcColors[i%srcColors.length]}" stroke-width="${sw}" stroke-linecap="round" opacity="0.75"/>`;
-    // Label
-    const labelX=tx-2,labelY=ty-8;
-    html+=`<text x="${labelX}" y="${labelY}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="600">${source}</text>`;
-    html+=`<text x="${labelX}" y="${labelY+11}" text-anchor="middle" font-family="Playfair Display,serif" font-size="9" fill="#40916C">$${amt.toFixed(0)}</text>`;
-  });
+  // ── GRADIENT DEFS update ──
+  h+=`<defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#74C69D" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#2D6A4F" stop-opacity="1"/>
+    </linearGradient>
+    <radialGradient id="pg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#40916C"/>
+      <stop offset="100%" stop-color="#1B4332"/>
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>`;
 
-  if(!sources.length){
-    html+=`<text x="120" y="${riverY-riverH/2-20}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11" fill="#aaa">No revenue this week</text>`;
+  // ── REVENUE TRIBUTARIES flowing INTO main river ──
+  const srcColors=['#52B788','#40916C','#74C69D','#2D6A4F','#95D5B2'];
+  const mergeX=riverStartX;
+
+  if(sources.length===0){
+    // Empty state — thin dashed river
+    h+=`<path d="M 20 ${riverY} C 80 ${riverY} 120 ${riverY} ${mergeX} ${riverY}" fill="none" stroke="#ccc" stroke-width="3" stroke-dasharray="6,4"/>`;
+    h+=`<text x="90" y="${riverY-12}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb">No revenue logged this week</text>`;
+  } else {
+    sources.forEach(([source,amt],i)=>{
+      const frac=amt/totalRev;
+      const sw=Math.max(3,Math.round(frac*28));
+      // Each trib starts top-left, spaced vertically
+      const spacing=Math.min(50,(H-60)/Math.max(sources.length,1));
+      const startY=riverY-((sources.length-1)*spacing/2)+(i*spacing);
+      const startX=16;
+      // Curve from startX,startY to mergeX,riverY
+      const cp1x=startX+60, cp1y=startY;
+      const cp2x=mergeX-30, cp2y=riverY;
+      h+=`<path d="M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${mergeX} ${riverY}"
+        fill="none" stroke="${srcColors[i%srcColors.length]}" stroke-width="${sw}"
+        stroke-linecap="round" opacity="0.85" filter="url(#glow)"/>`;
+      // Source label
+      h+=`<text x="${startX+4}" y="${startY-sw/2-5}" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">${source}</text>`;
+      h+=`<text x="${startX+4}" y="${startY-sw/2-5+12}" font-family="Playfair Display,serif" font-size="10" fill="#40916C" font-weight="700">$${amt.toLocaleString('en-US',{maximumFractionDigits:0})}</text>`;
+    });
   }
 
-  // ── Expense streams (bottom, branching off) ──
-  const expColors=['#E74C3C','#C0392B','#E57373','#EF9A9A'];
-  const expStartX=180;
-  expGroups.forEach((e,i)=>{
-    const ex=expStartX+i*70;
-    const ey=riverY+riverH/2+30+i*18;
-    const sw=Math.max(2,Math.round((parseFloat(e.amount||0)/Math.max(totalExp,1))*18));
-    html+=`<path d="M ${ex} ${riverY+riverH/4} Q ${ex} ${ey-10} ${ex+10} ${ey}" fill="none" stroke="${expColors[i%expColors.length]}" stroke-width="${sw}" stroke-linecap="round" opacity="0.7"/>`;
-    html+=`<text x="${ex+14}" y="${ey+1}" font-family="Source Sans 3,sans-serif" font-size="9" fill="#C0392B" font-weight="600">${(e.name||'Expense').substring(0,12)}</text>`;
-    html+=`<text x="${ex+14}" y="${ey+11}" font-family="Playfair Display,serif" font-size="9" fill="#E74C3C">-$${parseFloat(e.amount||0).toFixed(0)}</text>`;
+  // ── MAIN RIVER (mergeX → expEndX) ──
+  h+=`<path d="M ${mergeX} ${riverY} L ${expEndX} ${riverY}"
+    fill="none" stroke="url(#rg)" stroke-width="${mainW+6}"
+    stroke-linecap="butt" opacity="0.9" filter="url(#glow)"/>`;
+
+  // ── EXPENSE STREAMS branching DOWN from main river ──
+  const expColors=['#E07B6A','#C0392B','#E8967A','#B03A2E','#F1948A'];
+  validExp.forEach((e,i)=>{
+    const frac=parseFloat(e.amount||0)/totalExp;
+    const sw=Math.max(2,Math.round(frac*16));
+    // Space evenly along river
+    const segment=(expEndX-mergeX);
+    const ex=mergeX+30+(i*(segment-60)/Math.max(validExp.length,1));
+    const ey=riverY+mainW/2; // starts at bottom of river
+    const endY=riverY+55+i*10;
+    // Curve down
+    h+=`<path d="M ${ex} ${ey} C ${ex} ${ey+20} ${ex+10} ${endY-10} ${ex+14} ${endY}"
+      fill="none" stroke="${expColors[i%expColors.length]}" stroke-width="${sw}"
+      stroke-linecap="round" opacity="0.8"/>`;
+    // Expense label
+    const name=(e.name||'Expense').substring(0,14);
+    h+=`<text x="${ex+18}" y="${endY-2}" font-family="Source Sans 3,sans-serif" font-size="9" fill="${expColors[i%expColors.length]}" font-weight="700">${name}</text>`;
+    h+=`<text x="${ex+18}" y="${endY+10}" font-family="Playfair Display,serif" font-size="9" fill="${expColors[i%expColors.length]}">-$${parseFloat(e.amount||0).toFixed(0)}</text>`;
   });
 
-  // ── Pool (the lake) ──
-  html+=`<ellipse cx="${poolX+poolW/2}" cy="${poolY+poolH/2}" rx="${poolW/2}" ry="${poolH/2}" fill="url(#poolGrad)" opacity="0.92" filter="url(#glow)"/>`;
-  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2-14}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="9" fill="rgba(255,255,255,0.7)" letter-spacing="1">THE POOL</text>`;
-  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2+6}" text-anchor="middle" font-family="Playfair Display,serif" font-size="15" font-weight="900" fill="#fff">$${pool.toFixed(0)}</text>`;
-  // CT label
-  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2+22}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.55)">CT: $${ct.toFixed(0)}</text>`;
+  // ── RIVER INTO POOL ──
+  h+=`<path d="M ${expEndX} ${riverY} C ${expEndX+20} ${riverY} ${poolCX-poolRX} ${riverY} ${poolCX-poolRX+4} ${riverY}"
+    fill="none" stroke="url(#rg)" stroke-width="${mainW+6}" stroke-linecap="round" opacity="0.9"/>`;
 
-  // ── River label ──
-  html+=`<text x="32" y="${riverY+4}" font-family="Source Sans 3,sans-serif" font-size="10" fill="rgba(255,255,255,0.9)" font-weight="600">RIVER</text>`;
+  // ── THE POOL ──
+  h+=`<ellipse cx="${poolCX}" cy="${poolCY}" rx="${poolRX}" ry="${poolRY}"
+    fill="url(#pg)" opacity="0.95" filter="url(#glow)"/>`;
+  // Pool label
+  h+=`<text x="${poolCX}" y="${poolCY-18}" text-anchor="middle"
+    font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.65)" letter-spacing="2">THE POOL</text>`;
+  h+=`<text x="${poolCX}" y="${poolCY+5}" text-anchor="middle"
+    font-family="Playfair Display,serif" font-size="17" font-weight="900" fill="#fff">$${pool.toLocaleString('en-US',{maximumFractionDigits:0})}</text>`;
+  h+=`<text x="${poolCX}" y="${poolCY+22}" text-anchor="middle"
+    font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.5)">CT $${ct.toFixed(0)} aside</text>`;
 
-  svg.innerHTML=html;
+  svg.innerHTML=h;
 }
 
 // Auto-refresh dashboard every 60 seconds when on that tab
