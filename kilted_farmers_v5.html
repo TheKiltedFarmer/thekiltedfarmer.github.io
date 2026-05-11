@@ -1726,6 +1726,13 @@ async function refreshDashboard(){
   const label=getCurrentPeriodLabel();
   document.getElementById('dash-period-label').textContent=label;
 
+  // If no auth token yet, retry after a delay
+  if(!window._authToken){
+    document.getElementById('dash-updated-time').textContent='Waiting for auth...';
+    setTimeout(refreshDashboard, 1000);
+    return;
+  }
+
   try{
     // Revenue entries
     const allEntries=await sbAuth('kf_revenue_entries?order=created_at.desc&limit=200');
