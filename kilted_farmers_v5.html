@@ -822,7 +822,8 @@ async function signIn(){
     document.getElementById('userNameDisplay').textContent=currentProfile.name||email.split('@')[0];
     document.getElementById('userRoleDisplay').textContent=currentProfile.role||'Contributor';
     applyRoleAccess();
-    // autoInit called after login
+    await new Promise(r=>setTimeout(r,300));
+    await autoInit();
   }catch(e){
     errEl.textContent=e.message;
     btn.textContent='Sign In';btn.disabled=false;
