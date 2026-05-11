@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The People's Voice</title>
+  <script>
+    // GitHub Pages serves this file for any path it doesn't recognize.
+    // We rewrite the URL to the root and let the SPA's router pick up
+    // the original path. This makes /jackson, /calhoun, etc. work as
+    // sub-routes even though GitHub Pages doesn't natively support SPA routing.
+    (function(){
+      // Preserve the original path for the app to read after redirect
+      var pathAndQuery = window.location.pathname + window.location.search + window.location.hash;
+      // Store original path in sessionStorage and redirect to root
+      // App reads sessionStorage on load and rewrites history to the original path
+      sessionStorage.setItem('tpv_original_path', pathAndQuery);
+      // Redirect to root, preserving query string and hash
+      window.location.replace('/');
+    })();
+  </script>
+</head>
+<body>
+  <noscript>
+    <p>The People's Voice requires JavaScript. Please enable JavaScript in your browser to continue.</p>
+    <p><a href="/">Go to home</a></p>
+  </noscript>
+</body>
+</html>
