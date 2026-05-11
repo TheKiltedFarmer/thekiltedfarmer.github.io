@@ -221,6 +221,34 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .recipe-tag{display:inline-block;padding:2px 8px;background:#edf7f1;color:var(--green-dark);border:1px solid #b7dcc8;border-radius:4px;font-size:11px;font-weight:600;margin-left:6px;}
 
 .footer{text-align:center;font-size:11px;color:var(--mid);padding:16px;border-top:1px solid var(--rule);}
+/* RIVER VISUALIZATION */
+.river-viz{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:24px;margin-bottom:20px;overflow:hidden;position:relative;}
+.river-viz-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:16px;}
+.river-svg-wrap{width:100%;overflow-x:auto;}
+.river-svg-wrap svg{min-width:340px;width:100%;}
+
+/* WEEKLY/ACCUMULATED CARDS */
+.week-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
+@media(max-width:580px){.week-grid{grid-template-columns:1fr;}}
+.week-card{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:16px 20px;}
+.week-card.current{border-color:var(--green);background:#f6fbf8;}
+.week-card-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--mid);margin-bottom:4px;font-weight:600;}
+.week-card-amount{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:var(--green-dark);}
+.week-card-sub{font-size:12px;color:var(--mid);margin-top:3px;}
+.week-date-range{font-size:11px;color:var(--green);font-weight:600;margin-bottom:8px;}
+
+/* MEMBER ROWS */
+.member-week-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--cream-dark);}
+.member-week-row:last-child{border-bottom:none;}
+.mwr-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
+.mwr-info{flex:1;min-width:0;}
+.mwr-name{font-size:13px;font-weight:700;color:var(--ink);}
+.mwr-detail{font-size:11px;color:var(--mid);}
+.mwr-bar-wrap{width:80px;background:var(--cream-dark);border-radius:4px;height:5px;flex-shrink:0;}
+.mwr-bar{height:100%;border-radius:4px;background:var(--green);transition:width 0.4s ease;}
+.mwr-amount{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--green-dark);min-width:72px;text-align:right;}
+.mwr-accum{font-size:11px;color:var(--mid);text-align:right;}
+
 
 /* DASHBOARD */
 .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
@@ -381,10 +409,64 @@ document.addEventListener('DOMContentLoaded',function(){
     <button class="add-btn" style="margin-top:0;" onclick="refreshDashboard()">↻ Refresh</button>
   </div>
 
-  <!-- LAKE: THE POOL -->
-  <div class="dash-grid" style="margin-bottom:16px;">
+  <!-- WEEK SUMMARY CARDS -->
+  <div class="week-grid">
+    <div class="week-card current">
+      <div class="week-date-range" id="dash-week-range">This Week</div>
+      <div class="week-card-label">This Week's Pool</div>
+      <div class="week-card-amount" id="dash-week-pool">$0.00</div>
+      <div class="week-card-sub" id="dash-week-sub">Revenue building...</div>
+    </div>
+    <div class="week-card">
+      <div class="week-date-range" id="dash-accum-range">Accumulated</div>
+      <div class="week-card-label">Total Earned (All Weeks)</div>
+      <div class="week-card-amount" id="dash-accum-total">$0.00</div>
+      <div class="week-card-sub" id="dash-avg-rate">Avg: $0.00/hr</div>
+    </div>
+  </div>
+
+  <!-- RIVER VISUALIZATION -->
+  <div class="river-viz">
+    <div class="river-viz-title">This Week — Revenue & Expenses</div>
+    <div class="river-svg-wrap">
+      <svg id="riverSvg" viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="riverGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#52B788;stop-opacity:0.6"/>
+            <stop offset="100%" style="stop-color:#2D6A4F;stop-opacity:0.9"/>
+          </linearGradient>
+          <linearGradient id="poolGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#2D6A4F;stop-opacity:0.9"/>
+            <stop offset="100%" style="stop-color:#1B4332;stop-opacity:1"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <!-- Generated dynamically by JS -->
+        <text x="350" y="150" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13" fill="#aaa">Loading river...</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- MEMBER SHARES THIS WEEK + ACCUMULATED -->
+  <div class="dash-card full" style="margin-bottom:20px;">
+    <div class="dash-label" style="margin-bottom:14px;">Member Shares</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--rule);margin-bottom:8px;">
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Member</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);text-align:center;">Hrs This Week</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);text-align:right;">This Week</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);text-align:center;">Total Hrs</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);text-align:right;">Accumulated</div>
+    </div>
+    <div id="dash-member-shares"><div style="color:var(--mid);font-size:13px;">Loading...</div></div>
+  </div>
+
+  <!-- LAKE -->
+  <div class="dash-grid" style="margin-bottom:20px;">
     <div class="dash-card lake">
-      <div class="dash-label">Distributable Pool</div>
+      <div class="dash-label">This Week's Pool</div>
       <div class="dash-amount" id="dash-pool">$0</div>
       <div class="dash-sub" id="dash-pool-sub">After expenses &amp; Common Table</div>
     </div>
@@ -393,36 +475,6 @@ document.addEventListener('DOMContentLoaded',function(){
       <div class="dash-amount accent" id="dash-ct">$0</div>
       <div class="dash-sub">Collective reinvestment fund</div>
     </div>
-  </div>
-
-  <!-- RIVERS: REVENUE -->
-  <div class="river-section">
-    <div class="river-label">Revenue Streams</div>
-    <div id="dash-revenue-list"><div style="color:var(--mid);font-size:13px;padding:10px 0;">Loading revenue...</div></div>
-    <div class="river-entry" style="background:var(--cream);border-style:dashed;margin-top:4px;">
-      <div class="river-entry-left">
-        <div class="river-entry-name" style="color:var(--green-dark);">Total Revenue</div>
-      </div>
-      <div class="river-entry-amount" id="dash-total-revenue">$0.00</div>
-    </div>
-  </div>
-
-  <!-- STREAMS: EXPENSES -->
-  <div class="river-section">
-    <div class="river-label">Expenses</div>
-    <div id="dash-expense-list"><div style="color:var(--mid);font-size:13px;padding:10px 0;">Loading expenses...</div></div>
-    <div class="river-entry" style="background:var(--cream);border-style:dashed;margin-top:4px;">
-      <div class="river-entry-left">
-        <div class="river-entry-name" style="color:var(--red);">Total Expenses</div>
-      </div>
-      <div class="river-entry-amount neg" id="dash-total-expenses">$0.00</div>
-    </div>
-  </div>
-
-  <!-- MEMBER SHARES -->
-  <div class="dash-card full" style="margin-bottom:20px;">
-    <div class="dash-label" style="margin-bottom:14px;">Member Shares — Based on Hours This Period</div>
-    <div id="dash-member-shares"><div style="color:var(--mid);font-size:13px;">Loading...</div></div>
   </div>
 </div>
 
@@ -1721,6 +1773,22 @@ function resetAll(){
 }
 
 // ─── INIT ───
+// ─── WEEK HELPERS ───
+function getWeekBounds(date){
+  const d=new Date(date||new Date());
+  const day=d.getDay(); // 0=Sun,1=Mon...
+  const diffToMon=day===0?-6:1-day;
+  const mon=new Date(d);mon.setDate(d.getDate()+diffToMon);mon.setHours(0,0,0,0);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+  return{mon,sun};
+}
+function fmtDate(d){return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+function inWeek(dateStr,bounds){
+  if(!dateStr)return false;
+  const d=new Date(dateStr);
+  return d>=bounds.mon&&d<=bounds.sun;
+}
+
 // ─── DASHBOARD ───
 async function refreshDashboard(){
   const label=getCurrentPeriodLabel();
@@ -1734,41 +1802,28 @@ async function refreshDashboard(){
   }
 
   try{
-    // Revenue entries
-    const allEntries=await sbAuth('kf_revenue_entries?order=created_at.desc&limit=200');
     const now=new Date();
+    const weekBounds=getWeekBounds(now);
     const monthStr=now.toLocaleString('en-US',{month:'long'});
     const yearStr=String(now.getFullYear());
-    const entries=allEntries.filter(e=>e.period_label&&(e.period_label===label||(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr))));
-    const totalRevenue=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
 
-    // Revenue list
-    const revList=document.getElementById('dash-revenue-list');
-    if(entries.length){
-      // Group by source
-      const bySource={};
-      entries.forEach(e=>{
-        if(!bySource[e.source])bySource[e.source]=[];
-        bySource[e.source].push(e);
-      });
-      revList.innerHTML=Object.entries(bySource).map(([source,items])=>{
-        const total=items.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-        const details=items.map(e=>{
-          const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-          return `<div class="stream-entry"><span class="stream-entry-name">${t} — ${e.reported_by||''}${e.notes?' · '+e.notes:''}</span><span class="stream-entry-amount" style="color:var(--green-dark);">${fmt(parseFloat(e.amount)||0)}</span></div>`;
-        }).join('');
-        return `<div class="river-entry"><div class="river-entry-left"><div class="river-entry-name">${source}</div><div class="river-entry-meta">${items.length} ${items.length===1?'entry':'entries'}</div></div><div class="river-entry-amount">${fmt(total)}</div></div>${details}`;
-      }).join('');
-    } else {
-      revList.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No revenue logged yet this period.</div>';
-    }
-    document.getElementById('dash-total-revenue').textContent=fmt(totalRevenue);
+    // Week range label
+    document.getElementById('dash-week-range').textContent=fmtDate(weekBounds.mon)+' – '+fmtDate(weekBounds.sun);
+    document.getElementById('dash-accum-range').textContent=monthStr+' '+yearStr+' Total';
 
-    // Expenses — merge DB saved expenses with current session expenses
-    let expenseTotal=0;
-    const expList=document.getElementById('dash-expense-list');
+    // ─── ALL REVENUE for this month ───
+    const allRevEntries=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
+    const monthEntries=allRevEntries.filter(e=>{
+      if(!e.period_label)return false;
+      return e.period_label===label||(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr));
+    });
 
-    // Get all saved period records for this month
+    // Split into this week vs accumulated
+    const weekRevEntries=monthEntries.filter(e=>inWeek(e.created_at,weekBounds));
+    const weekRevenue=weekRevEntries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+    const totalRevenue=monthEntries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+
+    // ─── EXPENSES ───
     const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc');
     let dbExpenses=[];
     for(const p of (periods||[])){
@@ -1777,71 +1832,86 @@ async function refreshDashboard(){
         dbExpenses.push(...pe);
       }catch(e){}
     }
-
-    // Deduplicate DB expenses by name+amount
     const seenExp=new Set();
     const uniqueDbExp=dbExpenses.filter(e=>{
       const k=(e.name||'')+'|'+(e.amount||0);
-      if(seenExp.has(k))return false;
-      seenExp.add(k);
-      return true;
+      if(seenExp.has(k))return false;seenExp.add(k);return true;
     });
-
-    // Also include current session expenses not yet saved
     const sessionExp=expenses.filter(e=>{
       if(!e.name&&!e.amount)return false;
       const amt=parseFloat(e.amount)||0;
-      if(amt===0&&!e.name)return false;
-      // Check if already in DB
       const k=(e.name||'')+'|'+amt;
       return !seenExp.has(k);
     });
+    const allExpenses=[...uniqueDbExp,...sessionExp].filter(e=>e.name||parseFloat(e.amount||0)>0);
+    const totalExpenses=allExpenses.reduce((s,e)=>s+(parseFloat(e.amount||0)),0);
 
-    const allExpenses=[...uniqueDbExp,...sessionExp];
+    // This week expenses — use all expenses for now (can't date-stamp them yet)
+    const weekExpenses=totalExpenses;
 
-    if(allExpenses.length){
-      expList.innerHTML=allExpenses.map(e=>{
-        const amt=parseFloat(e.amount||0);
-        if(amt===0&&!e.name)return '';
-        expenseTotal+=amt;
-        return `<div class="stream-entry"><span class="stream-entry-name">${e.name||'Unnamed'}</span><span class="stream-entry-amount">— ${fmt(amt)}</span></div>`;
-      }).filter(Boolean).join('');
-    } else {
-      expList.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No expenses recorded yet.</div>';
-    }
-    document.getElementById('dash-total-expenses').textContent=fmt(expenseTotal);
+    // ─── POOL CALCS ───
+    const weekAfterExp=Math.max(0,weekRevenue-weekExpenses);
+    const weekCT=weekAfterExp*CT;
+    const weekPool=Math.max(0,weekAfterExp-weekCT);
+    const accumAfterExp=Math.max(0,totalRevenue-totalExpenses);
+    const accumCT=accumAfterExp*CT;
+    const accumPool=Math.max(0,accumAfterExp-accumCT);
 
-    // Pool calc
-    const afterExp=totalRevenue-expenseTotal;
-    const ct=Math.max(0,afterExp*CT);
-    const pool=Math.max(0,afterExp-ct);
-    document.getElementById('dash-pool').textContent=fmt(pool);
-    document.getElementById('dash-ct').textContent=fmt(ct);
-    document.getElementById('dash-pool-sub').textContent='From $'+totalRevenue.toFixed(2)+' revenue after expenses';
-
-    // Also update revenue on Distribution tab
+    // Update distribution tab
     document.getElementById('revenue').value=totalRevenue.toFixed(2);
     calculate();
 
-    // Member shares
+    // ─── WEEK CARDS ───
+    document.getElementById('dash-week-pool').textContent=fmt(weekPool);
+    document.getElementById('dash-week-sub').textContent='Revenue: '+fmt(weekRevenue)+' · Expenses: '+fmt(weekExpenses);
+    document.getElementById('dash-accum-total').textContent=fmt(accumPool);
+    document.getElementById('dash-pool').textContent=fmt(weekPool);
+    document.getElementById('dash-pool-sub').textContent='From '+fmt(weekRevenue)+' revenue this week';
+    document.getElementById('dash-ct').textContent=fmt(weekCT);
+
+    // ─── AVG HOURLY ───
     const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+    const avgRate=totalHours>0?accumPool/totalHours:0;
+    document.getElementById('dash-avg-rate').textContent='Avg earned: '+fmt(avgRate)+'/hr this period';
+
+    // ─── RIVER SVG ───
+    drawRiver(weekRevEntries, allExpenses, weekPool, weekCT);
+
+    // ─── MEMBER SHARES ───
     const sharesEl=document.getElementById('dash-member-shares');
     if(members&&members.length){
       sharesEl.innerHTML=members.map(m=>{
-        const hrs=getMemberHours(m);
-        const pct=totalHours>0?hrs/totalHours:0;
-        const share=pool*pct;
-        const initial=(m.name||'?')[0].toUpperCase();
-        const barWidth=totalHours>0?Math.round(pct*100):0;
-        return `<div class="share-row">
-          <div class="share-avatar" style="background:${m.role==='Steward'?'var(--green)':'var(--tan)'};">${initial}</div>
-          <div class="share-info">
-            <div class="share-name">${m.name||'Member'} <span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></div>
-            <div class="share-hrs">${hrs.toFixed(2)} hrs this period</div>
+        const hrsWeek=getMemberHours(m); // hours this week (session)
+        const pctWeek=totalHours>0?hrsWeek/totalHours:0;
+        const shareWeek=weekPool*pctWeek;
+        // Accumulated from distribution records
+        const accumHrs=hrsWeek; // same for now — will grow with history
+        const accumShare=accumPool*pctWeek;
+        const barW=totalHours>0?Math.round(pctWeek*100):0;
+        const col=m.role==='Steward'?'var(--green)':'var(--tan)';
+        const init=(m.name||'?')[0].toUpperCase();
+        return `<div class="member-week-row">
+          <div class="mwr-avatar" style="background:${col};">${init}</div>
+          <div class="mwr-info">
+            <div class="mwr-name">${m.name||'Member'}</div>
+            <div class="mwr-detail"><span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${m.role}</span></div>
           </div>
-          <div class="share-bar-wrap"><div class="share-bar" style="width:${barWidth}%"></div></div>
-          <div class="share-pct">${(pct*100).toFixed(1)}%</div>
-          <div class="share-amount">${fmt(share)}</div>
+          <div style="text-align:center;min-width:70px;">
+            <div style="font-weight:700;font-size:14px;color:var(--ink);">${hrsWeek.toFixed(1)}</div>
+            <div style="font-size:10px;color:var(--mid);">hrs</div>
+          </div>
+          <div style="text-align:right;min-width:80px;">
+            <div class="mwr-amount">${fmt(shareWeek)}</div>
+            <div class="mwr-accum">${(pctWeek*100).toFixed(1)}%</div>
+          </div>
+          <div style="text-align:center;min-width:70px;">
+            <div style="font-weight:700;font-size:14px;color:var(--mid);">${accumHrs.toFixed(1)}</div>
+            <div style="font-size:10px;color:var(--mid);">total hrs</div>
+          </div>
+          <div style="text-align:right;min-width:80px;">
+            <div class="mwr-amount">${fmt(accumShare)}</div>
+            <div class="mwr-accum">${fmt(avgRate)}/hr avg</div>
+          </div>
         </div>`;
       }).join('');
     } else {
@@ -1849,13 +1919,84 @@ async function refreshDashboard(){
     }
 
     // Update timestamp
-    const now2=new Date();
-    document.getElementById('dash-updated-time').textContent='Updated '+now2.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 
   }catch(e){
     console.warn('Dashboard error:',e.message);
-    document.getElementById('dash-updated-time').textContent='Error loading — tap refresh';
+    document.getElementById('dash-updated-time').textContent='Error — tap refresh';
   }
+}
+
+// ─── RIVER SVG VISUALIZATION ───
+function drawRiver(revEntries, expenses, pool, ct){
+  const svg=document.getElementById('riverSvg');
+  if(!svg)return;
+
+  const W=700,H=300;
+  const riverY=H/2;
+  const riverH=44;
+  const poolX=W-110,poolY=riverY-60,poolW=90,poolH=120;
+
+  // Group revenue by source
+  const bySource={};
+  revEntries.forEach(e=>{
+    if(!bySource[e.source])bySource[e.source]=0;
+    bySource[e.source]+=parseFloat(e.amount)||0;
+  });
+  const sources=Object.entries(bySource).filter(([,v])=>v>0);
+  const totalRev=sources.reduce((s,[,v])=>s+v,0)||1;
+
+  // Group expenses
+  const expGroups=expenses.filter(e=>parseFloat(e.amount||0)>0);
+  const totalExp=expGroups.reduce((s,e)=>s+(parseFloat(e.amount||0)),0)||0;
+
+  let html='';
+
+  // ── Main river body ──
+  html+=`<path d="M 60 ${riverY-riverH/2} Q 200 ${riverY-riverH/2-8} ${poolX} ${poolY+20}" fill="none" stroke="url(#riverGrad)" stroke-width="${riverH}" stroke-linecap="round" opacity="0.85" filter="url(#glow)"/>`;
+
+  // ── Revenue tributaries (top) ──
+  const srcColors=['#52B788','#2D6A4F','#74C69D','#40916C','#1B4332'];
+  sources.forEach(([source,amt],i)=>{
+    const frac=amt/totalRev;
+    const tx=50+i*18;
+    const ty=riverY-riverH/2-60-i*22;
+    const cx=tx+40,cy=riverY-riverH/4;
+    const sw=Math.max(3,Math.round(frac*22));
+    html+=`<path d="M ${tx} ${ty} Q ${cx} ${ty} ${cx} ${cy}" fill="none" stroke="${srcColors[i%srcColors.length]}" stroke-width="${sw}" stroke-linecap="round" opacity="0.75"/>`;
+    // Label
+    const labelX=tx-2,labelY=ty-8;
+    html+=`<text x="${labelX}" y="${labelY}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="600">${source}</text>`;
+    html+=`<text x="${labelX}" y="${labelY+11}" text-anchor="middle" font-family="Playfair Display,serif" font-size="9" fill="#40916C">$${amt.toFixed(0)}</text>`;
+  });
+
+  if(!sources.length){
+    html+=`<text x="120" y="${riverY-riverH/2-20}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11" fill="#aaa">No revenue this week</text>`;
+  }
+
+  // ── Expense streams (bottom, branching off) ──
+  const expColors=['#E74C3C','#C0392B','#E57373','#EF9A9A'];
+  const expStartX=180;
+  expGroups.forEach((e,i)=>{
+    const ex=expStartX+i*70;
+    const ey=riverY+riverH/2+30+i*18;
+    const sw=Math.max(2,Math.round((parseFloat(e.amount||0)/Math.max(totalExp,1))*18));
+    html+=`<path d="M ${ex} ${riverY+riverH/4} Q ${ex} ${ey-10} ${ex+10} ${ey}" fill="none" stroke="${expColors[i%expColors.length]}" stroke-width="${sw}" stroke-linecap="round" opacity="0.7"/>`;
+    html+=`<text x="${ex+14}" y="${ey+1}" font-family="Source Sans 3,sans-serif" font-size="9" fill="#C0392B" font-weight="600">${(e.name||'Expense').substring(0,12)}</text>`;
+    html+=`<text x="${ex+14}" y="${ey+11}" font-family="Playfair Display,serif" font-size="9" fill="#E74C3C">-$${parseFloat(e.amount||0).toFixed(0)}</text>`;
+  });
+
+  // ── Pool (the lake) ──
+  html+=`<ellipse cx="${poolX+poolW/2}" cy="${poolY+poolH/2}" rx="${poolW/2}" ry="${poolH/2}" fill="url(#poolGrad)" opacity="0.92" filter="url(#glow)"/>`;
+  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2-14}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="9" fill="rgba(255,255,255,0.7)" letter-spacing="1">THE POOL</text>`;
+  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2+6}" text-anchor="middle" font-family="Playfair Display,serif" font-size="15" font-weight="900" fill="#fff">$${pool.toFixed(0)}</text>`;
+  // CT label
+  html+=`<text x="${poolX+poolW/2}" y="${poolY+poolH/2+22}" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.55)">CT: $${ct.toFixed(0)}</text>`;
+
+  // ── River label ──
+  html+=`<text x="32" y="${riverY+4}" font-family="Source Sans 3,sans-serif" font-size="10" fill="rgba(255,255,255,0.9)" font-weight="600">RIVER</text>`;
+
+  svg.innerHTML=html;
 }
 
 // Auto-refresh dashboard every 60 seconds when on that tab
