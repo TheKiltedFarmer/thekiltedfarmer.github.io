@@ -695,7 +695,11 @@ document.addEventListener('DOMContentLoaded',function(){
 <div class="tab-content" id="tab-printsheet">
   <div class="print-card" id="printSheet">
     <div class="print-header-row">
-      <div><div class="print-title">The Kilted Farmers</div><div class="print-sub">Contributionist Distribution Statement</div></div>
+      <div>
+        <div class="print-title">The Kilted Farmers LLC</div>
+        <div class="print-sub">Contributionist Distribution Statement — Concord, Michigan</div>
+        <div class="print-sub" id="p-generated" style="margin-top:3px;"></div>
+      </div>
       <div class="print-period" id="p-period">—</div>
     </div>
     <div class="print-meta">
@@ -718,6 +722,7 @@ document.addEventListener('DOMContentLoaded',function(){
   </div>
   <div class="actions">
     <button class="btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    <button class="btn-secondary" onclick="exportCSV()">📊 Export CSV</button>
   </div>
 </div>
 
@@ -1742,6 +1747,7 @@ function buildPrintSheet(){
   const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);const hrRate=totalHours>0?pool/totalHours:0;
   const period=document.getElementById('periodType').value;const date=document.getElementById('periodDate').value;
   document.getElementById('p-period').textContent=period+(date?' — '+date:'');
+  document.getElementById('p-generated').textContent='Generated: '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   document.getElementById('p-revenue').textContent=fmt(revenue);
   document.getElementById('p-hours').textContent=totalHours.toFixed(2)+' hrs';
   document.getElementById('p-expenses').textContent=fmt(totalExp);
@@ -2206,6 +2212,134 @@ async function adminReactivate(userId, name) {
   const result = await adminCall('reactivate_user', { userId, name });
   if (result.success) { toast(name + ' reactivated'); adminLoadUsers(); }
   else toast('Failed to reactivate', true);
+}
+
+// ─── CSV EXPORT ───
+async function exportCSV(){
+  const label=getCurrentPeriodLabel();
+  const periodType=document.getElementById('periodType').value;
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;
+  const ct=Math.max(0,afterExp*CT);
+  const pool=Math.max(0,afterExp-ct);
+  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+  const hourlyRate=totalHours>0?pool/totalHours:0;
+
+  let csv='';
+
+  // ─── PERIOD SUMMARY ───
+  csv+='THE KILTED FARMERS LLC — DISTRIBUTION STATEMENT
+';
+  csv+=`Period,${periodType} — ${label}
+`;
+  csv+=`Generated,${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
+`;
+  csv+='
+';
+
+  // ─── REVENUE ───
+  csv+='REVENUE
+';
+  csv+='Source,Amount,Reported By,Notes,Date
+';
+  try{
+    const allRev=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
+    const now=new Date();
+    const monthStr=now.toLocaleString('en-US',{month:'long'});
+    const yearStr=String(now.getFullYear());
+    const revEntries=allRev.filter(e=>e.period_label===label||(e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)));
+    revEntries.forEach(e=>{
+      const d=new Date(e.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      csv+=`"${e.source||''}","${(parseFloat(e.amount)||0).toFixed(2)}","${e.reported_by||''}","${(e.notes||'').replace(/"/g,"'")}","${d}"
+`;
+    });
+  }catch(err){}
+  csv+=`"TOTAL REVENUE","${revenue.toFixed(2)}","","",""
+`;
+  csv+='
+';
+
+  // ─── EXPENSES ───
+  csv+='EXPENSES
+';
+  csv+='Description,Amount,Receipt
+';
+  expenses.filter(e=>e.name||e.amount).forEach(e=>{
+    csv+=`"${(e.name||'').replace(/"/g,"'")}","${(parseFloat(e.amount)||0).toFixed(2)}","${e.receiptUrl||''}"
+`;
+  });
+  csv+=`"TOTAL EXPENSES","${totalExp.toFixed(2)}",""
+`;
+  csv+='
+';
+
+  // ─── COMMON TABLE ───
+  csv+='COMMON TABLE
+';
+  csv+=`"Common Table (8%)","${ct.toFixed(2)}"
+`;
+  csv+='
+';
+
+  // ─── DISTRIBUTABLE POOL ───
+  csv+='DISTRIBUTABLE POOL
+';
+  csv+=`"Distributable Pool","${pool.toFixed(2)}"
+`;
+  csv+=`"Total Hours Worked","${totalHours.toFixed(2)}"
+`;
+  csv+=`"Effective Hourly Rate","${hourlyRate.toFixed(2)}"
+`;
+  csv+='
+';
+
+  // ─── DISTRIBUTIONS ───
+  csv+='DISTRIBUTIONS
+';
+  csv+='Member,Role,Hours,Percentage,Distribution,Effective Rate
+';
+  members.forEach(m=>{
+    const hrs=getMemberHours(m);
+    const pct=totalHours>0?hrs/totalHours:0;
+    const share=pool*pct;
+    const rate=hrs>0?share/hrs:0;
+    csv+=`"${m.name||''}","${m.role||''}","${hrs.toFixed(2)}","${(pct*100).toFixed(2)}%","${share.toFixed(2)}","${rate.toFixed(2)}"
+`;
+  });
+  csv+='
+';
+
+  // ─── TIME LOG ───
+  csv+='TIME LOG
+';
+  csv+='Member,Type,Date/Clock In,Clock Out,Hours,Notes
+';
+  members.forEach(m=>{
+    m.punches.forEach(p=>{
+      const inT=p.in?new Date(p.in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      const outT=p.out?new Date(p.out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';
+      const hrs=p.in&&p.out?((new Date(p.out)-new Date(p.in))/3600000).toFixed(2):'';
+      csv+=`"${m.name}","Punch In/Out","${inT}","${outT}","${hrs}",""
+`;
+    });
+    m.dailyEntries.forEach(d=>{
+      csv+=`"${m.name}","Daily Entry","${d.date||''}","","${d.hours||0}","${(d.note||'').replace(/"/g,"'")}"
+`;
+    });
+  });
+
+  // ─── DOWNLOAD ───
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`KiltedFarmers_${label.replace(/\s/g,'_')}_${periodType}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('CSV exported');
 }
 
 // ─── ENSURE PERIOD EXISTS ───
