@@ -2226,24 +2226,14 @@ async function exportCSV(){
   const pool=Math.max(0,afterExp-ct);
   const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
   const hourlyRate=totalHours>0?pool/totalHours:0;
-
-  let csv='';
-
-  // ─── PERIOD SUMMARY ───
-  csv+='THE KILTED FARMERS LLC — DISTRIBUTION STATEMENT
-';
-  csv+=`Period,${periodType} — ${label}
-`;
-  csv+=`Generated,${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
-`;
-  csv+='
-';
-
-  // ─── REVENUE ───
-  csv+='REVENUE
-';
-  csv+='Source,Amount,Reported By,Notes,Date
-';
+  const NL='\n';
+  const rows=[];
+  rows.push('THE KILTED FARMERS LLC — DISTRIBUTION STATEMENT');
+  rows.push('Period,'+periodType+' — '+label);
+  rows.push('Generated,'+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
+  rows.push('');
+  rows.push('REVENUE');
+  rows.push('Source,Amount,Reported By,Notes,Date');
   try{
     const allRev=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
     const now=new Date();
@@ -2252,90 +2242,55 @@ async function exportCSV(){
     const revEntries=allRev.filter(e=>e.period_label===label||(e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)));
     revEntries.forEach(e=>{
       const d=new Date(e.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      csv+=`"${e.source||''}","${(parseFloat(e.amount)||0).toFixed(2)}","${e.reported_by||''}","${(e.notes||'').replace(/"/g,"'")}","${d}"
-`;
+      rows.push('"'+(e.source||'')+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.reported_by||'')+'","'+((e.notes||'').replace(/"/g,"'"))+'","'+d+'"');
     });
   }catch(err){}
-  csv+=`"TOTAL REVENUE","${revenue.toFixed(2)}","","",""
-`;
-  csv+='
-';
-
-  // ─── EXPENSES ───
-  csv+='EXPENSES
-';
-  csv+='Description,Amount,Receipt
-';
+  rows.push('"TOTAL REVENUE","'+revenue.toFixed(2)+'","","",""');
+  rows.push('');
+  rows.push('EXPENSES');
+  rows.push('Description,Amount,Receipt');
   expenses.filter(e=>e.name||e.amount).forEach(e=>{
-    csv+=`"${(e.name||'').replace(/"/g,"'")}","${(parseFloat(e.amount)||0).toFixed(2)}","${e.receiptUrl||''}"
-`;
+    rows.push('"'+((e.name||'').replace(/"/g,"'"))+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.receiptUrl||'')+'"');
   });
-  csv+=`"TOTAL EXPENSES","${totalExp.toFixed(2)}",""
-`;
-  csv+='
-';
-
-  // ─── COMMON TABLE ───
-  csv+='COMMON TABLE
-';
-  csv+=`"Common Table (8%)","${ct.toFixed(2)}"
-`;
-  csv+='
-';
-
-  // ─── DISTRIBUTABLE POOL ───
-  csv+='DISTRIBUTABLE POOL
-';
-  csv+=`"Distributable Pool","${pool.toFixed(2)}"
-`;
-  csv+=`"Total Hours Worked","${totalHours.toFixed(2)}"
-`;
-  csv+=`"Effective Hourly Rate","${hourlyRate.toFixed(2)}"
-`;
-  csv+='
-';
-
-  // ─── DISTRIBUTIONS ───
-  csv+='DISTRIBUTIONS
-';
-  csv+='Member,Role,Hours,Percentage,Distribution,Effective Rate
-';
+  rows.push('"TOTAL EXPENSES","'+totalExp.toFixed(2)+'",""');
+  rows.push('');
+  rows.push('COMMON TABLE');
+  rows.push('"Common Table (8%)","'+ct.toFixed(2)+'"');
+  rows.push('');
+  rows.push('DISTRIBUTABLE POOL');
+  rows.push('"Distributable Pool","'+pool.toFixed(2)+'"');
+  rows.push('"Total Hours Worked","'+totalHours.toFixed(2)+'"');
+  rows.push('"Effective Hourly Rate","'+hourlyRate.toFixed(2)+'"');
+  rows.push('');
+  rows.push('DISTRIBUTIONS');
+  rows.push('Member,Role,Hours,Percentage,Distribution,Effective Rate');
   members.forEach(m=>{
     const hrs=getMemberHours(m);
     const pct=totalHours>0?hrs/totalHours:0;
     const share=pool*pct;
     const rate=hrs>0?share/hrs:0;
-    csv+=`"${m.name||''}","${m.role||''}","${hrs.toFixed(2)}","${(pct*100).toFixed(2)}%","${share.toFixed(2)}","${rate.toFixed(2)}"
-`;
+    rows.push('"'+(m.name||'')+'","'+(m.role||'')+'","'+hrs.toFixed(2)+'","'+(pct*100).toFixed(2)+'%","'+share.toFixed(2)+'","'+rate.toFixed(2)+'"');
   });
-  csv+='
-';
-
-  // ─── TIME LOG ───
-  csv+='TIME LOG
-';
-  csv+='Member,Type,Date/Clock In,Clock Out,Hours,Notes
-';
+  rows.push('');
+  rows.push('TIME LOG');
+  rows.push('Member,Type,Date/Clock In,Clock Out,Hours,Notes');
   members.forEach(m=>{
     m.punches.forEach(p=>{
       const inT=p.in?new Date(p.in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
       const outT=p.out?new Date(p.out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';
       const hrs=p.in&&p.out?((new Date(p.out)-new Date(p.in))/3600000).toFixed(2):'';
-      csv+=`"${m.name}","Punch In/Out","${inT}","${outT}","${hrs}",""
-`;
+      rows.push('"'+(m.name)+'","Punch","'+inT+'","'+outT+'","'+hrs+'",""');
     });
     m.dailyEntries.forEach(d=>{
-      csv+=`"${m.name}","Daily Entry","${d.date||''}","","${d.hours||0}","${(d.note||'').replace(/"/g,"'")}"
-`;
+      rows.push('"'+(m.name)+'","Daily","'+(d.date||'')+'","","'+(d.hours||0)+'","'+((d.note||'').replace(/"/g,"'"))+'"');
     });
   });
-
-  // ─── DOWNLOAD ───
+  const csv=rows.join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
-  a.download=`KiltedFarmers_${label.replace(/\s/g,'_')}_${periodType}.csv`;
+  a.download='KiltedFarmers_'+label.replace(/\s+/g,'_')+'_'+periodType+'.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -2343,176 +2298,7 @@ async function exportCSV(){
   toast('CSV exported');
 }
 
-// ─── ENSURE PERIOD EXISTS ───
-async function ensurePeriodId(){
-  if(window._currentPeriodId)return window._currentPeriodId;
-  const label=getCurrentPeriodLabel();
-  if(!label)return null;
-  try{
-    const existing=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-    if(existing.length){
-      window._currentPeriodId=existing[0].id;
-      return existing[0].id;
-    }
-    const revenue=parseFloat(document.getElementById('revenue').value)||0;
-    const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    const afterExp=revenue-totalExp;
-    const ct=Math.max(0,afterExp*CT);
-    const pool=Math.max(0,afterExp-ct);
-    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-    const[p]=await sbAuth('kf_pay_periods',{method:'POST',body:JSON.stringify({
-      period_type:document.getElementById('periodType').value,
-      period_label:label,gross_revenue:revenue,
-      total_expenses:totalExp,common_table:ct,
-      distributable_pool:pool,total_hours:totalHours
-    })});
-    window._currentPeriodId=p.id;
-    return p.id;
-  }catch(e){console.warn('ensurePeriodId failed:',e.message);return null;}
-}
 
-// ─── RECIPES ───
-async function loadRecipeList(){
-  try{
-    const recipes=await sbAuth('kf_recipes?select=*&order=name.asc');
-    const sel=document.getElementById('recipeSelect');
-    if(!sel)return;
-    sel.innerHTML='<option value="">— Load a saved recipe —</option>';
-    recipes.forEach(r=>{
-      const opt=document.createElement('option');
-      opt.value=r.id;
-      opt.textContent=r.name;
-      sel.appendChild(opt);
-    });
-  }catch(e){console.warn('Could not load recipes:',e.message);}
-}
-
-async function loadRecipe(){
-  const id=document.getElementById('recipeSelect').value;
-  if(!id)return;
-  const status=document.getElementById('recipeStatus');
-  status.textContent='Loading...';
-  try{
-    const[recipe]=await sbAuth('kf_recipes?id=eq.'+id+'&select=*');
-    const ings=await sbAuth('kf_recipe_ingredients?recipe_id=eq.'+id+'&order=sort_order.asc');
-
-    // Set recipe name
-    document.getElementById('recipeName').value=recipe.name;
-
-    // Set batch settings
-    document.getElementById('batchSize').value=recipe.batch_size||20;
-    document.getElementById('markupPct').value=recipe.markup_pct||40;
-    document.getElementById('laborRate').value=recipe.labor_rate||0;
-    document.getElementById('batchHours').value=recipe.batch_hours||0;
-
-    // Set ingredients
-    bulkIngs=ings.filter(i=>i.ingredient_type==='bulk').map((i,idx)=>({
-      id:idx+1,name:i.name||'',cost:i.cost||'',yield:i.yield_pastas||''
-    }));
-    specIngs=ings.filter(i=>i.ingredient_type==='specialty').map((i,idx)=>({
-      id:idx+100,name:i.name||'',cost:i.cost||'',purchaseSize:i.purchase_size||'',usedPer:i.used_per||'',unit:i.unit||'g'
-    }));
-
-    if(!bulkIngs.length)bulkIngs=[{id:1,name:'',cost:'',yield:''}];
-    if(!specIngs.length)specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
-
-    renderBulkIngs();
-    renderSpecIngs();
-    calcIngredients();
-    status.textContent='✓ Loaded';
-    setTimeout(()=>{status.textContent='';},2000);
-    toast('Recipe loaded: '+recipe.name);
-  }catch(e){
-    status.textContent='Failed';
-    toast('Could not load recipe',true);
-  }
-}
-
-async function saveRecipe(){
-  const name=document.getElementById('recipeName').value.trim();
-  const status=document.getElementById('recipeStatus');
-  if(!name){
-    toast('Enter a recipe name first',true);
-    document.getElementById('recipeName').focus();
-    return;
-  }
-  status.textContent='Saving...';
-  try{
-    const recipeData={
-      name,
-      batch_size:parseFloat(document.getElementById('batchSize').value)||20,
-      markup_pct:parseFloat(document.getElementById('markupPct').value)||40,
-      labor_rate:parseFloat(document.getElementById('laborRate').value)||0,
-      batch_hours:parseFloat(document.getElementById('batchHours').value)||0,
-      created_by:currentProfile?.name||'',
-      updated_at:new Date().toISOString()
-    };
-
-    // Check if recipe with this name already exists
-    const existing=await sbAuth('kf_recipes?name=eq.'+encodeURIComponent(name)+'&select=id');
-    let recipeId;
-
-    if(existing.length){
-      // Update existing
-      recipeId=existing[0].id;
-      await sbAuth('kf_recipes?id=eq.'+recipeId,{method:'PATCH',body:JSON.stringify(recipeData)});
-      // Delete old ingredients
-      await sbAuth('kf_recipe_ingredients?recipe_id=eq.'+recipeId,{method:'DELETE',headers:{'Prefer':''}});
-    } else {
-      // Create new
-      const[created]=await sbAuth('kf_recipes',{method:'POST',body:JSON.stringify(recipeData)});
-      recipeId=created.id;
-    }
-
-    // Save ingredients
-    const ingRows=[
-      ...bulkIngs.filter(i=>i.name||i.cost).map((i,idx)=>({
-        recipe_id:recipeId,ingredient_type:'bulk',name:i.name,
-        cost:parseFloat(i.cost)||0,yield_pastas:parseFloat(i.yield)||0,sort_order:idx
-      })),
-      ...specIngs.filter(i=>i.name||i.cost).map((i,idx)=>({
-        recipe_id:recipeId,ingredient_type:'specialty',name:i.name,
-        cost:parseFloat(i.cost)||0,purchase_size:parseFloat(i.purchaseSize)||0,
-        used_per:parseFloat(i.usedPer)||0,unit:i.unit||'g',sort_order:idx+100
-      }))
-    ];
-    if(ingRows.length) await sbAuth('kf_recipe_ingredients',{method:'POST',body:JSON.stringify(ingRows)});
-
-    status.textContent='✓ Saved';
-    setTimeout(()=>{status.textContent='';},2000);
-    toast('Recipe saved: '+name);
-    loadRecipeList();
-
-    // Update the select to show this recipe
-    setTimeout(()=>{
-      const sel=document.getElementById('recipeSelect');
-      Array.from(sel.options).forEach(o=>{if(o.textContent===name)sel.value=o.value;});
-    },500);
-
-  }catch(e){
-    status.textContent='Failed';
-    toast('Save failed: '+e.message,true);
-  }
-}
-
-async function deleteRecipe(){
-  const id=document.getElementById('recipeSelect').value;
-  const name=document.getElementById('recipeName').value.trim();
-  if(!id){toast('Select a recipe to delete first',true);return;}
-  if(!confirm('Delete recipe "'+name+'"? This cannot be undone.'))return;
-  try{
-    await sbAuth('kf_recipes?id=eq.'+id,{method:'DELETE',headers:{'Prefer':''}});
-    document.getElementById('recipeSelect').value='';
-    document.getElementById('recipeName').value='';
-    bulkIngs=[{id:1,name:'',cost:'',yield:''}];
-    specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
-    renderBulkIngs();renderSpecIngs();calcIngredients();
-    toast('Recipe deleted');
-    loadRecipeList();
-  }catch(e){toast('Delete failed: '+e.message,true);}
-}
-
-// ─── AUTO INIT ───
 async function autoInit(){
   // Dropdown already built by DOMContentLoaded listener
   document.getElementById('periodType').value='Monthly';
