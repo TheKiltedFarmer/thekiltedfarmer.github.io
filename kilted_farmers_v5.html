@@ -429,7 +429,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <div class="river-viz">
     <div class="river-viz-title">This Week — Revenue & Expenses</div>
     <div class="river-svg-wrap">
-      <svg id="riverSvg" viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+      <svg id="riverSvg" viewBox="0 0 700 160" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="riverGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" style="stop-color:#52B788;stop-opacity:0.6"/>
@@ -1995,7 +1995,7 @@ async function refreshDashboard(){
 function drawRiver(revEntries, expenseList, pool, ct){
   const svg=document.getElementById('riverSvg');
   if(!svg)return;
-  const W=700,H=240;
+  const W=700,H=160;
   svg.setAttribute('viewBox','0 0 '+W+' '+H);
 
   const bySource={};
@@ -2006,79 +2006,71 @@ function drawRiver(revEntries, expenseList, pool, ct){
   const sources=Object.entries(bySource).filter(([,v])=>v>0);
   const totalRev=Math.max(sources.reduce((s,[,v])=>s+v,0),1);
   const validExp=expenseList.filter(e=>parseFloat(e.amount||0)>0);
-  const totalExp=Math.max(validExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0),1);
 
-  const midY=H/2;
-  const mainW=18;
-  const poolCX=W-62;
-  const poolCY=midY;
-  const poolR=50;
-  // River runs from leftEdge to pool
-  const riverX1=sources.length?150:40;
-  const riverX2=poolCX-poolR-4;
+  // Layout
+  const midY=72;
+  const riverStart=sources.length?130:30;
+  const poolCX=W-44;
+  const poolR=38;
+  const riverEnd=poolCX-poolR-2;
 
-  let h='<defs>';
-  h+='<linearGradient id="rg2" x1="0%" y1="0%" x2="100%" y2="0%">';
-  h+='<stop offset="0%" stop-color="#74C69D"/>';
-  h+='<stop offset="100%" stop-color="#1B4332"/>';
-  h+='</linearGradient>';
-  h+='<radialGradient id="pg2" cx="40%" cy="35%" r="65%">';
-  h+='<stop offset="0%" stop-color="#52B788"/>';
-  h+='<stop offset="100%" stop-color="#1B4332"/>';
-  h+='</radialGradient>';
-  h+='<filter id="gs"><feGaussianBlur stdDeviation="1.5" result="b"/>';
-  h+='<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
-  h+='</defs>';
+  let h='';
 
-  // ── MAIN RIVER (drawn first, behind everything) ──
-  // Use solid color - gradient url refs don't work in innerHTML-assigned SVGs in Safari
-  h+='<path d="M '+riverX1+' '+midY+' L '+riverX2+' '+midY+'"';
-  h+=' fill="none" stroke="#2D6A4F" stroke-width="'+mainW+'" stroke-linecap="square" opacity="0.85"/>';
+  // ── MAIN RIVER: thin elegant line ──
+  h+='<line x1="'+riverStart+'" y1="'+midY+'" x2="'+riverEnd+'" y2="'+midY+'" stroke="#40916C" stroke-width="3" stroke-linecap="round" opacity="0.7"/>';
 
-  // ── REVENUE TRIBUTARIES (merge into left end of river) ──
-  const srcColors=['#52B788','#40916C','#95D5B2','#2D6A4F','#B7E4C7'];
+  // ── REVENUE TRIBUTARIES: thin lines angling in from top-left ──
+  const srcColors=['#52B788','#40916C','#74C69D','#2D6A4F','#95D5B2'];
   if(!sources.length){
-    h+='<text x="80" y="'+(midY-20)+'" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb" text-anchor="middle">No revenue this week</text>';
+    h+='<text x="60" y="'+(midY-14)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#bbb">No revenue this week</text>';
   } else {
-    const maxSpread=Math.min(160,(H-60));
-    const spacing=sources.length>1?maxSpread/(sources.length-1):0;
     sources.forEach(([src,amt],i)=>{
       const frac=amt/totalRev;
-      const sw=Math.max(4,Math.round(frac*22));
-      const ty=sources.length===1?midY:(midY-maxSpread/2+i*spacing);
-      const tx=10;
-      // Cubic bezier: start horizontal then curve into river start
-      h+='<path d="M '+tx+' '+ty+' C '+(tx+60)+' '+ty+' '+(riverX1-20)+' '+midY+' '+riverX1+' '+midY+'"';
-      h+=' fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.9"/>';
-      // Label above the tributary start
-      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2-5)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">'+src+'</text>';
-      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2+7)+'" font-family="Playfair Display,serif" font-size="10" fill="#40916C">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
+      const sw=Math.max(1.5,Math.round(frac*6*10)/10);
+      const startX=8+i*18;
+      const startY=midY-(sources.length===1?28:32-i*10);
+      // Diagonal line from top-left into river start
+      h+='<line x1="'+startX+'" y1="'+startY+'" x2="'+riverStart+'" y2="'+midY+'" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.85"/>';
+      // Dot at source start
+      h+='<circle cx="'+startX+'" cy="'+startY+'" r="3" fill="'+srcColors[i%srcColors.length]+'" opacity="0.9"/>';
+      // Label
+      h+='<text x="'+(startX+5)+'" y="'+(startY-5)+'" font-family="Source Sans 3,sans-serif" font-size="9" fill="#2D6A4F" font-weight="600">'+src+'</text>';
+      h+='<text x="'+(startX+5)+'" y="'+(startY+7)+'" font-family="Playfair Display,serif" font-size="9" fill="#52B788">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
     });
   }
 
-  // ── EXPENSE STREAMS (drain downward from river) ──
-  const expColors=['#D96B5A','#B03A2E','#E8967A','#922B21','#F1948A'];
+  // ── EXPENSE STREAMS: thin lines draining downward ──
+  const expColors=['#C0392B','#E07B6A','#B03A2E','#E8967A','#922B21'];
   if(validExp.length){
-    const zone=riverX2-riverX1-60;
-    const gap=validExp.length>1?zone/(validExp.length-1):0;
+    const totalExp=validExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0)||1;
+    const zone=riverEnd-riverStart-40;
+    const gap=validExp.length>1?zone/(validExp.length):zone/2;
     validExp.forEach((e,i)=>{
       const frac=parseFloat(e.amount||0)/totalExp;
-      const sw=Math.max(3,Math.round(frac*16));
-      const ex=riverX1+30+(validExp.length===1?zone/2:i*gap);
-      const ey1=midY+mainW/2;
-      const ey2=ey1+50;
-      h+='<path d="M '+ex+' '+ey1+' C '+ex+' '+(ey1+20)+' '+(ex+6)+' '+(ey2-10)+' '+(ex+8)+' '+ey2+'"';
-      h+=' fill="none" stroke="'+expColors[i%expColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.85"/>';
-      h+='<text x="'+(ex+12)+'" y="'+(ey2)+'" font-family="Source Sans 3,sans-serif" font-size="9" fill="'+expColors[i%expColors.length]+'" font-weight="700">'+((e.name||'').substring(0,13))+'</text>';
-      h+='<text x="'+(ex+12)+'" y="'+(ey2+12)+'" font-family="Playfair Display,serif" font-size="9" fill="'+expColors[i%expColors.length]+'">-$'+parseFloat(e.amount||0).toFixed(0)+'</text>';
+      const sw=Math.max(1.5,Math.round(frac*5*10)/10);
+      const ex=riverStart+24+i*gap;
+      const ey2=midY+36;
+      // Tick down from river
+      h+='<line x1="'+ex+'" y1="'+midY+'" x2="'+ex+'" y2="'+ey2+'" stroke="'+expColors[i%expColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.8"/>';
+      // Dot at bottom
+      h+='<circle cx="'+ex+'" cy="'+ey2+'" r="2.5" fill="'+expColors[i%expColors.length]+'" opacity="0.85"/>';
+      // Label below
+      const name=(e.name||'').substring(0,11);
+      h+='<text x="'+ex+'" y="'+(ey2+11)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="'+expColors[i%expColors.length]+'" font-weight="600">'+name+'</text>';
+      h+='<text x="'+ex+'" y="'+(ey2+21)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="8" fill="'+expColors[i%expColors.length]+'">-$'+parseFloat(e.amount||0).toFixed(0)+'</text>';
     });
   }
 
-  // ── POOL ──
-  h+='<circle cx="'+poolCX+'" cy="'+poolCY+'" r="'+poolR+'" fill="#1B4332" opacity="0.95"/>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY-16)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.6)" letter-spacing="2">THE POOL</text>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY+5)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="19" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY+21)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.45)">CT $'+ct.toFixed(0)+' aside</text>';
+  // ── MERGE DOT where tributaries join main river ──
+  if(sources.length){
+    h+='<circle cx="'+riverStart+'" cy="'+midY+'" r="4" fill="#40916C" opacity="0.7"/>';
+  }
+
+  // ── POOL: clean circle at end ──
+  h+='<circle cx="'+poolCX+'" cy="'+midY+'" r="'+poolR+'" fill="#1B4332" opacity="0.92"/>';
+  h+='<text x="'+poolCX+'" y="'+(midY-12)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="7" fill="rgba(255,255,255,0.55)" letter-spacing="1.5">POOL</text>';
+  h+='<text x="'+poolCX+'" y="'+(midY+5)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="15" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
+  h+='<text x="'+poolCX+'" y="'+(midY+18)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="7" fill="rgba(255,255,255,0.4)">CT $'+ct.toFixed(0)+'</text>';
 
   svg.innerHTML=h;
 }
@@ -2143,6 +2135,20 @@ function scheduleHoursSave(){
 }
 
 
+async function adminCall(action, extra={}){
+  try{
+    const res=await fetch(ADMIN_WORKER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action,callerToken:window._authToken,...extra})
+    });
+    return await res.json();
+  }catch(e){
+    console.warn('Worker call failed:',e.message);
+    return {error:e.message};
+  }
+}
+
 async function adminLoadUsers(){
   const list=document.getElementById('adminUserList');
   if(!list)return;
@@ -2175,6 +2181,231 @@ async function adminLoadUsers(){
     list.innerHTML='<p style="color:var(--red);font-size:13px;">Error: '+e.message+'</p>';
   }
 }
+
+// ─── AUTO LOAD CURRENT PERIOD ───
+async function autoLoadCurrentPeriod(){
+  const label=getCurrentPeriodLabel();
+  try{
+    await autoFetchRevenue(label);
+    const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+    if(periods.length){
+      const p=periods[0];
+      window._currentPeriodId=p.id;
+      const exps=await sbAuth('kf_expenses?period_id=eq.'+p.id+'&select=*&order=created_at.asc');
+      if(exps.length){
+        expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount!=null?String(e.amount):'',receiptUrl:e.receipt_url||'',receiptFile:null,dbId:e.id,periodId:p.id}));
+        expCounter=expenses.length+10;
+        renderExpenses();
+      }
+    }
+    calculate();
+  }catch(e){console.warn('Auto-load error:',e.message);calculate();}
+}
+
+// ─── RECIPE FUNCTIONS ───
+async function loadRecipe(){
+  const id=document.getElementById('recipeSelect').value;
+  if(!id)return;
+  const status=document.getElementById('recipeStatus');
+  if(status)status.textContent='Loading...';
+  try{
+    const recipes=await sbAuth('kf_recipes?id=eq.'+id+'&select=*');
+    const recipe=recipes[0];
+    if(!recipe)return;
+    const ings=await sbAuth('kf_recipe_ingredients?recipe_id=eq.'+id+'&order=sort_order.asc');
+    document.getElementById('recipeName').value=recipe.name;
+    document.getElementById('batchSize').value=recipe.batch_size||20;
+    document.getElementById('markupPct').value=recipe.markup_pct||40;
+    document.getElementById('laborRate').value=recipe.labor_rate||0;
+    document.getElementById('batchHours').value=recipe.batch_hours||0;
+    bulkIngs=ings.filter(i=>i.ingredient_type==='bulk').map((i,idx)=>({id:idx+1,name:i.name||'',cost:i.cost||'',yield:i.yield_pastas||''}));
+    specIngs=ings.filter(i=>i.ingredient_type==='specialty').map((i,idx)=>({id:idx+100,name:i.name||'',cost:i.cost||'',purchaseSize:i.purchase_size||'',usedPer:i.used_per||'',unit:i.unit||'g'}));
+    if(!bulkIngs.length)bulkIngs=[{id:1,name:'',cost:'',yield:''}];
+    if(!specIngs.length)specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
+    renderBulkIngs();renderSpecIngs();calcIngredients();
+    if(status){status.textContent='✓ Loaded';setTimeout(()=>{status.textContent='';},2000);}
+    toast('Recipe loaded: '+recipe.name);
+  }catch(e){toast('Could not load recipe',true);}
+}
+
+async function saveRecipe(){
+  const name=document.getElementById('recipeName').value.trim();
+  const status=document.getElementById('recipeStatus');
+  if(!name){toast('Enter a recipe name first',true);return;}
+  if(status)status.textContent='Saving...';
+  try{
+    const recipeData={name,batch_size:parseFloat(document.getElementById('batchSize').value)||20,markup_pct:parseFloat(document.getElementById('markupPct').value)||40,labor_rate:parseFloat(document.getElementById('laborRate').value)||0,batch_hours:parseFloat(document.getElementById('batchHours').value)||0,created_by:currentProfile?.name||'',updated_at:new Date().toISOString()};
+    const existing=await sbAuth('kf_recipes?name=eq.'+encodeURIComponent(name)+'&select=id');
+    let recipeId;
+    if(existing.length){
+      recipeId=existing[0].id;
+      await sbAuth('kf_recipes?id=eq.'+recipeId,{method:'PATCH',body:JSON.stringify(recipeData)});
+      await sbAuth('kf_recipe_ingredients?recipe_id=eq.'+recipeId,{method:'DELETE',headers:{'Prefer':''}});
+    } else {
+      const created=await sbAuth('kf_recipes',{method:'POST',body:JSON.stringify(recipeData)});
+      recipeId=created[0].id;
+    }
+    const ingRows=[
+      ...bulkIngs.filter(i=>i.name||i.cost).map((i,idx)=>({recipe_id:recipeId,ingredient_type:'bulk',name:i.name,cost:parseFloat(i.cost)||0,yield_pastas:parseFloat(i.yield)||0,sort_order:idx})),
+      ...specIngs.filter(i=>i.name||i.cost).map((i,idx)=>({recipe_id:recipeId,ingredient_type:'specialty',name:i.name,cost:parseFloat(i.cost)||0,purchase_size:parseFloat(i.purchaseSize)||0,used_per:parseFloat(i.usedPer)||0,unit:i.unit||'g',sort_order:idx+100}))
+    ];
+    if(ingRows.length)await sbAuth('kf_recipe_ingredients',{method:'POST',body:JSON.stringify(ingRows)});
+    if(status){status.textContent='✓ Saved';setTimeout(()=>{status.textContent='';},2000);}
+    toast('Recipe saved: '+name);
+    loadRecipeList();
+  }catch(e){if(status)status.textContent='Failed';toast('Save failed: '+e.message,true);}
+}
+
+async function deleteRecipe(){
+  const id=document.getElementById('recipeSelect').value;
+  const name=document.getElementById('recipeName').value.trim();
+  if(!id){toast('Select a recipe to delete first',true);return;}
+  if(!confirm('Delete recipe "'+name+'"? This cannot be undone.'))return;
+  try{
+    await sbAuth('kf_recipes?id=eq.'+id,{method:'DELETE',headers:{'Prefer':''}});
+    document.getElementById('recipeSelect').value='';
+    document.getElementById('recipeName').value='';
+    bulkIngs=[{id:1,name:'',cost:'',yield:''}];
+    specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
+    renderBulkIngs();renderSpecIngs();calcIngredients();
+    toast('Recipe deleted');loadRecipeList();
+  }catch(e){toast('Delete failed: '+e.message,true);}
+}
+
+async function loadRecipeList(){
+  try{
+    const recipes=await sbAuth('kf_recipes?select=*&order=name.asc');
+    const sel=document.getElementById('recipeSelect');
+    if(!sel)return;
+    sel.innerHTML='<option value="">— Load a saved recipe —</option>';
+    recipes.forEach(r=>{
+      const opt=document.createElement('option');
+      opt.value=r.id;opt.textContent=r.name;
+      sel.appendChild(opt);
+    });
+  }catch(e){console.warn('Could not load recipes:',e.message);}
+}
+
+// ─── EXPORT CSV ───
+async function exportCSV(){
+  const label=getCurrentPeriodLabel();
+  const periodType=document.getElementById('periodType').value;
+  const revenue=parseFloat(document.getElementById('revenue').value)||0;
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const afterExp=revenue-totalExp;
+  const ct=Math.max(0,afterExp*CT);
+  const pool=Math.max(0,afterExp-ct);
+  const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
+  const hourlyRate=totalHours>0?pool/totalHours:0;
+  const rows=[];
+  rows.push('THE KILTED FARMERS LLC — DISTRIBUTION STATEMENT');
+  rows.push('Period,'+periodType+' — '+label);
+  rows.push('Generated,'+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
+  rows.push('');
+  rows.push('REVENUE');
+  rows.push('Source,Amount,Reported By,Notes,Date');
+  try{
+    const allRev=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
+    const now=new Date();
+    const monthStr=now.toLocaleString('en-US',{month:'long'});
+    const yearStr=String(now.getFullYear());
+    const revEntries=allRev.filter(e=>e.period_label===label||(e.period_label&&e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)));
+    revEntries.forEach(e=>{
+      const d=new Date(e.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      rows.push('"'+(e.source||'')+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.reported_by||'')+'","'+((e.notes||'').replace(/"/g,"'"))+'","'+d+'"');
+    });
+  }catch(err){}
+  rows.push('"TOTAL REVENUE","'+revenue.toFixed(2)+'","","",""');
+  rows.push('');
+  rows.push('EXPENSES');
+  rows.push('Description,Amount,Receipt');
+  expenses.filter(e=>e.name||e.amount).forEach(e=>{rows.push('"'+((e.name||'').replace(/"/g,"'"))+'","'+(parseFloat(e.amount)||0).toFixed(2)+'","'+(e.receiptUrl||'')+'"');});
+  rows.push('"TOTAL EXPENSES","'+totalExp.toFixed(2)+'",""');
+  rows.push('');
+  rows.push('COMMON TABLE');
+  rows.push('"Common Table (8%)","'+ct.toFixed(2)+'"');
+  rows.push('');
+  rows.push('DISTRIBUTABLE POOL');
+  rows.push('"Distributable Pool","'+pool.toFixed(2)+'"');
+  rows.push('"Total Hours Worked","'+totalHours.toFixed(2)+'"');
+  rows.push('"Effective Hourly Rate","'+hourlyRate.toFixed(2)+'"');
+  rows.push('');
+  rows.push('DISTRIBUTIONS');
+  rows.push('Member,Role,Hours,Percentage,Distribution,Effective Rate');
+  members.forEach(m=>{
+    const hrs=getMemberHours(m);const pct=totalHours>0?hrs/totalHours:0;const share=pool*pct;const rate=hrs>0?share/hrs:0;
+    rows.push('"'+(m.name||'')+'","'+(m.role||'')+'","'+hrs.toFixed(2)+'","'+(pct*100).toFixed(2)+'%","'+share.toFixed(2)+'","'+rate.toFixed(2)+'"');
+  });
+  rows.push('');
+  rows.push('TIME LOG');
+  rows.push('Member,Type,Date/Clock In,Clock Out,Hours,Notes');
+  members.forEach(m=>{
+    m.punches.forEach(p=>{
+      const inT=p.in?new Date(p.in).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      const outT=p.out?new Date(p.out).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'Open';
+      const hrs=p.in&&p.out?((new Date(p.out)-new Date(p.in))/3600000).toFixed(2):'';
+      rows.push('"'+m.name+'","Punch","'+inT+'","'+outT+'","'+hrs+'",""');
+    });
+    m.dailyEntries.forEach(d=>{rows.push('"'+m.name+'","Daily","'+(d.date||'')+'","","'+(d.hours||0)+'","'+((d.note||'').replace(/"/g,"'"))+'"');});
+  });
+  const csv=rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='KiltedFarmers_'+label.replace(/\s+/g,'_')+'_'+periodType+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('CSV exported');
+}
+
+// ─── ADMIN FUNCTIONS ───
+async function adminCreateUser(){
+  const name=document.getElementById('newUserName').value.trim();
+  const email=document.getElementById('newUserEmail').value.trim();
+  const password=document.getElementById('newUserPassword').value.trim();
+  const role=document.getElementById('newUserRole').value;
+  const status=document.getElementById('adminCreateStatus');
+  if(!name||!email||!password){status.className='status-bar error';status.textContent='Name, email and password required.';return;}
+  if(password.length<6){status.className='status-bar error';status.textContent='Password must be at least 6 characters.';return;}
+  status.className='status-bar loading';status.textContent='Creating login for '+name+'...';
+  const result=await adminCall('create_user',{name,email,password,role});
+  if(result.success){
+    status.className='status-bar success';
+    status.textContent='Login created for '+name+'. They can sign in at thepeoplesvoices.org/kilted_farmers_v5.html';
+    document.getElementById('newUserName').value='';
+    document.getElementById('newUserEmail').value='';
+    document.getElementById('newUserPassword').value='';
+    setTimeout(()=>{status.className='status-bar';},5000);
+    adminLoadUsers();
+  } else {status.className='status-bar error';status.textContent='Error: '+(result.error||'Unknown error');}
+}
+
+async function adminUpdateRole(userId,name,role){
+  const result=await adminCall('update_role',{userId,role,name});
+  if(result.success)toast('Role updated for '+name);
+  else toast('Failed to update role',true);
+}
+
+async function adminResetPassword(userId,name){
+  const pw=prompt('New password for '+name+' (min 6 chars):');
+  if(!pw||pw.length<6){toast('Password too short',true);return;}
+  const result=await adminCall('update_password',{userId,password:pw});
+  if(result.success)toast('Password updated for '+name);
+  else toast('Failed to update password',true);
+}
+
+async function adminDeactivate(userId,name){
+  if(!confirm('Deactivate '+name+'? They will not be able to sign in.'))return;
+  const result=await adminCall('deactivate_user',{userId,name});
+  if(result.success){toast(name+' deactivated');adminLoadUsers();}
+  else toast('Failed to deactivate',true);
+}
+
+async function adminReactivate(userId,name){
+  const result=await adminCall('reactivate_user',{userId,name});
+  if(result.success){toast(name+' reactivated');adminLoadUsers();}
+  else toast('Failed to reactivate',true);
+}
+
 </script>
 </body>
 </html>
