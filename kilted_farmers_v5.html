@@ -2031,8 +2031,9 @@ function drawRiver(revEntries, expenseList, pool, ct){
   h+='</defs>';
 
   // ── MAIN RIVER (drawn first, behind everything) ──
+  // Use solid color - gradient url refs don't work in innerHTML-assigned SVGs in Safari
   h+='<path d="M '+riverX1+' '+midY+' L '+riverX2+' '+midY+'"';
-  h+=' fill="none" stroke="url(#rg2)" stroke-width="'+mainW+'" stroke-linecap="square" filter="url(#gs)"/>';
+  h+=' fill="none" stroke="#2D6A4F" stroke-width="'+mainW+'" stroke-linecap="square" opacity="0.85"/>';
 
   // ── REVENUE TRIBUTARIES (merge into left end of river) ──
   const srcColors=['#52B788','#40916C','#95D5B2','#2D6A4F','#B7E4C7'];
@@ -2048,7 +2049,7 @@ function drawRiver(revEntries, expenseList, pool, ct){
       const tx=10;
       // Cubic bezier: start horizontal then curve into river start
       h+='<path d="M '+tx+' '+ty+' C '+(tx+60)+' '+ty+' '+(riverX1-20)+' '+midY+' '+riverX1+' '+midY+'"';
-      h+=' fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#gs)" opacity="0.9"/>';
+      h+=' fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.9"/>';
       // Label above the tributary start
       h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2-5)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">'+src+'</text>';
       h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2+7)+'" font-family="Playfair Display,serif" font-size="10" fill="#40916C">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
@@ -2074,7 +2075,7 @@ function drawRiver(revEntries, expenseList, pool, ct){
   }
 
   // ── POOL ──
-  h+='<circle cx="'+poolCX+'" cy="'+poolCY+'" r="'+poolR+'" fill="url(#pg2)" filter="url(#gs)"/>';
+  h+='<circle cx="'+poolCX+'" cy="'+poolCY+'" r="'+poolR+'" fill="#1B4332" opacity="0.95"/>';
   h+='<text x="'+poolCX+'" y="'+(poolCY-16)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.6)" letter-spacing="2">THE POOL</text>';
   h+='<text x="'+poolCX+'" y="'+(poolCY+5)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="19" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
   h+='<text x="'+poolCX+'" y="'+(poolCY+21)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.45)">CT $'+ct.toFixed(0)+' aside</text>';
@@ -2141,6 +2142,41 @@ function scheduleHoursSave(){
   },800);
 }
 
+
+async function adminLoadUsers(){
+  const list=document.getElementById('adminUserList');
+  if(!list)return;
+  list.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
+  try{
+    const result=await adminCall('list_users');
+    if(!result.users){
+      list.innerHTML='<p style="color:var(--red);font-size:13px;">Could not load users. Check Worker is deployed.</p>';return;
+    }
+    if(!result.users.length){
+      list.innerHTML='<p style="color:var(--mid);font-size:13px;">No team members found in KF profiles.</p>';return;
+    }
+    list.innerHTML=result.users.map(u=>`
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--cream-dark);flex-wrap:wrap;">
+        <div style="flex:1;min-width:160px;">
+          <div style="font-weight:700;font-size:14px;">${u.name||'—'} ${u.banned?'<span style="color:var(--red);font-size:11px;">(inactive)</span>':''}</div>
+          <div style="font-size:12px;color:var(--mid);">${u.email}</div>
+          <div style="font-size:11px;color:var(--mid);">Last sign in: ${u.last_sign_in?new Date(u.last_sign_in).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'Never'}</div>
+        </div>
+        <select onchange="adminUpdateRole('${u.id}','${u.name}',this.value)" style="padding:4px 8px;border:1.5px solid var(--rule);border-radius:5px;font-size:12px;background:var(--cream);">
+          <option ${u.role==='Contributor'?'selected':''}>Contributor</option>
+          <option ${u.role==='Steward'?'selected':''}>Steward</option>
+        </select>
+        <button onclick="adminResetPassword('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--tan);border-radius:6px;background:transparent;color:var(--tan);font-size:12px;cursor:pointer;">Reset PW</button>
+        ${!u.banned
+          ?'<button onclick="adminDeactivate(''+u.id+'',''+u.name+'')" style="padding:5px 10px;border:1.5px solid var(--red);border-radius:6px;background:transparent;color:var(--red);font-size:12px;cursor:pointer;">Deactivate</button>'
+          :'<button onclick="adminReactivate(''+u.id+'',''+u.name+'')" style="padding:5px 10px;border:1.5px solid var(--green);border-radius:6px;background:transparent;color:var(--green);font-size:12px;cursor:pointer;">Reactivate</button>'
+        }
+      </div>
+    `).join('');
+  }catch(e){
+    list.innerHTML='<p style="color:var(--red);font-size:13px;">Error: '+e.message+'</p>';
+  }
+}
 </script>
 </body>
 </html>
