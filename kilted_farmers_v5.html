@@ -1766,38 +1766,47 @@ function buildPrintSheet(){
 // ─── CLEAR PERIOD DATA ───
 async function clearPeriodData(){
   const label=getCurrentPeriodLabel();
-  if(!confirm('This will permanently delete ALL saved data for "'+label+'" including revenue entries, expenses, time entries and distributions. This cannot be undone. Are you sure?'))return;
+  if(!confirm('This will permanently delete ALL data for "'+label+'" — revenue, expenses, hours, history. Cannot be undone. Are you sure?'))return;
 
   const status=document.getElementById('distStatus');
   status.className='status-bar loading';
   status.textContent='Clearing period data...';
 
   try{
-    // Get all period records for this label
+    // 1. Get all period records for this label
     const periods=await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&select=id');
 
-    // Delete time entries, expenses, distributions for each period
+    // 2. Delete linked records for each period
     for(const p of periods){
       await sbAuth('kf_time_entries?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
       await sbAuth('kf_expenses?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
       await sbAuth('kf_distributions?period_id=eq.'+p.id,{method:'DELETE',headers:{'Prefer':''}});
     }
 
-    // Delete the period records themselves
-    await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label),{method:'DELETE',headers:{'Prefer':''}});
+    // 3. Delete period records
+    if(periods.length){
+      await sbAuth('kf_pay_periods?period_label=eq.'+encodeURIComponent(label),{method:'DELETE',headers:{'Prefer':''}});
+    }
 
-    // Delete revenue entries for this period
-    const monthStr=new Date().toLocaleString('en-US',{month:'long'});
-    const yearStr=String(new Date().getFullYear());
-    const revEntries=await sbAuth('kf_revenue_entries?select=id');
-    const toDelete=revEntries.filter(e=>{
-      // We can't filter by period_label here easily so get all and filter
-      return true;
+    // 4. Delete ALL revenue entries that match this month/year
+    // Fetch all and delete ones matching current month+year (handles label format variations)
+    const now=new Date();
+    const monthStr=now.toLocaleString('en-US',{month:'long'});
+    const yearStr=String(now.getFullYear());
+    const allRev=await sbAuth('kf_revenue_entries?select=id,period_label&order=created_at.asc&limit=1000');
+    const toDelete=allRev.filter(e=>{
+      if(!e.period_label)return false;
+      return e.period_label===label||
+        (e.period_label.includes(monthStr)&&e.period_label.includes(yearStr));
     });
-    await sbAuth('kf_revenue_entries?period_label=eq.'+encodeURIComponent(label),{method:'DELETE',headers:{'Prefer':''}});
+    // Delete each matching entry
+    for(const e of toDelete){
+      await sbAuth('kf_revenue_entries?id=eq.'+e.id,{method:'DELETE',headers:{'Prefer':''}});
+    }
 
-    // Reset local state
+    // 5. Reset ALL local state — set flag to prevent autoLoad from reloading
     window._currentPeriodId=null;
+    window._periodJustCleared=true;
     document.getElementById('revenue').value='';
     expenses=[
       {id:1,name:'Ingredients',amount:'',receiptUrl:'',receiptFile:null},
@@ -1809,13 +1818,34 @@ async function clearPeriodData(){
     renderExpenses();renderTeam();renderClock();calculate();
 
     status.className='status-bar success';
-    status.textContent='✓ Period data cleared. Starting fresh.';
-    toast('Period data cleared');
-    setTimeout(()=>{status.className='status-bar';},4000);
-    refreshDashboard();
+    status.textContent='✓ Cleared. All data for '+label+' has been removed.';
+    toast('Period cleared — starting fresh');
+
+    // Stop auto-refresh so it doesn't reload cleared data
+    if(dashInterval)clearInterval(dashInterval);
+
+    // Clear the dashboard display manually without fetching
+    document.getElementById('dash-week-pool').textContent='$0.00';
+    document.getElementById('dash-accum-total').textContent='$0.00';
+    document.getElementById('dash-pool').textContent='$0';
+    document.getElementById('dash-ct').textContent='$0';
+    document.getElementById('dash-revenue-list') && (document.getElementById('dash-revenue-list').innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No revenue logged yet.</div>');
+    document.getElementById('dash-expense-list') && (document.getElementById('dash-expense-list').innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No expenses recorded yet.</div>');
+    document.getElementById('dash-total-revenue').textContent='$0.00';
+    document.getElementById('dash-total-expenses').textContent='$0.00';
+    drawRiver([],[],0,0);
+
+    // Re-enable auto-refresh after 6 seconds (enough time for Supabase to settle)
+    setTimeout(()=>{
+      status.className='status-bar';
+      window._periodJustCleared=false;
+      dashInterval=setInterval(refreshDashboard,60000);
+    },6000);
+
   }catch(e){
     status.className='status-bar error';
     status.textContent='Error clearing: '+e.message;
+    console.error('Clear error:',e);
   }
 }
 
@@ -1855,6 +1885,8 @@ function inWeek(dateStr,bounds){
 
 // ─── DASHBOARD ───
 async function refreshDashboard(){
+  // Don't refresh if period was just cleared
+  if(window._periodJustCleared)return;
   const label=getCurrentPeriodLabel();
   document.getElementById('dash-period-label').textContent=label;
 
@@ -2180,6 +2212,8 @@ async function adminLoadUsers(){
 
 // ─── AUTO LOAD CURRENT PERIOD ───
 async function autoLoadCurrentPeriod(){
+  // Don't reload if we just cleared
+  if(window._periodJustCleared){console.log('Skipping autoLoad — period just cleared');return;}
   const label=getCurrentPeriodLabel();
   try{
     await autoFetchRevenue(label);
