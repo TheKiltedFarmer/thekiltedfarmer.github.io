@@ -970,7 +970,7 @@ let expenses=[
 let members=[
   {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
   {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
-  {id:3,dbId:null,name:'Rochelle',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
+  {id:3,dbId:null,name:'Richelle Beatty',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
   {id:4,dbId:null,name:'Bev',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
   {id:5,dbId:null,name:'Keir',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
 ];
@@ -1168,7 +1168,7 @@ async function loadTeamMembers(){
   members=[
     {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
     {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
-    {id:3,dbId:null,name:'Rochelle',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
+    {id:3,dbId:null,name:'Richelle Beatty',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
     {id:4,dbId:null,name:'Bev',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
     {id:5,dbId:null,name:'Keir',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]}
   ];
@@ -1801,7 +1801,7 @@ function resetAll(){
   members=[
     {id:1,dbId:null,name:'Justin',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
     {id:2,dbId:null,name:'Jessica',role:'Steward',manualHours:'',punches:[],dailyEntries:[]},
-    {id:3,dbId:null,name:'Rochelle',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
+    {id:3,dbId:null,name:'Richelle Beatty',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
     {id:4,dbId:null,name:'Bev',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]},
     {id:5,dbId:null,name:'Keir',role:'Contributor',manualHours:'',punches:[],dailyEntries:[]}
   ];
@@ -2376,6 +2376,25 @@ async function adminReactivate(userId,name){
   const result=await adminCall('reactivate_user',{userId,name});
   if(result.success){toast(name+' reactivated');adminLoadUsers();}
   else toast('Failed to reactivate',true);
+}
+
+
+// ─── AUTO INIT ───
+async function autoInit(){
+  document.getElementById('periodType').value='Monthly';
+  renderExpenses();
+  renderBulkIngs();
+  renderSpecIngs();
+  renderTeam();renderClock();
+  await loadTeamMembers();
+  await loadCurrentPeriodHours();
+  renderTeam();renderClock();calculate();
+  await autoLoadCurrentPeriod();
+  await loadRecipeList();
+  await new Promise(r=>setTimeout(r,500));
+  await refreshDashboard();
+  if(dashInterval)clearInterval(dashInterval);
+  dashInterval=setInterval(refreshDashboard,60000);
 }
 
 </script>
