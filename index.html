@@ -793,7 +793,7 @@ function PrivacyModal({onClose}) {
           ['What we do NOT collect',
            'We do not collect your street address, phone number, social security number, financial information, or any government-issued ID. We do not track your browsing history or use third-party advertising trackers.'],
           ['How your data is used',
-           'Your data is used solely to operate The People\'s Voice — to verify you are a Jackson County area resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes.'],
+           "Your data is used solely to operate The People's Voice — to verify you are a "+getCurrentCounty().name+" area resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes."],
           ['Who can see your information',
            'Your display name and public activity (votes marked public, comments, ideas) are visible to other logged-in members. Your email address is never displayed publicly. "Anonymous" votes are not displayed publicly but are stored in our database associated with your account for fraud prevention.'],
           ['Neighbor Directory',
@@ -982,7 +982,7 @@ function AIBreakdown({bill}) {
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           model:'claude-sonnet-4-6',max_tokens:900,
-          system:'You are a nonpartisan civic analyst specializing in local impact. Respond ONLY with valid JSON, no markdown. Be specific — name actual groups, income levels, businesses, and geographic areas affected. Schema: {"plain":"2-3 plain sentences any resident can understand","benefits":[{"group":"specific group name","detail":"how they benefit specifically"}],"concerns":[{"group":"specific group name","detail":"the specific concern or cost they bear"}],"who_gains_most":"1 sentence about who benefits most and why","who_pays":"1 sentence about who bears the cost or tradeoff","fineprint":["up to 3 specific gotchas or details worth knowing"],"local":"1-2 sentences on specific Jackson County / local impact","bottom":"one honest, plain sentence summary"}',
+          system:'You are a nonpartisan civic analyst specializing in local impact. Respond ONLY with valid JSON, no markdown. Be specific — name actual groups, income levels, businesses, and geographic areas affected. Schema: {"plain":"2-3 plain sentences any resident can understand","benefits":[{"group":"specific group name","detail":"how they benefit specifically"}],"concerns":[{"group":"specific group name","detail":"the specific concern or cost they bear"}],"who_gains_most":"1 sentence about who benefits most and why","who_pays":"1 sentence about who bears the cost or tradeoff","fineprint":["up to 3 specific gotchas or details worth knowing"],"local":"1-2 sentences on specific '+getCurrentCounty().name+' / local impact","bottom":"one honest, plain sentence summary"}',
           messages:[{role:'user',content:'Analyze this civic proposal for '+bill.jurisdiction+':\nTitle: '+bill.title+'\nStatus: '+bill.status+'\nSponsor: '+bill.sponsor+'\nSummary: '+bill.summary+'\nText: '+(bill.full_text||bill.summary)+'\n\nBe specific about WHO benefits and WHO pays. Name actual groups - farmers, renters, landlords, small businesses, low-income residents, seniors, developers, etc.'}]
         })
       });
@@ -1068,7 +1068,7 @@ function AIChat({bill}) {
   const bottomRef = useRef(null);
 
   const SUGGESTIONS = [
-    'Who does this affect most in Jackson County?',
+    'Who does this affect most in '+getCurrentCounty().name+'?',
     'What would happen if this fails?',
     'Are there similar laws elsewhere in Michigan?',
     'What are the arguments for and against?',
@@ -1094,7 +1094,7 @@ function AIChat({bill}) {
         body:JSON.stringify({
           model:'claude-sonnet-4-6',
           max_tokens:600,
-          system:`You are a neutral, nonpartisan civic assistant helping residents of Jackson County, Michigan understand local legislation. You answer questions about this specific bill clearly and fairly, presenting multiple perspectives where relevant. Never tell someone how to vote. Always be honest about uncertainty. Keep answers concise — 2-4 paragraphs max.
+          system:`You are a neutral, nonpartisan civic assistant helping residents of ${getCurrentCounty().name}, Michigan understand local legislation. You answer questions about this specific bill clearly and fairly, presenting multiple perspectives where relevant. Never tell someone how to vote. Always be honest about uncertainty. Keep answers concise — 2-4 paragraphs max.
 
 Bill: ${bill.title}
 Jurisdiction: ${bill.jurisdiction}
@@ -1595,7 +1595,8 @@ function SourceBadge({url}) {
 
 // AI neutralize a news story via Cloudflare Worker
 async function neutralizeStory(title, url, summary, category) {
-  const prompt = `You are a nonpartisan civic editor for The People's Voice, a community platform serving Jackson County, Michigan.
+  const countyName = getCurrentCounty().name;
+  const prompt = `You are a nonpartisan civic editor for The People's Voice, a community platform serving ${countyName}, Michigan.
 
 A community member submitted this news story:
 Title: "${title}"
@@ -1607,10 +1608,10 @@ Your job — respond ONLY in this exact JSON format with no extra text:
 {
   "neutral_headline": "A neutral headline under 12 words",
   "neutral_summary": "2-3 factual sentences. Include key numbers/dates. Explain what happened and why it matters.",
-  "local_relevance": "One sentence: how this concretely affects Jackson County residents.",
+  "local_relevance": "One sentence: how this concretely affects ${countyName} residents.",
   "original_bias": "left-leaning or right-leaning or neutral",
   "category": "${category}",
-  "poll_question": "A clear yes/no civic question for Jackson County residents to vote on. Start with 'Do you support...' or 'Should the US...' or 'Do you believe...' Keep it under 12 words.",
+  "poll_question": "A clear yes/no civic question for ${countyName} residents to vote on. Start with 'Do you support...' or 'Should the US...' or 'Do you believe...' Keep it under 12 words.",
   "poll_benefits": ["Benefit 1 (one sentence, factual)", "Benefit 2 (one sentence, factual)", "Benefit 3 (one sentence, factual)"],
   "poll_consequences": ["Risk/consequence 1 (one sentence, factual)", "Risk/consequence 2 (one sentence, factual)", "Risk/consequence 3 (one sentence, factual)"]
 }
@@ -1708,7 +1709,7 @@ function NewsStoryCard({story, user, profile}) {
 
       // Local relevance
       h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:12,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6}},
-        h('span',{style:{fontWeight:700,color:'#1a1a2e'}},"\uD83D\uDCCD Jackson County: "),story.local_relevance
+        h('span',{style:{fontWeight:700,color:'#1a1a2e'}},"\uD83D\uDCCD "+getCurrentCounty().name+": "),story.local_relevance
       ),
 
       // Poll
@@ -1753,7 +1754,7 @@ function NewsStoryCard({story, user, profile}) {
                 )
               : h('div',{style:{textAlign:'center',padding:'8px 0',fontSize:12,color:'#888',fontStyle:'italic',fontFamily:"'Lora',serif"}},"Sign in to vote on this question")
             : h('div',null,
-                h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:"'Lora',serif",marginBottom:8,textAlign:'center'}},"\u2713 Your vote recorded — here's how Jackson County feels:"),
+                h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:"'Lora',serif",marginBottom:8,textAlign:'center'}},"\u2713 Your vote recorded — here's how "+getCurrentCounty().name+" feels:"),
                 [['yes',"\u2705 Yes",pollCounts.yes,'#1a6b3c'],['no',"\u274C No",pollCounts.no,'#c0392b'],['unsure',"\uD83E\uDD14 Unsure",pollCounts.unsure,'#888']].map(([choice,label,count,color])=>
                   h('div',{key:choice,style:{marginBottom:8}},
                     h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
@@ -1940,7 +1941,7 @@ function NewsTab({user, rep, profile}) {
 
   const loadStories = async()=>{
     setLoading(true);
-    let q = sb.from('news_stories').select('*').eq('approved',true).order('created_at',{ascending:false}).limit(20);
+    let q = sb.from('news_stories').select('*').eq('approved',true).eq('county', countyTag()).order('created_at',{ascending:false}).limit(20);
     if(catFilter!=='all') q = q.eq('category',catFilter);
     const {data} = await q;
     setStories(data||[]); setLoading(false);
@@ -2025,7 +2026,7 @@ function NewsTab({user, rep, profile}) {
         )
       ),
       h('div',{style:{marginBottom:14}},
-        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},"Why does this matter to Jackson County? (optional)"),
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},"Why does this matter to "+getCurrentCounty().name+"? (optional)"),
         h('textarea',{value:userContext,onChange:e=>setUserContext(e.target.value),rows:2,placeholder:'Local context helps the AI write a better relevance note...',
           style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
       ),
@@ -2074,7 +2075,7 @@ function WeekendEvents({bills}) {
     const fri = new Date(today); fri.setDate(today.getDate()+daysToFri);
     const sun = new Date(fri); sun.setDate(fri.getDate()+2);
     sb.from('events').select('id,title,event_date,event_time,location,category')
-      .eq('approved',true).is('deleted_at',null).gte('event_date',fri.toISOString().slice(0,10)).lte('event_date',sun.toISOString().slice(0,10))
+      .eq('approved',true).is('deleted_at',null).eq('county', countyTag()).gte('event_date',fri.toISOString().slice(0,10)).lte('event_date',sun.toISOString().slice(0,10))
       .order('event_date',{ascending:true}).limit(6)
       .then(({data})=>{ if(data&&data.length) setEvents(data); }).catch(()=>{});
   },[]);
@@ -2083,7 +2084,7 @@ function WeekendEvents({bills}) {
   return h('div',{style:{background:'linear-gradient(135deg,#1a1a2e,#2a1540)',borderRadius:12,padding:'16px 20px',marginBottom:16}},
     h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#f0c040',marginBottom:12,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
       '\uD83C\uDF89 What\'s Happening This Weekend?',
-      h('span',{style:{background:'rgba(240,192,64,.15)',border:'1px solid rgba(240,192,64,.2)',borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:400,color:'#8899aa'}},'Jackson County \u00b7 this weekend')
+      h('span',{style:{background:'rgba(240,192,64,.15)',border:'1px solid rgba(240,192,64,.2)',borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:400,color:'#8899aa'}},getCurrentCounty().name+' \u00b7 this weekend')
     ),
     h('div',{style:{display:'flex',gap:10,flexWrap:'wrap'}},
       events.map(e=>h('div',{key:e.id,style:{background:'rgba(255,255,255,.07)',border:'1px solid rgba(255,255,255,.12)',borderRadius:9,padding:'11px 14px',minWidth:170,flex:'1 1 170px'}},
@@ -2162,7 +2163,11 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
   const [viewingProfile, setViewingProfile] = useState(null); // userId to show in modal
 
   // ZIP codes that have dedicated chat rooms (mirrors CHAT_ROOMS)
-  const ZIP_CHAT_ROOMS = new Set(['49201','49202','49203','49237','49230','49285']);
+  const ZIP_CHAT_ROOMS = new Set(
+    chatRoomsForCounty(getCountyFromUrl() || DEFAULT_COUNTY)
+      .map(r => r.displayId)
+      .filter(z => /^\d{5}$/.test(z))
+  );
 
   // ── Load everything on mount ─────────────────────────────────────
   useEffect(()=>{ loadFeed(); },[userZip, user?.id]);
@@ -2189,24 +2194,24 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
 
       // 1. Recent community chat messages (excluding own)
       await safe(async()=>{
+        // Build the list of room IDs that belong to the current county.
+        // For Jackson (default county), rooms use legacy IDs (general, 49201, etc).
+        // For other counties, rooms are prefixed (calhoun-general, calhoun-49014).
+        const myCountyRooms = chatRoomsForCounty(countyTag()).map(r=>r.id);
         const {data} = await sb.from('community_chat')
           .select('id,room_id,user_id,display_name,content,created_at,parent_message_id,shared_event_id')
           .gte('created_at', since)
+          .in('room_id', myCountyRooms)
           .order('created_at',{ascending:false}).limit(limit);
         (data||[]).forEach(m=>{
           if(m.user_id === user?.id) return; // skip own actions
-          // Skip group rooms (they start with 'group-') in the public stream
-          // ZIP rooms (numeric) and 'general' are public-ish
-          const isZipRoom = /^\d{5}$/.test(m.room_id);
-          const isGeneral = m.room_id === 'general';
-          if(!isZipRoom && !isGeneral) return;
           results.push({
             id: 'chat-'+m.id,
             type: 'chat',
             actor_id: m.user_id,
             actor_name: m.display_name,
             verb: m.parent_message_id ? 'replied in' : (m.shared_event_id ? 'shared an event in' : 'posted in'),
-            target_label: isGeneral ? 'community chat' : (m.room_id+' chat'),
+            target_label: m.room_id.endsWith('-general') || m.room_id === 'general' ? 'community chat' : (m.room_id.split('-').pop()+' chat'),
             preview: (m.content||'').slice(0, 80),
             created_at: m.created_at,
             link_tab: 'connect'
@@ -2227,7 +2232,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         const billIds = [...new Set(data.map(v=>v.bill_id))];
         const [profilesRes, billsRes] = await Promise.all([
           sb.from('profiles').select('id,display_name').in('id', userIds),
-          sb.from('bills').select('id,title').in('id', billIds)
+          sb.from('bills').select('id,title').in('id', billIds).eq('county', countyTag())
         ]);
         const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
         const billMap = {}; (billsRes.data||[]).forEach(b=>billMap[b.id]=b);
@@ -2259,6 +2264,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .gte('created_at', since)
           .eq('approved', true)
           .is('deleted_at', null)
+          .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
         const userIds = [...new Set(data.map(e=>e.created_by).filter(Boolean))];
@@ -2288,6 +2294,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .select('id,name,created_by,resource_type,created_at')
           .gte('created_at', since)
           .is('deleted_at', null)
+          .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
         const userIds = [...new Set(data.map(r=>r.created_by).filter(Boolean))];
@@ -2315,6 +2322,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         const {data} = await sb.from('community_ideas')
           .select('id,title,created_by,created_at')
           .gte('created_at', since)
+          .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
         const userIds = [...new Set(data.map(i=>i.created_by).filter(Boolean))];
@@ -2345,7 +2353,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
         const billIds = [...new Set(data.map(c=>c.bill_id))];
-        const billsRes = await sb.from('bills').select('id,title').in('id', billIds);
+        const billsRes = await sb.from('bills').select('id,title').in('id', billIds).eq('county', countyTag());
         const billMap = {}; (billsRes.data||[]).forEach(b=>billMap[b.id]=b);
         data.forEach(c=>{
           if(c.user_id === user?.id) return;
@@ -2393,13 +2401,15 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .gte('created_at', new Date(Date.now()-7*86400000).toISOString()),
         // New bills in user's ZIP this week
         userZip ? sb.from('bills').select('id',{count:'exact',head:true})
+          .eq('county', countyTag())
           .gte('created_at', new Date(Date.now()-7*86400000).toISOString()) : Promise.resolve({count:0}),
         // Upcoming votes (bills with status like 'pending' or 'upcoming')
         sb.from('bills').select('id',{count:'exact',head:true})
+          .eq('county', countyTag())
           .in('status',['Council Vote Pending','Upcoming','Under Review']),
         // New neighbors in same ZIP joined last 14d
         userZip ? sb.from('profiles').select('id,display_name,zip,reputation,created_at')
-          .eq('zip', userZip).gte('created_at', new Date(Date.now()-14*86400000).toISOString())
+          .eq('zip', userZip).eq('county', countyTag()).gte('created_at', new Date(Date.now()-14*86400000).toISOString())
           .order('created_at',{ascending:false}).limit(8) : Promise.resolve({data:[]}),
         // Current user's connections
         user ? sb.from('neighbor_connections').select('neighbor_id').eq('user_id', user.id) : Promise.resolve({data:[]}),
@@ -2411,13 +2421,14 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         sb.from('participation_scores_7d').select('*')
           .gt('score', 0).order('score',{ascending:false}).limit(1),
         // Top recent news story
-        sb.from('news_stories').select('*').eq('approved',true)
+        sb.from('news_stories').select('*').eq('approved',true).eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(1).single(),
         // Recent neighborhood activity (joins + votes + proposals) — simplified
         sb.from('profiles').select('id,display_name,zip,created_at')
+          .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(6),
         // Total member count for stats
-        sb.from('profiles').select('id',{count:'exact',head:true})
+        sb.from('profiles').select('id',{count:'exact',head:true}).eq('county', countyTag())
       ]);
 
       // ── Compute featured & secondary bills ────────────────────────
@@ -2993,7 +3004,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
     h('div',{style:{display:'flex',alignItems:'baseline',justifyContent:'space-between',
       padding:'14px 4px 10px',borderBottom:'2px solid '+NAVY,marginBottom:16}},
       h('h3',{style:{fontFamily:FONT_D,fontSize:18,fontWeight:900,color:NAVY,margin:0,letterSpacing:'-.01em'}},
-        'This Week in Jackson County'),
+        'This Week in '+(getCurrentCounty().name)),
       h('span',{style:{fontSize:11,color:MUTED,textTransform:'uppercase',
         letterSpacing:'.12em',fontFamily:FONT_D,fontWeight:700}}, 'Live feed')
     ),
@@ -3577,7 +3588,7 @@ function ProposalsTab({user, profile, bills, onToast}) {
   const load = async()=>{
     setLoading(true);
     const [pendRes, approvedRes] = await Promise.all([
-      sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false}),
+      sb.from('pending_bills').select('*').eq('pending',true).eq('county', countyTag()).order('created_at',{ascending:false}),
       sb.from('bills').select('*').not('submitted_by_id','is',null).order('created_at',{ascending:false}).limit(30),
     ]);
     setPending(pendRes.data||[]);
@@ -4163,7 +4174,7 @@ function EventSharePicker({onPick, onClose, userZip}) {
   useEffect(()=>{
     const today = new Date().toISOString().slice(0,10);
     let q = sb.from('events').select('id,title,event_date,event_time,location,category,zip')
-      .eq('approved', true).is('deleted_at', null).gte('event_date', today)
+      .eq('approved', true).is('deleted_at', null).eq('county', countyTag()).gte('event_date', today)
       .order('event_date',{ascending:true}).limit(50);
     q.then(({data})=>{ setEvents(data||[]); setLoading(false); }).catch(()=>setLoading(false));
   },[]);
@@ -6395,15 +6406,52 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
 }
 
 // ── Neighbor Directory + Community Chat ───────────────────────────────────────
-const CHAT_ROOMS = [
-  {id:'general', label:'🏙 Jackson County', desc:'General community chat for all residents'},
-  {id:'49201', label:'📍 49201 · Jackson City', desc:'Downtown and central Jackson'},
-  {id:'49202', label:'📍 49202 · West Jackson', desc:'West side neighborhoods'},
-  {id:'49203', label:'📍 49203 · South Jackson', desc:'South Jackson area'},
-  {id:'49237', label:'📍 49237 · Concord', desc:'Village of Concord and surroundings'},
-  {id:'49230', label:'📍 49230 · Brooklyn', desc:'Brooklyn and Columbia Township'},
-  {id:'49285', label:'📍 49285 · Summit Twp', desc:'Summit Township area'},
-];
+// Chat rooms are now per-county. Each county has a 'general' room plus its
+// ZIP-specific rooms. Rooms are namespaced internally as `{county}-{zip}` so
+// rooms don't collide across counties.
+const COUNTY_CHAT_ROOMS = {
+  jackson: [
+    {id:'general', label:'🏙 Jackson County', desc:'General community chat for all residents'},
+    {id:'49201', label:'📍 49201 · Jackson City', desc:'Downtown and central Jackson'},
+    {id:'49202', label:'📍 49202 · West Jackson', desc:'West side neighborhoods'},
+    {id:'49203', label:'📍 49203 · South Jackson', desc:'South Jackson area'},
+    {id:'49237', label:'📍 49237 · Concord', desc:'Village of Concord and surroundings'},
+    {id:'49230', label:'📍 49230 · Brooklyn', desc:'Brooklyn and Columbia Township'},
+    {id:'49285', label:'📍 49285 · Summit Twp', desc:'Summit Township area'},
+  ],
+  calhoun: [
+    {id:'general', label:'🏙 Calhoun County', desc:'General community chat for all residents'},
+    {id:'49014', label:'📍 49014 · Battle Creek', desc:'Battle Creek city area'},
+    {id:'49015', label:'📍 49015 · Battle Creek (SW)', desc:'Southwest Battle Creek'},
+    {id:'49017', label:'📍 49017 · Battle Creek (N)', desc:'North Battle Creek'},
+    {id:'49037', label:'📍 49037 · Springfield', desc:'Springfield area'},
+    {id:'49068', label:'📍 49068 · Marshall', desc:'Marshall and surrounding townships'},
+    {id:'49224', label:'📍 49224 · Albion', desc:'Albion and surrounding area'},
+  ],
+};
+
+// Get the rooms for the current county. Returns an array.
+// IMPORTANT: Jackson rooms keep their legacy IDs ('general', '49201', etc.)
+// for backward compatibility with existing chat history. Other counties get
+// county-prefixed IDs like 'calhoun-general' to namespace them.
+function chatRoomsForCounty(countyId) {
+  const cid = countyId || DEFAULT_COUNTY;
+  const list = COUNTY_CHAT_ROOMS[cid] || COUNTY_CHAT_ROOMS[DEFAULT_COUNTY];
+  if(cid === DEFAULT_COUNTY) {
+    // Default county (Jackson) — keep legacy IDs unchanged
+    return list.map(r => ({...r, displayId: r.id}));
+  }
+  // Other counties — prefix to namespace
+  return list.map(r => ({
+    ...r,
+    id: cid + '-' + r.id,
+    displayId: r.id,
+  }));
+}
+
+// Legacy compatibility: CHAT_ROOMS still exists, but it's now a getter for
+// the current county's rooms based on the URL.
+const CHAT_ROOMS = chatRoomsForCounty(getCountyFromUrl() || DEFAULT_COUNTY);
 
 // ── Chat activity dot helpers (localStorage) ──────────────────────────────────
 const SEEN_KEY = r => 'chat_seen_'+r;
@@ -6466,7 +6514,7 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
 
   // Load neighbors
   useEffect(()=>{
-    sb.from('profiles').select('id,display_name,zip,reputation,avatar_url,tagline,bio,is_official,official_title,created_at,badges,show_in_directory').or('show_in_directory.is.null,show_in_directory.eq.true').order('reputation',{ascending:false}).limit(50).then(({data})=>{ setNeighbors(data||[]); setLoadingNeighbors(false); });
+    sb.from('profiles').select('id,display_name,zip,reputation,avatar_url,tagline,bio,is_official,official_title,created_at,badges,show_in_directory').eq('county', countyTag()).or('show_in_directory.is.null,show_in_directory.eq.true').order('reputation',{ascending:false}).limit(50).then(({data})=>{ setNeighbors(data||[]); setLoadingNeighbors(false); });
     // Load existing connections
     if(user?.id) {
       sb.from('neighbor_connections').select('neighbor_id').eq('user_id',user.id)
@@ -7455,7 +7503,7 @@ function PendingReviewQueue({onToast, setBills}) {
   const [loading, setLoading] = useState(true);
 
   useEffect(()=>{
-    sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false})
+    sb.from('pending_bills').select('*').eq('pending',true).eq('county', countyTag()).order('created_at',{ascending:false})
       .then(({data})=>{ if(data) setPending(data); setLoading(false); });
   },[]);
 
@@ -7814,7 +7862,7 @@ function EventsTab({user, profile, onToast}) {
   const load = async()=>{
     setLoading(true);
     try {
-      const {data} = await sb.from('events').select('*').is('deleted_at',null).order('event_date',{ascending:true});
+      const {data} = await sb.from('events').select('*').is('deleted_at',null).eq('county', countyTag()).order('event_date',{ascending:true});
       setEvents(data||[]);
     } catch(e) { /* table may not exist yet */ }
     setLoading(false);
@@ -7965,8 +8013,8 @@ function EventsTab({user, profile, onToast}) {
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
           view==='meetings'
             ? (meetingScope==='local' && userZip
-                ? 'Meetings in '+userZip+' and Jackson County. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.'
-                : 'All public meetings across Jackson County. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.')
+                ? 'Meetings in '+userZip+' and '+getCurrentCounty().name+'. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.'
+                : 'All public meetings across '+getCurrentCounty().name+'. ' + filtered.filter(e=>e.event_date>=today).length + ' upcoming.')
             : (filtered.filter(e=>e.event_date>=today).length + ' upcoming community events. Farmers markets, festivals, volunteer days, and more.')
         )
       ),
@@ -8166,7 +8214,7 @@ function EventsApprovalQueue({onToast}) {
 
   const load = async()=>{
     setLoading(true);
-    const {data} = await sb.from('events').select('*').eq('approved',false).order('created_at',{ascending:false});
+    const {data} = await sb.from('events').select('*').eq('approved',false).eq('county', countyTag()).order('created_at',{ascending:false});
     setEvents(data||[]);
     setLoading(false);
   };
@@ -8372,11 +8420,11 @@ function MapTab({user, profile}) {
           {data:resources},
           {data:members},
         ] = await Promise.all([
-          sb.from('events').select('id,title,event_date,event_time,location,zip,category').eq('approved',true).is('deleted_at',null).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
-          sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).is('deleted_at',null).limit(40),
-          sb.from('projects').select('id,title,supporter_count,proposer_name').limit(40),
-          sb.from('community_resources').select('id,name,category,address,lat,lng,description,hours,phone,website').eq('verified',true).is('deleted_at',null).limit(100),
-          sb.from('profiles').select('zip').not('zip','is',null).neq('zip',''),
+          sb.from('events').select('id,title,event_date,event_time,location,zip,category').eq('approved',true).is('deleted_at',null).eq('county', countyTag()).gte('event_date',today).order('event_date',{ascending:true}).limit(40),
+          sb.from('exchange_listings').select('id,title,listing_type,category,zip').eq('claimed',false).is('deleted_at',null).eq('county', countyTag()).limit(40),
+          sb.from('projects').select('id,title,supporter_count,proposer_name').eq('county', countyTag()).limit(40),
+          sb.from('community_resources').select('id,name,category,address,lat,lng,description,hours,phone,website').eq('verified',true).is('deleted_at',null).eq('county', countyTag()).limit(100),
+          sb.from('profiles').select('zip').not('zip','is',null).neq('zip','').eq('county', countyTag()),
         ]);
         // Count members per ZIP
         const membersByZip = {};
@@ -8646,7 +8694,7 @@ function MapTab({user, profile}) {
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
           zipFocus
             ? `Showing ${zipFocus} and the surrounding area. Pins inside your ZIP are highlighted.`
-            : "What's happening across Jackson County — events, exchange listings, projects, and neighbors.")
+            : "What's happening across "+getCurrentCounty().name+" — events, exchange listings, projects, and neighbors.")
       ),
       // ZIP focus controls
       h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
@@ -8906,7 +8954,7 @@ function ExchangeTab({user, profile, onToast}) {
     setLoading(true);
     try {
       const {data} = await sb.from('exchange_listings').select('*')
-        .is('deleted_at',null).order('created_at',{ascending:false}).limit(60);
+        .is('deleted_at',null).eq('county', countyTag()).order('created_at',{ascending:false}).limit(60);
       setListings(data||[]);
     } catch(e) { /* table may not exist yet */ }
     setLoading(false);
@@ -9440,6 +9488,7 @@ function QuestionAuthorPanel({user, profile, onToast}) {
 
   const loadQuestions = ()=>{
     sb.from('the_questions').select('*')
+      .eq('county', countyTag())
       .order('created_at',{ascending:false}).limit(20)
       .then(({data})=>{
         const all = data||[];
@@ -9732,8 +9781,8 @@ function TheQuestionTab({user, profile, onToast, onNavigate}) {
     setLoading(true);
     try {
       const [activeRes, archiveRes] = await Promise.all([
-        sb.from('the_questions').select('*').eq('status','active').limit(1).maybeSingle(),
-        sb.from('the_questions').select('*').eq('status','archived').order('active_from',{ascending:false}).limit(20),
+        sb.from('the_questions').select('*').eq('status','active').eq('county', countyTag()).limit(1).maybeSingle(),
+        sb.from('the_questions').select('*').eq('status','archived').eq('county', countyTag()).order('active_from',{ascending:false}).limit(20),
       ]);
       const active = activeRes.data;
       setActiveQ(active);
@@ -10109,7 +10158,7 @@ function NewsApprovalQueue({user, profile, onToast}) {
 
   const load = ()=>{
     setLoading(true);
-    sb.from('news_stories').select('*').eq('approved',false)
+    sb.from('news_stories').select('*').eq('approved',false).eq('county', countyTag())
       .order('created_at',{ascending:false}).limit(50)
       .then(({data})=>{ setPending(data||[]); setLoading(false); })
       .catch(()=>setLoading(false));
@@ -10216,7 +10265,7 @@ function MeetingPopulator({user, profile, onToast}) {
   const [editForm, setEditForm] = useState({});
 
   useEffect(()=>{
-    sb.from('meeting_drafts').select('*').eq('status','draft')
+    sb.from('meeting_drafts').select('*').eq('status','draft').eq('county', countyTag())
       .order('proposed_date',{ascending:true,nullsFirst:false})
       .then(({data})=>{ setDrafts(data||[]); setLoading(false); })
       .catch(()=>setLoading(false));
@@ -10792,7 +10841,7 @@ function ResourcesTab({user, profile, onToast, isAdmin}) {
   const set = k=>e=>setForm(f=>({...f,[k]:e.target.value}));
 
   useEffect(()=>{
-    sb.from('community_resources').select('*').eq('verified',true).is('deleted_at',null).order('category')
+    sb.from('community_resources').select('*').eq('verified',true).is('deleted_at',null).eq('county', countyTag()).order('category')
       .then(({data})=>{ setResources(data||[]); setLoading(false); })
       .catch(()=>setLoading(false));
   },[]);
@@ -10949,7 +10998,7 @@ function IdeasTab({user, profile, rep, onToast}) {
   const set = k=>e=>setForm(f=>({...f,[k]:e.target.value}));
 
   useEffect(()=>{
-    sb.from('community_ideas').select('*').order('upvotes',{ascending:false})
+    sb.from('community_ideas').select('*').eq('county', countyTag()).order('upvotes',{ascending:false})
       .then(({data})=>{ setIdeas(data||[]); setLoading(false); });
     if(user) sb.from('idea_upvotes').select('idea_id').eq('user_id',user.id)
       .then(({data})=>{ if(data){const v={};data.forEach(d=>v[d.idea_id]=true);setUpvoted(v);}});
@@ -11130,7 +11179,7 @@ function ResourceApprovalQueue({onToast}) {
   const [open, setOpen] = useState(false);
 
   useEffect(()=>{
-    sb.from('resource_suggestions').select('*').eq('status','pending').order('created_at',{ascending:false})
+    sb.from('resource_suggestions').select('*').eq('status','pending').eq('county', countyTag()).order('created_at',{ascending:false})
       .then(({data})=>setPending(data||[]))
       .catch(()=>{});
   },[]);
@@ -11368,7 +11417,7 @@ function OfficialManager({onToast}) {
   useEffect(()=>{
     // Try to load officials - gracefully handle missing column
     sb.from('profiles').select('id,display_name,email,is_official,official_title,zip')
-      .eq('is_official',true).order('display_name')
+      .eq('is_official',true).eq('county', countyTag()).order('display_name')
       .then(({data,error})=>{
         if(error && error.message && error.message.includes('is_official')) {
           setColMissing(true);
@@ -12480,7 +12529,7 @@ function App() {
   };
 
   const loadBills=async()=>{
-    const {data,error}=await sb.from('bills').select('*').order('id');
+    const {data,error}=await sb.from('bills').select('*').eq('county', countyTag()).order('id');
     if(data&&data.length){
       setBills(data);
     } else {
@@ -12643,12 +12692,12 @@ function App() {
         const [
           newBillsRes, newNeighborsRes, newIdeasRes, newNewsRes, unreadDmsRes
         ] = await Promise.all([
-          sb.from('bills').select('id',{count:'exact',head:true}).gte('created_at', sinceIso),
+          sb.from('bills').select('id',{count:'exact',head:true}).eq('county', countyTag()).gte('created_at', sinceIso),
           userZip
-            ? sb.from('profiles').select('id',{count:'exact',head:true}).eq('zip', userZip).gte('created_at', sinceIso).neq('id', authUser.id)
+            ? sb.from('profiles').select('id',{count:'exact',head:true}).eq('zip', userZip).eq('county', countyTag()).gte('created_at', sinceIso).neq('id', authUser.id)
             : Promise.resolve({count:0}),
-          sb.from('community_ideas').select('id',{count:'exact',head:true}).gte('created_at', sinceIso),
-          sb.from('news_stories').select('id',{count:'exact',head:true}).eq('approved',true).gte('created_at', sinceIso),
+          sb.from('community_ideas').select('id',{count:'exact',head:true}).eq('county', countyTag()).gte('created_at', sinceIso),
+          sb.from('news_stories').select('id',{count:'exact',head:true}).eq('approved',true).eq('county', countyTag()).gte('created_at', sinceIso),
           sb.from('direct_messages').select('id',{count:'exact',head:true}).eq('recipient_id', authUser.id).eq('read', false).gte('created_at', sinceIso),
         ]);
         const summary = {
