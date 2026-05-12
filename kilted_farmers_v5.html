@@ -1995,7 +1995,6 @@ async function refreshDashboard(){
 function drawRiver(revEntries, expenseList, pool, ct){
   const svg=document.getElementById('riverSvg');
   if(!svg)return;
-
   const W=700,H=240;
   svg.setAttribute('viewBox','0 0 '+W+' '+H);
 
@@ -2009,243 +2008,79 @@ function drawRiver(revEntries, expenseList, pool, ct){
   const validExp=expenseList.filter(e=>parseFloat(e.amount||0)>0);
   const totalExp=Math.max(validExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0),1);
 
-  // Layout
   const midY=H/2;
-  const riverStartX=sources.length?140:60;
-  const riverEndX=W-110;
-  const poolCX=W-65;
+  const mainW=18;
+  const poolCX=W-62;
   const poolCY=midY;
-  const poolR=48;
-  const mainStroke=16;
+  const poolR=50;
+  // River runs from leftEdge to pool
+  const riverX1=sources.length?150:40;
+  const riverX2=poolCX-poolR-4;
 
   let h='<defs>';
   h+='<linearGradient id="rg2" x1="0%" y1="0%" x2="100%" y2="0%">';
-  h+='<stop offset="0%" stop-color="#74C69D" stop-opacity="0.95"/>';
-  h+='<stop offset="100%" stop-color="#1B4332" stop-opacity="1"/>';
+  h+='<stop offset="0%" stop-color="#74C69D"/>';
+  h+='<stop offset="100%" stop-color="#1B4332"/>';
   h+='</linearGradient>';
   h+='<radialGradient id="pg2" cx="40%" cy="35%" r="65%">';
   h+='<stop offset="0%" stop-color="#52B788"/>';
   h+='<stop offset="100%" stop-color="#1B4332"/>';
   h+='</radialGradient>';
-  h+='<filter id="gs"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  h+='<filter id="gs"><feGaussianBlur stdDeviation="1.5" result="b"/>';
+  h+='<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
   h+='</defs>';
 
-  // ── MAIN RIVER CHANNEL (full width) ──
-  const chStart=sources.length?riverStartX:30;
-  h+='<path d="M '+chStart+' '+midY+' L '+riverEndX+' '+midY+'" ';
-  h+='fill="none" stroke="url(#rg2)" stroke-width="'+mainStroke+'" stroke-linecap="round" filter="url(#gs)"/>';
+  // ── MAIN RIVER (drawn first, behind everything) ──
+  h+='<path d="M '+riverX1+' '+midY+' L '+riverX2+' '+midY+'"';
+  h+=' fill="none" stroke="url(#rg2)" stroke-width="'+mainW+'" stroke-linecap="square" filter="url(#gs)"/>';
 
-  // ── REVENUE TRIBUTARIES ──
+  // ── REVENUE TRIBUTARIES (merge into left end of river) ──
   const srcColors=['#52B788','#40916C','#95D5B2','#2D6A4F','#B7E4C7'];
-  if(sources.length===0){
-    h+='<text x="'+(riverStartX-10)+'" y="'+(midY-18)+'" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb">No revenue this week</text>';
+  if(!sources.length){
+    h+='<text x="80" y="'+(midY-20)+'" font-family="Source Sans 3,sans-serif" font-size="11" fill="#bbb" text-anchor="middle">No revenue this week</text>';
   } else {
-    const spacing=Math.min(44,160/Math.max(sources.length,1));
+    const maxSpread=Math.min(160,(H-60));
+    const spacing=sources.length>1?maxSpread/(sources.length-1):0;
     sources.forEach(([src,amt],i)=>{
       const frac=amt/totalRev;
-      const sw=Math.max(4,Math.round(frac*20));
-      const totalH=(sources.length-1)*spacing;
-      const ty=midY-totalH/2+i*spacing;
-      const tx=14;
-      // Curve from tx,ty into riverStartX,midY
-      const cp1x=tx+50,cp1y=ty;
-      const cp2x=riverStartX-20,cp2y=midY;
-      h+='<path d="M '+tx+' '+ty+' C '+cp1x+' '+cp1y+' '+cp2x+' '+cp2y+' '+riverStartX+' '+midY+'" ';
-      h+='fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.9" filter="url(#gs)"/>';
-      // Label above trib
-      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2-4)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">'+src+'</text>';
-      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2+8)+'" font-family="Playfair Display,serif" font-size="10" fill="#40916C">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
+      const sw=Math.max(4,Math.round(frac*22));
+      const ty=sources.length===1?midY:(midY-maxSpread/2+i*spacing);
+      const tx=10;
+      // Cubic bezier: start horizontal then curve into river start
+      h+='<path d="M '+tx+' '+ty+' C '+(tx+60)+' '+ty+' '+(riverX1-20)+' '+midY+' '+riverX1+' '+midY+'"';
+      h+=' fill="none" stroke="'+srcColors[i%srcColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" filter="url(#gs)" opacity="0.9"/>';
+      // Label above the tributary start
+      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2-5)+'" font-family="Source Sans 3,sans-serif" font-size="10" fill="#2D6A4F" font-weight="700">'+src+'</text>';
+      h+='<text x="'+(tx+4)+'" y="'+(ty-sw/2+7)+'" font-family="Playfair Display,serif" font-size="10" fill="#40916C">$'+amt.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
     });
   }
 
   // ── EXPENSE STREAMS (drain downward from river) ──
   const expColors=['#D96B5A','#B03A2E','#E8967A','#922B21','#F1948A'];
-  const expZoneStart=riverStartX+40;
-  const expZoneEnd=riverEndX-40;
-  const expSpacing=validExp.length>1?(expZoneEnd-expZoneStart)/(validExp.length-1):0;
-  validExp.forEach((e,i)=>{
-    const frac=parseFloat(e.amount||0)/totalExp;
-    const sw=Math.max(3,Math.round(frac*14));
-    const ex=validExp.length===1?(expZoneStart+expZoneEnd)/2:expZoneStart+i*expSpacing;
-    const ey1=midY+mainStroke/2;
-    const ey2=midY+52+i*8;
-    h+='<path d="M '+ex+' '+ey1+' C '+ex+' '+(ey1+18)+' '+(ex+8)+' '+(ey2-8)+' '+(ex+10)+' '+ey2+'" ';
-    h+='fill="none" stroke="'+expColors[i%expColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.85"/>';
-    const name=(e.name||'Expense').substring(0,13);
-    h+='<text x="'+(ex+14)+'" y="'+(ey2-1)+'" font-family="Source Sans 3,sans-serif" font-size="9" fill="'+expColors[i%expColors.length]+'" font-weight="700">'+name+'</text>';
-    h+='<text x="'+(ex+14)+'" y="'+(ey2+11)+'" font-family="Playfair Display,serif" font-size="9" fill="'+expColors[i%expColors.length]+'">-$'+parseFloat(e.amount||0).toFixed(0)+'</text>';
-  });
+  if(validExp.length){
+    const zone=riverX2-riverX1-60;
+    const gap=validExp.length>1?zone/(validExp.length-1):0;
+    validExp.forEach((e,i)=>{
+      const frac=parseFloat(e.amount||0)/totalExp;
+      const sw=Math.max(3,Math.round(frac*16));
+      const ex=riverX1+30+(validExp.length===1?zone/2:i*gap);
+      const ey1=midY+mainW/2;
+      const ey2=ey1+50;
+      h+='<path d="M '+ex+' '+ey1+' C '+ex+' '+(ey1+20)+' '+(ex+6)+' '+(ey2-10)+' '+(ex+8)+' '+ey2+'"';
+      h+=' fill="none" stroke="'+expColors[i%expColors.length]+'" stroke-width="'+sw+'" stroke-linecap="round" opacity="0.85"/>';
+      h+='<text x="'+(ex+12)+'" y="'+(ey2)+'" font-family="Source Sans 3,sans-serif" font-size="9" fill="'+expColors[i%expColors.length]+'" font-weight="700">'+((e.name||'').substring(0,13))+'</text>';
+      h+='<text x="'+(ex+12)+'" y="'+(ey2+12)+'" font-family="Playfair Display,serif" font-size="9" fill="'+expColors[i%expColors.length]+'">-$'+parseFloat(e.amount||0).toFixed(0)+'</text>';
+    });
+  }
 
-  // ── RIVER FLOWS INTO POOL ──
-  h+='<path d="M '+riverEndX+' '+midY+' Q '+(riverEndX+20)+' '+midY+' '+(poolCX-poolR)+' '+midY+'" ';
-  h+='fill="none" stroke="#1B4332" stroke-width="'+(mainStroke-2)+'" stroke-linecap="round" opacity="0.95"/>';
-
-  // ── THE POOL ──
+  // ── POOL ──
   h+='<circle cx="'+poolCX+'" cy="'+poolCY+'" r="'+poolR+'" fill="url(#pg2)" filter="url(#gs)"/>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY-16)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.6)" letter-spacing="1.5">THE POOL</text>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY+4)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="18" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
-  h+='<text x="'+poolCX+'" y="'+(poolCY+20)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.45)">CT $'+ct.toFixed(0)+' aside</text>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY-16)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.6)" letter-spacing="2">THE POOL</text>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY+5)+'" text-anchor="middle" font-family="Playfair Display,serif" font-size="19" font-weight="900" fill="#fff">$'+pool.toLocaleString('en-US',{maximumFractionDigits:0})+'</text>';
+  h+='<text x="'+poolCX+'" y="'+(poolCY+21)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="8" fill="rgba(255,255,255,0.45)">CT $'+ct.toFixed(0)+' aside</text>';
 
   svg.innerHTML=h;
 }
-
-// ─── ADMIN FUNCTIONS ───
-async function adminCall(action, extra={}){
-  const res=await fetch(ADMIN_WORKER_URL,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action,callerToken:window._authToken,...extra})
-  });
-  return await res.json();
-}
-
-async function adminCreateUser(){
-  const name=document.getElementById('newUserName').value.trim();
-  const email=document.getElementById('newUserEmail').value.trim();
-  const password=document.getElementById('newUserPassword').value.trim();
-  const role=document.getElementById('newUserRole').value;
-  const status=document.getElementById('adminCreateStatus');
-  if(!name||!email||!password){status.className='status-bar error';status.textContent='Name, email and password required.';return;}
-  if(password.length<6){status.className='status-bar error';status.textContent='Password must be at least 6 characters.';return;}
-  status.className='status-bar loading';status.textContent='Creating login for '+name+'...';
-  const result=await adminCall('create_user',{name,email,password,role});
-  if(result.success){
-    status.className='status-bar success';
-    status.textContent='✓ Login created for '+name+'. They can sign in at thepeoplesvoices.org/kilted_farmers_v5.html';
-    document.getElementById('newUserName').value='';
-    document.getElementById('newUserEmail').value='';
-    document.getElementById('newUserPassword').value='';
-    setTimeout(()=>{status.className='status-bar';},5000);
-    adminLoadUsers();
-  } else {
-    status.className='status-bar error';status.textContent='Error: '+(result.error||'Unknown error');
-  }
-}
-
-async function adminLoadUsers(){
-  const list=document.getElementById('adminUserList');
-  if(!list)return;
-  list.innerHTML='<p style="color:var(--mid);font-size:13px;">Loading...</p>';
-  const result=await adminCall('list_users');
-  if(!result.users){
-    list.innerHTML='<p style="color:var(--red);font-size:13px;">Could not load users. Check Worker is deployed.</p>';return;
-  }
-  list.innerHTML=result.users.map(u=>`
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--cream-dark);flex-wrap:wrap;">
-      <div style="flex:1;min-width:160px;">
-        <div style="font-weight:700;font-size:14px;">${u.name||'—'} ${u.banned?'<span style="color:var(--red);font-size:11px;">(inactive)</span>':''}</div>
-        <div style="font-size:12px;color:var(--mid);">${u.email}</div>
-        <div style="font-size:11px;color:var(--mid);">Last sign in: ${u.last_sign_in?new Date(u.last_sign_in).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'Never'}</div>
-      </div>
-      <select onchange="adminUpdateRole('${u.id}','${u.name}',this.value)" style="padding:4px 8px;border:1.5px solid var(--rule);border-radius:5px;font-size:12px;background:var(--cream);">
-        <option ${u.role==='Contributor'?'selected':''}>Contributor</option>
-        <option ${u.role==='Steward'?'selected':''}>Steward</option>
-      </select>
-      <button onclick="adminResetPassword('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--tan);border-radius:6px;background:transparent;color:var(--tan);font-size:12px;cursor:pointer;">Reset PW</button>
-      ${!u.banned
-        ?`<button onclick="adminDeactivate('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--red);border-radius:6px;background:transparent;color:var(--red);font-size:12px;cursor:pointer;">Deactivate</button>`
-        :`<button onclick="adminReactivate('${u.id}','${u.name}')" style="padding:5px 10px;border:1.5px solid var(--green);border-radius:6px;background:transparent;color:var(--green);font-size:12px;cursor:pointer;">Reactivate</button>`
-      }
-    </div>
-  `).join('');
-}
-
-async function adminUpdateRole(userId,name,role){
-  const result=await adminCall('update_role',{userId,role,name});
-  if(result.success)toast('Role updated for '+name);
-  else toast('Failed to update role',true);
-}
-
-async function adminResetPassword(userId,name){
-  const pw=prompt('New password for '+name+' (min 6 chars):');
-  if(!pw||pw.length<6){toast('Password too short',true);return;}
-  const result=await adminCall('update_password',{userId,password:pw});
-  if(result.success)toast('Password updated for '+name);
-  else toast('Failed to update password',true);
-}
-
-async function adminDeactivate(userId,name){
-  if(!confirm('Deactivate '+name+'? They will not be able to sign in.'))return;
-  const result=await adminCall('deactivate_user',{userId,name});
-  if(result.success){toast(name+' deactivated');adminLoadUsers();}
-  else toast('Failed to deactivate',true);
-}
-
-async function adminReactivate(userId,name){
-  const result=await adminCall('reactivate_user',{userId,name});
-  if(result.success){toast(name+' reactivated');adminLoadUsers();}
-  else toast('Failed to reactivate',true);
-}
-
-// ─── MISSING UTILITY FUNCTIONS ───
-function deleteRevEntry(id){
-  if(!confirm('Delete this revenue entry?'))return;
-  sbAuth('kf_revenue_entries?id=eq.'+id,{method:'DELETE',headers:{'Prefer':''}})
-    .then(()=>{toast('Entry deleted');loadRevLog();refreshDashboard();})
-    .catch(e=>toast('Delete failed',true));
-}
-
-function removeExpense(id){
-  const exp=expenses.find(e=>e.id===id);
-  if(exp&&exp.dbId){
-    sbAuth('kf_expenses?id=eq.'+exp.dbId,{method:'DELETE',headers:{'Prefer':''}}).catch(e=>console.warn(e));
-  }
-  expenses=expenses.filter(e=>e.id!==id);
-  renderExpenses();calculate();
-}
-
-async function loadRecipeList(){
-  try{
-    const recipes=await sbAuth('kf_recipes?select=*&order=name.asc');
-    const sel=document.getElementById('recipeSelect');
-    if(!sel)return;
-    sel.innerHTML='<option value="">— Load a saved recipe —</option>';
-    recipes.forEach(r=>{
-      const opt=document.createElement('option');
-      opt.value=r.id;opt.textContent=r.name;
-      sel.appendChild(opt);
-    });
-  }catch(e){console.warn('Could not load recipes:',e.message);}
-}
-
-function addDailyEntry(mid){
-  const m=members.find(m=>m.id===mid);
-  if(!m)return;
-  m.dailyEntries.push({date:'',hours:'',note:''});
-  renderDailyEntries(mid);
-}
-
-function removeBulkIng(id){
-  bulkIngs=bulkIngs.filter(i=>i.id!==id);
-  renderBulkIngs();calcIngredients();
-}
-
-function removeSpecIng(id){
-  specIngs=specIngs.filter(i=>i.id!==id);
-  renderSpecIngs();calcIngredients();
-}
-
-async function addRevEntry(){
-  const amount=parseFloat(document.getElementById('revAmount').value)||0;
-  const source=document.getElementById('revSource').value;
-  const reporter=document.getElementById('revReporter').value||currentProfile?.name||'';
-  const notes=document.getElementById('revNotes').value.trim();
-  const periodLabel=getCurrentPeriodLabel();
-  if(!amount){toast('Enter an amount first',true);return;}
-  try{
-    await sbAuth('kf_revenue_entries',{method:'POST',body:JSON.stringify({
-      amount,source,reported_by:reporter,notes,period_label:periodLabel
-    })});
-    document.getElementById('revAmount').value='';
-    document.getElementById('revNotes').value='';
-    toast('Revenue logged: $'+amount.toFixed(2));
-    loadRevLog();
-    await autoFetchRevenue(periodLabel);
-    calculate();
-    refreshDashboard();
-  }catch(e){toast('Failed to log revenue: '+e.message,true);}
-}
-
 
 // ─── RESTORED MISSING FUNCTIONS ───
 let dashInterval=null;
