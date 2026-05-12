@@ -2246,6 +2246,66 @@ async function addRevEntry(){
   }catch(e){toast('Failed to log revenue: '+e.message,true);}
 }
 
+
+// ─── RESTORED MISSING FUNCTIONS ───
+let dashInterval=null;
+
+async function autoFetchRevenue(label){
+  try{
+    const allEntries=await sbAuth('kf_revenue_entries?order=created_at.asc&limit=500');
+    const now=new Date();
+    const monthStr=now.toLocaleString('en-US',{month:'long'});
+    const yearStr=String(now.getFullYear());
+    const entries=allEntries.filter(e=>e.period_label&&(
+      e.period_label===label||
+      (e.period_label.includes(monthStr)&&e.period_label.includes(yearStr))
+    ));
+    if(entries&&entries.length){
+      const total=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      if(total>0){
+        document.getElementById('revenue').value=total.toFixed(2);
+        calculate();
+      }
+    }
+  }catch(e){console.warn('Revenue fetch error:',e.message);}
+}
+
+function scheduleExpenseSave(){
+  // Auto-save expenses to Supabase after a short delay
+  clearTimeout(window._expSaveTimer);
+  window._expSaveTimer=setTimeout(async()=>{
+    try{
+      const pid=await ensurePeriodId();
+      if(!pid)return;
+      for(const exp of expenses){
+        if(!exp.name&&!exp.amount)continue;
+        const amt=parseFloat(exp.amount)||0;
+        if(exp.dbId){
+          await sbAuth('kf_expenses?id=eq.'+exp.dbId,{
+            method:'PATCH',
+            body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})
+          });
+        } else if(exp.name||amt){
+          const[row]=await sbAuth('kf_expenses',{
+            method:'POST',
+            body:JSON.stringify({period_id:pid,name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})
+          });
+          if(row)exp.dbId=row.id;
+        }
+      }
+    }catch(e){console.warn('Expense save error:',e.message);}
+  },1500);
+}
+
+function scheduleHoursSave(){
+  // Trigger dashboard refresh after hours change
+  clearTimeout(window._hrsSaveTimer);
+  window._hrsSaveTimer=setTimeout(()=>{
+    calculate();
+    refreshDashboard();
+  },800);
+}
+
 </script>
 </body>
 </html>
