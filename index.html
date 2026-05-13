@@ -7372,7 +7372,7 @@ function AuthScreen({onAuth, onGuest}) {
       // ── SIGNUP STEP 2 - ZIP + ATTESTATION ──
       mode==='signup'&&step===2&&h(Fragment,null,
         h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a',lineHeight:1.7}},
-          "📍 ",h('strong',null,"Just your ZIP code:")," We only need your ZIP to confirm you're a Jackson County area resident. We do not collect or store your street address."
+          "📍 ",h('strong',null,"Just your ZIP code:")," We only need your ZIP to confirm you're a "+getCurrentCounty().name+" area resident. We do not collect or store your street address."
         ),
         h('div',{style:{marginBottom:10}},
           h('input',{value:zip,onChange:e=>setZip(e.target.value),placeholder:'ZIP code * (e.g. 49237)',maxLength:5,
@@ -7381,7 +7381,7 @@ function AuthScreen({onAuth, onGuest}) {
         community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},"✓ "+community+" — welcome to The People's Voice!"),
         zip.trim().length===5&&!zipValid&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:8,fontSize:13,color:'#c0392b',lineHeight:1.6}},
           h('strong',null,"❌ ZIP code not in our service area. "),
-          "The People's Voice is currently open to Jackson County and surrounding area residents only.",
+          "The People's Voice is currently active in: "+Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta').map(c=>c.name).join(', ')+".",
           h('br'),
           h('span',{style:{color:'#555',fontSize:12}},"You can still ",
             h('button',{onClick:onGuest,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',padding:0,fontFamily:"'Lora',serif",fontWeight:700}},"browse as a guest"),
@@ -7393,7 +7393,7 @@ function AuthScreen({onAuth, onGuest}) {
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.8,marginBottom:14}},
             "By checking the box below, I ",h('strong',null,"attest")," that:",
             h('ul',{style:{marginTop:8,marginLeft:16,display:'flex',flexDirection:'column',gap:6}},
-              h('li',null,"I am a real person and a genuine Jackson County area resident"),
+              h('li',null,"I am a real person and a genuine "+getCurrentCounty().name+" area resident"),
               h('li',null,"I will cast only one vote per bill on this platform"),
               h('li',null,"I understand my votes are unofficial civic engagement, not legally binding"),
               h('li',null,"I will use this platform honestly and in good faith")
@@ -7403,7 +7403,7 @@ function AuthScreen({onAuth, onGuest}) {
             h('input',{type:'checkbox',checked:attested,onChange:e=>setAttested(e.target.checked),
               style:{width:20,height:20,flexShrink:0,marginTop:2,cursor:'pointer'}}),
             h('span',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#1a1a2e',fontWeight:600,lineHeight:1.6}},
-              "I confirm I am a real Jackson County area resident and will use this platform honestly."
+              "I confirm I am a real "+getCurrentCounty().name+" area resident and will use this platform honestly."
             )
           )
         ),
@@ -8373,6 +8373,7 @@ function ExchangeCard({item, user, profile, onToast, onDelete, onUpdate, isAdmin
 // ── Community Pulse Dashboard ─────────────────────────────────────────────────
 // ── ZIP Code Centroids (Jackson County) ──────────────────────────────────────
 const ZIP_COORDS = {
+  // ── Jackson County ZIPs ──
   '49201':[42.2459,-84.4013],'49202':[42.2600,-84.4200],'49203':[42.2200,-84.4013],
   '49204':[42.2459,-84.4013],'49230':[42.1084,-84.2471],'49233':[42.0056,-84.3330],
   '49234':[42.1500,-84.3200],'49237':[42.1789,-84.6384],'49240':[42.2589,-84.1630],
@@ -8383,7 +8384,26 @@ const ZIP_COORDS = {
   '49269':[42.2934,-84.5830],'49272':[42.3245,-84.3608],'49277':[42.4695,-84.4580],
   '49283':[42.1006,-84.5508],'49284':[42.3920,-84.7402],'49285':[42.2134,-84.3600],
   '49224':[42.2495,-84.7530],'48827':[42.5078,-84.6555],'48158':[42.1517,-84.0527],
+
+  // ── Calhoun County ZIPs ──
+  '49014':[42.2906,-85.1294],'49015':[42.3000,-85.2050],'49016':[42.3211,-85.1797],
+  '49017':[42.3400,-85.1850],'49037':[42.3286,-85.2389],
+  '49012':[42.0875,-85.2200],'49020':[42.1100,-85.0750],'49021':[42.2200,-85.1200],
+  '49029':[42.1700,-85.0200],'49033':[42.2789,-85.2611],'49034':[42.2900,-85.4200],
+  '49050':[42.4419,-85.4083],'49058':[42.6517,-85.2950],'49068':[42.2722,-84.9633],
+  '49070':[42.0000,-85.4350],'49076':[42.4400,-84.9300],
+  '49092':[42.0894,-84.9772],'49096':[42.6400,-84.4400],'49099':[42.0644,-85.1364],
 };
+
+// County map centers — used when zoom is not focused on a specific ZIP.
+const COUNTY_MAP_CENTERS = {
+  jackson: [42.25, -84.40],   // Centered roughly on Jackson city
+  calhoun: [42.28, -85.10],   // Centered roughly between Battle Creek and Marshall
+};
+
+function countyMapCenter(countyId) {
+  return COUNTY_MAP_CENTERS[countyId || DEFAULT_COUNTY] || COUNTY_MAP_CENTERS[DEFAULT_COUNTY];
+}
 
 const MAP_LAYERS = [
   {id:'events',    label:'📅 Events',     color:'#5b3a8c'},
@@ -8446,7 +8466,7 @@ function MapTab({user, profile}) {
     if(!mapRef.current||leafletRef.current) return;
     const L = window.L;
     if(!L) return;
-    const initialCenter = zipFocus && ZIP_COORDS[zipFocus] ? ZIP_COORDS[zipFocus] : [42.25,-84.40];
+    const initialCenter = zipFocus && ZIP_COORDS[zipFocus] ? ZIP_COORDS[zipFocus] : countyMapCenter(countyTag());
     const initialZoom = zipFocus ? 13 : 10;
     const map = L.map(mapRef.current,{
       center:initialCenter,
@@ -10339,7 +10359,7 @@ function MeetingPopulator({user, profile, onToast}) {
 
   const generate = async()=>{
     if(!window.confirm(
-      'Generate draft public meetings for the next 30 days across 14 Jackson County jurisdictions?\n\n' +
+      'Generate draft public meetings for the next 30 days across '+getCurrentCounty().name+' jurisdictions?\n\n' +
       'These are TYPICAL SCHEDULES, not real fetched data. You will need to verify each one against the official jurisdiction calendar before publishing.\n\n' +
       'This call costs Anthropic API tokens.'
     )) return;
@@ -10547,7 +10567,7 @@ function MeetingPopulator({user, profile, onToast}) {
     // Generate button
     !open && h('div',{style:{marginTop:10}},
       h('div',{style:{fontSize:12,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6,marginBottom:10}},
-        'Generate draft public meetings for the next 30 days across 14 Jackson County jurisdictions. ',
+        'Generate draft public meetings for the next 30 days across '+getCurrentCounty().name+' jurisdictions. ',
         h('strong',null,'These are typical schedules, not real fetched data — verify each before publishing.')
       ),
       h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
