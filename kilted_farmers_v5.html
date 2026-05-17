@@ -1057,11 +1057,19 @@ async function saveExpenses(){
   try{
     const pid=await ensurePeriodId();if(!pid)return;
     for(const exp of expenses){
-      if(!exp.name&&!exp.amount)continue;
       const amt=parseFloat(exp.amount)||0;
-      if(exp.dbId)await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
-      else if(exp.name||amt){
-        const[row]=await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
+      // Only save if there's an actual amount entered
+      if(!amt&&!exp.dbId)continue;
+      if(exp.dbId){
+        if(amt>0||exp.name){
+          await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
+        } else {
+          // Amount cleared — delete from DB
+          await sb('kf_expenses?id=eq.'+exp.dbId,{method:'DELETE',headers:{'Prefer':'return=minimal'}});
+          exp.dbId=null;
+        }
+      } else if(amt>0&&exp.name){
+        const[row]=await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:exp.name,amount:amt,receipt_url:exp.receiptUrl||''})});
         if(row)exp.dbId=row.id;
       }
     }
@@ -1077,8 +1085,11 @@ async function loadExpensesFromDB(){
     const pid=periods[0].id;window._currentPeriodId=pid;
     const exps=await sb('kf_expenses?period_id=eq.'+pid+'&select=*&order=created_at.asc');
     if(exps.length){
+      // Load saved expenses plus one blank row for new entries
       expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount!=null?String(e.amount):'',receiptUrl:e.receipt_url||'',dbId:e.id}));
-      expCounter=exps.length+10;renderExpenses();
+      expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null});
+      expCounter+=10;
+      renderExpenses();
     }
   }catch(e){console.warn('Load expenses:',e.message);}
 }
