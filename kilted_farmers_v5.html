@@ -824,8 +824,15 @@ async function loadTeamMembers(){
       const rows=await res.json();
       const valid=(rows||[]).filter(r=>r.name&&r.name.trim());
       if(valid.length){
-        members=valid.map((r,i)=>({id:i+1,dbId:r.id,name:r.name.trim(),role:r.role||'Contributor',manualHours:'',punches:[],dailyEntries:[]}));
-        memberCounter=valid.length+10;
+        // Deduplicate by name — keep first occurrence
+        const seen=new Set();
+        const deduped=valid.filter(r=>{
+          const n=r.name.trim().toLowerCase();
+          if(seen.has(n))return false;
+          seen.add(n);return true;
+        });
+        members=deduped.map((r,i)=>({id:i+1,dbId:r.id,name:r.name.trim(),role:r.role||'Contributor',manualHours:'',punches:[],dailyEntries:[]}));
+        memberCounter=deduped.length+10;
       }
     }
   }catch(e){console.warn('Team load:',e.message);}
@@ -926,9 +933,9 @@ function renderDailyEntries(id){
   const m=members.find(m=>m.id===id);if(!m)return;
   el.innerHTML=(m.dailyEntries||[]).map((d,i)=>`
     <div class="daily-row">
-      <input type="date" value="${d.date}" class="period-input" style="width:130px;" oninput="updateDaily(${id},${i},'date',this.value)">
-      <input type="number" value="${d.hours}" placeholder="hrs" class="period-input" style="width:70px;" oninput="updateDaily(${id},${i},'hours',this.value)">
-      <input type="text" value="${d.note}" placeholder="Notes" class="period-input" style="flex:1;" oninput="updateDaily(${id},${i},'note',this.value)">
+      <input type="date" value="${d.date||''}" class="period-input" style="width:140px;" onchange="updateDaily(${id},${i},'date',this.value)">
+      <input type="number" value="${d.hours||''}" placeholder="hrs" class="period-input" style="width:70px;" min="0" step="0.5" onchange="updateDaily(${id},${i},'hours',this.value)">
+      <input type="text" value="${(d.note||'').replace(/"/g,'&quot;')}" placeholder="Notes" class="period-input" style="flex:1;" onchange="updateDaily(${id},${i},'note',this.value)">
       <button class="remove-btn" onclick="removeDaily(${id},${i})">×</button>
     </div>`).join('');
 }
