@@ -1135,12 +1135,16 @@ async function loadRevLogEntries(){
     if(!entries.length){el.innerHTML='<div style="color:var(--mid);font-size:13px;padding:12px 0;">No revenue logged yet.</div>';return;}
     el.innerHTML=entries.map(e=>{
       const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+      const amt=parseFloat(e.amount)||0;
       return '<div class="rev-entry-row">'
         +'<span class="rev-entry-time">'+t+'</span>'
-        +'<span class="source-badge" style="font-size:10px;">'+e.source+'</span>'
+        +'<span class="source-badge" style="font-size:10px;">'+(e.source||'')+'</span>'
         +(e.notes?'<span class="rev-entry-notes">'+e.notes+'</span>':'')
-        +'<span class="rev-entry-amount">'+fmt(parseFloat(e.amount)||0)+'</span>'
-        +'<button onclick="deleteRevEntry(\''+e.id+'\')" style="margin-left:8px;padding:2px 7px;border:1px solid var(--red);border-radius:4px;background:transparent;color:var(--red);font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>'
+        +'<span class="rev-entry-amount">'+fmt(amt)+'</span>'
+        +'<div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px;">'
+        +'<button onclick="editRevEntry('+JSON.stringify(e.id)+','+amt+','+JSON.stringify(e.source||'')+','+JSON.stringify(e.notes||'')+')" style="padding:2px 8px;border:1px solid var(--tan);border-radius:4px;background:transparent;color:var(--tan);font-size:11px;cursor:pointer;">✎</button>'
+        +'<button onclick="deleteRevEntry('+JSON.stringify(e.id)+')" style="padding:2px 8px;border:1px solid var(--red);border-radius:4px;background:transparent;color:var(--red);font-size:11px;cursor:pointer;">✕</button>'
+        +'</div>'
         +'</div>';
     }).join('');
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:13px;">Error loading</div>';}
@@ -1149,10 +1153,18 @@ async function loadRevLogEntries(){
 async function deleteRevEntry(id){
   if(!confirm('Delete this entry?'))return;
   try{
-    await sb('kf_revenue_entries?id=eq.'+id,{method:'DELETE',headers:{'Prefer':'return=minimal'}});
+    const res=await fetch(SUPABASE_URL+'/rest/v1/kf_revenue_entries?id=eq.'+id,{
+      method:'DELETE',
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+window._authToken,
+        'Content-Type':'application/json'
+      }
+    });
+    if(!res.ok)throw new Error('HTTP '+res.status);
     toast('Entry deleted');
     await loadRevLogEntries();
-    await refreshDashboard();
+    refreshDashboard();
   }catch(e){
     toast('Delete failed: '+e.message,true);
     console.warn('Delete error:',e);
@@ -1162,16 +1174,23 @@ async function deleteRevEntry(id){
 async function editRevEntry(id,currentAmount,currentSource,currentNotes){
   const amount=prompt('Edit amount:',currentAmount);
   if(amount===null)return;
-  const notes=prompt('Edit notes:',currentNotes||'');
+  const notes=prompt('Edit notes (optional):',currentNotes||'');
   if(notes===null)return;
   try{
-    await sb('kf_revenue_entries?id=eq.'+id,{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/kf_revenue_entries?id=eq.'+id,{
       method:'PATCH',
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+window._authToken,
+        'Content-Type':'application/json',
+        'Prefer':'return=minimal'
+      },
       body:JSON.stringify({amount:parseFloat(amount)||0,notes:notes})
     });
+    if(!res.ok)throw new Error('HTTP '+res.status);
     toast('Entry updated');
     await loadRevLogEntries();
-    await refreshDashboard();
+    refreshDashboard();
   }catch(e){toast('Update failed: '+e.message,true);}
 }
 
@@ -1268,9 +1287,14 @@ async function refreshDashboard(){
       }).join('');
     }
     document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    // Auto-snapshot current period
+    // Auto-snapshot current period (create or update)
+    const snapshotData={period_type:'Weekly',period_label:label,gross_revenue:monthRevTotal,total_expenses:expTotal,common_table:Math.max(0,(monthRevTotal-expTotal)*CT),distributable_pool:aPool,total_hours:totalHours};
     if(periods.length){
-      sb('kf_pay_periods?id=eq.'+periods[0].id,{method:'PATCH',body:JSON.stringify({gross_revenue:monthRevTotal,total_expenses:expTotal,common_table:Math.max(0,(monthRevTotal-expTotal)*CT),distributable_pool:aPool,total_hours:totalHours})}).catch(e=>console.warn(e));
+      sb('kf_pay_periods?id=eq.'+periods[0].id,{method:'PATCH',body:JSON.stringify(snapshotData)}).catch(e=>console.warn(e));
+    } else if(monthRevTotal>0||expTotal>0){
+      sb('kf_pay_periods',{method:'POST',body:JSON.stringify(snapshotData)})
+        .then(rows=>{if(rows.length)window._currentPeriodId=rows[0].id;})
+        .catch(e=>console.warn(e));
     }
   }catch(e){console.warn('Dashboard:',e.message);document.getElementById('dash-updated-time').textContent='Error — tap refresh';}
 }
