@@ -1146,11 +1146,33 @@ async function loadRevLogEntries(){
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:13px;">Error loading</div>';}
 }
 
-function deleteRevEntry(id){
+async function deleteRevEntry(id){
   if(!confirm('Delete this entry?'))return;
-  sb('kf_revenue_entries?id=eq.'+id,{method:'DELETE',headers:{'Prefer':''}})
-    .then(()=>{toast('Deleted');loadRevLogEntries();refreshDashboard();})
-    .catch(e=>toast('Delete failed',true));
+  try{
+    await sb('kf_revenue_entries?id=eq.'+id,{method:'DELETE',headers:{'Prefer':'return=minimal'}});
+    toast('Entry deleted');
+    await loadRevLogEntries();
+    await refreshDashboard();
+  }catch(e){
+    toast('Delete failed: '+e.message,true);
+    console.warn('Delete error:',e);
+  }
+}
+
+async function editRevEntry(id,currentAmount,currentSource,currentNotes){
+  const amount=prompt('Edit amount:',currentAmount);
+  if(amount===null)return;
+  const notes=prompt('Edit notes:',currentNotes||'');
+  if(notes===null)return;
+  try{
+    await sb('kf_revenue_entries?id=eq.'+id,{
+      method:'PATCH',
+      body:JSON.stringify({amount:parseFloat(amount)||0,notes:notes})
+    });
+    toast('Entry updated');
+    await loadRevLogEntries();
+    await refreshDashboard();
+  }catch(e){toast('Update failed: '+e.message,true);}
 }
 
 // ─── CALCULATE ───
