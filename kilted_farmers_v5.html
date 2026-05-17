@@ -1054,27 +1054,44 @@ function updateExpense(id,f,v){
 }
 
 async function saveExpenses(){
+  showSave('expSaveIndicator','saving');
   try{
-    const pid=await ensurePeriodId();if(!pid)return;
-    for(const exp of expenses){
-      const amt=parseFloat(exp.amount)||0;
-      // Only save if there's an actual amount entered
-      if(!amt&&!exp.dbId)continue;
-      if(exp.dbId){
-        if(amt>0||exp.name){
-          await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
-        } else {
-          // Amount cleared — delete from DB
-          await sb('kf_expenses?id=eq.'+exp.dbId,{method:'DELETE',headers:{'Prefer':'return=minimal'}});
-          exp.dbId=null;
-        }
-      } else if(amt>0&&exp.name){
-        const[row]=await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:exp.name,amount:amt,receipt_url:exp.receiptUrl||''})});
-        if(row)exp.dbId=row.id;
+    // Get or create period record
+    const label=getCurrentPeriodLabel();
+    let pid=window._currentPeriodId;
+    if(!pid){
+      // Try to find existing
+      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+      if(existing.length){
+        pid=existing[0].id;
+        window._currentPeriodId=pid;
+      } else {
+        // Create new period record
+        const created=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:'Weekly',period_label:label,gross_revenue:0,total_expenses:0,common_table:0,distributable_pool:0,total_hours:0})});
+        pid=created[0].id;
+        window._currentPeriodId=pid;
       }
     }
-    showSave('expSaveIndicator','saved');refreshDashboard();
-  }catch(e){showSave('expSaveIndicator','error',e.message);}
+    if(!pid){showSave('expSaveIndicator','error','No period ID');return;}
+
+    for(const exp of expenses){
+      const amt=parseFloat(exp.amount)||0;
+      if(!amt&&!exp.dbId)continue; // Skip blank unsaved rows
+      if(exp.dbId){
+        // Update existing
+        await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
+      } else if(amt>0&&exp.name){
+        // Insert new
+        const rows=await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:exp.name,amount:amt,receipt_url:exp.receiptUrl||''})});
+        if(rows&&rows[0])exp.dbId=rows[0].id;
+      }
+    }
+    showSave('expSaveIndicator','saved');
+    refreshDashboard();
+  }catch(e){
+    console.error('saveExpenses error:',e);
+    showSave('expSaveIndicator','error',e.message);
+  }
 }
 
 async function loadExpensesFromDB(){
