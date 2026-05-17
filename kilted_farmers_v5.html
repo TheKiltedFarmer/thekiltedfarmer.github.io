@@ -1136,18 +1136,33 @@ async function loadRevLogEntries(){
     el.innerHTML=entries.map(e=>{
       const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
       const amt=parseFloat(e.amount)||0;
+      // Store entry in a global map so buttons can reference by index
+      window._revEntries=window._revEntries||{};
+      window._revEntries[e.id]=e;
       return '<div class="rev-entry-row">'
         +'<span class="rev-entry-time">'+t+'</span>'
         +'<span class="source-badge" style="font-size:10px;">'+(e.source||'')+'</span>'
         +(e.notes?'<span class="rev-entry-notes">'+e.notes+'</span>':'')
         +'<span class="rev-entry-amount">'+fmt(amt)+'</span>'
         +'<div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px;">'
-        +'<button onclick="editRevEntry('+JSON.stringify(e.id)+','+amt+','+JSON.stringify(e.source||'')+','+JSON.stringify(e.notes||'')+')" style="padding:2px 8px;border:1px solid var(--tan);border-radius:4px;background:transparent;color:var(--tan);font-size:11px;cursor:pointer;">✎</button>'
-        +'<button onclick="deleteRevEntry('+JSON.stringify(e.id)+')" style="padding:2px 8px;border:1px solid var(--red);border-radius:4px;background:transparent;color:var(--red);font-size:11px;cursor:pointer;">✕</button>'
+        +'<button onclick="editRevEntryById(this)" data-id="'+e.id+'" style="padding:2px 8px;border:1px solid var(--tan);border-radius:4px;background:transparent;color:var(--tan);font-size:11px;cursor:pointer;">✎</button>'
+        +'<button onclick="deleteRevEntryById(this)" data-id="'+e.id+'" style="padding:2px 8px;border:1px solid var(--red);border-radius:4px;background:transparent;color:var(--red);font-size:11px;cursor:pointer;">✕</button>'
         +'</div>'
         +'</div>';
     }).join('');
   }catch(e){el.innerHTML='<div style="color:var(--red);font-size:13px;">Error loading</div>';}
+}
+
+function deleteRevEntryById(btn){
+  const id=btn.getAttribute('data-id');
+  deleteRevEntry(id);
+}
+
+function editRevEntryById(btn){
+  const id=btn.getAttribute('data-id');
+  const entry=window._revEntries&&window._revEntries[id];
+  if(!entry)return;
+  editRevEntry(id,entry.amount,entry.source,entry.notes);
 }
 
 async function deleteRevEntry(id){
