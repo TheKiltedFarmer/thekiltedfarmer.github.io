@@ -699,10 +699,20 @@ function showSave(indicatorId,state,msg){
   if(state!=='saving')setTimeout(()=>{el.className='save-indicator';el.textContent='';},3000);
 }
 
+function getWeekLabel(date){
+  const d=new Date(date||new Date());
+  const day=d.getDay();
+  const mon=new Date(d);mon.setDate(d.getDate()+(day===0?-6:1-day));mon.setHours(0,0,0,0);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const fmt=(dt)=>dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const yr=sun.getFullYear();
+  return fmt(mon)+' – '+fmt(sun)+', '+yr;
+}
+
 function getCurrentPeriodLabel(){
   const sel=document.getElementById('periodDate');
   if(sel&&sel.options&&sel.options.length>0&&sel.value)return sel.value.trim();
-  return new Date().toLocaleString('en-US',{month:'long',year:'numeric'});
+  return getWeekLabel();
 }
 
 function getWeekBounds(date){
@@ -767,24 +777,35 @@ function signOut(){
 // ─── INIT ───
 function buildPeriodDropdowns(){
   const now=new Date();
+  // Build last 12 weeks
+  const weeks=[];
+  for(let i=0;i<12;i++){
+    const d=new Date(now);
+    d.setDate(now.getDate()-(i*7));
+    weeks.push(getWeekLabel(d));
+  }
+  // Deduplicate (in case same week appears twice)
+  const seen=new Set();
+  const unique=weeks.filter(w=>{if(seen.has(w))return false;seen.add(w);return true;});
   [document.getElementById('periodDate'),document.getElementById('logPeriodDate')].forEach(sel=>{
     if(!sel)return;
+    const cur=sel.value;
     sel.innerHTML='';
-    for(let i=-1;i<=11;i++){
-      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
-      const label=d.toLocaleString('en-US',{month:'long',year:'numeric'});
+    unique.forEach((label,i)=>{
       const opt=document.createElement('option');
       opt.value=label;opt.textContent=label;
       if(i===0)opt.selected=true;
       sel.appendChild(opt);
-    }
+    });
+    // Restore previous selection if still valid
+    if(cur&&unique.includes(cur))sel.value=cur;
   });
 }
 
 function getLogPeriodLabel(){
   const sel=document.getElementById('logPeriodDate');
   if(sel&&sel.value)return sel.value.trim();
-  return getCurrentPeriodLabel();
+  return getWeekLabel();
 }
 
 async function onLogPeriodChange(){
@@ -1182,7 +1203,14 @@ async function loadRevLogEntries(){
   const periodLabel=getLogPeriodLabel();
   try{
     const allRev=await sb('kf_revenue_entries?order=created_at.desc&limit=200');
-    const entries=allRev.filter(e=>e.period_label&&e.period_label===periodLabel);
+    // Match exact week label or entries created during that week
+    const labelParts=periodLabel.split('–');
+    const entries=allRev.filter(e=>{
+      if(!e.period_label)return false;
+      if(e.period_label===periodLabel)return true;
+      // Also match old monthly entries if they fall in the right week
+      return false;
+    });
     const total=entries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
     const revTotalEl=document.getElementById('revTotal');if(revTotalEl)revTotalEl.textContent=fmt(total);
     if(!entries.length){el.innerHTML='<div style="color:var(--mid);font-size:13px;padding:12px 0;">No revenue logged yet.</div>';return;}
@@ -1295,8 +1323,18 @@ async function refreshDashboard(){
     document.getElementById('dash-accum-range').textContent=monthStr+' '+yearStr+' Total';
     // Revenue
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
-    const monthRev=allRev.filter(e=>e.period_label&&(e.period_label===label||(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr))));
-    const weekRev=monthRev.filter(e=>inWeek(e.created_at,wb));
+    // Match exact week label OR fall back to date-based filtering for old monthly entries
+    const monthRev=allRev.filter(e=>{
+      if(!e.period_label)return false;
+      // Exact week match
+      if(e.period_label===label)return true;
+      // Old monthly format — check if entry date falls in selected week range
+      if(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)){
+        return inWeek(e.created_at,wb);
+      }
+      return false;
+    });
+    const weekRev=monthRev;
     const weekRevTotal=weekRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
     const monthRevTotal=monthRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
     // Expenses
