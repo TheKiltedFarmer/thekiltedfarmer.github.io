@@ -1402,19 +1402,20 @@ async function refreshDashboard(){
     const revEl=document.getElementById('revenue');if(revEl)revEl.value=weekRevTotal.toFixed(2);
     calculate();
     drawRiver(weekRev,allExp,wPool,wCT);
-    // Member shares — use period-specific hours
+    // Member shares — always show every active team member
     const sharesEl=document.getElementById('dash-member-shares');
     if(sharesEl){
-      // Build display list: DB period hours first, then any live members
-      const displayMembers=[];
+      // Start with all known team members (ensures everyone always appears)
+      const displayMembers=members.map(m=>({name:m.name,role:m.role,hrs:periodHours[m.name]||0}));
+      // Add any DB entries for names not in the local members list
       Object.entries(periodHours).forEach(([name,hrs])=>{
-        const m=members.find(m=>m.name===name)||{name,role:'Contributor'};
-        displayMembers.push({name,role:m.role,hrs});
+        if(!displayMembers.find(d=>d.name===name))displayMembers.push({name,role:'Contributor',hrs});
       });
-      // If current week, include members who have live hours but no DB entry yet
+      // If current week, layer in live in-memory hours for anyone whose DB hours are still 0
       if(isCurrentWeek){
-        members.forEach(m=>{
-          if(!periodHours[m.name]){const h=getMemberHours(m);if(h>0)displayMembers.push({name:m.name,role:m.role,hrs:h});}
+        displayMembers.forEach(d=>{
+          const m=members.find(m=>m.name===d.name);
+          if(m&&d.hrs===0){const h=getMemberHours(m);if(h>0){totalHours+=h;d.hrs=h;}}
         });
       }
       if(!displayMembers.length){
@@ -1507,7 +1508,14 @@ async function viewPeriod(id,label){
   try{
     const [period]=await sb('kf_pay_periods?id=eq.'+id+'&select=*');
     const exps=await sb('kf_expenses?period_id=eq.'+id+'&select=*');
-    const timeEntries=await sb('kf_time_entries?period_id=eq.'+id+'&select=*&order=created_at.asc');
+    // Dual query: by period_id AND by date range, merged — catches entries saved under a different period_id
+    let timeEntries=await sb('kf_time_entries?period_id=eq.'+id+'&select=*&order=created_at.asc');
+    const wb=getWeekBoundsFromLabel(label);
+    if(wb){
+      const rangeEntries=await sb('kf_time_entries?created_at=gte.'+wb.mon.toISOString()+'&created_at=lte.'+wb.sun.toISOString()+'&select=*&order=created_at.asc');
+      const seenIds=new Set(timeEntries.map(e=>e.id));
+      rangeEntries.forEach(e=>{if(!seenIds.has(e.id))timeEntries.push(e);});
+    }
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
     const revEntries=allRev.filter(e=>e.period_label===label);
     let html='';
@@ -1541,8 +1549,13 @@ async function viewPeriod(id,label){
         else if(e.entry_type==='daily')h=parseFloat(e.hours)||0;
         memberHours[name]+=h;
       });
+      // Fill in all active team members so nobody is missing from the table
+      try{
+        const teamRows=await sb('kf_team_members?active=eq.true&order=sort_order.asc');
+        teamRows.forEach(r=>{if(r.name&&memberHours[r.name]===undefined)memberHours[r.name]=0;});
+      }catch(e){console.warn('team fill:',e.message);}
       const totalHours=Object.values(memberHours).reduce((s,h)=>s+h,0);
-      if(totalHours>0||Object.keys(memberHours).length>0){
+      if(Object.keys(memberHours).length>0){
         html+='<h4 style="color:var(--green-dark);margin:16px 0 6px;">Pay Distribution</h4>';
         html+='<div style="background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--mid);">Pool: '+fmt(pool)+' &nbsp;|&nbsp; Common Table: '+fmt(ctAmt)+' &nbsp;|&nbsp; Total Hours: '+(totalHours).toFixed(2)+'</div>';
         html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">';
