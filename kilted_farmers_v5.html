@@ -1512,12 +1512,29 @@ async function loadHistory(){
   try{
     const periods=await sb('kf_pay_periods?order=created_at.desc&select=*');
     if(!periods.length){el.innerHTML='<p style="color:var(--mid);">No saved periods yet.</p>';return;}
-    el.innerHTML=periods.map(p=>{
+    // Load all revenue and expenses once, calculate live — never trust stale snapshots
+    const allRev=await sb('kf_revenue_entries?select=period_label,amount&limit=2000');
+    const allExp=await sb('kf_expenses?select=period_id,amount&limit=2000');
+    const revByLabel={};
+    allRev.forEach(e=>{const lbl=e.period_label||'';revByLabel[lbl]=(revByLabel[lbl]||0)+(parseFloat(e.amount)||0);});
+    const expByPeriod={};
+    allExp.forEach(e=>{const pid=e.period_id||'';expByPeriod[pid]=(expByPeriod[pid]||0)+(parseFloat(e.amount)||0);});
+    // Deduplicate — one card per period label, using the latest record
+    const seenLabels=new Set();
+    const uniquePeriods=periods.filter(p=>{if(seenLabels.has(p.period_label))return false;seenLabels.add(p.period_label);return true;});
+    el.innerHTML=uniquePeriods.map(p=>{
       const saved=new Date(p.created_at).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-      return '<div class="history-item" onclick="viewPeriod(\''+p.id+'\',\''+p.period_label+'\')"><div class="history-item-header"><div><div class="history-period">'+p.period_type+' — '+p.period_label+'</div><div class="history-date">Saved '+saved+'</div></div><div class="history-pool">'+fmt(p.distributable_pool)+'</div></div><div class="history-meta">Revenue: '+fmt(p.gross_revenue)+'&nbsp;&nbsp;Expenses: '+fmt(p.total_expenses)+'&nbsp;&nbsp;Common Table: '+fmt(p.common_table)+'&nbsp;&nbsp;Hours: '+(p.total_hours||0).toFixed(2)+'</div></div>';
+      const liveRev=revByLabel[p.period_label]||0;
+      const liveExp=expByPeriod[p.id]||0;
+      const liveNet=liveRev-liveExp;
+      const liveCT=Math.max(0,liveNet*CT);
+      const livePool=Math.max(0,liveNet*(1-CT));
+      const hrs=parseFloat(p.total_hours)||0;
+      return '<div class="history-item" onclick="viewPeriod(\''+p.id+'\',\''+p.period_label+'\')">'+'<div class="history-item-header"><div><div class="history-period">'+p.period_type+' — '+p.period_label+'</div><div class="history-date">Saved '+saved+'</div></div><div class="history-pool">'+fmt(livePool)+'</div></div><div class="history-meta">Revenue: '+fmt(liveRev)+'&nbsp;&nbsp;Expenses: '+fmt(liveExp)+'&nbsp;&nbsp;Common Table: '+fmt(liveCT)+'&nbsp;&nbsp;Hours: '+hrs.toFixed(2)+'</div></div>';
     }).join('');
   }catch(e){el.innerHTML='<p style="color:var(--red);">Error loading history</p>';}
 }
+
 
 async function viewPeriod(id,label){
   const modal=document.getElementById('historyModal');
