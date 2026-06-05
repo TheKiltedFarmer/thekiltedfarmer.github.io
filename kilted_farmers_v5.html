@@ -724,6 +724,22 @@ function getWeekBounds(date){
 function fmtDate(d){return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function inWeek(ds,b){if(!ds)return false;const d=new Date(ds);return d>=b.mon&&d<=b.sun;}
 
+function getWeekBoundsFromLabel(label){
+  // Parse labels like "Jun 2 – Jun 8, 2026"
+  try{
+    if(!label)return null;
+    const yr=label.match(/\d{4}/);
+    if(!yr)return null;
+    const year=parseInt(yr[0]);
+    const parts=label.replace(/,\s*\d{4}/,'').split('–').map(s=>s.trim());
+    if(parts.length<2)return null;
+    const mon=new Date(parts[0]+' '+year);mon.setHours(0,0,0,0);
+    const sun=new Date(parts[1]+' '+year);sun.setHours(23,59,59,999);
+    if(isNaN(mon)||isNaN(sun))return null;
+    return{mon,sun};
+  }catch(e){return null;}
+}
+
 // ─── AUTH ───
 async function signIn(){
   const email=document.getElementById('loginEmail').value.trim();
@@ -1040,10 +1056,21 @@ async function clockOut(id){
 
 async function loadCurrentPeriodHours(){
   try{
-    const now=new Date();
-    const monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
-    const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59).toISOString();
-    const entries=await sb('kf_time_entries?created_at=gte.'+monthStart+'&created_at=lte.'+monthEnd+'&select=*&order=created_at.asc');
+    const label=getCurrentPeriodLabel();
+    // Find or create the period record
+    let pid=window._currentPeriodId;
+    if(!pid){
+      const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+      if(periods.length){pid=periods[0].id;window._currentPeriodId=pid;}
+    }
+    // Load all entries for this period, or fall back to all entries and filter by member_name
+    let entries=[];
+    if(pid){
+      entries=await sb('kf_time_entries?period_id=eq.'+pid+'&select=*&order=created_at.asc');
+    } else {
+      // Period doesn't exist yet — no hours to load
+      entries=[];
+    }
     const seen=new Set();
     const unique=entries.filter(e=>{if(seen.has(e.id))return false;seen.add(e.id);return true;});
     members.forEach(m=>{
@@ -1051,11 +1078,6 @@ async function loadCurrentPeriodHours(){
       m.punches=mine.filter(e=>e.entry_type==='punch').map(e=>({in:e.clock_in,out:e.clock_out,dbId:e.id}));
       m.dailyEntries=mine.filter(e=>e.entry_type==='daily').map(e=>({date:e.entry_date||'',hours:String(e.hours||0),note:e.notes||'',dbId:e.id}));
     });
-    if(!window._currentPeriodId){
-      const label=getCurrentPeriodLabel();
-      const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-      if(periods.length)window._currentPeriodId=periods[0].id;
-    }
   }catch(e){console.warn('Load hours:',e.message);}
 }
 
@@ -1316,81 +1338,115 @@ async function refreshDashboard(){
   if(!window._authToken){document.getElementById('dash-updated-time').textContent='Waiting...';setTimeout(refreshDashboard,1000);return;}
   try{
     const now=new Date();
-    const wb=getWeekBounds(now);
-    const monthStr=now.toLocaleString('en-US',{month:'long'});
-    const yearStr=String(now.getFullYear());
-    document.getElementById('dash-week-range').textContent=fmtDate(wb.mon)+' – '+fmtDate(wb.sun);
-    document.getElementById('dash-accum-range').textContent=monthStr+' '+yearStr+' Total';
-    // Revenue
+    // Parse week bounds FROM the selected label (e.g. "Jun 2 – Jun 8, 2026")
+    // so viewing a past week shows that week's data, not today's
+    const selectedWb=getWeekBoundsFromLabel(label)||getWeekBounds(now);
+    document.getElementById('dash-week-range').textContent=fmtDate(selectedWb.mon)+' – '+fmtDate(selectedWb.sun);
+    document.getElementById('dash-accum-range').textContent='Period Total';
+    // Revenue — match exact period label
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
-    // Match exact week label OR fall back to date-based filtering for old monthly entries
-    const monthRev=allRev.filter(e=>{
-      if(!e.period_label)return false;
-      // Exact week match
-      if(e.period_label===label)return true;
-      // Old monthly format — check if entry date falls in selected week range
-      if(e.period_label.includes(monthStr)&&e.period_label.includes(yearStr)){
-        return inWeek(e.created_at,wb);
-      }
-      return false;
-    });
-    const weekRev=monthRev;
+    const weekRev=allRev.filter(e=>e.period_label===label);
     const weekRevTotal=weekRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    const monthRevTotal=monthRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    // Expenses
+    // Expenses — load from DB for the selected period only
     const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
     let dbExp=[];
     if(periods.length){try{dbExp=await sb('kf_expenses?period_id=eq.'+periods[0].id+'&select=*');}catch(e){}}
-    const seen=new Set();
-    const uExp=dbExp.filter(e=>{const k=(e.name||'')+'|'+(e.amount||0);if(seen.has(k))return false;seen.add(k);return true;});
-    const sExp=expenses.filter(e=>{if(!e.name&&!e.amount)return false;const k=(e.name||'')+'|'+(parseFloat(e.amount)||0);return!seen.has(k);});
-    const allExp=[...uExp,...sExp].filter(e=>e.name||parseFloat(e.amount||0)>0);
+    // If viewing the current week, also merge in any unsaved local expenses
+    const isCurrentWeek=(label===getWeekLabel());
+    let allExp=dbExp.filter(e=>e.name||parseFloat(e.amount||0)>0);
+    if(isCurrentWeek){
+      const seen=new Set(dbExp.map(e=>(e.name||'')+'|'+(e.amount||0)));
+      const localOnly=expenses.filter(e=>{if(!e.name&&!e.amount)return false;const k=(e.name||'')+'|'+(parseFloat(e.amount)||0);return!seen.has(k);});
+      allExp=[...allExp,...localOnly];
+    }
     const expTotal=allExp.reduce((s,e)=>s+(parseFloat(e.amount||0)),0);
     // Pools
     const wPool=Math.max(0,(weekRevTotal-expTotal)*(1-CT));
     const wCT=Math.max(0,(weekRevTotal-expTotal)*CT);
-    const aPool=Math.max(0,(monthRevTotal-expTotal)*(1-CT));
-    const totalHours=members.reduce((s,m)=>s+getMemberHours(m),0);
-    const avgRate=totalHours>0?aPool/totalHours:0;
+    // Hours — load from DB for the selected period
+    let periodHours={};
+    let totalHours=0;
+    if(periods.length){
+      try{
+        const timeEntries=await sb('kf_time_entries?period_id=eq.'+periods[0].id+'&select=*');
+        timeEntries.forEach(e=>{
+          const name=e.member_name||'Unknown';
+          if(!periodHours[name])periodHours[name]=0;
+          let h=0;
+          if(e.entry_type==='punch'&&e.clock_in&&e.clock_out)h=Math.max(0,(new Date(e.clock_out)-new Date(e.clock_in))/3600000);
+          else if(e.entry_type==='daily')h=parseFloat(e.hours)||0;
+          periodHours[name]+=h;
+        });
+        totalHours=Object.values(periodHours).reduce((s,h)=>s+h,0);
+      }catch(e){console.warn('Dashboard hours:',e.message);}
+    }
+    // If current week, also include live in-memory hours for members with no DB entries
+    if(isCurrentWeek){
+      members.forEach(m=>{
+        if(periodHours[m.name]===undefined){
+          const h=getMemberHours(m);
+          if(h>0){periodHours[m.name]=h;totalHours+=h;}
+        }
+      });
+    }
+    const avgRate=totalHours>0?wPool/totalHours:0;
     // Update cards
     document.getElementById('dash-week-pool').textContent=fmt(wPool);
     document.getElementById('dash-week-sub').textContent='Revenue: '+fmt(weekRevTotal)+' · Expenses: '+fmt(expTotal);
-    document.getElementById('dash-accum-total').textContent=fmt(aPool);
+    document.getElementById('dash-accum-total').textContent=fmt(wPool);
     document.getElementById('dash-avg-rate').textContent='Avg earned: '+fmt(avgRate)+'/hr';
     document.getElementById('dash-pool').textContent=fmt(wPool);
-    document.getElementById('dash-pool-sub').textContent='From '+fmt(weekRevTotal)+' revenue this week';
+    document.getElementById('dash-pool-sub').textContent='From '+fmt(weekRevTotal)+' revenue';
     document.getElementById('dash-ct').textContent=fmt(wCT);
     // Update hidden revenue input for calculate()
-    const revEl=document.getElementById('revenue');if(revEl)revEl.value=monthRevTotal.toFixed(2);
+    const revEl=document.getElementById('revenue');if(revEl)revEl.value=weekRevTotal.toFixed(2);
     calculate();
     drawRiver(weekRev,allExp,wPool,wCT);
-    // Member shares
+    // Member shares — use period-specific hours
     const sharesEl=document.getElementById('dash-member-shares');
     if(sharesEl){
-      sharesEl.innerHTML=members.map(m=>{
-        const hrs=getMemberHours(m),pct=totalHours>0?hrs/totalHours:0;
-        const wShare=wPool*pct,aShare=aPool*pct;
-        const col=m.role==='Steward'?'var(--green)':'var(--tan)';
-        return '<div class="member-week-row">'
-          +'<div class="mwr-avatar" style="background:'+col+';">'+(m.name||'?')[0].toUpperCase()+'</div>'
-          +'<div class="mwr-info"><div class="mwr-name">'+m.name+'</div>'
-          +'<span class="role-badge '+(m.role==='Steward'?'role-steward':'role-contributor')+'">'+m.role+'</span></div>'
-          +'<div style="text-align:center;min-width:55px;"><div style="font-weight:700;font-size:14px;">'+hrs.toFixed(1)+'</div><div style="font-size:10px;color:var(--mid);">hrs</div></div>'
-          +'<div style="text-align:right;min-width:75px;"><div class="mwr-amount">'+fmt(wShare)+'</div><div class="mwr-accum">'+(pct*100).toFixed(1)+'%</div></div>'
-          +'<div style="text-align:center;min-width:55px;"><div style="font-weight:700;font-size:14px;color:var(--mid);">'+hrs.toFixed(1)+'</div><div style="font-size:10px;color:var(--mid);">total</div></div>'
-          +'<div style="text-align:right;min-width:75px;"><div class="mwr-amount">'+fmt(aShare)+'</div><div class="mwr-accum">'+fmt(avgRate)+'/hr</div></div>'
-          +'</div>';
-      }).join('');
+      // Build display list: DB period hours first, then any live members
+      const displayMembers=[];
+      Object.entries(periodHours).forEach(([name,hrs])=>{
+        const m=members.find(m=>m.name===name)||{name,role:'Contributor'};
+        displayMembers.push({name,role:m.role,hrs});
+      });
+      // If current week, include members who have live hours but no DB entry yet
+      if(isCurrentWeek){
+        members.forEach(m=>{
+          if(!periodHours[m.name]){const h=getMemberHours(m);if(h>0)displayMembers.push({name:m.name,role:m.role,hrs:h});}
+        });
+      }
+      if(!displayMembers.length){
+        sharesEl.innerHTML='<div style="color:var(--mid);font-size:13px;padding:10px 0;">No hours logged for this period.</div>';
+      } else {
+        sharesEl.innerHTML=displayMembers.map(({name,role,hrs})=>{
+          const pct=totalHours>0?hrs/totalHours:0;
+          const wShare=wPool*pct;
+          const col=role==='Steward'?'var(--green)':'var(--tan)';
+          return '<div class="member-week-row">'
+            +'<div class="mwr-avatar" style="background:'+col+';">'+(name||'?')[0].toUpperCase()+'</div>'
+            +'<div class="mwr-info"><div class="mwr-name">'+name+'</div>'
+            +'<span class="role-badge '+(role==='Steward'?'role-steward':'role-contributor')+'">'+role+'</span></div>'
+            +'<div style="text-align:center;min-width:55px;"><div style="font-weight:700;font-size:14px;">'+hrs.toFixed(1)+'</div><div style="font-size:10px;color:var(--mid);">hrs</div></div>'
+            +'<div style="text-align:right;min-width:75px;"><div class="mwr-amount">'+fmt(wShare)+'</div><div class="mwr-accum">'+(pct*100).toFixed(1)+'%</div></div>'
+            +'<div style="text-align:center;min-width:55px;"></div>'
+            +'<div style="text-align:right;min-width:75px;"><div class="mwr-accum">'+fmt(avgRate)+'/hr</div></div>'
+            +'</div>';
+        }).join('');
+      }
     }
     document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    // Auto-snapshot current period (create or update)
-    const snapshotData={period_type:'Weekly',period_label:label,gross_revenue:monthRevTotal,total_expenses:expTotal,common_table:Math.max(0,(monthRevTotal-expTotal)*CT),distributable_pool:aPool,total_hours:totalHours};
-    if(periods.length){
-      sb('kf_pay_periods?id=eq.'+periods[0].id,{method:'PATCH',body:JSON.stringify(snapshotData)}).catch(e=>console.warn(e));
-    } else if(monthRevTotal>0||expTotal>0){
-      sb('kf_pay_periods',{method:'POST',body:JSON.stringify(snapshotData)})
-        .then(rows=>{if(rows.length)window._currentPeriodId=rows[0].id;})
-        .catch(e=>console.warn(e));
+    // Auto-snapshot current period only (don't overwrite past weeks)
+    if(isCurrentWeek){
+      const snapshotData={period_type:'Weekly',period_label:label,gross_revenue:weekRevTotal,total_expenses:expTotal,common_table:wCT,distributable_pool:wPool,total_hours:totalHours};
+      if(periods.length){
+        sb('kf_pay_periods?id=eq.'+periods[0].id,{method:'PATCH',body:JSON.stringify(snapshotData)}).catch(e=>console.warn(e));
+      } else if(weekRevTotal>0||expTotal>0){
+        sb('kf_pay_periods',{method:'POST',body:JSON.stringify(snapshotData)})
+          .then(rows=>{if(rows.length)window._currentPeriodId=rows[0].id;})
+          .catch(e=>console.warn(e));
+      }
     }
   }catch(e){console.warn('Dashboard:',e.message);document.getElementById('dash-updated-time').textContent='Error — tap refresh';}
 }
@@ -1449,14 +1505,57 @@ async function viewPeriod(id,label){
   document.getElementById('modalBody').innerHTML='Loading...';
   modal.style.display='flex';
   try{
+    const [period]=await sb('kf_pay_periods?id=eq.'+id+'&select=*');
     const exps=await sb('kf_expenses?period_id=eq.'+id+'&select=*');
-    const dists=await sb('kf_distributions?period_id=eq.'+id+'&select=*');
+    const timeEntries=await sb('kf_time_entries?period_id=eq.'+id+'&select=*&order=created_at.asc');
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
-    const revEntries=allRev.filter(e=>e.period_label&&e.period_label.includes(label.split(' ')[0])&&e.period_label.includes((label.split(' ')[1]||'')));
+    const revEntries=allRev.filter(e=>e.period_label===label);
     let html='';
-    if(revEntries.length){html+='<h4 style="color:var(--green-dark);margin:0 0 10px;">Revenue</h4>'+revEntries.map(e=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;"><span>'+e.source+(e.notes?' — '+e.notes:'')+'</span><strong>'+fmt(parseFloat(e.amount)||0)+'</strong></div>').join('');}
-    if(exps.length){html+='<h4 style="color:var(--green-dark);margin:16px 0 10px;">Expenses</h4>'+exps.map(e=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;"><span>'+e.name+'</span><strong>'+fmt(parseFloat(e.amount)||0)+'</strong></div>'+(e.receipt_url?'<a href="'+e.receipt_url+'" target="_blank" style="font-size:11px;color:var(--green);">View Receipt</a>':'')).join('');}
-    if(dists.length){html+='<h4 style="color:var(--green-dark);margin:16px 0 10px;">Distributions</h4>'+dists.map(d=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;"><span>'+d.member_name+' ('+d.hours.toFixed(1)+' hrs)</span><strong>'+fmt(d.distribution)+'</strong></div>').join('');}
+    // Revenue section
+    if(revEntries.length){
+      const revTotal=revEntries.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      html+='<h4 style="color:var(--green-dark);margin:0 0 10px;">Revenue</h4>';
+      html+=revEntries.map(e=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;"><span>'+e.source+(e.notes?' — '+e.notes:'')+'</span><strong>'+fmt(parseFloat(e.amount)||0)+'</strong></div>').join('');
+      html+='<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;color:var(--green-dark);">Total Revenue<span>'+fmt(revTotal)+'</span></div>';
+    }
+    // Expenses section
+    if(exps.length){
+      const expTotal=exps.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      html+='<h4 style="color:var(--green-dark);margin:16px 0 10px;">Expenses</h4>';
+      html+=exps.map(e=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;"><span>'+e.name+'</span><span style="display:flex;align-items:center;gap:8px;"><strong>'+fmt(parseFloat(e.amount)||0)+'</strong>'+(e.receipt_url?'<a href="'+e.receipt_url+'" target="_blank" style="font-size:11px;color:var(--green);">Receipt</a>':'')+'</span></div>').join('');
+      html+='<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;color:var(--red);">Total Expenses<span>'+fmt(expTotal)+'</span></div>';
+    }
+    // Pay breakdown from time entries
+    if(timeEntries.length||period){
+      const grossRev=period?parseFloat(period.gross_revenue)||0:0;
+      const totalExp=period?parseFloat(period.total_expenses)||0:0;
+      const pool=period?parseFloat(period.distributable_pool)||0:Math.max(0,(grossRev-totalExp)*(1-CT));
+      const ctAmt=period?parseFloat(period.common_table)||0:Math.max(0,(grossRev-totalExp)*CT);
+      // Aggregate hours per member
+      const memberHours={};
+      timeEntries.forEach(e=>{
+        const name=e.member_name||'Unknown';
+        if(!memberHours[name])memberHours[name]=0;
+        let h=0;
+        if(e.entry_type==='punch'&&e.clock_in&&e.clock_out)h=Math.max(0,(new Date(e.clock_out)-new Date(e.clock_in))/3600000);
+        else if(e.entry_type==='daily')h=parseFloat(e.hours)||0;
+        memberHours[name]+=h;
+      });
+      const totalHours=Object.values(memberHours).reduce((s,h)=>s+h,0);
+      if(totalHours>0||Object.keys(memberHours).length>0){
+        html+='<h4 style="color:var(--green-dark);margin:16px 0 6px;">Pay Distribution</h4>';
+        html+='<div style="background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--mid);">Pool: '+fmt(pool)+' &nbsp;|&nbsp; Common Table: '+fmt(ctAmt)+' &nbsp;|&nbsp; Total Hours: '+(totalHours).toFixed(2)+'</div>';
+        html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+        html+='<thead><tr><th style="text-align:left;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Member</th><th style="text-align:center;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Hours</th><th style="text-align:center;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">% of Pool</th><th style="text-align:right;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Earned</th></tr></thead><tbody>';
+        Object.entries(memberHours).sort((a,b)=>b[1]-a[1]).forEach(([name,hrs])=>{
+          const pct=totalHours>0?hrs/totalHours:0;
+          const earned=pool*pct;
+          html+='<tr><td style="padding:7px 8px;border:1px solid var(--rule);">'+name+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+hrs.toFixed(2)+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+(pct*100).toFixed(1)+'%</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--green-dark);">'+fmt(earned)+'</td></tr>';
+        });
+        html+='<tr style="background:var(--green-dark);"><td colspan="3" style="padding:7px 8px;border:1px solid var(--green-dark);color:#fff;font-weight:700;">Total</td><td style="padding:7px 8px;border:1px solid var(--green-dark);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--tan-light);">'+fmt(pool)+'</td></tr>';
+        html+='</tbody></table>';
+      }
+    }
     if(!html)html='<p style="color:var(--mid);">No detail records found.</p>';
     document.getElementById('modalBody').innerHTML=html;
   }catch(e){document.getElementById('modalBody').innerHTML='<p style="color:var(--red);">Error: '+e.message+'</p>';}
