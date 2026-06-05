@@ -1621,11 +1621,28 @@ async function viewPeriod(id,label){
         });
         // Only show total if hours were actually found; otherwise show a warning
         if(totalHours===0){
-          html+='<tr><td colspan="4" style="padding:10px 8px;border:1px solid var(--rule);color:var(--red);font-size:12px;text-align:center;">⚠ No hours found in the database for this period. Hours may not have been saved correctly.</td></tr>';
+          html+='<tr><td colspan="4" style="padding:10px 8px;border:1px solid var(--rule);color:var(--red);font-size:12px;text-align:center;">⚠ No hours found in the database for this period. Enter them below.</td></tr>';
         } else {
           html+='<tr style="background:var(--green-dark);"><td colspan="3" style="padding:7px 8px;border:1px solid var(--green-dark);color:#fff;font-weight:700;">Total Distributed</td><td style="padding:7px 8px;border:1px solid var(--green-dark);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--tan-light);">'+fmt(earnedTotal)+'</td></tr>';
         }
         html+='</tbody></table>';
+        // Always show editable hours inputs so past periods can be corrected
+        html+='<div id="hoursEditor-'+id+'" style="margin-top:18px;">';
+        html+='<h4 style="color:var(--green-dark);margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;">Edit Hours <span style="font-size:11px;font-weight:400;color:var(--mid);">Enter actual hours worked this period</span></h4>';
+        html+='<div id="hoursEditorRows-'+id+'">';
+        Object.entries(memberHours).forEach(([name,hrs])=>{
+          html+='<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">'
+            +'<div style="flex:1;font-size:13px;font-weight:600;">'+name+'</div>'
+            +'<input type="number" min="0" step="0.5" value="'+hrs+'" placeholder="0" '
+            +'style="width:90px;padding:7px 10px;border:1.5px solid var(--rule);border-radius:6px;font-size:13px;background:var(--cream);text-align:center;" '
+            +'data-member="'+name.replace(/"/g,'&quot;')+'" data-period-id="'+id+'" onchange="updateHistoryHours(this)">'
+            +'<span style="font-size:11px;color:var(--mid);">hrs</span>'
+            +'</div>';
+        });
+        html+='</div>';
+        html+='<button onclick="saveHistoryHours(\''+id+'\',\''+label+'\')\" style="margin-top:10px;padding:9px 20px;background:var(--green-dark);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">💾 Save Hours</button>';
+        html+='<span id="hoursSaveStatus-'+id+'" style="margin-left:12px;font-size:12px;font-weight:600;"></span>';
+        html+='</div>';
       }
     }
     if(!html)html='<p style="color:var(--mid);">No detail records found.</p>';
@@ -1633,6 +1650,64 @@ async function viewPeriod(id,label){
   }catch(e){document.getElementById('modalBody').innerHTML='<p style="color:var(--red);">Error: '+e.message+'</p>';}
 }
 function closeModal(){document.getElementById('historyModal').style.display='none';}
+
+// Track edited hours values in-memory before saving
+window._historyHoursEdits={};
+function updateHistoryHours(input){
+  const member=input.getAttribute('data-member');
+  const periodId=input.getAttribute('data-period-id');
+  if(!window._historyHoursEdits[periodId])window._historyHoursEdits[periodId]={};
+  window._historyHoursEdits[periodId][member]=parseFloat(input.value)||0;
+}
+
+async function saveHistoryHours(periodId,label){
+  const statusEl=document.getElementById('hoursSaveStatus-'+periodId);
+  if(statusEl){statusEl.textContent='Saving...';statusEl.style.color='var(--tan)';}
+  const edits=window._historyHoursEdits[periodId]||{};
+  // Also collect directly from the inputs in case updateHistoryHours wasn't fired
+  const inputs=document.querySelectorAll('[data-period-id="'+periodId+'"]');
+  inputs.forEach(inp=>{
+    const member=inp.getAttribute('data-member');
+    if(member)edits[member]=parseFloat(inp.value)||0;
+  });
+  if(!Object.keys(edits).length){
+    if(statusEl){statusEl.textContent='No changes to save.';statusEl.style.color='var(--mid)';}
+    return;
+  }
+  try{
+    // Delete existing time entries for this period so we don't double-count
+    const existingRes=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries?period_id=eq.'+periodId,{
+      method:'DELETE',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Prefer':'return=minimal'}
+    });
+    // Insert fresh daily entries for each member
+    const rows=Object.entries(edits)
+      .filter(([,hrs])=>hrs>0)
+      .map(([name,hrs])=>({period_id:periodId,member_name:name,entry_type:'daily',hours:hrs,notes:'Retroactively entered'}));
+    if(rows.length){
+      const res=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries',{
+        method:'POST',
+        headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=representation'},
+        body:JSON.stringify(rows)
+      });
+      if(!res.ok)throw new Error('Save failed: '+res.status);
+    }
+    // Update total_hours on the period snapshot
+    const totalHrs=Object.values(edits).reduce((s,h)=>s+h,0);
+    await fetch(SUPABASE_URL+'/rest/v1/kf_pay_periods?id=eq.'+periodId,{
+      method:'PATCH',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({total_hours:totalHrs})
+    });
+    if(statusEl){statusEl.textContent='✓ Saved!';statusEl.style.color='var(--green)';}
+    toast('Hours saved for '+label);
+    // Reload the modal with updated data
+    setTimeout(()=>viewPeriod(periodId,label),600);
+  }catch(e){
+    if(statusEl){statusEl.textContent='Error: '+e.message;statusEl.style.color='var(--red)';}
+    toast('Save failed: '+e.message,true);
+  }
+}
 
 // ─── INGREDIENTS ───
 function renderBulkIngs(){
