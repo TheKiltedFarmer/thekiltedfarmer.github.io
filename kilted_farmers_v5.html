@@ -825,7 +825,17 @@ function getLogPeriodLabel(){
 }
 
 async function onLogPeriodChange(){
-  window._currentPeriodId=null;
+  // Clear cached period so expenses load for the newly selected log period
+  // But only if the log period differs from the timeclock period to avoid clobbering hours
+  const logLabel=getLogPeriodLabel();
+  const clockLabel=getCurrentPeriodLabel();
+  if(logLabel!==clockLabel){
+    // Don't nuke _currentPeriodId — it belongs to the timeclock tab
+    // Just reload expenses for the log's selected period
+  } else {
+    window._currentPeriodId=null;
+    window._currentPeriodLabel=null;
+  }
   expenses=[{id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null}];
   renderExpenses();
   await loadRevLogEntries();
@@ -1127,20 +1137,21 @@ function updateExpense(id,f,v){
 async function saveExpenses(){
   showSave('expSaveIndicator','saving');
   try{
-    // Get or create period record
-    const label=getCurrentPeriodLabel();
-    let pid=window._currentPeriodId;
+    // Get or create period record — expenses always belong to the LOG tab's selected period
+    const label=getLogPeriodLabel();
+    // Use a separate period cache for the log tab so it doesn't clobber the timeclock period
+    let pid=window._logPeriodId&&window._logPeriodLabel===label?window._logPeriodId:null;
     if(!pid){
       // Try to find existing
       const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
       if(existing.length){
         pid=existing[0].id;
-        window._currentPeriodId=pid;
+        window._logPeriodId=pid;window._logPeriodLabel=label;
       } else {
         // Create new period record
         const created=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:'Weekly',period_label:label,gross_revenue:0,total_expenses:0,common_table:0,distributable_pool:0,total_hours:0})});
         pid=created[0].id;
-        window._currentPeriodId=pid;
+        window._logPeriodId=pid;window._logPeriodLabel=label;
       }
     }
     if(!pid){showSave('expSaveIndicator','error','No period ID');return;}
@@ -1319,14 +1330,22 @@ function calculate(){
 }
 
 // ─── PERIOD ID ───
-async function ensurePeriodId(){
-  if(window._currentPeriodId)return window._currentPeriodId;
-  const label=getLogPeriodLabel();if(!label)return null;
+async function ensurePeriodId(forceLabel){
+  // Use the passed label, or the current dashboard/timeclock period
+  const label=forceLabel||getCurrentPeriodLabel();if(!label)return null;
+  // If cached period matches the current label, reuse it
+  if(window._currentPeriodId&&window._currentPeriodLabel===label)return window._currentPeriodId;
   try{
     const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-    if(existing.length){window._currentPeriodId=existing[0].id;return existing[0].id;}
+    if(existing.length){
+      window._currentPeriodId=existing[0].id;
+      window._currentPeriodLabel=label;
+      return existing[0].id;
+    }
     const[p]=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:'Weekly',period_label:label,gross_revenue:0,total_expenses:0,common_table:0,distributable_pool:0,total_hours:0})});
-    window._currentPeriodId=p.id;return p.id;
+    window._currentPeriodId=p.id;
+    window._currentPeriodLabel=label;
+    return p.id;
   }catch(e){console.warn('ensurePeriodId:',e.message);return null;}
 }
 
@@ -1516,6 +1535,19 @@ async function viewPeriod(id,label){
       const seenIds=new Set(timeEntries.map(e=>e.id));
       rangeEntries.forEach(e=>{if(!seenIds.has(e.id))timeEntries.push(e);});
     }
+    // Also try a broader query — no date filter — just get ALL entries and filter by member name
+    // This catches entries with null period_id that fall outside the date range
+    const allEntries=await sb('kf_time_entries?select=*&order=created_at.desc&limit=500');
+    const seenIds2=new Set(timeEntries.map(e=>e.id));
+    // Include entries whose period_id matches OR whose created_at is within ±3 days of the week
+    const wbLoose=wb||{mon:new Date(0),sun:new Date()};
+    const looseMon=new Date(wbLoose.mon);looseMon.setDate(looseMon.getDate()-3);
+    const looseSun=new Date(wbLoose.sun);looseSun.setDate(looseSun.getDate()+3);
+    allEntries.forEach(e=>{
+      if(seenIds2.has(e.id))return;
+      const created=new Date(e.created_at);
+      if(created>=looseMon&&created<=looseSun){timeEntries.push(e);seenIds2.add(e.id);}
+    });
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
     const revEntries=allRev.filter(e=>e.period_label===label);
     let html='';
@@ -1560,12 +1592,20 @@ async function viewPeriod(id,label){
         html+='<div style="background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--mid);">Pool: '+fmt(pool)+' &nbsp;|&nbsp; Common Table: '+fmt(ctAmt)+' &nbsp;|&nbsp; Total Hours: '+(totalHours).toFixed(2)+'</div>';
         html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">';
         html+='<thead><tr><th style="text-align:left;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Member</th><th style="text-align:center;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Hours</th><th style="text-align:center;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">% of Pool</th><th style="text-align:right;padding:6px 8px;background:var(--cream);border:1px solid var(--rule);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);">Earned</th></tr></thead><tbody>';
+        let earnedTotal=0;
         Object.entries(memberHours).sort((a,b)=>b[1]-a[1]).forEach(([name,hrs])=>{
           const pct=totalHours>0?hrs/totalHours:0;
           const earned=pool*pct;
-          html+='<tr><td style="padding:7px 8px;border:1px solid var(--rule);">'+name+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+hrs.toFixed(2)+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+(pct*100).toFixed(1)+'%</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--green-dark);">'+fmt(earned)+'</td></tr>';
+          earnedTotal+=earned;
+          const hoursNote=hrs===0?'<span style="font-size:10px;color:var(--red);margin-left:4px;">⚠ no hours logged</span>':'';
+          html+='<tr><td style="padding:7px 8px;border:1px solid var(--rule);">'+name+hoursNote+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+hrs.toFixed(2)+'</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:center;">'+(pct*100).toFixed(1)+'%</td><td style="padding:7px 8px;border:1px solid var(--rule);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--green-dark);">'+fmt(earned)+'</td></tr>';
         });
-        html+='<tr style="background:var(--green-dark);"><td colspan="3" style="padding:7px 8px;border:1px solid var(--green-dark);color:#fff;font-weight:700;">Total</td><td style="padding:7px 8px;border:1px solid var(--green-dark);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--tan-light);">'+fmt(pool)+'</td></tr>';
+        // Only show total if hours were actually found; otherwise show a warning
+        if(totalHours===0){
+          html+='<tr><td colspan="4" style="padding:10px 8px;border:1px solid var(--rule);color:var(--red);font-size:12px;text-align:center;">⚠ No hours found in the database for this period. Hours may not have been saved correctly.</td></tr>';
+        } else {
+          html+='<tr style="background:var(--green-dark);"><td colspan="3" style="padding:7px 8px;border:1px solid var(--green-dark);color:#fff;font-weight:700;">Total Distributed</td><td style="padding:7px 8px;border:1px solid var(--green-dark);text-align:right;font-family:\'Playfair Display\',serif;font-weight:700;color:var(--tan-light);">'+fmt(earnedTotal)+'</td></tr>';
+        }
         html+='</tbody></table>';
       }
     }
