@@ -3,27 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The People's Voice</title>
+  <title>Page not found · The People's Voice</title>
   <script>
+    // ── Selective SPA path router for GitHub Pages ──────────────────────────
     // GitHub Pages serves this file for any path it doesn't recognize.
-    // We rewrite the URL to the root and let the SPA's router pick up
-    // the original path. This makes /jackson, /calhoun, etc. work as
-    // sub-routes even though GitHub Pages doesn't natively support SPA routing.
+    // We ONLY redirect to the People's Voice SPA when the path looks like
+    // a county slug. Anything else (including unknown .html files, asset
+    // paths, etc.) just shows a normal "page not found" message so other
+    // apps living in this repo (like kilted_farmers_v5.html) aren't broken
+    // by a greedy redirect.
+    //
+    // To add new counties, update the list below or use a broader regex.
+    // ────────────────────────────────────────────────────────────────────────
     (function(){
-      // Preserve the original path for the app to read after redirect
-      var pathAndQuery = window.location.pathname + window.location.search + window.location.hash;
-      // Store original path in sessionStorage and redirect to root
-      // App reads sessionStorage on load and rewrites history to the original path
-      sessionStorage.setItem('tpv_original_path', pathAndQuery);
-      // Redirect to root, preserving query string and hash
-      window.location.replace('/');
+      var KNOWN_COUNTY_SLUGS = ['jackson', 'calhoun'];
+
+      var path = window.location.pathname || '/';
+      // Strip leading slash, take first segment, lowercase
+      var firstSeg = path.replace(/^\/+/, '').split('/')[0].toLowerCase();
+
+      // Only redirect if the first segment matches a known county.
+      // Anything else (kilted_farmers_v5.html, unknown.html, /assets/x.png,
+      // typos, etc.) falls through to the visible "page not found" UI below.
+      if (KNOWN_COUNTY_SLUGS.indexOf(firstSeg) !== -1) {
+        var pathAndQuery = window.location.pathname + window.location.search + window.location.hash;
+        sessionStorage.setItem('tpv_original_path', pathAndQuery);
+        window.location.replace('/');
+      }
     })();
   </script>
+  <style>
+    body {
+      margin: 0;
+      background: #1a1a2e;
+      color: #f0c040;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    h1 { font-family: 'Playfair Display', serif; font-size: 28px; margin: 0 0 8px; font-weight: 900; }
+    p { color: #c8b890; margin: 6px 0; font-size: 14px; }
+    a {
+      color: #f0c040;
+      text-decoration: none;
+      border-bottom: 1px solid #f0c040;
+      padding-bottom: 1px;
+    }
+    a:hover { color: #fff; border-bottom-color: #fff; }
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: rgba(255,255,255,.06);
+      padding: 6px 10px;
+      border-radius: 4px;
+      color: #aaa;
+      margin-top: 14px;
+      max-width: 80vw;
+      overflow-wrap: anywhere;
+    }
+  </style>
 </head>
 <body>
+  <h1>The People's Voice</h1>
+  <p>Page not found.</p>
+  <p style="margin-top: 16px;">
+    <a href="/">Return home</a>
+  </p>
   <noscript>
-    <p>The People's Voice requires JavaScript. Please enable JavaScript in your browser to continue.</p>
-    <p><a href="/">Go to home</a></p>
+    <p style="margin-top: 20px; font-size: 13px;">This site uses JavaScript. Please enable it in your browser.</p>
   </noscript>
 </body>
 </html>
