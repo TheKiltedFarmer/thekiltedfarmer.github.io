@@ -359,9 +359,14 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
   </div>
   <div style="width:100%;max-width:380px;padding:0 24px;">
     <input type="email" id="loginEmail" placeholder="Email" style="width:100%;margin-bottom:12px;padding:14px 16px;font-size:16px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:10px;font-family:'Source Sans 3',sans-serif;box-sizing:border-box;" autocomplete="email">
-    <input type="password" id="loginPassword" placeholder="Password" style="width:100%;margin-bottom:20px;padding:14px 16px;font-size:16px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:10px;font-family:'Source Sans 3',sans-serif;box-sizing:border-box;" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+    <input type="password" id="loginPassword" placeholder="Password" style="width:100%;margin-bottom:14px;padding:14px 16px;font-size:16px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:10px;font-family:'Source Sans 3',sans-serif;box-sizing:border-box;" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;color:rgba(255,255,255,0.7);font-size:14px;">
+      <input type="checkbox" id="rememberMe" checked style="width:16px;height:16px;accent-color:var(--tan);cursor:pointer;">
+      Remember me on this device
+    </label>
     <button onclick="signIn()" id="loginBtn" class="btn-tan" style="width:100%;padding:14px;font-size:16px;border-radius:10px;">Sign In</button>
     <div id="loginError" style="color:#ff8a80;font-size:13px;margin-top:12px;text-align:center;"></div>
+    <div id="restoringSession" style="display:none;color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;text-align:center;">Signing you back in...</div>
   </div>
 </div>
 
@@ -651,6 +656,7 @@ const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE';
 const ADMIN_WORKER_URL='https://kf-admin.justindfair.workers.dev';
 const CT=0.08;
+const REMEMBER_KEY='kf_remember_token';
 
 let currentUser=null,currentProfile=null,dashInterval=null;
 let memberCounter=10,expCounter=10,bulkCounter=10,specCounter=10;
@@ -674,12 +680,41 @@ let bulkIngs=[{id:1,name:'Semolina Flour',cost:'',yield:'400'},{id:2,name:'Eggs 
 let specIngs=[{id:1,name:'Squid Ink',cost:'',purchaseSize:'2',usedPer:'0.5',unit:'ml'}];
 
 // ─── SUPABASE ───
-async function sb(path,opts={}){
+let _refreshInFlight=null;
+async function silentRefresh(){
+  if(_refreshInFlight)return _refreshInFlight;
+  _refreshInFlight=(async()=>{
+    let refreshToken;
+    try{refreshToken=localStorage.getItem(REMEMBER_KEY);}catch(e){return false;}
+    if(!refreshToken)return false;
+    try{
+      const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
+        method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({refresh_token:refreshToken})
+      });
+      const data=await res.json();
+      if(!res.ok)return false;
+      window._authToken=data.access_token;
+      if(data.refresh_token){try{localStorage.setItem(REMEMBER_KEY,data.refresh_token);}catch(e){}}
+      return true;
+    }catch(e){return false;}
+  })();
+  const result=await _refreshInFlight;
+  _refreshInFlight=null;
+  return result;
+}
+
+async function sb(path,opts={},_retried=false){
   const isDelete=opts.method==='DELETE';
   const prefer=isDelete?'return=minimal':'return=representation';
   const headers={'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':prefer,...(opts.headers||{})};
   if(window._authToken)headers['Authorization']='Bearer '+window._authToken;
   const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{...opts,headers});
+  // Access token expired mid-session — try a silent refresh once, then retry the request
+  if(res.status===401&&!_retried){
+    const refreshed=await silentRefresh();
+    if(refreshed)return sb(path,opts,true);
+  }
   if(isDelete){
     if(!res.ok){let e;try{e=await res.json();}catch(x){e={};}throw new Error(e.message||e.hint||e.error||res.statusText||'Delete failed');}
     return[];
@@ -750,6 +785,7 @@ function getWeekBoundsFromLabel(label){
 async function signIn(){
   const email=document.getElementById('loginEmail').value.trim();
   const password=document.getElementById('loginPassword').value;
+  const remember=document.getElementById('rememberMe').checked;
   const errEl=document.getElementById('loginError');
   const btn=document.getElementById('loginBtn');
   errEl.textContent='';btn.textContent='Signing in...';btn.disabled=true;
@@ -761,6 +797,12 @@ async function signIn(){
     const data=await res.json();
     if(!res.ok)throw new Error(data.error_description||data.message||'Login failed');
     currentUser=data.user;window._authToken=data.access_token;
+    // Store refresh token for silent re-login next visit, only if Remember Me is checked
+    if(remember&&data.refresh_token){
+      try{localStorage.setItem(REMEMBER_KEY,data.refresh_token);}catch(e){console.warn('localStorage unavailable:',e.message);}
+    } else {
+      try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
+    }
     await new Promise(r=>setTimeout(r,200));
     await loadProfile();
     document.getElementById('authGate').style.display='none';
@@ -771,6 +813,43 @@ async function signIn(){
     await new Promise(r=>setTimeout(r,300));
     await autoInit();
   }catch(e){errEl.textContent=e.message;btn.textContent='Sign In';btn.disabled=false;}
+}
+
+// On page load, try to silently restore a session using a saved refresh token
+async function restoreSession(){
+  let refreshToken;
+  try{refreshToken=localStorage.getItem(REMEMBER_KEY);}catch(e){return false;}
+  if(!refreshToken)return false;
+  const restoringEl=document.getElementById('restoringSession');
+  if(restoringEl)restoringEl.style.display='block';
+  try{
+    const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
+      method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({refresh_token:refreshToken})
+    });
+    const data=await res.json();
+    if(!res.ok){
+      // Stored token is stale/invalid — clear it and fall back to manual login
+      try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
+      return false;
+    }
+    currentUser=data.user;window._authToken=data.access_token;
+    // Refresh tokens rotate on use — store the new one
+    if(data.refresh_token){try{localStorage.setItem(REMEMBER_KEY,data.refresh_token);}catch(e){}}
+    await loadProfile();
+    document.getElementById('authGate').style.display='none';
+    document.getElementById('userBar').style.display='flex';
+    document.getElementById('userNameDisplay').textContent=currentProfile?.name||currentUser.email?.split('@')[0];
+    document.getElementById('userRoleDisplay').textContent=currentProfile?.role||'Contributor';
+    applyRoleAccess();
+    await autoInit();
+    return true;
+  }catch(e){
+    console.warn('Session restore failed:',e.message);
+    return false;
+  }finally{
+    if(restoringEl)restoringEl.style.display='none';
+  }
 }
 
 async function loadProfile(){
@@ -791,6 +870,7 @@ function applyRoleAccess(){
 
 function signOut(){
   window._authToken=null;currentUser=null;currentProfile=null;
+  try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
   if(dashInterval)clearInterval(dashInterval);
   document.getElementById('authGate').style.display='flex';
   document.getElementById('userBar').style.display='none';
@@ -1853,6 +1933,8 @@ document.addEventListener('DOMContentLoaded',function(){
   if(!document.getElementById('revenue')){
     const inp=document.createElement('input');inp.type='hidden';inp.id='revenue';inp.value='0';document.body.appendChild(inp);
   }
+  // Try to silently restore a previous session before showing the login form
+  restoreSession();
 });
 
 </script>
