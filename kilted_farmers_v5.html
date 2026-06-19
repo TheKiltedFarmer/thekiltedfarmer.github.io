@@ -1571,6 +1571,18 @@ async function viewPeriod(id,label){
       const created=new Date(e.created_at);
       if(created>=looseMon&&created<=looseSun){timeEntries.push(e);seenIds2.add(e.id);}
     });
+    // Deduplicate daily entries per member — keep the most recent, sum would be wrong due to stacking
+    // For each member, if there are multiple daily entries, keep only the latest one
+    const latestDailyByMember={};
+    timeEntries.filter(e=>e.entry_type==='daily').forEach(e=>{
+      const existing=latestDailyByMember[e.member_name];
+      if(!existing||new Date(e.created_at)>new Date(existing.created_at))latestDailyByMember[e.member_name]=e;
+    });
+    const deduped=[
+      ...timeEntries.filter(e=>e.entry_type!=='daily'),
+      ...Object.values(latestDailyByMember)
+    ];
+    timeEntries=deduped;
     const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=500');
     const revEntries=allRev.filter(e=>e.period_label===label);
     let html='';
@@ -1674,125 +1686,75 @@ async function saveHistoryHours(periodId,label){
   };
   setStatus('Collecting hours...','var(--tan)');
 
-  // Collect hours from all inputs for this period
+  // Collect hours from all inputs
   const edits={};
   document.querySelectorAll('[data-period-id="'+periodId+'"]').forEach(inp=>{
     const member=inp.getAttribute('data-member');
-    const val=parseFloat(inp.value)||0;
-    if(member){edits[member]=val;console.log('[saveHistoryHours] collected:',member,val);}
+    if(member)edits[member]=parseFloat(inp.value)||0;
   });
+  console.log('[saveHistoryHours] edits:',edits);
 
-  const membersWithHours=Object.entries(edits).filter(([,h])=>h>0);
-  if(!membersWithHours.length){
-    setStatus('⚠ All hours are 0 — enter hours first then save.','var(--red)');
-    return;
-  }
+  const allMembers=Object.keys(edits);
+  if(!allMembers.length){setStatus('No members found.','var(--red)');return;}
 
-  // Get entry_date from label
   const wb=getWeekBoundsFromLabel(label);
   const entryDate=wb?wb.mon.toISOString().split('T')[0]:new Date().toISOString().split('T')[0];
-  console.log('[saveHistoryHours] periodId:',periodId,'label:',label,'entryDate:',entryDate);
 
   try{
-    // Step 1: Delete all existing time entries for this period
-    setStatus('Step 1/3: Clearing old entries...','var(--tan)');
-    try{
-      const delRes=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries?period_id=eq.'+encodeURIComponent(periodId),{
-        method:'DELETE',
-        headers:{
-          'apikey':SUPABASE_KEY,
-          'Authorization':'Bearer '+window._authToken,
-          'Prefer':'return=minimal'
-        }
-      });
-      console.log('[saveHistoryHours] DELETE status:',delRes.status);
-      if(!delRes.ok){const t=await delRes.text();console.warn('DELETE failed:',t);}
-    }catch(delErr){console.warn('[saveHistoryHours] DELETE error (non-fatal):',delErr.message);}
+    // Load existing entries for this period so we can PATCH existing rows instead of inserting duplicates
+    setStatus('Loading existing entries...','var(--tan)');
+    const existing=await sb('kf_time_entries?period_id=eq.'+periodId+'&entry_type=eq.daily&select=id,member_name,hours');
+    const existingByMember={};
+    existing.forEach(e=>existingByMember[e.member_name]=e);
+    console.log('[saveHistoryHours] existing entries:',existing.length,existingByMember);
 
-    // Step 2: Insert one row per member who has hours > 0
-    setStatus('Step 2/3: Saving hours...','var(--tan)');
     let saved=0;
-    for(const [name,hrs] of membersWithHours){
-      const row={period_id:periodId,member_name:name,entry_type:'daily',entry_date:entryDate,hours:hrs,notes:'Retroactively entered'};
-      console.log('[saveHistoryHours] inserting:',row);
-      const insRes=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries',{
-        method:'POST',
-        headers:{
-          'apikey':SUPABASE_KEY,
-          'Authorization':'Bearer '+window._authToken,
-          'Content-Type':'application/json',
-          'Prefer':'return=minimal'
-        },
-        body:JSON.stringify(row)
-      });
-      console.log('[saveHistoryHours] INSERT status for',name,':',insRes.status);
-      if(!insRes.ok){
-        const errText=await insRes.text();
-        console.error('[saveHistoryHours] INSERT error for',name,':',errText);
-        setStatus('Error saving '+name+': '+errText,'var(--red)');
-        return;
+    for(const [name,hrs] of Object.entries(edits)){
+      if(existingByMember[name]){
+        // Row exists — PATCH it
+        const rowId=existingByMember[name].id;
+        console.log('[saveHistoryHours] PATCHing',name,'id:',rowId,'hrs:',hrs);
+        const res=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries?id=eq.'+rowId,{
+          method:'PATCH',
+          headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=minimal'},
+          body:JSON.stringify({hours:hrs,entry_date:entryDate})
+        });
+        console.log('[saveHistoryHours] PATCH',name,'status:',res.status);
+        if(!res.ok){const t=await res.text();setStatus('Error updating '+name+': '+t,'var(--red)');return;}
+      } else {
+        // No row — INSERT
+        console.log('[saveHistoryHours] INSERTing',name,'hrs:',hrs);
+        const res=await fetch(SUPABASE_URL+'/rest/v1/kf_time_entries',{
+          method:'POST',
+          headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=minimal'},
+          body:JSON.stringify({period_id:periodId,member_name:name,entry_type:'daily',entry_date:entryDate,hours:hrs,notes:'Retroactively entered'})
+        });
+        console.log('[saveHistoryHours] INSERT',name,'status:',res.status);
+        if(!res.ok){const t=await res.text();setStatus('Error saving '+name+': '+t,'var(--red)');return;}
       }
       saved++;
     }
 
-    // Step 3: Update total_hours on the period snapshot
-    setStatus('Step 3/3: Updating period...','var(--tan)');
-    const totalHrs=membersWithHours.reduce((s,[,h])=>s+h,0);
-    const patchRes=await fetch(SUPABASE_URL+'/rest/v1/kf_pay_periods?id=eq.'+encodeURIComponent(periodId),{
+    // Update period total_hours
+    const totalHrs=Object.values(edits).reduce((s,h)=>s+h,0);
+    await fetch(SUPABASE_URL+'/rest/v1/kf_pay_periods?id=eq.'+periodId,{
       method:'PATCH',
-      headers:{
-        'apikey':SUPABASE_KEY,
-        'Authorization':'Bearer '+window._authToken,
-        'Content-Type':'application/json',
-        'Prefer':'return=minimal'
-      },
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json','Prefer':'return=minimal'},
       body:JSON.stringify({total_hours:totalHrs})
     });
-    console.log('[saveHistoryHours] PATCH period status:',patchRes.status);
 
-    setStatus('✓ Saved '+saved+' members ('+totalHrs.toFixed(1)+' total hrs)','var(--green)');
+    setStatus('✓ Saved '+saved+' members ('+totalHrs.toFixed(1)+' hrs total)','var(--green)');
     toast('Hours saved for '+label);
     window._historyHoursEdits[periodId]={};
-    setTimeout(()=>viewPeriod(periodId,label),1200);
+    setTimeout(()=>viewPeriod(periodId,label),1000);
 
   }catch(e){
-    console.error('[saveHistoryHours] fatal error:',e);
+    console.error('[saveHistoryHours] error:',e);
     setStatus('Error: '+e.message,'var(--red)');
   }
 }
 
-// ─── INGREDIENTS ───
-function renderBulkIngs(){
-  const el=document.getElementById('bulkIngList');if(!el)return;
-  el.innerHTML=bulkIngs.map(i=>`<div class="bulk-row"><input class="inp" type="text" placeholder="Ingredient" value="${i.name}" oninput="updateBulk(${i.id},'name',this.value)" style="flex:2;"><span style="color:var(--mid);font-size:12px;">Cost $</span><input class="inp" type="number" placeholder="0.00" value="${i.cost}" oninput="updateBulk(${i.id},'cost',this.value)" style="width:80px;"><span style="color:var(--mid);font-size:12px;">Yield</span><input class="inp" type="number" placeholder="pastas" value="${i.yield}" oninput="updateBulk(${i.id},'yield',this.value)" style="width:80px;"><button class="remove-btn" onclick="removeBulkIng(${i.id})">×</button></div>`).join('');
-}
-function addBulkIng(){bulkIngs.push({id:++bulkCounter,name:'',cost:'',yield:''});renderBulkIngs();calcIngredients();}
-function removeBulkIng(id){bulkIngs=bulkIngs.filter(i=>i.id!==id);renderBulkIngs();calcIngredients();}
-function updateBulk(id,f,v){const i=bulkIngs.find(i=>i.id===id);if(i)i[f]=v;calcIngredients();}
 
-function renderSpecIngs(){
-  const el=document.getElementById('specIngList');if(!el)return;
-  el.innerHTML=specIngs.map(i=>`<div class="bulk-row"><input class="inp" type="text" placeholder="Ingredient" value="${i.name}" oninput="updateSpec(${i.id},'name',this.value)" style="flex:2;"><span style="color:var(--mid);font-size:12px;">Cost $</span><input class="inp" type="number" placeholder="0.00" value="${i.cost}" oninput="updateSpec(${i.id},'cost',this.value)" style="width:70px;"><span style="color:var(--mid);font-size:12px;">per</span><input class="inp" type="number" placeholder="size" value="${i.purchaseSize}" oninput="updateSpec(${i.id},'purchaseSize',this.value)" style="width:60px;"><select class="role-select" onchange="updateSpec(${i.id},'unit',this.value)">${['g','ml','oz','tsp','tbsp'].map(u=>`<option ${i.unit===u?'selected':''}>${u}</option>`).join('')}</select><span style="color:var(--mid);font-size:12px;">use</span><input class="inp" type="number" placeholder="amt" value="${i.usedPer}" oninput="updateSpec(${i.id},'usedPer',this.value)" style="width:60px;"><button class="remove-btn" onclick="removeSpecIng(${i.id})">×</button></div>`).join('');
-}
-function addSpecIng(){specIngs.push({id:++specCounter,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'});renderSpecIngs();calcIngredients();}
-function removeSpecIng(id){specIngs=specIngs.filter(i=>i.id!==id);renderSpecIngs();calcIngredients();}
-function updateSpec(id,f,v){const i=specIngs.find(i=>i.id===id);if(i)i[f]=v;calcIngredients();}
-
-function calcIngredients(){
-  const batch=parseFloat(document.getElementById('batchSize')?.value)||20;
-  const markup=parseFloat(document.getElementById('markupPct')?.value)||40;
-  const laborRate=parseFloat(document.getElementById('laborRate')?.value)||0;
-  const batchHours=parseFloat(document.getElementById('batchHours')?.value)||0;
-  let bulkTotal=0;bulkIngs.forEach(i=>{const c=parseFloat(i.cost)||0,y=parseFloat(i.yield)||1;bulkTotal+=c/y;});
-  let specTotal=0;specIngs.forEach(i=>{const c=parseFloat(i.cost)||0,ps=parseFloat(i.purchaseSize)||1,u=parseFloat(i.usedPer)||0;specTotal+=(c/ps)*u;});
-  const labor=(laborRate*batchHours)/Math.max(batch,1);
-  const total=bulkTotal+specTotal+labor;
-  const sell=total*(1+markup/100);
-  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  s('costPerPasta',total>0?'$'+total.toFixed(2):'—');s('suggestedPrice',sell>0?'$'+sell.toFixed(2):'—');s('batchCost',total>0?'$'+(total*batch).toFixed(2):'—');
-}
-
-// ─── RECIPES ───
 async function loadRecipeList(){
   try{
     const recipes=await sb('kf_recipes?select=*&order=name.asc');
