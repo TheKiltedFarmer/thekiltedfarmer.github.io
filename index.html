@@ -296,11 +296,19 @@ const BADGES = {
   // Special / rare
   founding_member:  {id:'founding_member',   icon:'🌾',  label:'Founding Member',    desc:'Among the first 25 members of The People\'s Voice', color:'#8a6000', bg:'#fff8e7'},
   verified_official:{id:'verified_official', icon:'🏛',  label:'Verified Official',  desc:'Verified public official',                    color:'#1a5c8a', bg:'#e8f2fa'},
-  // ZIP / community identity
+  // ZIP / community identity — Jackson County
   zip_49201:        {id:'zip_49201',         icon:'📍',  label:'Jackson Resident',   desc:'Verified resident of City of Jackson (49201-49204)', color:'#1a1a2e', bg:'#f0f0f8'},
   zip_49237:        {id:'zip_49237',         icon:'📍',  label:'Concord Neighbor',   desc:'Verified resident of Concord (49237)',         color:'#1a6b3c', bg:'#eef7f1'},
   zip_49230:        {id:'zip_49230',         icon:'📍',  label:'Brooklyn Resident',  desc:'Verified resident of Brooklyn area (49230)',   color:'#5b3a8c', bg:'#f0ebf8'},
   zip_49285:        {id:'zip_49285',         icon:'📍',  label:'Summit Neighbor',    desc:'Verified resident of Summit Township (49285)', color:'#1a5c8a', bg:'#e8f2fa'},
+  zip_jackson_co:   {id:'zip_jackson_co',    icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
+  // ZIP / community identity — Calhoun County
+  zip_49014:        {id:'zip_49014',         icon:'📍',  label:'Battle Creek',       desc:'Verified resident of Battle Creek (49014-49017, 49037)', color:'#1a1a2e', bg:'#f0f0f8'},
+  zip_49068:        {id:'zip_49068',         icon:'📍',  label:'Marshall Resident',  desc:'Verified resident of Marshall (49068)',        color:'#1a6b3c', bg:'#eef7f1'},
+  zip_49224:        {id:'zip_49224',         icon:'📍',  label:'Albion Resident',    desc:'Verified resident of Albion area (49224)',     color:'#5b3a8c', bg:'#f0ebf8'},
+  zip_calhoun_co:   {id:'zip_calhoun_co',    icon:'📍',  label:'Calhoun County',     desc:'Verified Calhoun County resident',             color:'#888',    bg:'#f5f5f5'},
+  // Legacy alias: existing rows still reference 'zip_other'. Keep it pointing
+  // at the Jackson County badge so old profiles don't show a broken chip.
   zip_other:        {id:'zip_other',         icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
   youth_voice:      {id:'youth_voice',       icon:'⭐',  label:'Youth Voice',        desc:'Under-25 member making civic impact',          color:'#5b3a8c', bg:'#f0ebf8'},
 };
@@ -319,12 +327,22 @@ const computeBadges = (profile, voteCounts, commentCount) => {
   if(rep>=100) earned.add('rep_100');
   if(rep>=200) earned.add('rep_200');
 
-  // ZIP identity
-  if(['49201','49202','49203','49204'].includes(zip)) earned.add('zip_49201');
-  else if(zip==='49237') earned.add('zip_49237');
-  else if(zip==='49230') earned.add('zip_49230');
-  else if(zip==='49285') earned.add('zip_49285');
-  else if(zip&&zip.startsWith('49')) earned.add('zip_other');
+  // ZIP identity — routed by county
+  const zipCounty = ZIP_TO_COUNTY[zip] || null;
+  if(zipCounty === 'jackson') {
+    if(['49201','49202','49203','49204'].includes(zip)) earned.add('zip_49201');
+    else if(zip==='49237') earned.add('zip_49237');
+    else if(zip==='49230') earned.add('zip_49230');
+    else if(zip==='49285') earned.add('zip_49285');
+    else earned.add('zip_jackson_co');
+  } else if(zipCounty === 'calhoun') {
+    if(['49014','49015','49016','49017','49037'].includes(zip)) earned.add('zip_49014');
+    else if(zip==='49068') earned.add('zip_49068');
+    else if(zip==='49224') earned.add('zip_49224');
+    else earned.add('zip_calhoun_co');
+  }
+  // Existing legacy data may have 'zip_other' badge stored on profiles;
+  // it stays earned because we start `earned` from profile.badges.
 
   // Official
   if(profile?.is_official) earned.add('verified_official');
@@ -2146,6 +2164,34 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
   const [myVotes, setMyVotes] = useState({});
   // Spotlight bills that user explicitly chose to expand (overrides auto-collapse)
   const [expandedSpotlights, setExpandedSpotlights] = useState(new Set());
+  // ── Getting Started checklist ─────────────────────────────────
+  // Derived from real data (has the user voted / chatted / RSVPd?) so it's
+  // always honest. Dismissible via localStorage.
+  const [gettingStarted, setGettingStarted] = useState(null); // {voted,chatted,rsvpd} | null
+  const [gsDismissed, setGsDismissed] = useState(()=>{
+    try { return localStorage.getItem('tpv_getting_started_dismissed') === '1'; } catch(e){ return false; }
+  });
+  const [inviteCopied, setInviteCopied] = useState(false);
+  useEffect(()=>{
+    if(!user?.id || gsDismissed) return;
+    let mounted = true;
+    (async()=>{
+      try {
+        const [v, c, r] = await Promise.all([
+          sb.from('user_votes').select('id',{count:'exact',head:true}).eq('user_id', user.id),
+          sb.from('community_chat').select('id',{count:'exact',head:true}).eq('user_id', user.id),
+          sb.from('event_rsvps').select('id',{count:'exact',head:true}).eq('user_id', user.id),
+        ]);
+        if(!mounted) return;
+        setGettingStarted({
+          voted:   (v.count||0)  > 0,
+          chatted: (c.count||0)  > 0,
+          rsvpd:   (r.count||0)  > 0,
+        });
+      } catch(e) { /* non-critical */ }
+    })();
+    return ()=>{ mounted = false; };
+  },[user?.id, gsDismissed]);
   // ── Activity stream ────────────────────────────────────────────
   const [activityStream, setActivityStream] = useState([]);
   const [activityStreamLoading, setActivityStreamLoading] = useState(true);
@@ -2893,6 +2939,68 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           h('b',{style:{color:GOLD}}, zipStats.newNeighbors), ' new neighbors')
       )
     ),
+
+    // ── Getting Started checklist ─────────────────────────────────
+    // Shown until the user has voted, chatted, and RSVPd at least once
+    // (derived from real data), or until dismissed. Completing all three
+    // reveals an invite-a-neighbor link.
+    user && !gsDismissed && gettingStarted && (()=>{
+      const items = [
+        {done: gettingStarted.voted,   icon:'🗳️', label:'Vote on your first bill',    sub:'Real legislation, your real voice', nav:'bills'},
+        {done: gettingStarted.chatted, icon:'💬', label:'Say hi in your ZIP chat',     sub:'Your neighbors are in there',       nav:'connect'},
+        {done: gettingStarted.rsvpd,   icon:'📅', label:'RSVP to a local event',       sub:'Show up. That\'s how it starts.',   nav:'events'},
+      ];
+      const doneCount = items.filter(i=>i.done).length;
+      const allDone = doneCount === 3;
+      const inviteUrl = countyUrl(countyTag());
+      return h('div',{style:{background:'#fff',border:'2px solid '+GOLD,borderRadius:8,
+        padding:'16px 18px',marginBottom:18,position:'relative'}},
+        h('button',{onClick:()=>{
+            try { localStorage.setItem('tpv_getting_started_dismissed','1'); } catch(e){}
+            setGsDismissed(true);
+          },
+          style:{position:'absolute',top:10,right:12,background:'transparent',border:'none',
+            color:'#bbb',fontSize:16,cursor:'pointer',lineHeight:1,padding:2}}, '×'),
+        h('div',{style:{display:'flex',alignItems:'baseline',gap:8,marginBottom:4,flexWrap:'wrap'}},
+          h('div',{style:{fontFamily:FONT_D,fontSize:15,fontWeight:900,color:NAVY}},
+            allDone ? '🎉 You\'re a full citizen of this platform' : '🌱 Get rooted in your community'),
+          h('span',{style:{fontSize:11,color:MUTED,fontFamily:FONT_B}}, doneCount+' of 3 done')
+        ),
+        // Progress bar
+        h('div',{style:{height:5,background:'#f0ece0',borderRadius:3,marginBottom:12,overflow:'hidden'}},
+          h('div',{style:{height:'100%',width:(doneCount/3*100)+'%',background:GREEN,
+            borderRadius:3,transition:'width .4s ease'}})),
+        !allDone && items.map((it,i)=>h('div',{key:i,
+          onClick:()=>{ if(!it.done && onNavigate) onNavigate(it.nav); },
+          style:{display:'flex',alignItems:'center',gap:10,padding:'8px 4px',
+            cursor: it.done ? 'default' : 'pointer',
+            opacity: it.done ? .55 : 1,
+            borderBottom: i<items.length-1 ? '1px solid #f5f1e6' : 'none'}},
+          h('div',{style:{fontSize:17,flexShrink:0}}, it.done ? '✅' : it.icon),
+          h('div',{style:{flex:1,minWidth:0}},
+            h('div',{style:{fontFamily:FONT_D,fontSize:13,fontWeight:700,color:NAVY,
+              textDecoration: it.done ? 'line-through' : 'none'}}, it.label),
+            !it.done && h('div',{style:{fontFamily:FONT_B,fontSize:11,color:MUTED,fontStyle:'italic'}}, it.sub)
+          ),
+          !it.done && h('span',{style:{color:GOLD,fontSize:13,fontWeight:700}}, '→')
+        )),
+        allDone && h('div',null,
+          h('div',{style:{fontFamily:FONT_B,fontSize:12.5,color:'#555',lineHeight:1.6,marginBottom:10}},
+            'Communities grow one invitation at a time. Know a neighbor who\'d want a real voice in ',
+            getCurrentCounty().name, '?'),
+          h('button',{onClick:()=>{
+              try {
+                navigator.clipboard.writeText(inviteUrl);
+                setInviteCopied(true);
+                setTimeout(()=>setInviteCopied(false), 2500);
+              } catch(e) { window.prompt('Copy this link:', inviteUrl); }
+            },
+            style:{background:NAVY,color:GOLD,border:'none',padding:'9px 18px',
+              borderRadius:6,fontFamily:FONT_D,fontWeight:700,fontSize:13,cursor:'pointer'}},
+            inviteCopied ? '✓ Link copied — go share it!' : '🔗 Copy invite link')
+        )
+      );
+    })(),
 
     // ── ZIP Stats Strip ────────────────────────────────────────────
     userZip && h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:1,
@@ -4970,12 +5078,31 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
           h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🔗 Invite Neighbors'),
             h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:10,lineHeight:1.5}},
-              'Share The People\'s Voice with neighbors in Jackson County.'
+              'Share The People\'s Voice with neighbors in '+getCurrentCounty().name+'.'
             ),
-            h('button',{onClick:()=>{navigator.clipboard&&navigator.clipboard.writeText(SITE_URL);onToast('Link copied!');},
+            h('button',{onClick:()=>{navigator.clipboard&&navigator.clipboard.writeText(countyUrl(countyTag()));onToast('Link copied!');},
               style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'10px 20px',borderRadius:7,
                 fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',width:'100%'}
-            },'📋 Copy Invite Link → thepeoplesvoices.org')
+            },'📋 Copy Invite Link')
+          ),
+          // Weekly digest email preference
+          h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'📬 Weekly Digest Email'),
+            h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:10,lineHeight:1.5}},
+              'A short Saturday-morning summary of your county\'s week — new bills, upcoming events, new neighbors.'),
+            h('label',{style:{display:'flex',alignItems:'center',gap:10,cursor:'pointer',
+              fontFamily:"'Lora',serif",fontSize:14,color:'#333'}},
+              h('input',{type:'checkbox',
+                checked: profile?.digest_opt_in !== false,
+                onChange: async(e)=>{
+                  const val = e.target.checked;
+                  const {error} = await sb.from('profiles').update({digest_opt_in: val}).eq('id', user.id);
+                  if(error) onToast('Could not save: '+error.message);
+                  else { onProfileUpdate && onProfileUpdate({...profile, digest_opt_in: val}); onToast(val ? 'Digest on 📬' : 'Digest off'); }
+                },
+                style:{width:18,height:18,accentColor:'#1a6b3c',cursor:'pointer'}}),
+              'Send me the weekly digest'
+            )
           ),
           // Change password
           h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
@@ -10065,13 +10192,16 @@ function StuckSignupsQueue({user, profile, onToast}) {
 
   const load = ()=>{
     setLoading(true);
-    sb.from('stuck_signups').select('*').limit(50)
+    // Call the admin-gated RPC function. The function checks is_admin
+    // server-side and returns zero rows for non-admins (no leak possible).
+    sb.rpc('get_stuck_signups')
       .then(({data,error})=>{
         if(error) {
-          console.error('stuck_signups view error:', error);
+          console.error('get_stuck_signups RPC error:', error);
           setRows([]);
         } else {
-          setRows(data||[]);
+          // Limit to 50 client-side to match previous behavior
+          setRows((data||[]).slice(0,50));
         }
         setLoading(false);
       })
@@ -11958,7 +12088,7 @@ const JURISDICTIONS = [
 // ── Admin Chat ───────────────────────────────────────────────────────────────
 // Cross-county chat for admins only. Not county-scoped — explicit exception
 // to the multi-county architecture. Visible only when user is admin.
-function AdminChat({user, profile, onToast}) {
+function AdminChat({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11969,6 +12099,14 @@ function AdminChat({user, profile, onToast}) {
   const [editText, setEditText] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const scrollRef = useRef(null);
+
+  // Auto-open when a notification routes here
+  useEffect(()=>{
+    if(autoOpen && !open) {
+      setOpen(true);
+      onAutoOpenConsumed && onAutoOpenConsumed();
+    }
+  },[autoOpen]);
 
   const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Admin';
   const myCounty = profile?.county || DEFAULT_COUNTY;
@@ -12223,7 +12361,7 @@ function AdminChat({user, profile, onToast}) {
   );
 }
 
-function AdminPanel({bills,setBills,onToast,user,profile}) {
+function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed}) {
   // Admin access is granted via is_admin flag on the profile — no password in source code
   const isAdmin = profile?.is_admin === true;
   const [authed,setAuthed]=useState(isAdmin);
@@ -12385,7 +12523,7 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
     ),
 
     // Cross-county admin chat — coordination channel for admins
-    h(AdminChat,{user,profile,onToast}),
+    h(AdminChat,{user,profile,onToast,autoOpen:navCtx?.openAdminChat,onAutoOpenConsumed:onNavCtxConsumed}),
 
     // Pending community submissions review queue
     h(NewUsersInbox,{onToast}),
@@ -12515,17 +12653,21 @@ function AdminPanel({bills,setBills,onToast,user,profile}) {
 // ── Main App ──────────────────────────────────────────────────────────────────
 // ── Notification Panel ────────────────────────────────────────────────────────
 const NOTIF_TYPES = {
-  dm:       {icon:'✉️', label:'Direct message', color:'#1a5c8a'},
-  bill:     {icon:'📋', label:'New bill added', color:'#5b3a8c'},
-  comment:  {icon:'💬', label:'Comment on your bill', color:'#1a5c8a'},
-  vote:     {icon:'🗳', label:'Community vote', color:'#1a6b3c'},
-  badge:    {icon:'🏅', label:'Badge earned', color:'#8a6000'},
-  idea:     {icon:'💡', label:'Idea update', color:'#8a6000'},
-  official: {icon:'🏛', label:'Official badge approved', color:'#1a5c8a'},
-  system:   {icon:'📢', label:'Platform update', color:'#555'},
+  dm:                {icon:'✉️', label:'Direct message', color:'#1a5c8a'},
+  bill:              {icon:'📋', label:'New bill added', color:'#5b3a8c'},
+  comment:           {icon:'💬', label:'Comment on your bill', color:'#1a5c8a'},
+  comment_reply:     {icon:'↪️', label:'Reply to you', color:'#1a5c8a'},
+  vote:              {icon:'🗳', label:'Community vote', color:'#1a6b3c'},
+  badge:             {icon:'🏅', label:'Badge earned', color:'#8a6000'},
+  idea:              {icon:'💡', label:'Idea update', color:'#8a6000'},
+  idea_update:       {icon:'💡', label:'Idea update', color:'#8a6000'},
+  official:          {icon:'🏛', label:'Official badge approved', color:'#1a5c8a'},
+  admin_chat:        {icon:'🛡', label:'Admin chat', color:'#1a4a1a'},
+  admin_chat_reply:  {icon:'🛡', label:'Admin chat reply', color:'#1a4a1a'},
+  system:            {icon:'📢', label:'Platform update', color:'#555'},
 };
 
-function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomActivity, onOpenChat}) {
+function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomActivity, onOpenChat, onOpenAdmin}) {
   const chatRows = Object.entries(chatRoomActivity||{}).filter(([rid,n])=>n>0);
   const totalEmpty = notifications.length===0 && chatRows.length===0;
   return h('div',{style:{position:'fixed',top:60,right:16,width:340,maxWidth:'calc(100vw - 32px)',
@@ -12566,7 +12708,7 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
       ),
       notifications.map((n,i)=>{
         const type = NOTIF_TYPES[n.type]||NOTIF_TYPES.system;
-        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update';
+        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update' || n.type === 'admin_chat' || n.type === 'admin_chat_reply';
         return h('div',{key:n.id||i,
           onClick: isClickable ? ()=>{
             // Mark as read locally and in DB
@@ -12577,6 +12719,8 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
               // on the notification, so the user lands on their DM list and picks
               // the conversation they want.
               onOpenChat && onOpenChat('dm');
+            } else if(n.type === 'admin_chat' || n.type === 'admin_chat_reply') {
+              onOpenAdmin && onOpenAdmin();
             } else {
               // Default: just close the panel, future routing can be added
               onClose && onClose();
@@ -13106,6 +13250,12 @@ function App() {
           setFeedNavCtx({openConnectDm:true});
         }
         setMainTab('connect');
+      },
+      onOpenAdmin:()=>{
+        setShowNotifications(false);
+        setMainTab('admin');
+        // Signal to AdminChat that it should auto-open
+        setFeedNavCtx({openAdminChat:true});
       }
     }),
     showNotificationPrefs&&h(NotificationPreferences,{user,profile,
@@ -13474,7 +13624,7 @@ function App() {
       ),
 
       // Admin tab
-      mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile})
+      mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)})
     ),
 
     // Footer
