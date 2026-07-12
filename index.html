@@ -2527,9 +2527,12 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .order('created_at',{ascending:false}).limit(8) : Promise.resolve({data:[]}),
         // Current user's connections
         user ? sb.from('neighbor_connections').select('neighbor_id').eq('user_id', user.id) : Promise.resolve({data:[]}),
-        // Chat preview from user's ZIP room (fallback: general)
+        // Chat preview from user's ZIP room in this county (fallback: this
+        // county's general room — namespaced for non-default counties)
         sb.from('community_chat').select('id,display_name,content,created_at')
-          .eq('room_id', userZip || 'general')
+          .eq('room_id', (()=>{ const rooms = chatRoomsForCounty(countyTag());
+            const zipRoom = rooms.find(r=>r.displayId===userZip);
+            return zipRoom ? zipRoom.id : (rooms[0] ? rooms[0].id : 'general'); })())
           .order('created_at',{ascending:false}).limit(2),
         // Top contributor via view
         sb.from('participation_scores_7d').select('*')
@@ -6690,7 +6693,15 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
   const [activeTab, setActiveTab] = useState(
     (navCtx?.dmTarget || navCtx?.openConnectDm) ? 'dm' : 'chat'
   );
-  const [activeRoom, setActiveRoom] = useState(navCtx?.zipRoom || 'general');
+  const [activeRoom, setActiveRoom] = useState(()=>{
+    // navCtx may carry a bare ZIP (e.g. '49237' or '48104'); resolve it to the
+    // county-namespaced room id. Fall back to this county's general room.
+    if(navCtx?.zipRoom) {
+      const match = CHAT_ROOMS.find(r=>r.id===navCtx.zipRoom || r.displayId===navCtx.zipRoom);
+      if(match) return match.id;
+    }
+    return (CHAT_ROOMS[0] && CHAT_ROOMS[0].id) || 'general';
+  });
 
   // Clear the nav context once consumed
   useEffect(()=>{
@@ -8658,7 +8669,10 @@ function MapTab({user, profile}) {
   const markersRef = useRef([]);
   const focusCircleRef = useRef(null);
   const userZip = profile?.zip || '';
-  const userZipHasCoords = userZip && ZIP_COORDS[userZip];
+  // Only treat the user's home ZIP as focusable when it belongs to the county
+  // being viewed — otherwise a Jackson resident visiting /washtenaw would get
+  // a map centered on their Jackson ZIP.
+  const userZipHasCoords = userZip && ZIP_COORDS[userZip] && countyForZip(userZip) === countyTag();
   const [zipFocus, setZipFocus] = useState(userZipHasCoords ? userZip : null);
   const [activeLayers, setActiveLayers] = useState(new Set(['events','exchange','projects','resources','members']));
   const [mapData, setMapData] = useState({events:[],exchange:[],projects:[],resources:[],members:[]});
