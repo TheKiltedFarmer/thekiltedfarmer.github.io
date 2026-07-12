@@ -1629,7 +1629,7 @@ Your job — respond ONLY in this exact JSON format with no extra text:
   "local_relevance": "One sentence: how this concretely affects ${countyName} residents.",
   "original_bias": "left-leaning or right-leaning or neutral",
   "category": "${category}",
-  "poll_question": "A clear yes/no civic question for ${countyName} residents to vote on. Start with 'Do you support...' or 'Should the US...' or 'Do you believe...' Keep it under 12 words.",
+  "poll_question": "A clear yes/no civic question for ${countyName} residents to vote on, ONLY if this story involves policy, government, public spending, or a civic decision. If it's human-interest, entertainment, sports, or has no civic dimension, use null. Start with 'Do you support...' or 'Should the US...' or 'Do you believe...' Keep it under 12 words.",
   "poll_benefits": ["Benefit 1 (one sentence, factual)", "Benefit 2 (one sentence, factual)", "Benefit 3 (one sentence, factual)"],
   "poll_consequences": ["Risk/consequence 1 (one sentence, factual)", "Risk/consequence 2 (one sentence, factual)", "Risk/consequence 3 (one sentence, factual)"]
 }
@@ -3262,10 +3262,13 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       h('p',{style:{fontSize:13,lineHeight:1.55,color:INK,margin:'0 0 14px 0'}},
         topNews.neutral_summary || ''),
 
-      // Civic position
-      h('div',{style:{marginBottom:12}},
+      // Civic position — only shown when the AI produced an actual civic
+      // question for this story. Human-interest pieces have no position to take.
+      topNews.poll_question && h('div',{style:{marginBottom:12}},
         h('div',{style:{fontSize:10,color:MUTED,fontFamily:FONT_D,fontWeight:700,
           letterSpacing:'.12em',textTransform:'uppercase',marginBottom:6}}, 'Your position'),
+        h('div',{style:{fontSize:13,color:INK,fontFamily:FONT_B,fontWeight:700,
+          lineHeight:1.4,marginBottom:8}}, topNews.poll_question),
         h('div',{style:{display:'flex',gap:6}},
           [
             {key:'yes', label:'Agree', color:GREEN},
@@ -3315,16 +3318,21 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
         paddingTop:12,borderTop:'1px solid #f0ece0',flexWrap:'wrap',gap:10}},
         h('div',{style:{display:'flex',gap:12,alignItems:'center',fontSize:11,color:MUTED,fontFamily:FONT_B,flexWrap:'wrap'}},
-          h('span',null, h('b',{style:{color:GREEN}}, topNews.poll_yes||0), ' agree'),
-          h('span',null, h('b',{style:{color:'#8a6a30'}}, topNews.poll_unsure||0), ' undecided'),
-          h('span',null, h('b',{style:{color:MAROON}}, topNews.poll_no||0), ' disagree'),
-          h('span',{style:{marginLeft:4,paddingLeft:10,borderLeft:'1px solid #e0d9c5'}},
+          topNews.poll_question && h('span',null, h('b',{style:{color:GREEN}}, topNews.poll_yes||0), ' agree'),
+          topNews.poll_question && h('span',null, h('b',{style:{color:'#8a6a30'}}, topNews.poll_unsure||0), ' undecided'),
+          topNews.poll_question && h('span',null, h('b',{style:{color:MAROON}}, topNews.poll_no||0), ' disagree'),
+          h('span',{style: topNews.poll_question ? {marginLeft:4,paddingLeft:10,borderLeft:'1px solid #e0d9c5'} : {}},
             [['like','👍'],['love','❤️'],['sad','😢'],['angry','😠'],['thinking','🤔']].map(([k,e])=>
               h('span',{key:k,style:{marginRight:6}}, e,
                 h('b',{style:{fontSize:10,marginLeft:2,color:INK}}, newsReactions[k]||0))
             )
           )
-        )
+        ),
+        h('button',{onClick:()=>onNavigate && onNavigate('news'),
+          style:{background:'transparent',border:'1px solid #d4cdb8',color:NAVY,
+            padding:'5px 12px',borderRadius:14,fontSize:11,fontFamily:FONT_D,
+            fontWeight:700,letterSpacing:'.04em',cursor:'pointer'}},
+          'More news →')
       ),
       h('div',{style:{marginTop:10,fontSize:11,color:MUTED,fontStyle:'italic'}},
         (topNews.submitted_by_name || 'News') + ' · ' + timeAgo(topNews.created_at))
