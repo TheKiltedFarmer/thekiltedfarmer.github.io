@@ -156,6 +156,25 @@ const COUNTIES = {
     status: 'beta', // 'active' | 'beta' | 'coming-soon'
     defaultZip: '49014',
     accentColor: '#f0c040',
+    // Max member count for this county. null = unlimited. When the cap is
+    // reached, signup shows a "beta is full" message. Change anytime.
+    signupCap: null,
+  },
+  washtenaw: {
+    id: 'washtenaw',
+    slug: 'washtenaw',
+    name: 'Washtenaw County',
+    state: 'Michigan',
+    displayName: 'Washtenaw County, Michigan',
+    short: 'Washtenaw',
+    timezone: 'America/Detroit',
+    description: 'Civic engagement platform for Washtenaw County, MI residents.',
+    primaryCity: 'Ann Arbor',
+    launched: '2026-07-11',
+    status: 'beta',
+    defaultZip: '48104',
+    accentColor: '#f0c040',
+    signupCap: 100, // beta cap — raise or set to null when ready to open up
   },
 };
 
@@ -223,7 +242,14 @@ const ZIP_COMMUNITY = {
   "49272":"Pleasant Lake","49277":"Rives Junction","49283":"Spring Arbor",
   "49284":"Springport","49285":"Summit Township",
   // Adjacent areas that cross county lines
-  "49224":"Albion area","48827":"Eaton Rapids area","48158":"Manchester area",
+  "49224":"Albion area","48827":"Eaton Rapids area",
+
+  // ── Washtenaw County ──────────────────────────────────────────
+  "48103":"Ann Arbor (West)","48104":"Ann Arbor (Central)","48105":"Ann Arbor (North)",
+  "48108":"Ann Arbor (South)","48109":"Ann Arbor (U-M)",
+  "48197":"Ypsilanti","48198":"Ypsilanti Township",
+  "48176":"Saline","48118":"Chelsea","48130":"Dexter",
+  "48158":"Manchester","48160":"Milan","48189":"Whitmore Lake",
 
   // ── Calhoun County ────────────────────────────────────────────
   // Battle Creek (primary city)
@@ -252,7 +278,15 @@ const ZIP_TO_COUNTY = {
   "49283":"jackson","49284":"jackson","49285":"jackson",
   // Cross-boundary
   "49224":"calhoun", // Albion is in Calhoun
-  "48827":"jackson","48158":"jackson",
+  "48827":"jackson",
+  "48158":"washtenaw", // Manchester is in Washtenaw (was jackson before washtenaw launch)
+
+  // Washtenaw County ZIPs
+  "48103":"washtenaw","48104":"washtenaw","48105":"washtenaw",
+  "48108":"washtenaw","48109":"washtenaw",
+  "48197":"washtenaw","48198":"washtenaw",
+  "48176":"washtenaw","48118":"washtenaw","48130":"washtenaw",
+  "48160":"washtenaw","48189":"washtenaw",
 
   // Calhoun County ZIPs
   "49014":"calhoun","49015":"calhoun","49016":"calhoun","49017":"calhoun",
@@ -307,6 +341,10 @@ const BADGES = {
   zip_49068:        {id:'zip_49068',         icon:'📍',  label:'Marshall Resident',  desc:'Verified resident of Marshall (49068)',        color:'#1a6b3c', bg:'#eef7f1'},
   zip_49224:        {id:'zip_49224',         icon:'📍',  label:'Albion Resident',    desc:'Verified resident of Albion area (49224)',     color:'#5b3a8c', bg:'#f0ebf8'},
   zip_calhoun_co:   {id:'zip_calhoun_co',    icon:'📍',  label:'Calhoun County',     desc:'Verified Calhoun County resident',             color:'#888',    bg:'#f5f5f5'},
+  // ZIP / community identity — Washtenaw County
+  zip_48104:        {id:'zip_48104',         icon:'📍',  label:'Ann Arbor',          desc:'Verified resident of Ann Arbor (48103-48109)',  color:'#1a1a2e', bg:'#f0f0f8'},
+  zip_48197:        {id:'zip_48197',         icon:'📍',  label:'Ypsilanti Resident', desc:'Verified resident of Ypsilanti (48197-48198)',  color:'#1a6b3c', bg:'#eef7f1'},
+  zip_washtenaw_co: {id:'zip_washtenaw_co',  icon:'📍',  label:'Washtenaw County',   desc:'Verified Washtenaw County resident',            color:'#888',    bg:'#f5f5f5'},
   // Legacy alias: existing rows still reference 'zip_other'. Keep it pointing
   // at the Jackson County badge so old profiles don't show a broken chip.
   zip_other:        {id:'zip_other',         icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
@@ -340,6 +378,10 @@ const computeBadges = (profile, voteCounts, commentCount) => {
     else if(zip==='49068') earned.add('zip_49068');
     else if(zip==='49224') earned.add('zip_49224');
     else earned.add('zip_calhoun_co');
+  } else if(zipCounty === 'washtenaw') {
+    if(['48103','48104','48105','48108','48109'].includes(zip)) earned.add('zip_48104');
+    else if(['48197','48198'].includes(zip)) earned.add('zip_48197');
+    else earned.add('zip_washtenaw_co');
   }
   // Existing legacy data may have 'zip_other' badge stored on profiles;
   // it stays earned because we start `earned` from profile.badges.
@@ -1847,6 +1889,11 @@ const COUNTY_RSS_FEEDS = {
   calhoun: [
     {name:'FOX 17 (West Michigan)',   url:'https://www.fox17online.com/index.rss',   category:'Michigan'},
     {name:'WLNS 6 (Mid-Michigan)',    url:'https://www.wlns.com/news/michigan/feed', category:'Michigan'},
+    {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
+  ],
+  washtenaw: [
+    {name:'MLive Ann Arbor',          url:'https://www.mlive.com/arc/outboundfeeds/rss/category/news/ann-arbor/?outputType=xml', category:'Local'},
+    {name:'The Michigan Daily',       url:'https://www.michigandaily.com/feed',      category:'Local'},
     {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
   ],
 };
@@ -6570,6 +6617,15 @@ const COUNTY_CHAT_ROOMS = {
     {id:'49068', label:'📍 49068 · Marshall', desc:'Marshall and surrounding townships'},
     {id:'49224', label:'📍 49224 · Albion', desc:'Albion and surrounding area'},
   ],
+  washtenaw: [
+    {id:'general', label:'🏙 Washtenaw County', desc:'General community chat for all residents'},
+    {id:'48104', label:'📍 48104 · Ann Arbor', desc:'Central Ann Arbor'},
+    {id:'48103', label:'📍 48103 · Ann Arbor (West)', desc:'West side neighborhoods'},
+    {id:'48197', label:'📍 48197 · Ypsilanti', desc:'Ypsilanti city and township'},
+    {id:'48176', label:'📍 48176 · Saline', desc:'Saline and surrounding area'},
+    {id:'48118', label:'📍 48118 · Chelsea', desc:'Chelsea and surrounding area'},
+    {id:'48130', label:'📍 48130 · Dexter', desc:'Dexter and surrounding area'},
+  ],
 };
 
 // Get the rooms for the current county. Returns an array.
@@ -7193,6 +7249,24 @@ function AuthScreen({onAuth, onGuest}) {
     }
     if(!attested){setError('Please confirm the attestation to continue.');return;}
     setLoading(true);setError('');
+
+    // ── Per-county signup cap ─────────────────────────────────────
+    // Counties can set signupCap in the COUNTIES registry to limit beta size.
+    // null/undefined = unlimited. Checked at signup time against live count.
+    const capCounty = COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY];
+    if(capCounty?.signupCap) {
+      try {
+        const {count: memberCount} = await sb.from('profiles')
+          .select('id',{count:'exact',head:true}).eq('county', capCounty.id);
+        if((memberCount||0) >= capCounty.signupCap) {
+          setError(capCounty.name + ' is currently at capacity for our beta (' +
+            capCounty.signupCap + ' members). We open more spots as the community grows — please check back soon!');
+          setLoading(false);
+          return;
+        }
+      } catch(e) { /* if count fails, don't block signup */ }
+    }
+
     const displayName=name||email.split('@')[0];
     const {data,error:err}=await sb.auth.signUp({
       email,password:pass,
@@ -8535,12 +8609,19 @@ const ZIP_COORDS = {
   '49050':[42.4419,-85.4083],'49058':[42.6517,-85.2950],'49068':[42.2722,-84.9633],
   '49070':[42.0000,-85.4350],'49076':[42.4400,-84.9300],
   '49092':[42.0894,-84.9772],'49096':[42.6400,-84.4400],'49099':[42.0644,-85.1364],
+  // ── Washtenaw County ZIPs ──
+  '48103':[42.2810,-83.7860],'48104':[42.2660,-83.7300],'48105':[42.3080,-83.7050],
+  '48108':[42.2330,-83.7330],'48109':[42.2780,-83.7380],
+  '48197':[42.2120,-83.6270],'48198':[42.2600,-83.5830],
+  '48176':[42.1690,-83.7820],'48118':[42.3180,-84.0210],'48130':[42.3380,-83.8890],
+  '48160':[42.0850,-83.6820],'48189':[42.4400,-83.7530],'48158':[42.1500,-84.0370],
 };
 
 // County map centers — used when zoom is not focused on a specific ZIP.
 const COUNTY_MAP_CENTERS = {
   jackson: [42.25, -84.40],   // Centered roughly on Jackson city
   calhoun: [42.28, -85.10],   // Centered roughly between Battle Creek and Marshall
+  washtenaw: [42.26, -83.79], // Centered roughly on Ann Arbor
 };
 
 function countyMapCenter(countyId) {
