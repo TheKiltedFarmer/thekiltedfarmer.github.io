@@ -1834,9 +1834,27 @@ function NewsStoryCard({story, user, profile}) {
 
 
 // ── RSS Auto-Fetch ────────────────────────────────────────────────────────────
-const RSS_FEEDS = [
-  {name:'NPR News',          url:'https://feeds.npr.org/1001/rss.xml',           category:'Federal'},
-];
+// ── News feeds, per county ─────────────────────────────────────────────────
+// Each county pulls its own local sources plus shared national/state feeds.
+// A dead feed URL is harmless: the per-feed results panel in Admin shows the
+// error and the other feeds still run. To add a feed, add a row here.
+const COUNTY_RSS_FEEDS = {
+  jackson: [
+    {name:'WLNS 6 (Lansing/Jackson)', url:'https://www.wlns.com/news/michigan/feed', category:'Michigan'},
+    {name:'MLive Jackson',            url:'https://www.mlive.com/arc/outboundfeeds/rss/category/news/jackson/?outputType=xml', category:'Local'},
+    {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
+  ],
+  calhoun: [
+    {name:'FOX 17 (West Michigan)',   url:'https://www.fox17online.com/index.rss',   category:'Michigan'},
+    {name:'WLNS 6 (Mid-Michigan)',    url:'https://www.wlns.com/news/michigan/feed', category:'Michigan'},
+    {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
+  ],
+};
+function rssFeedsForCounty(countyId){
+  return COUNTY_RSS_FEEDS[countyId || DEFAULT_COUNTY] || COUNTY_RSS_FEEDS[DEFAULT_COUNTY];
+}
+// Legacy alias — resolved per current county at fetch time.
+const RSS_FEEDS = rssFeedsForCounty(getCountyFromUrl() || DEFAULT_COUNTY);
 
 // Primary: our own Cloudflare Worker (unblockable, no CORS issues, 10-min edge cache).
 // Fallback: AllOrigins public proxy (in case the Worker is ever down).
