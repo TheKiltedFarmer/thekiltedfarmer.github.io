@@ -2306,24 +2306,20 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       // 3. New events created
       await safe(async()=>{
         const {data} = await sb.from('events')
-          .select('id,title,created_by,event_date,created_at')
+          .select('id,title,submitted_by_id,submitted_by_name,event_date,created_at')
           .gte('created_at', since)
           .eq('approved', true)
           .is('deleted_at', null)
           .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
-        const userIds = [...new Set(data.map(e=>e.created_by).filter(Boolean))];
-        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
-        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
         data.forEach(e=>{
-          if(e.created_by === user?.id) return;
-          const prof = profMap[e.created_by];
+          if(e.submitted_by_id === user?.id) return;
           results.push({
             id: 'event-'+e.id,
             type: 'event',
-            actor_id: e.created_by,
-            actor_name: prof?.display_name || 'A neighbor',
+            actor_id: e.submitted_by_id,
+            actor_name: e.submitted_by_name || 'A neighbor',
             verb: 'added an event:',
             target_label: e.title,
             preview: null,
@@ -2335,26 +2331,23 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       }, 'events');
 
       // 4. New resources added
+      // Note: community_resources has no creator column (admin-approved rows),
+      // so these entries are unattributed by design.
       await safe(async()=>{
         const {data} = await sb.from('community_resources')
-          .select('id,name,created_by,resource_type,created_at')
+          .select('id,name,category,created_at')
           .gte('created_at', since)
           .is('deleted_at', null)
           .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
-        const userIds = [...new Set(data.map(r=>r.created_by).filter(Boolean))];
-        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
-        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
         data.forEach(r=>{
-          if(r.created_by === user?.id) return;
-          const prof = profMap[r.created_by];
           results.push({
             id: 'resource-'+r.id,
             type: 'resource',
-            actor_id: r.created_by,
-            actor_name: prof?.display_name || 'A neighbor',
-            verb: 'added a resource:',
+            actor_id: null,
+            actor_name: 'A new resource',
+            verb: 'was added to the map:',
             target_label: r.name,
             preview: null,
             created_at: r.created_at,
@@ -2366,22 +2359,18 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       // 5. New community ideas
       await safe(async()=>{
         const {data} = await sb.from('community_ideas')
-          .select('id,title,created_by,created_at')
+          .select('id,title,submitted_by_id,submitted_by_name,created_at')
           .gte('created_at', since)
           .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
-        const userIds = [...new Set(data.map(i=>i.created_by).filter(Boolean))];
-        const profilesRes = await sb.from('profiles').select('id,display_name').in('id', userIds);
-        const profMap = {}; (profilesRes.data||[]).forEach(p=>profMap[p.id]=p);
         data.forEach(i=>{
-          if(i.created_by === user?.id) return;
-          const prof = profMap[i.created_by];
+          if(i.submitted_by_id === user?.id) return;
           results.push({
             id: 'idea-'+i.id,
             type: 'idea',
-            actor_id: i.created_by,
-            actor_name: prof?.display_name || 'A neighbor',
+            actor_id: i.submitted_by_id,
+            actor_name: i.submitted_by_name || 'A neighbor',
             verb: 'proposed an idea:',
             target_label: i.title,
             preview: null,
@@ -2460,7 +2449,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         // Current user's connections
         user ? sb.from('neighbor_connections').select('neighbor_id').eq('user_id', user.id) : Promise.resolve({data:[]}),
         // Chat preview from user's ZIP room (fallback: general)
-        sb.from('community_chat').select('id,display_name,content,created_at,badges')
+        sb.from('community_chat').select('id,display_name,content,created_at')
           .eq('room_id', userZip || 'general')
           .order('created_at',{ascending:false}).limit(2),
         // Top contributor via view
