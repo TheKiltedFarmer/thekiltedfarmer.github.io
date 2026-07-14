@@ -2130,7 +2130,10 @@ function NewsTab({user, rep, profile}) {
 
     showSubmit&&isTrusted&&h('div',{style:{background:'#fff',border:'2px solid #1a5c8a',borderRadius:10,padding:18,marginBottom:16}},
       h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:4}},"Submit a News Story"),
-      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',marginBottom:16,lineHeight:1.6}},"The AI will neutralize the story and generate a community poll question with benefits and risks before it goes live."),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',marginBottom:16,lineHeight:1.6}},
+        aiEnabled()
+          ? "The AI will summarize the story and draft a community poll question — the original source is always linked."
+          : "Your story posts with its original headline and your own context — no AI processing. An admin reviews it before it goes live."),
       h('div',{style:{marginBottom:10}},
         h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},"Source URL *"),
         h('input',{value:url,onChange:e=>checkUrl(e.target.value),placeholder:'https://apnews.com/article/...',
@@ -2152,7 +2155,7 @@ function NewsTab({user, rep, profile}) {
       ),
       h('div',{style:{marginBottom:14}},
         h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},"Why does this matter to "+getCurrentCounty().name+"? (optional)"),
-        h('textarea',{value:userContext,onChange:e=>setUserContext(e.target.value),rows:2,placeholder:'Local context helps the AI write a better relevance note...',
+        h('textarea',{value:userContext,onChange:e=>setUserContext(e.target.value),rows:2,placeholder: aiEnabled() ? 'Local context helps the AI write a better relevance note...' : 'In your own words: why should neighbors care about this story?',
           style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
       ),
       h('div',{style:{background:'#e8f2fa',borderRadius:7,padding:'10px 12px',marginBottom:14,fontSize:11,color:'#1a5c8a',lineHeight:1.6}},
