@@ -175,6 +175,10 @@ const COUNTIES = {
     defaultZip: '48104',
     accentColor: '#f0c040',
     signupCap: null, // null = even share of TOTAL_SIGNUP_BUDGET; set a number to override
+    // Runtime AI features (news summaries, bill analysis, AI chat) are OFF
+    // for this county by community preference. The core platform — voting,
+    // events, chat, map, exchange — has no AI in it either way.
+    aiFeatures: false,
   },
 };
 
@@ -188,6 +192,12 @@ const DEFAULT_COUNTY = 'jackson';
 // counties are added. A county can override with an explicit signupCap
 // number in its registry entry; null/undefined = use the even split.
 const TOTAL_SIGNUP_BUDGET = 50000;
+// Whether runtime AI features are enabled for the current county.
+// Counties can opt out with aiFeatures: false in their registry entry.
+function aiEnabled(countyId){
+  const c = COUNTIES[countyId || countyTag()] || COUNTIES[DEFAULT_COUNTY];
+  return c ? c.aiFeatures !== false : true;
+}
 function signupCapForCounty(countyId){
   const c = COUNTIES[countyId || DEFAULT_COUNTY];
   if(!c) return null;
@@ -1577,7 +1587,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         )
       ),
 
-      h('button',{onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:0}},open?"▲ Close":"▼ AI Analysis & Discussion")
+      aiEnabled() && h('button',{onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:0}},open?"▲ Close":"▼ AI Analysis & Discussion")
     ),
 
     open&&h('div',{style:{borderTop:'1px solid #e5dece',padding:'16px 16px'}},
@@ -2053,11 +2063,26 @@ function NewsTab({user, rep, profile}) {
   const submitStory = async()=>{
     if(!url.trim()||!originalTitle.trim()) { setSubmitMsg('Please enter a URL and headline.'); return; }
     if(!isCredibleSource(url)) { setSubmitMsg('Please use a credible news source.'); return; }
-    setSubmitting(true); setSubmitMsg("\uD83E\uDD16 AI is reading and neutralizing this story...");
-    const result = await neutralizeStory(originalTitle, url, userContext, category);
-    if(!result) { setSubmitMsg("\u274C AI analysis failed. Check that the Cloudflare Worker is updated with the new domain, then try again."); setSubmitting(false); return; }
+    setSubmitting(true);
+    let result;
+    if(aiEnabled()) {
+      setSubmitMsg("\uD83E\uDD16 AI is reading and neutralizing this story...");
+      result = await neutralizeStory(originalTitle, url, userContext, category);
+      if(!result) { setSubmitMsg("\u274C AI analysis failed. Check that the Cloudflare Worker is updated with the new domain, then try again."); setSubmitting(false); return; }
+    } else {
+      // AI features are off for this county: publish the story as submitted,
+      // original headline and the submitter's own context, no AI processing.
+      result = {
+        neutral_headline: originalTitle.trim(),
+        neutral_summary: (userContext||'').trim() || null,
+        local_relevance: null,
+        original_bias: null,
+        category: category,
+        poll_question: null, poll_benefits: [], poll_consequences: [],
+      };
+    }
     const isVerifiedPress = profile?.is_press === true;
-    setSubmitMsg(isVerifiedPress ? "\u2705 Neutralized! Publishing..." : "\u2705 Neutralized! Submitting for admin review...");
+    setSubmitMsg(isVerifiedPress ? "\u2705 Publishing..." : "\u2705 Submitting for admin review...");
     const {data,error} = await sb.from('news_stories').insert({
       source_url:url.trim(), original_title:originalTitle.trim(),
       neutral_headline:result.neutral_headline, neutral_summary:result.neutral_summary,
@@ -7703,7 +7728,7 @@ function RssFetchButton({ onToast, user, profile }) {
   };
 
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' } },
-    h('button', {
+    aiEnabled() && h('button', {
       onClick: run, disabled: fetching,
       style: {
         background: fetching ? '#444' : '#1a5c8a', color: '#fff', border: 'none',
@@ -8307,7 +8332,7 @@ function EventsTab({user, profile, onToast}) {
           border:'1px solid '+(meetingScope==='county' ? '#1a1a2e' : '#d4cdb8'),
           padding:'5px 14px',borderRadius:20,fontSize:12,cursor:'pointer',
           fontFamily:"'Playfair Display',serif",fontWeight: meetingScope==='county' ? 700 : 400}},
-        '🗺 All Jackson County')
+        '🗺 All ' + getCurrentCounty().name)
     ),
 
     // Add Event Form
@@ -10826,7 +10851,7 @@ function MeetingPopulator({user, profile, onToast}) {
         h('strong',null,'These are typical schedules, not real fetched data — verify each before publishing.')
       ),
       h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
-        h('button',{onClick: generate, disabled: generating,
+        aiEnabled() && h('button',{onClick: generate, disabled: generating,
           style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'9px 18px',
             borderRadius:6,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
             cursor: generating ? 'default' : 'pointer'}},
