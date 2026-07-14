@@ -2167,7 +2167,9 @@ function NewsTab({user, rep, profile}) {
         fontFamily:"'Lora',serif"}},submitMsg),
       h('button',{onClick:submitStory,disabled:submitting||!url.trim()||!originalTitle.trim()||!!urlError,
         style:{width:'100%',background:submitting||!url.trim()||!originalTitle.trim()||urlError?'#ccc':'#1a5c8a',color:'#fff',border:'none',padding:'12px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}
-      },submitting?"\uD83E\uDD16 AI Neutralizing...":"Submit & Neutralize \u2192")
+      },submitting
+        ? (aiEnabled() ? "\uD83E\uDD16 AI Summarizing..." : "Submitting...")
+        : (aiEnabled() ? "Submit & Summarize \u2192" : "Submit for Review \u2192"))
     ),
 
     h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:14,alignItems:'center'}},
