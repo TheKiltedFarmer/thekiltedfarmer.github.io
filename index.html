@@ -2572,7 +2572,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           .gt('score', 0).order('score',{ascending:false}).limit(1),
         // Top recent news story
         sb.from('news_stories').select('*').eq('approved',true).eq('county', countyTag())
-          .order('created_at',{ascending:false}).limit(1).single(),
+          .order('created_at',{ascending:false}).limit(1).maybeSingle(),
         // Recent neighborhood activity (joins + votes + proposals) — simplified
         sb.from('profiles').select('id,display_name,zip,created_at')
           .eq('county', countyTag())
