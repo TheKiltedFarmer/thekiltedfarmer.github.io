@@ -233,17 +233,38 @@ function getCountyFromUrl() {
 }
 
 // Get the current county object (with all its metadata)
+// Module-level cache of current county id. The App sets this on every render
+// so deep component code can call countyTag() without prop-drilling.
+//
+// __COUNTY_RESOLVED tracks whether we actually KNOW the user's county or are
+// merely falling back to DEFAULT_COUNTY. Data queries may use the fallback;
+// user-facing copy must not, or we end up telling a Washtenaw resident that
+// they live in Jackson County.
+let __CURRENT_COUNTY_ID = DEFAULT_COUNTY;
+let __COUNTY_RESOLVED = false;
+function setCountyTag(id) {
+  const ok = !!(id && COUNTIES[id]);
+  __COUNTY_RESOLVED = ok;
+  __CURRENT_COUNTY_ID = ok ? id : DEFAULT_COUNTY;
+}
+function countyTag() { return __CURRENT_COUNTY_ID; }
+function countyResolved() { return __COUNTY_RESOLVED; }
+
+// Get the current county object (with all its metadata).
+// Prefers the tag the App keeps in sync with React state; only re-parses the
+// URL if the tag has not been set yet (e.g. very early module-level calls).
 function getCurrentCounty() {
+  if(__COUNTY_RESOLVED && COUNTIES[__CURRENT_COUNTY_ID]) return COUNTIES[__CURRENT_COUNTY_ID];
   const fromUrl = getCountyFromUrl();
   if(fromUrl) return COUNTIES[fromUrl];
   return COUNTIES[DEFAULT_COUNTY];
 }
 
-// Module-level cache of current county id. The App sets this on every render
-// so deep component code can call countyTag() without prop-drilling.
-let __CURRENT_COUNTY_ID = DEFAULT_COUNTY;
-function setCountyTag(id) { __CURRENT_COUNTY_ID = id || DEFAULT_COUNTY; }
-function countyTag() { return __CURRENT_COUNTY_ID; }
+// Phrase used where copy says "<County> area resident". Returns neutral
+// wording when the county is unknown rather than asserting the default one.
+function countyAreaPhrase() {
+  return countyResolved() ? (getCurrentCounty().name + ' area') : 'local';
+}
 
 // Build a URL for a given county slug
 function countyUrl(slug, path) {
@@ -877,7 +898,7 @@ function PrivacyModal({onClose}) {
           ['What we do NOT collect',
            'We do not collect your street address, phone number, social security number, financial information, or any government-issued ID. We do not track your browsing history or use third-party advertising trackers.'],
           ['How your data is used',
-           "Your data is used solely to operate The People's Voice — to verify you are a "+getCurrentCounty().name+" area resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes."],
+           "Your data is used solely to operate The People's Voice — to verify you are a "+countyAreaPhrase()+" resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes."],
           ['Who can see your information',
            'Your display name and public activity (votes marked public, comments, ideas) are visible to other logged-in members. Your email address is never displayed publicly. "Anonymous" votes are not displayed publicly but are stored in our database associated with your account for fraud prevention.'],
           ['Neighbor Directory',
@@ -7647,7 +7668,7 @@ function AuthScreen({onAuth, onGuest}) {
       // ── SIGNUP STEP 2 - ZIP + ATTESTATION ──
       mode==='signup'&&step===2&&h(Fragment,null,
         h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a',lineHeight:1.7}},
-          "📍 ",h('strong',null,"Just your ZIP code:")," We only need your ZIP to confirm you're a "+getCurrentCounty().name+" area resident. We do not collect or store your street address."
+          "📍 ",h('strong',null,"Just your ZIP code:")," We only need your ZIP to confirm you're a "+countyAreaPhrase()+" resident. We do not collect or store your street address."
         ),
         h('div',{style:{marginBottom:10}},
           h('input',{value:zip,onChange:e=>setZip(e.target.value),placeholder:'ZIP code * (e.g. 49237)',maxLength:5,
@@ -7668,7 +7689,7 @@ function AuthScreen({onAuth, onGuest}) {
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.8,marginBottom:14}},
             "By checking the box below, I ",h('strong',null,"attest")," that:",
             h('ul',{style:{marginTop:8,marginLeft:16,display:'flex',flexDirection:'column',gap:6}},
-              h('li',null,"I am a real person and a genuine "+getCurrentCounty().name+" area resident"),
+              h('li',null,"I am a real person and a genuine "+countyAreaPhrase()+" resident"),
               h('li',null,"I will cast only one vote per bill on this platform"),
               h('li',null,"I understand my votes are unofficial civic engagement, not legally binding"),
               h('li',null,"I will use this platform honestly and in good faith")
@@ -7678,7 +7699,7 @@ function AuthScreen({onAuth, onGuest}) {
             h('input',{type:'checkbox',checked:attested,onChange:e=>setAttested(e.target.checked),
               style:{width:20,height:20,flexShrink:0,marginTop:2,cursor:'pointer'}}),
             h('span',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#1a1a2e',fontWeight:600,lineHeight:1.6}},
-              "I confirm I am a real "+getCurrentCounty().name+" area resident and will use this platform honestly."
+              "I confirm I am a real "+countyAreaPhrase()+" resident and will use this platform honestly."
             )
           )
         ),
@@ -13045,7 +13066,7 @@ function App() {
   const [showCountyMenu, setShowCountyMenu] = useState(false);
   // Sync the module-level tag so deep code can write county-scoped inserts
   // without prop-drilling currentCountyId everywhere.
-  setCountyTag(currentCountyId || DEFAULT_COUNTY);
+  setCountyTag(currentCountyId);
   // Hierarchical routing: hub + sub-tab. Legacy 'mainTab' values still flow through resolveRoute.
   const [hub, setHub] = useState('home'); // home | civic | community | map | resources | admin
   const [subTab, setSubTab] = useState('feed');
