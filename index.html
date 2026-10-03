@@ -99,6 +99,7 @@ const HUBS = [
     { id:'bills',     label:'Bills' },
     { id:'news',      label:'News' },
     { id:'thequestion', label:'The Question' },
+    { id:'ask',       label:'Ask an Official' },
     { id:'proposals', label:'Civic Voice' },
     { id:'reps',      label:'Reps' },
     { id:'pulse',     label:'Pulse' }
@@ -1514,7 +1515,8 @@ function OfficialBadge({title, small}) {
 //   • an admin for this county can hide or unhide it
 // All of it goes through server functions (tpv_report_content,
 // tpv_hide_content, tpv_unhide_content) that re-check permissions.
-const HIDEABLE_TABLES = new Set(['bill_comments','news_comments','project_comments','community_chat','community_ideas']);
+const HIDEABLE_TABLES = new Set(['bill_comments','news_comments','project_comments','community_chat','community_ideas',
+  'bill_reasons','official_questions','the_question_responses']);
 const REPORT_REASONS = [
   'Harassment or personal attack',
   'Hate speech or threats',
@@ -1524,7 +1526,7 @@ const REPORT_REASONS = [
   'Something else',
 ];
 
-function postAuthorId(row){ return row ? (row.user_id || row.sender_id || row.submitted_by_id || null) : null; }
+function postAuthorId(row){ return row ? (row.user_id || row.sender_id || row.submitted_by_id || row.asker_id || null) : null; }
 
 // Hidden posts: residents see a short note; admins also see the original, faded.
 function HiddenBody({row, viewer}) {
@@ -1535,9 +1537,9 @@ function HiddenBody({row, viewer}) {
     byAuthor ? 'Deleted by its author' : 'Removed by a moderator',
     admin && !byAuthor && row.hidden_reason && row.hidden_reason!=='Removed by a moderator' &&
       h('span',{style:{fontStyle:'normal',color:'#b07000'}},' · '+row.hidden_reason),
-    admin && (row.content || row.title) && h('div',{style:{marginTop:4,color:'#bbb',fontStyle:'normal',
+    admin && (row.content || row.reason || row.question || row.reasoning || row.title) && h('div',{style:{marginTop:4,color:'#bbb',fontStyle:'normal',
       textDecoration:'line-through',wordBreak:'break-word'}},
-      (row.content || row.title || '').slice(0,300))
+      (row.content || row.reason || row.question || row.reasoning || row.title || '').slice(0,300))
   );
 }
 
@@ -1565,7 +1567,7 @@ function ReportModal({table, row, onClose, onDone}) {
         'Only admins see reports. The person who posted it won\'t know who reported it.'),
       h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 10px',fontSize:12,color:'#555',marginBottom:12,
         maxHeight:80,overflow:'hidden',wordBreak:'break-word'}},
-        (row.content || row.title || '[photo]').slice(0,200)),
+        (row.content || row.reason || row.question || row.reasoning || row.title || '[photo]').slice(0,200)),
       REPORT_REASONS.map(r=>h('label',{key:r,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',
           fontSize:13,color:'#333',cursor:'pointer'}},
         h('input',{type:'radio',name:'tpv-report-reason',checked:reason===r,onChange:()=>setReason(r)}), r)),
@@ -1595,7 +1597,7 @@ function ModMenu({table, row, user, profile, onChanged, align}) {
   if(typeof row.id === 'number' && row.id > 1e12) return null;
 
   const viewer = {...user, ...(profile||{})};
-  const isOwn = postAuthorId(row) === user.id;
+  const isOwn = row.is_mine === true || postAuthorId(row) === user.id;
   const canHide = HIDEABLE_TABLES.has(table);
   const admin = isAdminHere(viewer);
   const hidden = !!row.hidden_at;
@@ -1890,6 +1892,837 @@ function ModerationLog({profile}) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// CLOSING THE LOOP
+// What officials decided, what's coming up near you, following an issue,
+// why neighbors voted the way they did, and asking officials in public.
+// Backed by tpv_civic_loop.sql.
+// ═════════════════════════════════════════════════════════════════════════════
+const PD = "'Playfair Display',serif";
+const LB = "'Lora',serif";
+
+const OUTCOME_META = {
+  passed:    {label:'Passed',              icon:'✅', color:'#1a6b3c', bg:'#eef7f1', verb:'passed it',                 won:'yes'},
+  failed:    {label:'Failed',              icon:'❌', color:'#c0392b', bg:'#fdf0ef', verb:'voted it down',             won:'no'},
+  amended:   {label:'Passed with changes', icon:'✏️', color:'#1a6b3c', bg:'#eef7f1', verb:'passed an amended version', won:'yes'},
+  tabled:    {label:'Tabled',              icon:'⏸', color:'#8a6000', bg:'#fff8e7', verb:'tabled it',                 won:null},
+  withdrawn: {label:'Withdrawn',           icon:'↩', color:'#555',    bg:'#f5f5f5', verb:'withdrew it',               won:null},
+};
+const OFFICIAL_VOTE_META = {
+  yes:     {label:'Yes',       color:'#1a6b3c', bg:'#eef7f1'},
+  no:      {label:'No',        color:'#c0392b', bg:'#fdf0ef'},
+  abstain: {label:'Abstained', color:'#777',    bg:'#f5f5f5'},
+  absent:  {label:'Absent',    color:'#999',    bg:'#f5f5f5'},
+};
+
+// ── Small helpers ────────────────────────────────────────────────────────────
+function fmtDecisionTime(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}) + ' · ' +
+         d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+}
+function fmtShortDate(v) {
+  if(!v) return '';
+  const d = (typeof v === 'string' && v.length === 10) ? new Date(v + 'T12:00:00') : new Date(v);
+  return d.toLocaleDateString([], {month:'short', day:'numeric'});
+}
+function whenLabel(iso) {
+  const d = new Date(iso), now = new Date();
+  if(d.toDateString() === now.toDateString()) return 'Today';
+  if(d.toDateString() === new Date(Date.now()+86400000).toDateString()) return 'Tomorrow';
+  const days = Math.ceil((d.getTime() - Date.now())/86400000);
+  return days <= 6 ? d.toLocaleDateString([], {weekday:'long'}) : d.toLocaleDateString([], {month:'short', day:'numeric'});
+}
+function communityForZip(zip) {
+  const c = ZIP_COMMUNITY[(zip||'').trim()];
+  if(!c) return null;
+  return c.replace(/\s*\(.*\)$/,'').replace(/\s+area$/i,'').replace(/\s+Township$/i,'').trim();
+}
+function billIsLocal(b) { return ['city','village','township','county'].includes(b.level); }
+function billRelevantToZip(b, zip) {
+  if(!billIsLocal(b)) return false;
+  if(b.level === 'county') return true;
+  const c = communityForZip(zip);
+  if(!c) return true;   // no ZIP on file: every local bill counts as "near you"
+  return (b.jurisdiction||'').toLowerCase().includes(c.toLowerCase());
+}
+function firstSentence(t) {
+  if(!t) return '';
+  const m = String(t).match(/^[^.!?]+[.!?]/);
+  return (m ? m[0] : String(t)).slice(0, 200);
+}
+function hasUpcomingDecision(b) {
+  return !!(b && b.next_meeting_at && !b.outcome && new Date(b.next_meeting_at).getTime() > Date.now() - 3*3600000);
+}
+function billLink(bill) {
+  const origin = (typeof window !== 'undefined' ? window.location.origin : SITE_URL);
+  return origin + '/' + (bill.county || countyTag()) + '?bill=' + encodeURIComponent(bill.id);
+}
+function questionLink(id) {
+  const origin = (typeof window !== 'undefined' ? window.location.origin : SITE_URL);
+  return origin + '/' + countyTag() + '?q=' + id;
+}
+function memberSupport(b) {
+  const total = (b.votes_yes||0) + (b.votes_no||0);
+  return total > 0 ? Math.round(100 * (b.votes_yes||0) / total) : null;
+}
+
+// Official votes recorded with an outcome feed the Reps accountability tracker
+function applyOutcomeVotesToReps(bills) {
+  (bills||[]).forEach(b=>{
+    if(!Array.isArray(b.outcome_rep_votes)) return;
+    b.outcome_rep_votes.forEach(v=>{
+      if(!v || !v.rep_id || !v.vote) return;
+      const r = REPS.find(x=>x.id === v.rep_id);
+      if(r) r.votes[b.id] = {vote: v.vote === 'absent' ? 'not-recorded' : v.vote, date: b.outcome_date};
+    });
+  });
+}
+
+// ── Deep links ───────────────────────────────────────────────────────────────
+// /jackson?bill=ID&act=vote  · /jackson?q=QUESTION_ID  · old share links #bill/ID
+const __DEEP_LINK = (function(){
+  try {
+    const p = new URLSearchParams(window.location.search);
+    let billId = p.get('bill');
+    const q = p.get('q');
+    if(!billId) {
+      const m = (window.location.hash||'').match(/^#bill\/(.+)$/);
+      if(m) billId = decodeURIComponent(m[1]);
+    }
+    if(!billId && !q) return null;
+    return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
+  } catch(e) { return null; }
+})();
+let __deepLinkUsed = false;
+function takeDeepLink() {
+  if(__deepLinkUsed || !__DEEP_LINK) return null;
+  __deepLinkUsed = true;
+  try {
+    const p = new URLSearchParams(window.location.search);
+    ['bill','act','q'].forEach(k=>p.delete(k));
+    const rest = p.toString();
+    const hash = /^#bill\//.test(window.location.hash||'') ? '' : (window.location.hash||'');
+    window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : '') + hash);
+  } catch(e) {}
+  return __DEEP_LINK;
+}
+
+// ── Follow button ────────────────────────────────────────────────────────────
+function FollowButton({bill, following, onToggle, user}) {
+  if(!user?.id || !onToggle) return null;
+  return h('button',{onClick:()=>onToggle(bill.id),
+    title: following ? 'You get a notification when this bill moves or is decided' : 'Get a notification when this bill moves or is decided',
+    style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,cursor:'pointer',fontFamily:LB,
+      borderRadius:5,padding:'4px 10px',
+      background: following ? '#fff8e7' : 'transparent',
+      color: following ? '#8a6000' : '#8899aa',
+      border: '1px solid ' + (following ? '#f0c040' : '#e5dece')}},
+    following ? '★ Following' : '☆ Follow');
+}
+
+// ── "Decision coming" strip on a bill ────────────────────────────────────────
+function NextDecisionStrip({bill}) {
+  if(!hasUpcomingDecision(bill)) return null;
+  const where = [bill.next_meeting_body, bill.next_meeting_location].filter(Boolean).join(' · ');
+  return h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',marginBottom:12}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:13,color:'#8a6000'}},
+      '🗓 Goes to a decision ' + (['Today','Tomorrow'].includes(whenLabel(bill.next_meeting_at)) ? whenLabel(bill.next_meeting_at).toLowerCase() + ' · ' : '') + fmtDecisionTime(bill.next_meeting_at)),
+    where && h('div',{style:{fontSize:12,color:'#6b5a2a',fontFamily:LB,marginTop:2}}, where),
+    bill.public_comment && h('div',{style:{fontSize:12,color:'#1a5c8a',fontFamily:LB,marginTop:6,lineHeight:1.5}},
+      '🎤 ', h('strong',null,'Public comment is open.'),
+      ' Anyone can speak, usually for about three minutes. Arrive a few minutes early and sign in at the door.')
+  );
+}
+
+// ── What officials decided ───────────────────────────────────────────────────
+function OutcomePanel({bill, userZip, myVote}) {
+  const m = OUTCOME_META[bill.outcome];
+  if(!m) return null;
+  const tally = (bill.outcome_yes != null && bill.outcome_no != null) ? ' ' + bill.outcome_yes + '–' + bill.outcome_no : '';
+  const support = memberSupport(bill);
+  const myReps = new Set(ZIP_REPS[(userZip||'').trim()] || []);
+  const votes = Array.isArray(bill.outcome_rep_votes) ? bill.outcome_rep_votes.filter(v=>v && v.name && v.vote) : [];
+  let mine = null;
+  if(myVote && m.won && myVote.choice !== 'abstain') mine = (myVote.choice === m.won);
+  const membersWon = (support == null || !m.won) ? null : ((support >= 50 ? 'yes' : 'no') === m.won);
+
+  return h('div',{style:{background:m.bg,borderLeft:'4px solid '+m.color,borderRadius:8,padding:'12px 14px',marginBottom:14}},
+    h('div',{style:{fontSize:11,color:m.color,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',fontFamily:PD,marginBottom:4}},
+      m.icon + ' Decided' + (bill.outcome_date ? ' ' + fmtShortDate(bill.outcome_date) : '')),
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',lineHeight:1.35}},
+      (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + '.'),
+    h('div',{style:{fontSize:13,color:'#444',fontFamily:LB,marginTop:6,lineHeight:1.6}},
+      support != null && h('span',null, h('strong',null, support + '%'), ' of People\'s Voice members were for it',
+        membersWon === true ? ' — officials went the same way.' : membersWon === false ? ' — officials went the other way.' : '.'),
+      mine != null && h('div',null, 'You voted ', h('strong',null, myVote.choice === 'yes' ? 'Support' : 'Oppose'),
+        mine ? ' — that\'s how it turned out.' : ' — it went the other way this time.')
+    ),
+    votes.length > 0 && h('div',{style:{marginTop:10}},
+      h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6}},'How each official voted'),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+        votes.map((v,i)=>{
+          const vm = OFFICIAL_VOTE_META[v.vote] || OFFICIAL_VOTE_META.absent;
+          const isMine = v.rep_id && myReps.has(v.rep_id);
+          return h('div',{key:i,style:{background:'#fff',border:'1px solid '+(isMine?'#f0c040':'#e5dece'),borderRadius:20,
+              padding:'4px 10px',fontSize:12,display:'inline-flex',alignItems:'center',gap:6,fontFamily:LB}},
+            h('span',{style:{color:'#1a1a2e',fontWeight:isMine?700:400}}, v.name),
+            isMine && h('span',{style:{fontSize:9,background:'#f0c040',color:'#1a1a2e',fontWeight:700,padding:'1px 5px',borderRadius:8}},'YOUR REP'),
+            h('span',{style:{background:vm.bg,color:vm.color,fontWeight:700,fontSize:11,padding:'1px 7px',borderRadius:10}}, vm.label)
+          );
+        })
+      )
+    ),
+    bill.outcome_note && h('div',{style:{fontSize:12.5,color:'#555',fontFamily:LB,marginTop:10,lineHeight:1.6,fontStyle:'italic'}}, bill.outcome_note),
+    bill.outcome_source && h('a',{href:bill.outcome_source,target:'_blank',rel:'noopener',
+      style:{display:'inline-block',marginTop:8,fontSize:12,color:'#1a5c8a',fontFamily:LB}},'📎 Meeting minutes / source ↗')
+  );
+}
+
+// ── Why I voted ──────────────────────────────────────────────────────────────
+function ReasonComposer({bill, myVote, existing, onSaved, onCancel}) {
+  const [reason, setReason] = useState(existing?.reason || '');
+  const [change, setChange] = useState(existing?.change_mind || '');
+  const [showName, setShowName] = useState(!myVote?.anonymous);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const word = myVote?.choice === 'yes' ? 'support' : myVote?.choice === 'no' ? 'oppose' : 'abstain on';
+  const save = async()=>{
+    if(reason.trim().length < 10) { setErr('Say a little more — at least a sentence.'); return; }
+    setSaving(true); setErr('');
+    const {error} = await sb.rpc('tpv_save_bill_reason',{p_bill_id:String(bill.id), p_reason:reason.trim(),
+      p_change_mind:change.trim()||null, p_show_name:showName && !myVote?.anonymous});
+    setSaving(false);
+    if(error) { setErr(error.message); return; }
+    onSaved && onSaved();
+  };
+  const inputStyle = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB,resize:'vertical'};
+  return h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},'Why do you '+word+' it?'),
+    h('div',{style:{fontSize:12,color:'#888',fontFamily:LB,marginBottom:8,lineHeight:1.5}},
+      'One or two sentences. Neighbors who voted the other way will read this.'),
+    h('textarea',{value:reason,onChange:e=>setReason(e.target.value),rows:3,maxLength:600,
+      placeholder:'e.g. The sidewalks on my street are dangerous for kids walking to school.',style:inputStyle}),
+    h('input',{value:change,onChange:e=>setChange(e.target.value),maxLength:400,
+      placeholder:'What would change your mind? (optional, but it helps)',style:{...inputStyle,marginTop:8}}),
+    h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',marginTop:8,fontFamily:LB,
+        cursor:myVote?.anonymous?'default':'pointer',opacity:myVote?.anonymous?.6:1}},
+      h('input',{type:'checkbox',checked:showName && !myVote?.anonymous,disabled:!!myVote?.anonymous,onChange:e=>setShowName(e.target.checked)}),
+      myVote?.anonymous ? 'Shown as "A neighbor" because you voted anonymously' : 'Show my first name (otherwise "A neighbor")'),
+    err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:6}},err),
+    h('div',{style:{display:'flex',gap:8,marginTop:10}},
+      h(Btn,{onClick:save,disabled:saving},saving?'Saving...':(existing?'Update':'Share my reason')),
+      onCancel && h(Btn,{onClick:onCancel,bg:'transparent',color:'#aaa',border:'1px solid #ddd'},'Cancel')
+    )
+  );
+}
+
+function ReasonItem({r, user, onChanged}) {
+  const viewer = user || {};
+  return h('div',{style:{background:'#fff',border:'1px solid #eee',borderRadius:7,padding:'10px 12px',marginBottom:8}},
+    r.hidden_at
+      ? h(HiddenBody,{row:r,viewer})
+      : h(Fragment,null,
+          h('div',{style:{fontSize:13,color:'#333',fontFamily:LB,lineHeight:1.6}}, r.reason),
+          r.change_mind && h('div',{style:{fontSize:12,color:'#5b3a8c',fontFamily:LB,marginTop:6,lineHeight:1.5}},
+            h('span',{style:{fontWeight:700}},'Would change my mind: '), r.change_mind)
+        ),
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,gap:6}},
+      h('span',{style:{fontSize:11,color:'#aaa',fontFamily:LB}}, r.author_label + (r.is_mine ? ' (you)' : '')),
+      h(ModMenu,{table:'bill_reasons',row:r,user,onChanged,align:'right'})
+    )
+  );
+}
+
+function WhyPanel({bill, user, myVote}) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const load = async()=>{
+    const {data, error} = await sb.rpc('tpv_bill_reasons',{p_bill_id:String(bill.id)});
+    if(error) setUnavailable(true); else setRows(data||[]);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[bill.id]);
+  if(loading) return h('div',{style:{color:'#aaa',fontSize:13,padding:12}},'Loading...');
+  if(unavailable) return h('div',{style:{color:'#aaa',fontSize:13,fontStyle:'italic',padding:12}},'Reasons aren\'t switched on yet.');
+
+  const admin = isAdminHere(user);
+  const visible = rows.filter(r=>!r.hidden_at || admin || (r.is_mine && r.hidden_reason!=='Deleted by author'));
+  const mine = rows.find(r=>r.is_mine && !(r.hidden_at && r.hidden_reason==='Deleted by author'));
+  const side = pos => visible.filter(r=>r.position===pos && !(r.is_mine && r.hidden_reason==='Deleted by author'));
+  const yes = side('yes'), no = side('no');
+  const limit = showAll ? 999 : 3;
+  const col = (title, color, list) => h('div',{style:{flex:'1 1 240px',minWidth:0}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:13,color,marginBottom:8}}, title + ' (' + list.length + ')'),
+    list.length === 0
+      ? h('div',{style:{fontSize:12,color:'#bbb',fontStyle:'italic',fontFamily:LB,marginBottom:8}},'No one has shared a reason yet.')
+      : list.slice(0,limit).map(r=>h(ReasonItem,{key:r.id,r,user,onChanged:()=>load()}))
+  );
+
+  return h('div',null,
+    h('div',{style:{fontSize:13,color:'#666',fontFamily:LB,lineHeight:1.6,marginBottom:12}},
+      'Reasons from neighbors on both sides, and what would change their minds. Read the side you didn\'t pick first.'),
+    myVote && (!mine || editing) && h(ReasonComposer,{bill,myVote,existing:editing?mine:null,
+      onSaved:()=>{setEditing(false);load();}, onCancel: editing ? ()=>setEditing(false) : null}),
+    myVote && mine && !editing && h('div',{style:{fontSize:12,color:'#888',fontFamily:LB,marginBottom:10}},
+      '✓ You shared why. ', h('button',{onClick:()=>setEditing(true),style:{background:'none',border:'none',color:'#1a5c8a',cursor:'pointer',fontSize:12,textDecoration:'underline',padding:0}},'Edit')),
+    !myVote && user?.id && h('div',{style:{fontSize:12,color:'#8a6000',background:'#fff8e7',borderRadius:6,padding:'8px 10px',marginBottom:12,fontFamily:LB}},
+      'Vote on this bill to add your own reason.'),
+    h('div',{style:{display:'flex',gap:16,flexWrap:'wrap'}},
+      col('✅ Why neighbors support it', '#1a6b3c', yes),
+      col('❌ Why neighbors oppose it', '#c0392b', no)
+    ),
+    (yes.length > 3 || no.length > 3) && h('button',{onClick:()=>setShowAll(!showAll),
+      style:{background:'transparent',border:'1px solid #ddd',color:'#777',borderRadius:5,padding:'5px 12px',fontSize:12,cursor:'pointer',marginTop:4}},
+      showAll ? 'Show fewer' : 'Show all reasons')
+  );
+}
+
+// ── Ask an Official ──────────────────────────────────────────────────────────
+function repsForCounty() { return countyTag() === 'jackson' ? REPS : []; }
+
+function AskComposer({bills, presetBill, officials, user, onAsked, onToast}) {
+  const [question, setQuestion] = useState('');
+  const local = (bills||[]).filter(b=>!b.outcome);
+  const [billId, setBillId] = useState(presetBill ? String(presetBill.id) : '');
+  const relatedBill = presetBill || (bills||[]).find(b=>String(b.id)===billId) || null;
+  const reps = repsForCounty();
+  const suggested = relatedBill ? reps.filter(r=>r.jurisdiction === relatedBill.jurisdiction) : [];
+  const others = reps.filter(r=>!suggested.includes(r));
+  const [target, setTarget] = useState('');
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState('');
+  const [sent, setSent] = useState(null); // {id, rep}
+
+  if(!user?.id) return h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,fontSize:13,color:'#8a6000',textAlign:'center',marginBottom:14}},
+    'Sign in to ask an official a question.');
+
+  const submit = async()=>{
+    if(question.trim().length < 15) { setErr('Ask a full question (at least a sentence).'); return; }
+    if(!target) { setErr('Pick who you\'re asking.'); return; }
+    setSending(true); setErr('');
+    const args = {p_county:countyTag(), p_question:question.trim(), p_bill_id: relatedBill ? String(relatedBill.id) : null,
+      p_official_id:null, p_official_ref:null, p_official_name:null, p_official_title:null};
+    let rep = null;
+    if(target.startsWith('p:')) args.p_official_id = target.slice(2);
+    else if(target.startsWith('r:')) {
+      rep = REPS.find(r=>r.id === target.slice(2));
+      if(rep) { args.p_official_ref = rep.id; args.p_official_name = rep.name; args.p_official_title = rep.title; }
+    }
+    const {data, error} = await sb.rpc('tpv_ask_official', args);
+    setSending(false);
+    if(error) { setErr(error.message); return; }
+    setSent({id:data, rep, text:question.trim()});
+    setQuestion('');
+    onAsked && onAsked(data);
+  };
+
+  if(sent) {
+    const rep = sent.rep;
+    const mailto = rep && rep.contact ? 'mailto:'+rep.contact+'?subject='+encodeURIComponent('A question from a constituent on The People\'s Voice')+
+      '&body='+encodeURIComponent('Dear '+rep.name+',\n\nA resident asked you this question in public on The People\'s Voice:\n\n'+
+        '"'+(sent.text||'')+'"\n\nYou can read it, see how many neighbors want an answer, and reply here:\n'+questionLink(sent.id)+
+        '\n\nIf you reply to this email instead, a local admin can post your answer for you.\n\nThank you,\n[Your name]') : null;
+    return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:8,padding:14,marginBottom:14,fontFamily:LB}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a6b3c',marginBottom:4}},'✓ Your question is posted'),
+      h('div',{style:{fontSize:13,color:'#444',lineHeight:1.6}},
+        rep
+          ? [rep.name+' isn\'t on The People\'s Voice yet, so send it to them too. When they reply, an admin can post the answer here.']
+          : 'The official gets a notification. Neighbors can upvote it so it rises to the top.'),
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}},
+        mailto && h('a',{href:mailto,style:{background:'#1a5c8a',color:'#fff',padding:'7px 14px',borderRadius:6,fontSize:12,
+          textDecoration:'none',fontFamily:PD,fontWeight:700}},'📧 Email it to '+rep.name.split(' ').slice(-1)[0]),
+        h('button',{onClick:()=>setSent(null),style:{background:'transparent',border:'1px solid #a8e6c0',color:'#1a6b3c',
+          padding:'7px 14px',borderRadius:6,fontSize:12,cursor:'pointer'}},'Ask another')
+      )
+    );
+  }
+
+  const inputStyle = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:13,fontFamily:LB};
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:14,marginBottom:16}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:8}},'❓ Ask a question in public'),
+    h('textarea',{value:question,onChange:e=>{setQuestion(e.target.value);setSent(null);},rows:3,maxLength:500,
+      placeholder:'e.g. When will the Main Street sidewalk repairs start, and how will they be paid for?',
+      style:{...inputStyle,resize:'vertical'}}),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}},
+      h('select',{value:target,onChange:e=>setTarget(e.target.value),style:{...inputStyle,flex:'1 1 200px',minWidth:0,maxWidth:'100%'}},
+        h('option',{value:''},'Ask who?'),
+        officials.length > 0 && h('optgroup',{label:'Verified on The People\'s Voice'},
+          officials.map(o=>h('option',{key:o.id,value:'p:'+o.id}, (o.display_name||'Official') + (o.official_title ? ' — '+o.official_title : '')))),
+        suggested.length > 0 && h('optgroup',{label:'Votes on this bill'},
+          suggested.map(r=>h('option',{key:r.id,value:'r:'+r.id}, r.name+' — '+r.title))),
+        others.length > 0 && h('optgroup',{label:'Other officials (we\'ll help you email them)'},
+          others.map(r=>h('option',{key:r.id,value:'r:'+r.id}, r.name+' — '+r.title))),
+        h('option',{value:'open'},'Any verified official (open question)')
+      ),
+      !presetBill && h('select',{value:billId,onChange:e=>setBillId(e.target.value),style:{...inputStyle,flex:'1 1 200px',minWidth:0,maxWidth:'100%'}},
+        h('option',{value:''},'About a bill? (optional)'),
+        local.map(b=>h('option',{key:b.id,value:String(b.id)}, (b.title||'').slice(0,70)))
+      )
+    ),
+    err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:6}},err),
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10,gap:8,flexWrap:'wrap'}},
+      h('div',{style:{fontSize:11,color:'#999',fontFamily:LB}},'Questions are public. Keep it about the issue, not the person.'),
+      h(Btn,{onClick:submit,disabled:sending}, sending?'Posting...':'Post question')
+    )
+  );
+}
+
+function QuestionCard({q, user, profile, voted, onVote, onChanged, bill, onOpenBill, highlighted}) {
+  const [answering, setAnswering] = useState(false);
+  const [answer, setAnswer] = useState(q.answer || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const ref = useRef(null);
+  useEffect(()=>{ if(highlighted && ref.current) ref.current.scrollIntoView({behavior:'smooth',block:'center'}); },[highlighted]);
+  const me = {...(user||{}), ...(profile||{})};
+  const isTarget = q.official_id && q.official_id === user?.id;
+  const openToMe = !q.official_id && !q.official_ref && me.is_official === true;
+  // Admins can post a reply on behalf of an official who isn't on the platform
+  const adminRelay = !isTarget && !openToMe && !q.official_id && isAdminFor(me, q.county);
+  const canAnswer = !!user?.id && (isTarget || openToMe || adminRelay) && (!q.answer || q.answered_by === user.id || (adminRelay && q.answer_relayed));
+  const daysWaiting = Math.max(0, Math.floor((Date.now() - new Date(q.created_at).getTime())/86400000));
+
+  const save = async()=>{
+    setSaving(true); setErr('');
+    const {error} = await sb.rpc('tpv_answer_question',{p_id:q.id, p_answer:answer.trim()});
+    setSaving(false);
+    if(error) { setErr(error.message); return; }
+    setAnswering(false);
+    onChanged && onChanged();
+  };
+
+  return h('div',{ref,id:'q-'+q.id,style:{background:'#fff',border:'2px solid '+(highlighted?'#f0c040':'#e5dece'),borderRadius:10,
+      padding:'14px 16px',marginBottom:12,display:'flex',gap:12}},
+    h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',minWidth:42}},
+      h('button',{onClick:()=>onVote(q),disabled:!user?.id,title:voted?'Remove your upvote':'I want an answer to this too',
+        style:{background:voted?'#1a1a2e':'#f5f3ee',color:voted?'#f0c040':'#555',border:'1px solid '+(voted?'#1a1a2e':'#e5dece'),
+          borderRadius:8,padding:'6px 8px',cursor:user?.id?'pointer':'default',fontFamily:PD,fontWeight:700,fontSize:13,lineHeight:1.1}},
+        '▲', h('br'), q.upvotes||0)
+    ),
+    h('div',{style:{flex:1,minWidth:0}},
+      h('div',{style:{fontSize:11,color:'#999',fontFamily:LB,marginBottom:4}},
+        'To ', h('strong',{style:{color:'#1a5c8a'}}, q.official_name || 'any verified official'),
+        q.official_title ? ', '+q.official_title : '',
+        ' · asked by ', q.asker_name || 'a neighbor', ' · ', timeSince(q.created_at)),
+      q.hidden_at
+        ? h(HiddenBody,{row:q,viewer:me})
+        : h('div',{style:{fontFamily:LB,fontSize:15,color:'#1a1a2e',lineHeight:1.55}}, q.question),
+      bill && h('button',{onClick:()=>onOpenBill && onOpenBill(bill),
+        style:{marginTop:6,background:'#f5f0ff',border:'1px solid #c8b8e8',color:'#5b3a8c',borderRadius:20,padding:'2px 10px',
+          fontSize:11,cursor:'pointer',fontFamily:LB,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
+        '📋 ' + (bill.title||'').slice(0,60)),
+      q.answer && !answering
+        ? h('div',{style:{background:'#eef7f1',borderLeft:'3px solid #1a6b3c',borderRadius:6,padding:'10px 12px',marginTop:10}},
+            h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:PD,marginBottom:4}},
+              '💬 ' + (q.answered_by_name || 'Official') + ' answered · ' + fmtShortDate(q.answered_at)),
+            h('div',{style:{fontSize:13.5,color:'#333',fontFamily:LB,lineHeight:1.65,whiteSpace:'pre-wrap'}}, q.answer),
+            q.answer_relayed && h('div',{style:{fontSize:11,color:'#888',fontStyle:'italic',marginTop:4}},
+              'Shared by a local admin from the official\'s reply.')
+          )
+        : !q.hidden_at && h('div',{style:{fontSize:12,color:'#8a6000',fontFamily:LB,marginTop:8}},
+            '⏳ Waiting for an answer' + (daysWaiting > 0 ? ' · ' + daysWaiting + ' day' + (daysWaiting===1?'':'s') : '')),
+      canAnswer && !answering && !q.hidden_at && h('button',{onClick:()=>{setAnswer(q.answer||'');setAnswering(true);},
+        style:{marginTop:8,background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'6px 12px',fontSize:12,
+          cursor:'pointer',fontFamily:PD,fontWeight:700}},
+        q.answer ? '✏️ Edit answer' : adminRelay ? '📨 Post their reply' : '💬 Answer publicly'),
+      answering && h('div',{style:{marginTop:8}},
+        adminRelay && h('div',{style:{fontSize:11,color:'#8a6000',marginBottom:4,fontFamily:LB}},
+          'Paste the reply '+(q.official_name||'the official')+' sent you. It will be labeled as shared by an admin.'),
+        h('textarea',{value:answer,onChange:e=>setAnswer(e.target.value),rows:4,maxLength:2000,
+          style:{width:'100%',boxSizing:'border-box',border:'1px solid #1a6b3c',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB,resize:'vertical'}}),
+        err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:4}},err),
+        h('div',{style:{display:'flex',gap:8,marginTop:6}},
+          h(Btn,{onClick:save,disabled:saving,bg:'#1a6b3c',color:'#fff'}, saving?'Posting...':'Post answer'),
+          h(Btn,{onClick:()=>setAnswering(false),bg:'transparent',color:'#aaa',border:'1px solid #ddd'},'Cancel'))
+      ),
+      h('div',{style:{marginTop:6,textAlign:'right'}},
+        h(ModMenu,{table:'official_questions',row:q,user,profile,align:'right',onChanged:()=>onChanged && onChanged()}))
+    )
+  );
+}
+
+function QuestionsBoard({user, profile, bills, onToast, billId, highlightId, onOpenBill, compact}) {
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [myVotes, setMyVotes] = useState(()=>new Set());
+  const [sort, setSort] = useState(highlightId ? 'new' : 'top');
+  const [officials, setOfficials] = useState([]);
+  const me = {...(user||{}), ...(profile||{})};
+
+  const load = async()=>{
+    let q = sb.from('official_questions').select('*').eq('county', countyTag());
+    if(billId) q = q.eq('bill_id', String(billId));
+    const {data, error} = await q.order('created_at',{ascending:false}).limit(150);
+    if(error) { setUnavailable(true); setLoading(false); return; }
+    setQuestions(data||[]);
+    if(user?.id) {
+      const {data:v} = await sb.from('official_question_votes').select('question_id').eq('user_id', user.id);
+      setMyVotes(new Set((v||[]).map(x=>x.question_id)));
+    }
+    setLoading(false);
+  };
+  useEffect(()=>{
+    load();
+    sb.from('profiles').select('id,display_name,official_title,county').eq('is_official', true)
+      .eq('county', countyTag()).is('deleted_at', null).limit(100)
+      .then(({data})=>setOfficials((data||[]).filter(o=>o.id !== user?.id)));
+  },[billId]);
+
+  const vote = async(q)=>{
+    if(!user?.id) return;
+    const had = myVotes.has(q.id);
+    setMyVotes(prev=>{ const n = new Set(prev); had ? n.delete(q.id) : n.add(q.id); return n; });
+    setQuestions(prev=>prev.map(x=>x.id===q.id ? {...x, upvotes:(x.upvotes||0)+(had?-1:1)} : x));
+    const {data, error} = await sb.rpc('tpv_upvote_question',{p_id:q.id});
+    if(error) { onToast && onToast('Could not upvote: '+error.message); load(); return; }
+    if(typeof data === 'number') setQuestions(prev=>prev.map(x=>x.id===q.id ? {...x, upvotes:data} : x));
+  };
+
+  if(unavailable) return h('div',{style:{color:'#aaa',fontSize:13,fontStyle:'italic',padding:12}},'Questions aren\'t switched on yet.');
+
+  const admin = isAdminHere(me);
+  const isOfficial = me.is_official === true;
+  let list = questions.filter(q=>!q.hidden_at || admin);
+  if(sort === 'top')      list = [...list].sort((a,b)=>(b.upvotes||0)-(a.upvotes||0) || new Date(b.created_at)-new Date(a.created_at));
+  if(sort === 'waiting')  list = list.filter(q=>!q.answer).sort((a,b)=>(b.upvotes||0)-(a.upvotes||0));
+  if(sort === 'answered') list = list.filter(q=>q.answer).sort((a,b)=>new Date(b.answered_at)-new Date(a.answered_at));
+  if(sort === 'forme')    list = list.filter(q=>q.official_id===user?.id || (!q.official_id && !q.official_ref));
+  if(sort === 'mine')     list = list.filter(q=>q.asker_id===user?.id);
+  const billById = id => (bills||[]).find(b=>String(b.id)===String(id));
+  const presetBill = billId ? billById(billId) : null;
+  const tab = (id,label)=>h('button',{key:id,onClick:()=>setSort(id),
+    style:{background:sort===id?'#1a1a2e':'#fff',color:sort===id?'#f0c040':'#555',border:'1px solid '+(sort===id?'#1a1a2e':'#ddd'),
+      padding:'5px 12px',borderRadius:20,fontFamily:PD,fontSize:12,fontWeight:sort===id?700:400,cursor:'pointer'}},label);
+
+  return h('div',null,
+    h(AskComposer,{bills,presetBill,officials,user,onToast,onAsked:()=>{ setSort('new'); load(); }}),
+    !compact && h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
+      tab('top','Most wanted'), tab('new','Newest'), tab('waiting','Waiting'), tab('answered','Answered'),
+      isOfficial && tab('forme','For me'), user?.id && tab('mine','My questions')),
+    loading && h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+    !loading && list.length === 0 && h('div',{style:{textAlign:'center',padding:compact?12:30,color:'#aaa',fontStyle:'italic',fontSize:13,fontFamily:LB}},
+      billId ? 'No questions about this bill yet. Be the first to ask.' : 'No questions here yet.'),
+    list.map(q=>h(QuestionCard,{key:q.id,q,user,profile,voted:myVotes.has(q.id),onVote:vote,onChanged:load,
+      bill: !billId && q.bill_id ? billById(q.bill_id) : null, onOpenBill, highlighted: highlightId && Number(highlightId)===q.id}))
+  );
+}
+
+function AskOfficialTab({user, profile, bills, onToast, navCtx, onNavCtxConsumed, onOpenBill}) {
+  const [highlightId] = useState(()=>navCtx?.questionId || null);
+  useEffect(()=>{ if(navCtx?.questionId && onNavCtxConsumed) setTimeout(onNavCtxConsumed, 3000); },[]);
+  return h('div',null,
+    h('div',{style:{background:'linear-gradient(135deg,#1a1a2e,#2a2a4e)',borderRadius:10,padding:'18px 20px',marginBottom:16,borderLeft:'4px solid #f0c040'}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:20,color:'#f0c040',marginBottom:6}},'❓ Ask an Official'),
+      h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#d8d3c4',lineHeight:1.65}},
+        'Ask your local officials a question where everyone can see it. Upvote the ones you want answered. ',
+        'Answers are public too, so one answer helps the whole community.')
+    ),
+    h(QuestionsBoard,{user,profile,bills,onToast,highlightId,onOpenBill})
+  );
+}
+
+// ── Home: what's being decided near you ──────────────────────────────────────
+function ThisWeekNearYou({bills, profile, userVotes, onNavigate}) {
+  const [meetings, setMeetings] = useState([]);
+  const zip = profile?.zip || '';
+  const community = communityForZip(zip);
+  useEffect(()=>{
+    const today = new Date().toISOString().slice(0,10);
+    const week = new Date(Date.now()+8*86400000).toISOString().slice(0,10);
+    sb.from('events').select('id,title,event_date,event_time,location,zip,category')
+      .eq('approved',true).is('deleted_at',null).eq('county',countyTag())
+      .in('category',['Government','Town Hall','Candidate Forum','Community Meeting'])
+      .gte('event_date',today).lte('event_date',week).order('event_date',{ascending:true}).limit(12)
+      .then(({data})=>{
+        const rows = data||[];
+        const near = rows.filter(e=>(zip && e.zip===zip) || (community && ((e.title||'')+' '+(e.location||'')).toLowerCase().includes(community.toLowerCase())));
+        const rest = rows.filter(e=>!near.includes(e));
+        setMeetings([...near, ...rest].slice(0,3));
+      }, ()=>{});
+  },[zip]);
+
+  const horizon = Date.now() + 10*86400000;
+  const upcoming = (bills||[]).filter(b=>hasUpcomingDecision(b) && new Date(b.next_meeting_at).getTime() < horizon && billRelevantToZip(b, zip))
+    .sort((a,b)=>new Date(a.next_meeting_at)-new Date(b.next_meeting_at)).slice(0,4);
+  const decided = (bills||[]).filter(b=>b.outcome && b.outcome_recorded_at && Date.now()-new Date(b.outcome_recorded_at).getTime() < 21*86400000
+      && (!billIsLocal(b) || billRelevantToZip(b, zip)))
+    .sort((a,b)=>new Date(b.outcome_recorded_at)-new Date(a.outcome_recorded_at)).slice(0,3);
+
+  if(upcoming.length === 0 && decided.length === 0 && meetings.length === 0) return null;
+  const dateBlock = iso => { const d = new Date(iso); return h('div',{style:{minWidth:46,textAlign:'center',background:'#1a1a2e',color:'#f0c040',borderRadius:6,padding:'5px 4px',flexShrink:0}},
+    h('div',{style:{fontSize:10,textTransform:'uppercase',letterSpacing:1,fontFamily:PD}}, d.toLocaleDateString([], {weekday:'short'})),
+    h('div',{style:{fontSize:18,fontWeight:900,fontFamily:PD,lineHeight:1.1}}, d.getDate())); };
+
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'16px 18px',marginBottom:18}},
+    h('div',{style:{fontFamily:PD,fontSize:11,fontWeight:700,color:'#7a2838',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:4}},
+      'This week near ' + (community || 'you')),
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:12}},
+      upcoming.length ? 'Decisions coming up — and how to be there' : 'What\'s happening in local government'),
+    upcoming.map(b=>{
+      const voted = userVotes && userVotes[b.id];
+      return h('div',{key:b.id,style:{display:'flex',gap:12,padding:'10px 0',borderTop:'1px solid #f0ece4'}},
+        dateBlock(b.next_meeting_at),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',lineHeight:1.3}}, b.title),
+          h('div',{style:{fontSize:12,color:'#888',fontFamily:LB,marginTop:2}},
+            [b.next_meeting_body, new Date(b.next_meeting_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}), b.next_meeting_location].filter(Boolean).join(' · ')),
+          h('div',{style:{fontSize:13,color:'#444',fontFamily:LB,marginTop:4,lineHeight:1.5}},
+            h('strong',{style:{color:'#7a2838'}},'At stake: '), b.at_stake || firstSentence(b.summary)),
+          h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:6}},
+            b.public_comment && h('span',{style:{background:'#e8f2fa',color:'#1a5c8a',fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10}},'🎤 Public comment open'),
+            h('button',{onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+              style:{background:voted?'transparent':'#1a6b3c',color:voted?'#1a6b3c':'#fff',border:'1px solid #1a6b3c',borderRadius:6,
+                padding:'4px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}},
+              voted ? '✓ You voted · see it' : 'Weigh in →')
+          )
+        )
+      );
+    }),
+    meetings.length > 0 && h('div',{style:{borderTop:'1px solid #f0ece4',paddingTop:10,marginTop:upcoming.length?4:0}},
+      h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:PD,fontWeight:700}},'Public meetings this week'),
+      meetings.map(e=>h('div',{key:e.id,onClick:()=>onNavigate('events',{eventId:e.id}),
+          style:{fontSize:13,color:'#333',fontFamily:LB,padding:'4px 0',cursor:'pointer'}},
+        h('strong',null, new Date(e.event_date+'T12:00:00').toLocaleDateString([], {weekday:'short'}) + (e.event_time ? ' ' + e.event_time : '')),
+        ' · ', e.title, e.location ? h('span',{style:{color:'#999'}},' · '+e.location) : null))
+    ),
+    decided.length > 0 && h('div',{style:{borderTop:'1px solid #f0ece4',paddingTop:10,marginTop:6}},
+      h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:PD,fontWeight:700}},'Just decided'),
+      decided.map(b=>{
+        const m = OUTCOME_META[b.outcome]; const s = memberSupport(b);
+        return h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+            style:{display:'flex',gap:8,alignItems:'baseline',padding:'5px 0',cursor:'pointer',fontFamily:LB,fontSize:13}},
+          h('span',{style:{background:m.bg,color:m.color,fontWeight:700,fontSize:11,padding:'1px 8px',borderRadius:10,whiteSpace:'nowrap'}},
+            m.icon+' '+m.label+(b.outcome_yes!=null&&b.outcome_no!=null?' '+b.outcome_yes+'–'+b.outcome_no:'')),
+          h('span',{style:{color:'#1a1a2e',flex:1,minWidth:0}}, b.title),
+          s != null && h('span',{style:{color:'#999',fontSize:11,whiteSpace:'nowrap'}}, 'members '+s+'% for')
+        );
+      })
+    )
+  );
+}
+
+// ── Home: issues you follow ──────────────────────────────────────────────────
+function FollowingCard({bills, followedIds, onNavigate}) {
+  const mine = (bills||[]).filter(b=>followedIds && followedIds.has(String(b.id)));
+  if(mine.length === 0) return null;
+  const rank = b => hasUpcomingDecision(b) ? 0 : (b.outcome && b.outcome_recorded_at && Date.now()-new Date(b.outcome_recorded_at).getTime() < 30*86400000) ? 1 : 2;
+  const list = [...mine].sort((a,b)=>rank(a)-rank(b) ||
+    (hasUpcomingDecision(a) && hasUpcomingDecision(b) ? new Date(a.next_meeting_at)-new Date(b.next_meeting_at) : 0)).slice(0,5);
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'14px 18px',marginBottom:18}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e'}},'★ Issues you follow'),
+      h('span',{style:{fontSize:11,color:'#aaa',fontFamily:LB}}, mine.length + ' followed')),
+    list.map(b=>{
+      const m = OUTCOME_META[b.outcome];
+      const pill = m ? {t:m.icon+' '+m.label, c:m.color, bg:m.bg}
+        : hasUpcomingDecision(b) ? {t:'🗓 Decision '+whenLabel(b.next_meeting_at), c:'#8a6000', bg:'#fff8e7'}
+        : {t:b.status || 'Open', c:'#555', bg:'#f5f5f5'};
+      return h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+          style:{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #f5f1e8',cursor:'pointer'}},
+        h('span',{style:{fontFamily:LB,fontSize:13,color:'#1a1a2e',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, b.title),
+        h('span',{style:{background:pill.bg,color:pill.c,fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap',flexShrink:0}}, pill.t)
+      );
+    })
+  );
+}
+
+// ── Admin: track a bill (next decision + outcome) ────────────────────────────
+function toLocalInput(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function eventToLocalInput(e) {
+  if(!e || !e.event_date) return '';
+  let hh = 19, mm = 0;
+  const m = String(e.event_time||'').match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if(m) { hh = parseInt(m[1],10); mm = parseInt(m[2]||'0',10); if(m[3]) { const pm = m[3].toLowerCase()==='pm'; if(pm && hh<12) hh+=12; if(!pm && hh===12) hh=0; } }
+  return e.event_date + 'T' + String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+}
+function defaultBodyFor(bill) {
+  const j = bill.jurisdiction || '';
+  if(/^City of /.test(j)) return j.replace(/^City of /,'') + ' City Council';
+  if(/^Village of /.test(j)) return j.replace(/^Village of /,'') + ' Village Council';
+  if(/Township/.test(j)) return j + ' Board';
+  if(/County$/.test(j)) return j + ' Board of Commissioners';
+  if(j === 'State of Michigan') return 'Michigan Legislature';
+  if(j === 'Federal') return 'Congress';
+  return j;
+}
+
+function BillTrackerModal({bill, onClose, onSaved, onToast}) {
+  const [when, setWhen] = useState(toLocalInput(bill.next_meeting_at));
+  const [body, setBody] = useState(bill.next_meeting_body || defaultBodyFor(bill));
+  const [location, setLocation] = useState(bill.next_meeting_location || '');
+  const [publicComment, setPublicComment] = useState(bill.public_comment !== false);
+  const [atStake, setAtStake] = useState(bill.at_stake || '');
+  const [events, setEvents] = useState([]);
+  const [savingMeeting, setSavingMeeting] = useState(false);
+
+  const [outcome, setOutcome] = useState(bill.outcome || '');
+  const [oYes, setOYes] = useState(bill.outcome_yes ?? '');
+  const [oNo, setONo] = useState(bill.outcome_no ?? '');
+  const [oDate, setODate] = useState(bill.outcome_date || new Date().toISOString().slice(0,10));
+  const [oBody, setOBody] = useState(bill.outcome_body || bill.next_meeting_body || defaultBodyFor(bill));
+  const [oSource, setOSource] = useState(bill.outcome_source || '');
+  const [oNote, setONote] = useState(bill.outcome_note || '');
+  const [notify, setNotify] = useState(!bill.outcome);
+  const [officials, setOfficials] = useState(()=>{
+    if(Array.isArray(bill.outcome_rep_votes) && bill.outcome_rep_votes.length) return bill.outcome_rep_votes.map(v=>({...v}));
+    return REPS.filter(r=>r.jurisdiction === bill.jurisdiction).map(r=>({rep_id:r.id, name:r.name, title:r.title, vote:''}));
+  });
+  const [savingOutcome, setSavingOutcome] = useState(false);
+
+  useEffect(()=>{
+    const today = new Date().toISOString().slice(0,10);
+    sb.from('events').select('id,title,event_date,event_time,location,category').eq('county',countyTag())
+      .is('deleted_at',null).in('category',['Government','Town Hall','Community Meeting'])
+      .gte('event_date',today).order('event_date',{ascending:true}).limit(30)
+      .then(({data})=>setEvents(data||[]), ()=>{});
+  },[]);
+
+  const saveMeeting = async(clear)=>{
+    setSavingMeeting(true);
+    const patch = clear
+      ? {next_meeting_at:null, next_meeting_body:null, next_meeting_location:null, public_comment:null}
+      : {next_meeting_at: when ? new Date(when).toISOString() : null, next_meeting_body: body.trim()||null,
+         next_meeting_location: location.trim()||null, public_comment: !!publicComment, at_stake: atStake.trim()||null};
+    const {error} = await sb.from('bills').update(patch).eq('id', bill.id);
+    setSavingMeeting(false);
+    if(error) { onToast('❌ '+error.message); return; }
+    onSaved(patch);
+    onToast(clear ? 'Meeting cleared.' : when ? '✓ Saved. Followers were told the decision is coming.' : '✓ Saved.');
+  };
+
+  const tallyFromOfficials = ()=>{
+    const y = officials.filter(o=>o.vote==='yes').length, n = officials.filter(o=>o.vote==='no').length;
+    if(y+n > 0) { setOYes(y); setONo(n); }
+  };
+
+  const saveOutcome = async(clear)=>{
+    if(!clear && !outcome) { onToast('Pick what happened.'); return; }
+    if(clear && !window.confirm('Clear the recorded outcome? Nobody gets notified.')) return;
+    setSavingOutcome(true);
+    const repVotes = officials.filter(o=>o.name && o.name.trim() && o.vote).map(o=>({rep_id:o.rep_id||null, name:o.name.trim(), title:(o.title||'').trim()||null, vote:o.vote}));
+    const {data, error} = await sb.rpc('tpv_record_outcome',{
+      p_bill_id:String(bill.id), p_outcome: clear ? null : outcome,
+      p_yes: oYes === '' ? null : parseInt(oYes,10), p_no: oNo === '' ? null : parseInt(oNo,10),
+      p_date: oDate || null, p_body: oBody || null, p_source: oSource || null, p_note: oNote || null,
+      p_rep_votes: repVotes.length ? repVotes : null, p_notify: !clear && notify});
+    setSavingOutcome(false);
+    if(error) { onToast('❌ '+error.message); return; }
+    const STATUS = {passed:'Passed',failed:'Failed',amended:'Passed (amended)',tabled:'Tabled',withdrawn:'Withdrawn'};
+    onSaved(clear
+      ? {outcome:null,outcome_yes:null,outcome_no:null,outcome_date:null,outcome_body:null,outcome_source:null,outcome_note:null,outcome_rep_votes:null,outcome_recorded_at:null}
+      : {outcome, outcome_yes:oYes===''?null:+oYes, outcome_no:oNo===''?null:+oNo, outcome_date:oDate, outcome_body:oBody||null,
+         outcome_source:oSource||null, outcome_note:oNote||null, outcome_rep_votes:repVotes.length?repVotes:null,
+         outcome_recorded_at:new Date().toISOString(), status:STATUS[outcome], next_meeting_at:null});
+    const n = data && typeof data.notified === 'number' ? data.notified : 0;
+    onToast(clear ? 'Outcome cleared.' : '✓ Outcome recorded.' + (n ? ' ' + n + ' resident' + (n===1?'':'s') + ' notified.' : ''));
+    if(!clear) onClose();
+  };
+
+  const label = t => h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3,marginTop:10}},t);
+  const inp = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB};
+  const section = (title, sub, ...kids)=>h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e'}},title),
+    h('div',{style:{fontSize:12,color:'#888',fontFamily:LB,marginTop:2,lineHeight:1.5}},sub), ...kids);
+
+  return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:2500,overflowY:'auto',padding:'20px 12px'}},
+    h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:12,maxWidth:560,margin:'0 auto',padding:18,boxShadow:'0 20px 60px rgba(0,0,0,.35)'}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:12}},
+        h('div',null,
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1}},'Track this bill'),
+          h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',lineHeight:1.3}},bill.title)),
+        h('button',{onClick:onClose,style:{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}},'✕')),
+
+      section('🗓 Next decision','When officials will take it up. Residents near it see this on their home page, and followers get a notification.',
+        events.length>0 && h(Fragment,null, label('Fill from an upcoming public meeting'),
+          h('select',{defaultValue:'',onChange:e=>{ const ev = events.find(x=>String(x.id)===e.target.value); if(ev){ setWhen(eventToLocalInput(ev)); setLocation(ev.location||''); if(ev.title) setBody(ev.title.replace(/\s*(regular|special)?\s*meeting\s*$/i,'').trim()||body); } },style:inp},
+            h('option',{value:''},'Pick a meeting...'),
+            events.map(ev=>h('option',{key:ev.id,value:String(ev.id)}, ev.event_date+(ev.event_time?' '+ev.event_time:'')+' · '+ev.title)))),
+        label('Date and time'), h('input',{type:'datetime-local',value:when,onChange:e=>setWhen(e.target.value),style:inp}),
+        label('Who decides'), h('input',{value:body,onChange:e=>setBody(e.target.value),placeholder:'e.g. Jackson City Council',style:inp}),
+        label('Where'), h('input',{value:location,onChange:e=>setLocation(e.target.value),placeholder:'e.g. City Hall, 161 W Michigan Ave',style:inp}),
+        h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#333',marginTop:10,fontFamily:LB,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:publicComment,onChange:e=>setPublicComment(e.target.checked)}),'Public comment is open (residents can speak)'),
+        label('What\'s at stake (one plain sentence)'),
+        h('textarea',{value:atStake,onChange:e=>setAtStake(e.target.value),rows:2,maxLength:240,
+          placeholder:'e.g. Whether Main Street gets new sidewalks this summer, paid for by a 0.5 mill increase.',style:{...inp,resize:'vertical'}}),
+        h('div',{style:{display:'flex',gap:8,marginTop:10}},
+          h(Btn,{onClick:()=>saveMeeting(false),disabled:savingMeeting},savingMeeting?'Saving...':'Save'),
+          bill.next_meeting_at && h(Btn,{onClick:()=>saveMeeting(true),bg:'transparent',color:'#888',border:'1px solid #ddd'},'Clear meeting'))
+      ),
+
+      section('🗳 What happened','Record the result once officials vote. Everyone who voted on or follows this bill gets told, with how members voted next to it.',
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}},
+          Object.entries(OUTCOME_META).map(([k,m])=>h('button',{key:k,onClick:()=>setOutcome(k),
+            style:{background:outcome===k?m.color:'#fff',color:outcome===k?'#fff':m.color,border:'1px solid '+m.color,borderRadius:20,
+              padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}}, m.icon+' '+m.label))),
+        officials.length>0 && h(Fragment,null, label('How each official voted'),
+          officials.map((o,i)=>h('div',{key:i,style:{display:'flex',gap:6,alignItems:'center',marginBottom:6,flexWrap:'wrap'}},
+            o.rep_id
+              ? h('div',{style:{flex:'1 1 100%',fontSize:13,fontFamily:LB,color:'#1a1a2e'}}, o.name, h('span',{style:{color:'#999',fontSize:11}},' · '+(o.title||'')))
+              : h('input',{value:o.name,onChange:e=>setOfficials(prev=>prev.map((x,j)=>j===i?{...x,name:e.target.value}:x)),placeholder:'Official\'s name',style:{...inp,flex:'1 1 100%'}}),
+            ['yes','no','abstain','absent'].map(v=>h('button',{key:v,onClick:()=>setOfficials(prev=>prev.map((x,j)=>j===i?{...x,vote:x.vote===v?'':v}:x)),
+              style:{background:o.vote===v?OFFICIAL_VOTE_META[v].color:'#fff',color:o.vote===v?'#fff':OFFICIAL_VOTE_META[v].color,
+                border:'1px solid '+OFFICIAL_VOTE_META[v].color,borderRadius:5,padding:'3px 8px',fontSize:11,cursor:'pointer'}}, OFFICIAL_VOTE_META[v].label)),
+            !o.rep_id && h('button',{onClick:()=>setOfficials(prev=>prev.filter((x,j)=>j!==i)),style:{background:'none',border:'none',color:'#c0392b',cursor:'pointer'}},'✕')
+          )),
+          h('button',{onClick:tallyFromOfficials,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',padding:0,textDecoration:'underline'}},'Count the tally from these')),
+        h('button',{onClick:()=>setOfficials(prev=>[...prev,{rep_id:null,name:'',title:'',vote:''}]),
+          style:{marginTop:6,background:'transparent',border:'1px dashed #ccc',color:'#777',borderRadius:5,padding:'4px 10px',fontSize:12,cursor:'pointer'}},'+ Add an official'),
+        h('div',{style:{display:'flex',gap:8}},
+          h('div',{style:{flex:1}}, label('Votes for'), h('input',{type:'number',min:0,value:oYes,onChange:e=>setOYes(e.target.value),style:inp})),
+          h('div',{style:{flex:1}}, label('Votes against'), h('input',{type:'number',min:0,value:oNo,onChange:e=>setONo(e.target.value),style:inp})),
+          h('div',{style:{flex:1.3}}, label('Date'), h('input',{type:'date',value:oDate,onChange:e=>setODate(e.target.value),style:inp}))),
+        label('Who decided'), h('input',{value:oBody,onChange:e=>setOBody(e.target.value),style:inp}),
+        label('Source (minutes, video, news story)'), h('input',{value:oSource,onChange:e=>setOSource(e.target.value),placeholder:'https://',style:inp}),
+        label('Anything residents should know (optional)'),
+        h('textarea',{value:oNote,onChange:e=>setONote(e.target.value),rows:2,placeholder:'e.g. Council asked staff to bring back a cheaper version in March.',style:{...inp,resize:'vertical'}}),
+        h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#333',marginTop:10,fontFamily:LB,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:notify,onChange:e=>setNotify(e.target.checked)}),
+          bill.outcome ? 'Notify followers again about this correction' : 'Notify everyone who voted on or follows this bill'),
+        h('div',{style:{display:'flex',gap:8,marginTop:10}},
+          h(Btn,{onClick:()=>saveOutcome(false),disabled:savingOutcome,bg:'#1a6b3c',color:'#fff'},savingOutcome?'Saving...':'Record outcome'),
+          bill.outcome && h(Btn,{onClick:()=>saveOutcome(true),bg:'transparent',color:'#888',border:'1px solid #ddd'},'Clear outcome'))
+      )
+    )
+  );
+}
+
+// ── The Question: hear the other side ────────────────────────────────────────
+function OtherSidePanel({responses, myResponse, user, profile, onChanged}) {
+  if(!myResponse) return null;
+  const admin = isAdminHere({...(user||{}),...(profile||{})});
+  const others = (responses||[]).filter(r=>r.id!==myResponse.id && r.position && r.position!==myResponse.position
+    && (r.reasoning||'').trim().length>0 && (!r.hidden_at || admin));
+  if(others.length === 0) return null;
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'18px 22px',marginTop:14}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:4,textTransform:'uppercase',letterSpacing:'.12em'}},
+      '👂 Hear the other side'),
+    h('div',{style:{fontSize:12.5,color:'#888',fontFamily:LB,marginBottom:12,lineHeight:1.5}},
+      'Neighbors who answered differently than you, in their own words.'),
+    others.slice(0,6).map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #f0ece0',padding:'10px 0'}},
+      h('div',{style:{fontSize:11,color:'#5b3a8c',fontWeight:700,fontFamily:PD,marginBottom:4}}, r.position),
+      r.hidden_at ? h(HiddenBody,{row:{...r,content:r.reasoning},viewer:{...(user||{}),...(profile||{})}})
+        : h(Fragment,null,
+            h('div',{style:{fontSize:13.5,color:'#333',fontFamily:LB,lineHeight:1.65}}, r.reasoning),
+            r.change_my_mind && h('div',{style:{fontSize:12.5,color:'#5b3a8c',fontFamily:LB,marginTop:5,lineHeight:1.5}},
+              h('strong',null,'Would change their mind: '), r.change_my_mind)),
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}},
+        h('span',{style:{fontSize:11,color:'#aaa',fontFamily:LB}}, '— ' + ((r.display_name||'').split(' ')[0] || 'A neighbor')),
+        h(ModMenu,{table:'the_question_responses',row:r,user,profile,align:'right',onChanged:patch=>onChanged && onChanged(r.id, patch)}))
+    ))
+  );
+}
+
 function CommentItem({comment:c, user, billId, onEdited, onChanged}) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(c.content);
@@ -1950,7 +2783,7 @@ function CommentItem({comment:c, user, billId, onEdited, onChanged}) {
 }
 
 // ── Bill Card ─────────────────────────────────────────────────────────────────
-function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighlightDone}) {
+function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighlightDone,following,onToggleFollow,userZip,profile}) {
   const cardRef = useRef(null);
 
   useEffect(()=>{
@@ -1961,7 +2794,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
     }
   },[highlighted]);
   const [open,setOpen]=useState(false);
-  const [tab,setTab]=useState('ai');
+  const [tab,setTab]=useState(aiEnabled()?'ai':'why');
   const [pending,setPending]=useState(null);
   const [comments,setComments]=useState([]);
   const [commentText,setCommentText]=useState('');
@@ -2027,7 +2860,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         h(StatusBadge,{status:bill.status})
       ),
       h('h3',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e',margin:'0 0 6px',lineHeight:1.3}},bill.title),
-      h('div',{style:{fontSize:12,color:'#aaa',marginBottom:8}},"Introduced "+bill.introduced+" · "+bill.sponsor),
+      (bill.introduced||bill.sponsor)&&h('div',{style:{fontSize:12,color:'#aaa',marginBottom:8}},[bill.introduced&&("Introduced "+bill.introduced),bill.sponsor].filter(Boolean).join(" · ")),
       h('div',{style:{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap',alignItems:'center'}},
         bill.source_url
           ? h('a',{href:bill.source_url,target:'_blank',
@@ -2037,17 +2870,21 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
           : bill.full_text&&bill.full_text.includes('http')
             ? h('span',{style:{fontSize:11,color:'#aaa',fontStyle:'italic'}},"Source in bill text below")
             : null,
+        h(FollowButton,{bill,following,onToggle:onToggleFollow,user}),
         h('button',{
           onClick:()=>{
-            const url=window.location.origin+window.location.pathname+'#bill/'+bill.id;
-            navigator.clipboard&&navigator.clipboard.writeText(url);
-            if(navigator.share) navigator.share({title:bill.title,url});
-            else { navigator.clipboard&&navigator.clipboard.writeText(url); }
+            const url=billLink(bill);
+            if(navigator.share) navigator.share({title:bill.title,url}).catch(()=>{});
+            else { navigator.clipboard&&navigator.clipboard.writeText(url); setToast('Link copied.'); }
           },
           style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,color:'#8899aa',textDecoration:'none',
             background:'transparent',border:'1px solid #e5dece',borderRadius:5,padding:'4px 10px',fontFamily:"'Lora',serif",cursor:'pointer'}
         },"🔗 Share")
       ),
+      h(OutcomePanel,{bill,userZip,myVote}),
+      h(NextDecisionStrip,{bill}),
+      bill.at_stake&&!bill.outcome&&h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#7a2838',margin:'0 0 8px',lineHeight:1.6}},
+        h('strong',null,'At stake: '),bill.at_stake),
       h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,lineHeight:1.7,color:'#444',margin:'0 0 14px'}},bill.summary),
 
       // Vote bar
@@ -2084,6 +2921,10 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
           h('span',{style:{color:'#ccc'}}," · "),
           h('span',{style:{color:'#aaa'}},myVote.anonymous?"🔒 anonymous":"👤 public")
         ),
+        h('button',{onClick:()=>{setOpen(true);setTab('why');},
+          style:{display:'block',marginTop:8,background:'#f5f0ff',border:'1px solid #c8b8e8',color:'#5b3a8c',borderRadius:6,
+            padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+          '🤔 Say why you voted · see why others did'),
         !myVote.anonymous&&h(Fragment,null,
           h('div',{style:{marginTop:6,fontSize:12,color:'#888',fontFamily:"'Lora',serif"}},"Share your vote:"),
           h(ShareButtons,{bill,choice:myVote.choice}),
@@ -2092,14 +2933,18 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         )
       ),
 
-      aiEnabled() && h('button',{onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:0}},open?"▲ Close":"▼ AI Analysis & Discussion")
+      h('button',{onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:0,cursor:'pointer'}},
+        open?"▲ Close":(aiEnabled()?"▼ AI analysis, reasons, discussion & questions":"▼ Reasons, discussion & questions"))
     ),
 
     open&&h('div',{style:{borderTop:'1px solid #e5dece',padding:'16px 16px'}},
-      h('div',{style:{display:'flex',borderBottom:'2px solid #e5dece',marginBottom:16}},
-        ['ai','forum'].map(t=>h('button',{key:t,onClick:()=>setTab(t),style:{background:'transparent',border:'none',borderBottom:tab===t?'2px solid #1a1a2e':'none',marginBottom:-2,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:tab===t?700:400,fontSize:14,color:tab===t?'#1a1a2e':'#aaa'}},t==='ai'?"🤖 AI Analysis":"💬 Discussion"))
+      h('div',{style:{display:'flex',borderBottom:'2px solid #e5dece',marginBottom:16,overflowX:'auto'}},
+        [...(aiEnabled()?['ai']:[]),'why','forum','ask'].map(t=>h('button',{key:t,onClick:()=>setTab(t),style:{background:'transparent',border:'none',borderBottom:tab===t?'2px solid #1a1a2e':'none',marginBottom:-2,padding:'8px 12px',fontFamily:"'Playfair Display',serif",fontWeight:tab===t?700:400,fontSize:13.5,color:tab===t?'#1a1a2e':'#aaa',whiteSpace:'nowrap',cursor:'pointer'}},
+          {ai:"🤖 AI",why:"🤔 Reasons",forum:"💬 Discussion",ask:"❓ Ask officials"}[t]))
       ),
-      tab==='ai'&&h(Fragment,null,
+      tab==='why'&&h(WhyPanel,{bill,user:user?.id?user:null,myVote}),
+      tab==='ask'&&h(QuestionsBoard,{user:user?.id?user:null,profile,bills:[bill],billId:bill.id,compact:true,onToast:setToast}),
+      tab==='ai'&&aiEnabled()&&h(Fragment,null,
         h(AIBreakdown,{bill}),
         h(BillSections,{bill,user,onRepGain}),
         h(BillChangeLog,{bill}),
@@ -2770,7 +3615,7 @@ const timeAgo = (ts)=>{
   return d+'d ago';
 };
 
-function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
+function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, followedIds}){
   // ── Color palette ────────────────────────────────────────────────
   const NAVY='#1a1a2e', GOLD='#f0c040', CREAM='#f4f1ea';
   const MAROON='#7a2838', INK='#2a2a35', MUTED='#8a8578', GREEN='#1a6b3c';
@@ -3559,6 +4404,10 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
           h('b',{style:{color:GOLD}}, zipStats.newNeighbors), ' new neighbors')
       )
     ),
+
+    // ── What's being decided near you + issues you follow ─────────
+    h(ThisWeekNearYou,{bills,profile,userVotes,onNavigate}),
+    h(FollowingCard,{bills,followedIds,onNavigate}),
 
     // ── Getting Started checklist ─────────────────────────────────
     // Shown until the user has voted, chatted, and RSVPd at least once
@@ -10858,8 +11707,10 @@ function TheQuestionTab({user, profile, onToast, onNavigate}) {
         }),
         h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid #f0ece0',fontSize:12,color:'#888',
           fontFamily:"'Lora',serif",fontStyle:'italic'}},
-          'Full results — including reasoning samples — are published when the question closes.')
-      )
+          'You can change your answer any time while the question is open.')
+      ),
+      h(OtherSidePanel,{responses,myResponse,user,profile,
+        onChanged:(id,patch)=>setResponses(prev=>prev.map(r=>r.id===id?{...r,...patch}:r))})
     );
   }
 
@@ -13231,6 +14082,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
   const [editing,setEditing]=useState(null);
   const [saving,setSaving]=useState(false);
   const [deleting,setDeleting]=useState(null);
+  const [tracking,setTracking]=useState(null);
 
   const EMPTY = {id:'',level:'city',jurisdiction:jurisdictionsForCounty()[0],title:'',status:'',introduced:'',sponsor:'',summary:'',full_text:'',votes_yes:0,votes_no:0,votes_abstain:0,created_at:'2025-01-01'};
   const [form,setForm]=useState(EMPTY);
@@ -13391,6 +14243,8 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
 
     // Cross-county admin chat — coordination channel for admins
     h(AdminChat,{user,profile,onToast,autoOpen:navCtx?.openAdminChat,onAutoOpenConsumed:onNavCtxConsumed}),
+    tracking&&h(BillTrackerModal,{bill:tracking,onToast,onClose:()=>setTracking(null),
+      onSaved:(patch)=>{ setBills(prev=>prev.map(b=>b.id===tracking.id?{...b,...patch}:b)); setTracking(t=>t?{...t,...patch}:t); }}),
 
     // Pending community submissions review queue
     h(NewUsersInbox,{onToast,profile}),
@@ -13421,14 +14275,21 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}},
           h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,textTransform:'uppercase'}},bill.level),
           h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.jurisdiction),
-          h('span',{style:{background:'#fffbea',color:'#8a6000',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.status||'No status')
+          h('span',{style:{background:'#fffbea',color:'#8a6000',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.status||'No status'),
+          bill.outcome&&OUTCOME_META[bill.outcome]&&h('span',{style:{background:OUTCOME_META[bill.outcome].bg,color:OUTCOME_META[bill.outcome].color,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},
+            OUTCOME_META[bill.outcome].icon+' '+OUTCOME_META[bill.outcome].label),
+          hasUpcomingDecision(bill)&&h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},
+            '🗓 '+fmtDecisionTime(bill.next_meeting_at))
         ),
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},bill.title),
         h('div',{style:{fontSize:11,color:'#aaa'}},
           "✅ "+bill.votes_yes+" · ❌ "+bill.votes_no+" · ⬜ "+bill.votes_abstain+" · ID: "+bill.id
         )
       ),
-      h('div',{style:{display:'flex',gap:8,flexShrink:0}},
+      h('div',{style:{display:'flex',gap:8,flexShrink:0,flexWrap:'wrap'}},
+        h('button',{onClick:()=>setTracking(bill),style:{background:'#8a6000',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+          bill.outcome?"🗳 Outcome":"🗓 Track"
+        ),
         h('button',{onClick:()=>openEdit(bill),style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},
           "✏️ Edit"
         ),
@@ -13536,10 +14397,14 @@ const NOTIF_TYPES = {
   admin_chat:        {icon:'🛡', label:'Admin chat', color:'#1a4a1a'},
   admin_chat_reply:  {icon:'🛡', label:'Admin chat reply', color:'#1a4a1a'},
   report:            {icon:'🚩', label:'New report', color:'#c0392b'},
+  outcome:           {icon:'🗳', label:'Decision made', color:'#1a6b3c'},
+  bill_update:       {icon:'📅', label:'Bill update', color:'#8a6000'},
+  question:          {icon:'❓', label:'Question for you', color:'#1a5c8a'},
+  answer:            {icon:'💬', label:'Question answered', color:'#1a6b3c'},
   system:            {icon:'📢', label:'Platform update', color:'#555'},
 };
 
-function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomActivity, onOpenChat, onOpenAdmin}) {
+function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomActivity, onOpenChat, onOpenAdmin, onOpenLink}) {
   const chatRows = Object.entries(chatRoomActivity||{}).filter(([rid,n])=>n>0);
   const totalEmpty = notifications.length===0 && chatRows.length===0;
   return h('div',{style:{position:'fixed',top:60,right:16,width:340,maxWidth:'calc(100vw - 32px)',
@@ -13580,13 +14445,16 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
       ),
       notifications.map((n,i)=>{
         const type = NOTIF_TYPES[n.type]||NOTIF_TYPES.system;
-        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update' || n.type === 'admin_chat' || n.type === 'admin_chat_reply' || n.type === 'report';
+        const link = n.link && typeof n.link === 'object' && n.link.tab ? n.link : null;
+        const isClickable = !!link || n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update' || n.type === 'admin_chat' || n.type === 'admin_chat_reply' || n.type === 'report';
         return h('div',{key:n.id||i,
           onClick: isClickable ? ()=>{
             // Mark as read locally and in DB
             try { sb.from('notifications').update({read:true}).eq('id',n.id); } catch(e){}
             // Route based on type
-            if(n.type === 'dm') {
+            if(link) {
+              onOpenLink && onOpenLink(link);
+            } else if(n.type === 'dm') {
               // Navigate to Connect → DM tab. We don't have the sender's user_id
               // on the notification, so the user lands on their DM list and picks
               // the conversation they want.
@@ -13788,6 +14656,18 @@ function App() {
   const [chatRoomActivity, setChatRoomActivity] = useState({}); // {roomId: count of new msgs since last seen}
   const [welcomeBack, setWelcomeBack] = useState(null); // {daysAway, summary} or null
   const [guestMode,setGuestMode]=useState(false);
+  const [followedIds,setFollowedIds]=useState(()=>new Set());
+
+  // Deep links from emails and shared links: open straight to a bill or question
+  useEffect(()=>{
+    if(loading) return;
+    if(!user && !guestMode) return;
+    if(!bills.length && __DEEP_LINK && __DEEP_LINK.billId) return;
+    const dl = takeDeepLink();
+    if(!dl) return;
+    if(dl.questionId) { setFeedNavCtx({tab:'ask',questionId:dl.questionId}); setMainTab('ask'); }
+    else if(dl.billId) { setFeedNavCtx({billId:String(dl.billId),act:dl.act}); setMainTab('bills'); }
+  },[loading, user?.id, guestMode, bills.length]);
 
   useEffect(()=>{
     const handler = ()=>setShowPrivacy(true);
@@ -13823,6 +14703,7 @@ function App() {
         } else {
         setUser({...session.user,...(prof||{})});setProfile(prof||{});setRep(prof?.reputation||0);
         loadUserVotes(session.user.id);
+        loadFollows(session.user.id);
         loadNotifications(session.user.id);
         // Welcome-back + auto-welcome DM (fire and forget — don't block initApp)
         handleReturnVisit(session.user, prof||{}).catch(e=>console.error('return visit handler error:',e));
@@ -13846,11 +14727,31 @@ function App() {
   const loadBills=async()=>{
     const {data,error}=await sb.from('bills').select('*').eq('county', countyTag()).order('id');
     if(data&&data.length){
+      applyOutcomeVotesToReps(data);
       setBills(data);
     } else {
-      // No bills in DB yet - show seed bills locally, they'll be added via Admin panel
-      setBills(SEED_BILLS);
+      // No bills in DB yet. The sample bills are Jackson's, so only Jackson
+      // falls back to them; other counties start empty rather than wrong.
+      setBills(countyTag()==='jackson' ? SEED_BILLS : []);
     }
+  };
+  const loadFollows=async(uid)=>{
+    try {
+      const {data,error}=await sb.from('bill_follows').select('bill_id').eq('user_id',uid);
+      if(!error&&data) setFollowedIds(new Set(data.map(d=>String(d.bill_id))));
+    } catch(e) {}
+  };
+  const toggleFollow=async(billId)=>{
+    if(!user?.id){ setToast('Sign in to follow bills.'); return; }
+    const id=String(billId);
+    const was=followedIds.has(id);
+    const flip=()=>setFollowedIds(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; });
+    flip();
+    const res = was
+      ? await sb.from('bill_follows').delete().eq('user_id',user.id).eq('bill_id',id)
+      : await sb.from('bill_follows').insert({user_id:user.id,bill_id:id});
+    if(res.error){ flip(); setToast('Could not update: '+res.error.message); return; }
+    setToast(was ? 'Unfollowed. No more updates on this one.' : '★ Following. You\'ll hear when it moves or gets decided.');
   };
   const loadPendingBills=async()=>{
     const {data}=await sb.from('pending_bills').select('*').eq('pending',true).order('created_at',{ascending:false});
@@ -13889,7 +14790,7 @@ function App() {
   };
 
   const handleAuth=(authUser,prof)=>{
-    setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);
+    setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);loadFollows(authUser.id);
     // Show onboarding for brand new users
     if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
     // Welcome-back banner + auto-DM check (fire and forget)
@@ -13915,7 +14816,7 @@ function App() {
       if(badges.length!==curBadges.length) setProfile(p=>({...p,badges}));
     },1000);
   };
-  const handleVoteCast=(billId,choice,anon)=>{setUserVotes(prev=>({...prev,[billId]:{choice,anonymous:anon}}));setBills(prev=>prev.map(b=>b.id!==billId?b:{...b,['votes_'+choice]:b['votes_'+choice]+1}));};
+  const handleVoteCast=(billId,choice,anon)=>{setFollowedIds(prev=>{const n=new Set(prev);n.add(String(billId));return n;});setUserVotes(prev=>({...prev,[billId]:{choice,anonymous:anon}}));setBills(prev=>prev.map(b=>b.id!==billId?b:{...b,['votes_'+choice]:b['votes_'+choice]+1}));};
   const gainRep=async(pts, badgeToAward)=>{
     const newRep = rep+pts;
     setRep(newRep);
@@ -14040,6 +14941,17 @@ function App() {
   // ZIP search - must be declared before any conditional returns (Rules of Hooks)
   const [zipSearch,setZipSearch]=useState(profile?.zip||'');
   const [keywordSearch,setKeywordSearch]=useState('');
+  // Show local bills for the member's own ZIP by default (they used to stay
+  // hidden until someone typed a ZIP into the search box)
+  const zipPrefilled = useRef(false);
+  useEffect(()=>{
+    if(profile?.zip && !zipPrefilled.current && !zipSearch) { zipPrefilled.current = true; setZipSearch(profile.zip); }
+  },[profile?.zip]);
+  // A bill opened from a link or notification stays pinned at the top of
+  // the list until the member changes the filters
+  const [pinnedBillId,setPinnedBillId]=useState(null);
+  useEffect(()=>{ if(feedNavCtx?.billId) setPinnedBillId(String(feedNavCtx.billId)); },[feedNavCtx]);
+  useEffect(()=>{ setPinnedBillId(p=>p && feedNavCtx?.billId ? p : null); },[keywordSearch, billFilter]);
 
   if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
 
@@ -14122,6 +15034,11 @@ function App() {
     showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates})),onToast:setToast}),
     showNotifications&&h(NotificationPanel,{notifications,user,chatRoomActivity,
       onClose:()=>setShowNotifications(false),
+      onOpenLink:(link)=>{
+        setShowNotifications(false);
+        setFeedNavCtx(link);
+        setMainTab(link.tab||'bills');
+      },
       onOpenPrefs:()=>{setShowNotifications(false);setShowNotificationPrefs(true);},
       onOpenChat:(roomId)=>{
         setShowNotifications(false);
@@ -14373,10 +15290,12 @@ function App() {
 
       // Bills tab
       // Feed tab — community activity stream
-      mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
+      mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode,userVotes,followedIds,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       mainTab==='news'&&h(NewsTab,{user,rep,profile}),
 
+      mainTab==='ask'&&h(AskOfficialTab,{user,profile,bills,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),
+        onOpenBill:(b)=>{setFeedNavCtx({billId:String(b.id)});setMainTab('bills');}}),
       mainTab==='thequestion'&&h(TheQuestionTab,{user,profile,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       mainTab==='bills'&&h(Fragment,null,
@@ -14409,7 +15328,7 @@ function App() {
             '📍 Showing bills for: ',h('strong',null,searchedCommunity),' + all State & Federal bills'
           ),
           zipSearch.trim().length===5&&!searchedCommunity&&h('div',{style:{marginTop:4,fontSize:13,color:'#e74c3c',fontFamily:"'Lora',serif"}},
-            'ZIP code not found in Jackson County. Showing Federal & State bills only.'
+            'ZIP code not found in '+getCurrentCounty().name+'. Showing Federal & State bills only.'
           ),
           !zipSearch.trim()&&h('div',{style:{marginTop:4,fontSize:12,color:'#8899aa',fontFamily:"'Lora',serif"}},
             '💡 Enter your ZIP to see local legislation for your community'
@@ -14427,8 +15346,13 @@ function App() {
           ),
           h('div',{style:{marginLeft:'auto',fontSize:12,color:'#aaa'}},filteredBills.length+" bill"+(filteredBills.length!==1?'s':''))
         ),
-        filteredBills.length===0&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No bills found for this filter."),
-        filteredBills.map(bill=>h(BillCard,{key:bill.id,bill,user:{...user,reputation:rep,account_type:profile?.account_type},userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep,highlighted:feedNavCtx?.billId===bill.id,onHighlightDone:()=>setFeedNavCtx(null)})),
+        filteredBills.length===0&&!(pinnedBillId&&bills.some(b=>String(b.id)===pinnedBillId))&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"No bills found for this filter."),
+        (pinnedBillId && !filteredBills.some(b=>String(b.id)===pinnedBillId)
+          ? bills.filter(b=>String(b.id)===pinnedBillId).concat(filteredBills)
+          : filteredBills
+        ).map(bill=>h(BillCard,{key:bill.id,bill,user:user?{...user,reputation:rep,account_type:profile?.account_type}:null,profile,userVotes,onVoteCast:handleVoteCast,onRepGain:gainRep,
+          highlighted:feedNavCtx?.billId!=null&&String(feedNavCtx.billId)===String(bill.id),onHighlightDone:()=>setFeedNavCtx(null),
+          following:followedIds.has(String(bill.id)),onToggleFollow:toggleFollow,userZip:profile?.zip})),
 
         // Link to proposals tab
         h('div',{style:{textAlign:'center',marginTop:20,padding:'14px 16px',background:'#f5f0ff',borderRadius:8,border:'1px solid #c8b8e8',display:'flex',alignItems:'center',justifyContent:'center',gap:12,flexWrap:'wrap'}},
