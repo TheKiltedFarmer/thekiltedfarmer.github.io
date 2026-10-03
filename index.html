@@ -54,6 +54,19 @@ class ErrorBoundary extends Component {
 // ── Config ────────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://zhnilrohxoixsgmdyqiw.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE";
+// GitHub Pages sends /calhoun, /washtenaw etc. through 404.html, which stashes
+// the real path (including any #access_token from a confirm/reset email) and
+// bounces to "/". Put it back BEFORE the Supabase client reads the URL, or the
+// login token is lost and the person lands in the wrong county.
+(function restoreOriginalPath(){
+  try {
+    const stored = sessionStorage.getItem('tpv_original_path');
+    if(stored) {
+      sessionStorage.removeItem('tpv_original_path');
+      window.history.replaceState({}, '', stored);
+    }
+  } catch(e) { /* sessionStorage may be unavailable */ }
+})();
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
 const SITE_URL = "https://thepeoplesvoices.org";
@@ -156,6 +169,16 @@ const COUNTIES = {
     status: 'beta', // 'active' | 'beta' | 'coming-soon'
     defaultZip: '49014',
     accentColor: '#f0c040',
+    jurisdictions: [
+      'City of Battle Creek','City of Marshall','City of Albion','City of Springfield',
+      'Village of Homer','Village of Athens','Village of Tekonsha','Village of Union City',
+      'Albion Township','Athens Township','Battle Creek Township','Bedford Charter Township',
+      'Burlington Township','Clarence Township','Clarendon Township','Convis Township',
+      'Eckford Township','Emmett Charter Township','Fredonia Township','Homer Township',
+      'Lee Township','Leroy Township','Marengo Township','Marshall Township','Newton Township',
+      'Pennfield Charter Township','Sheridan Township','Tekonsha Township',
+      'Calhoun County','State of Michigan','Federal',
+    ],
     // Max member count for this county. null = unlimited. When the cap is
     // reached, signup shows a "beta is full" message. Change anytime.
     signupCap: null,
@@ -174,6 +197,16 @@ const COUNTIES = {
     status: 'beta',
     defaultZip: '48104',
     accentColor: '#f0c040',
+    jurisdictions: [
+      'City of Ann Arbor','City of Ypsilanti','City of Saline','City of Chelsea',
+      'City of Dexter','City of Milan','Village of Manchester',
+      'Ann Arbor Charter Township','Augusta Charter Township','Bridgewater Township',
+      'Dexter Township','Freedom Township','Lima Township','Lodi Township','Lyndon Township',
+      'Manchester Township','Northfield Township','Pittsfield Charter Township','Salem Township',
+      'Saline Township','Scio Township','Sharon Township','Superior Charter Township',
+      'Sylvan Township','Webster Township','York Charter Township','Ypsilanti Charter Township',
+      'Washtenaw County','State of Michigan','Federal',
+    ],
     signupCap: null, // null = even share of TOTAL_SIGNUP_BUDGET; set a number to override
     // Runtime AI features (news summaries, bill analysis, AI chat) are OFF
     // for this county by community preference. The core platform — voting,
@@ -265,6 +298,71 @@ function getCurrentCounty() {
 function countyAreaPhrase() {
   return countyResolved() ? (getCurrentCounty().name + ' area') : 'local';
 }
+
+// ── Admin scope ──────────────────────────────────────────────────────────────
+// profiles.admin_counties: null/empty = admin for every county ("full admin");
+// ['washtenaw'] = admin for Washtenaw only. The database enforces the same rule.
+function adminCounties(p) {
+  if(!p || p.is_admin !== true || p.deleted_at) return [];
+  if(!Array.isArray(p.admin_counties) || p.admin_counties.length === 0) return Object.keys(COUNTIES);
+  return p.admin_counties.filter(c=>COUNTIES[c]);
+}
+function isFullAdmin(p) {
+  return !!(p && p.is_admin === true && !p.deleted_at &&
+    (!Array.isArray(p.admin_counties) || p.admin_counties.length === 0));
+}
+function isAdminFor(p, county) { return isFullAdmin(p) || adminCounties(p).includes(county); }
+function isAdminHere(p) { return isAdminFor(p, countyTag()); }
+function adminScopeLabel(p) {
+  if(isFullAdmin(p)) return 'All counties';
+  const list = adminCounties(p).map(c=>COUNTIES[c].short);
+  return list.length ? list.join(', ') + ' only' : 'None';
+}
+
+// Account-level ban / delete runs in the admin-manage-user server function
+// (it needs the service key, which never goes in this file). Returns
+// {ok, error, notDeployed}.
+async function adminManageUser(action, userId, reason) {
+  try {
+    const {data, error} = await sb.functions.invoke('admin-manage-user', {body:{action, user_id:userId, reason:reason||null}});
+    if(error) {
+      const msg = (error.message||'') + '';
+      const status = error.context && error.context.status;
+      const notDeployed = status === 404 || /FunctionsFetchError|FunctionsRelayError/.test(error.name||'');
+      let detail = msg;
+      try { if(error.context && error.context.json) { const j = await error.context.json(); if(j && j.error) detail = j.error; } } catch(e) {}
+      return {ok:false, error:detail, notDeployed};
+    }
+    if(data && data.error) return {ok:false, error:data.error};
+    return {ok:true, data};
+  } catch(e) {
+    return {ok:false, error:e.message, notDeployed:true};
+  }
+}
+
+
+// Where auth emails (confirm, reset, resend) should send people back to.
+// Always includes the county slug so they return to the county they joined.
+function authRedirectUrl(countyId, query) {
+  const origin = (typeof window !== 'undefined' ? window.location.origin : SITE_URL);
+  const id = (countyId && COUNTIES[countyId]) ? countyId : (countyResolved() ? countyTag() : null);
+  return origin + (id ? '/' + id : '/') + (query || '');
+}
+
+// County-specific lists of governing bodies for bill/proposal forms.
+function jurisdictionsForCounty(countyId) {
+  const c = COUNTIES[countyId || countyTag()];
+  if(c && Array.isArray(c.jurisdictions) && c.jurisdictions.length) return c.jurisdictions;
+  return JACKSON_JURISDICTIONS;
+}
+const JACKSON_JURISDICTIONS = [
+  'Village of Concord','City of Jackson','Summit Township','Columbia Township',
+  'Napoleon Township','Grass Lake Township','Spring Arbor Township','Leoni Township',
+  'Blackman Township','Rives Township','Henrietta Township','Waterloo Township',
+  'Norvell Township','Hanover Township','Springport Township','Liberty Township',
+  'Pulaski Township','Sandstone Township','Tompkins Township','Concord Township',
+  'Jackson County','State of Michigan','Federal',
+];
 
 // Build a URL for a given county slug
 function countyUrl(slug, path) {
@@ -1409,7 +1507,390 @@ function OfficialBadge({title, small}) {
   },'🏛 '+( small?'Official':(title||'Verified Official')));
 }
 
-function CommentItem({comment:c, user, billId, onEdited}) {
+// ── Moderation: report / delete / hide controls for posts ───────────────────
+// Every comment, chat message and idea gets a small "⋯" control:
+//   • the author can delete their own post
+//   • any resident can report someone else's post
+//   • an admin for this county can hide or unhide it
+// All of it goes through server functions (tpv_report_content,
+// tpv_hide_content, tpv_unhide_content) that re-check permissions.
+const HIDEABLE_TABLES = new Set(['bill_comments','news_comments','project_comments','community_chat','community_ideas']);
+const REPORT_REASONS = [
+  'Harassment or personal attack',
+  'Hate speech or threats',
+  'Spam or scam',
+  'Sharing someone\'s private info',
+  'False claim presented as fact',
+  'Something else',
+];
+
+function postAuthorId(row){ return row ? (row.user_id || row.sender_id || row.submitted_by_id || null) : null; }
+
+// Hidden posts: residents see a short note; admins also see the original, faded.
+function HiddenBody({row, viewer}) {
+  const byAuthor = row.hidden_reason === 'Deleted by author';
+  const admin = isAdminHere(viewer);
+  return h('div',{style:{fontSize:12,color:'#999',fontStyle:'italic',fontFamily:"'Lora',serif",
+    background:'#faf8f5',border:'1px dashed #e0d8c8',borderRadius:6,padding:'6px 10px'}},
+    byAuthor ? 'Deleted by its author' : 'Removed by a moderator',
+    admin && !byAuthor && row.hidden_reason && row.hidden_reason!=='Removed by a moderator' &&
+      h('span',{style:{fontStyle:'normal',color:'#b07000'}},' · '+row.hidden_reason),
+    admin && (row.content || row.title) && h('div',{style:{marginTop:4,color:'#bbb',fontStyle:'normal',
+      textDecoration:'line-through',wordBreak:'break-word'}},
+      (row.content || row.title || '').slice(0,300))
+  );
+}
+
+function ReportModal({table, row, onClose, onDone}) {
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState('');
+  const send = async()=>{
+    if(!reason) { setErr('Pick the reason that fits best.'); return; }
+    setSending(true); setErr('');
+    const {data, error} = await sb.rpc('tpv_report_content', {
+      p_table: table, p_id: String(row.id), p_reason: reason, p_note: note.trim()||null, p_county: countyTag()
+    });
+    setSending(false);
+    if(error) { setErr(error.message || 'Could not send the report.'); return; }
+    onDone(data === 'already' ? 'You already reported this. An admin will look at it.' : 'Thanks. An admin will take a look.');
+  };
+  return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:3000,
+      display:'flex',alignItems:'center',justifyContent:'center',padding:16}},
+    h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:12,padding:20,width:380,maxWidth:'100%',
+        boxShadow:'0 20px 60px rgba(0,0,0,.35)',fontFamily:"'Lora',serif"}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'🚩 Report this post'),
+      h('div',{style:{fontSize:12,color:'#888',marginBottom:12,lineHeight:1.5}},
+        'Only admins see reports. The person who posted it won\'t know who reported it.'),
+      h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 10px',fontSize:12,color:'#555',marginBottom:12,
+        maxHeight:80,overflow:'hidden',wordBreak:'break-word'}},
+        (row.content || row.title || '[photo]').slice(0,200)),
+      REPORT_REASONS.map(r=>h('label',{key:r,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',
+          fontSize:13,color:'#333',cursor:'pointer'}},
+        h('input',{type:'radio',name:'tpv-report-reason',checked:reason===r,onChange:()=>setReason(r)}), r)),
+      h('textarea',{value:note,onChange:e=>setNote(e.target.value),rows:2,maxLength:500,
+        placeholder:'Anything an admin should know? (optional)',
+        style:{width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',
+          fontSize:13,marginTop:8,fontFamily:"'Lora',serif",resize:'vertical'}}),
+      err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:6}},err),
+      h('div',{style:{display:'flex',gap:8,marginTop:12}},
+        h('button',{onClick:send,disabled:sending,style:{flex:1,background:'#c0392b',color:'#fff',border:'none',
+          padding:'10px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}},
+          sending?'Sending...':'Send report'),
+        h('button',{onClick:onClose,style:{background:'transparent',border:'1px solid #ddd',color:'#888',
+          padding:'10px 16px',borderRadius:7,fontSize:13,cursor:'pointer'}},'Cancel')
+      )
+    )
+  );
+}
+
+function ModMenu({table, row, user, profile, onChanged, align}) {
+  const [open, setOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  if(!user || !row || row.id == null) return null;
+  // Optimistic rows (not yet saved) have a timestamp id; nothing to act on yet
+  if(typeof row.id === 'number' && row.id > 1e12) return null;
+
+  const viewer = {...user, ...(profile||{})};
+  const isOwn = postAuthorId(row) === user.id;
+  const canHide = HIDEABLE_TABLES.has(table);
+  const admin = isAdminHere(viewer);
+  const hidden = !!row.hidden_at;
+
+  const flash = msg => { setNote(msg); setOpen(false); setTimeout(()=>setNote(''), 4000); };
+
+  const run = async(fn, args, patch, okMsg)=>{
+    setBusy(true);
+    const {error} = await sb.rpc(fn, args);
+    setBusy(false);
+    if(error) { flash(error.message || 'That didn\'t work.'); return; }
+    onChanged && onChanged(patch);
+    flash(okMsg);
+  };
+
+  const del = ()=>{
+    if(!window.confirm('Delete this post? Others will see "Deleted by its author".')) return;
+    run('tpv_hide_content', {p_table:table, p_id:String(row.id), p_reason:null, p_county:countyTag()},
+      {hidden_at:new Date().toISOString(), hidden_reason:'Deleted by author'}, 'Deleted.');
+  };
+  const hide = ()=>{
+    const reason = window.prompt('Hide this post. Reason (admins only see this):', 'Removed by a moderator');
+    if(reason === null) return;
+    run('tpv_hide_content', {p_table:table, p_id:String(row.id), p_reason:reason, p_county:countyTag()},
+      {hidden_at:new Date().toISOString(), hidden_reason:reason||'Removed by a moderator'}, 'Hidden.');
+  };
+  const unhide = ()=>run('tpv_unhide_content', {p_table:table, p_id:String(row.id), p_county:countyTag()},
+      {hidden_at:null, hidden_reason:null}, 'Restored.');
+
+  const options = [];
+  if(isOwn && canHide && !hidden) options.push(['🗑 Delete', del]);
+  if(!isOwn && !hidden) options.push(['🚩 Report', ()=>{setOpen(false);setReporting(true);}]);
+  if(admin && canHide && !isOwn && !hidden) options.push(['🛡 Hide', hide]);
+  if(admin && canHide && hidden && row.hidden_reason !== 'Deleted by author') options.push(['↩ Unhide', unhide]);
+  if(options.length === 0 && !note) return null;
+
+  const linkStyle = {background:'transparent',border:'none',color:'#999',fontSize:10,cursor:'pointer',
+    padding:'2px 4px',fontFamily:"'Playfair Display',serif",fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'};
+
+  return h('span',{style:{display:'inline-flex',alignItems:'center',gap:2,flexWrap:'wrap',
+      justifyContent:align==='right'?'flex-end':'flex-start'}},
+    note
+      ? h('span',{style:{fontSize:11,color:'#1a6b3c',fontFamily:"'Lora',serif",fontStyle:'italic'}},note)
+      : !open
+        ? h('button',{onClick:()=>setOpen(true),title:'More',style:{...linkStyle,fontSize:13,letterSpacing:0}},'⋯')
+        : [
+            ...options.map(([label,fn])=>h('button',{key:label,onClick:fn,disabled:busy,
+              style:{...linkStyle,color:label.indexOf('Report')>=0||label.indexOf('Hide')>=0?'#c0392b':'#777'}},label)),
+            h('button',{key:'x',onClick:()=>setOpen(false),style:linkStyle},'✕')
+          ],
+    reporting && h(ReportModal,{table,row,onClose:()=>setReporting(false),
+      onDone:msg=>{setReporting(false);flash(msg);}})
+  );
+}
+
+// ── Removing / restoring a resident (shared by User Manager + Reports) ───────
+async function removeResident(targetId, reason, adminId) {
+  const {error} = await sb.from('profiles').update({
+    deleted_at: new Date().toISOString(),
+    removed_reason: (reason||'').trim() || null,
+    removed_by: adminId || null,
+    show_in_directory: false,
+  }).eq('id', targetId);
+  if(error) return {ok:false, error:error.message};
+  // Also block the login itself (server function). If it isn't deployed yet,
+  // the app-level block above still keeps them out of the site.
+  const ban = await adminManageUser('ban', targetId, reason);
+  return {ok:true, banned:ban.ok, banError:ban.ok?null:ban.error, notDeployed:!!ban.notDeployed};
+}
+async function restoreResident(targetId) {
+  const {error} = await sb.from('profiles')
+    .update({deleted_at:null, removed_reason:null, removed_by:null, show_in_directory:true})
+    .eq('id', targetId);
+  if(error) return {ok:false, error:error.message};
+  const unban = await adminManageUser('unban', targetId);
+  return {ok:true, unbanned:unban.ok, notDeployed:!!unban.notDeployed};
+}
+
+const REPORT_TABLE_LABELS = {
+  bill_comments:'Bill comment', news_comments:'News comment', project_comments:'Project comment',
+  community_chat:'Chat message', community_ideas:'Community idea', direct_messages:'Private message',
+  exchange_listings:'Exchange listing', events:'Event',
+};
+
+function timeSince(iso) {
+  if(!iso) return '';
+  const s = Math.floor((Date.now() - new Date(iso).getTime())/1000);
+  if(s < 60) return 'just now';
+  if(s < 3600) return Math.floor(s/60)+'m ago';
+  if(s < 86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+// ── Admin: Reports queue ─────────────────────────────────────────────────────
+function ReportsQueue({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState('open'); // open | resolved
+  const [reports, setReports] = useState([]);
+  const [openCount, setOpenCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(null);
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const myCounties = adminCounties(profile);
+
+  const load = async(which)=>{
+    setLoading(true);
+    const w = which || view;
+    let q = sb.from('content_reports').select('*');
+    q = w === 'open' ? q.eq('status','open').order('created_at',{ascending:true})
+                     : q.neq('status','open').order('resolved_at',{ascending:false});
+    const {data, error} = await q.limit(50);
+    if(error) {
+      if(/content_reports|does not exist|schema cache/i.test(error.message)) setSetupNeeded(true);
+      setReports([]);
+    } else {
+      setReports(data||[]);
+      if(w === 'open') setOpenCount((data||[]).length);
+    }
+    setLoading(false);
+  };
+  useEffect(()=>{ load('open'); },[]);
+  useEffect(()=>{ if(autoOpen){ setOpen(true); setView('open'); load('open'); onAutoOpenConsumed && onAutoOpenConsumed(); } },[autoOpen]);
+
+  const resolve = async(r, status, resolution)=>{
+    const {error} = await sb.rpc('tpv_resolve_report',{p_report_id:r.id, p_status:status, p_resolution:resolution||null});
+    if(error) { onToast('❌ '+error.message); return false; }
+    return true;
+  };
+  const done = (msg)=>{ onToast(msg); load(view); if(view!=='open') load('open'); };
+
+  const hidePost = async(r)=>{
+    const reason = window.prompt('Reason for hiding (admins only see this):', r.reason || 'Removed by a moderator');
+    if(reason === null) return;
+    setBusy(r.id);
+    const {error} = await sb.rpc('tpv_hide_content',{p_table:r.content_table, p_id:r.content_id, p_reason:reason, p_county:r.county});
+    setBusy(null);
+    if(error) { onToast('❌ '+error.message); return; }
+    done('✓ Post hidden. Report closed.');
+  };
+
+  const takeDown = async(r)=>{
+    if(!window.confirm('Take this '+(REPORT_TABLE_LABELS[r.content_table]||'item').toLowerCase()+' down? You can restore it from Deleted items.')) return;
+    setBusy(r.id);
+    const {error} = await sb.from(r.content_table).update({deleted_at:new Date().toISOString()}).eq('id', r.content_id);
+    if(error) { setBusy(null); onToast('❌ '+error.message); return; }
+    await resolve(r, 'actioned', 'Taken down');
+    setBusy(null);
+    done('✓ Taken down.');
+  };
+
+  const removePoster = async(r)=>{
+    if(!r.content_author_id) return;
+    if(r.content_author_id === user?.id) { onToast('That\'s your own post.'); return; }
+    const reason = window.prompt('Remove '+(r.content_author_name||'this resident')+' from The People\'s Voice?\n\nThey\'ll be signed out and blocked. You can restore them from User Manager.\n\nReason (admins only):', r.reason);
+    if(reason === null) return;
+    setBusy(r.id);
+    const res = await removeResident(r.content_author_id, reason, user?.id);
+    if(!res.ok) { setBusy(null); onToast('❌ '+res.error); return; }
+    if(HIDEABLE_TABLES.has(r.content_table)) {
+      await sb.rpc('tpv_hide_content',{p_table:r.content_table, p_id:r.content_id, p_reason:reason||r.reason, p_county:r.county});
+    }
+    await resolve(r, 'actioned', 'Poster removed');
+    setBusy(null);
+    done('✓ '+(r.content_author_name||'Resident')+' removed.' + (res.notDeployed ? ' (Account-level block isn\'t set up yet, but they\'re locked out of the site.)' : ''));
+  };
+
+  const dismiss = async(r)=>{
+    const why = window.prompt('Dismiss this report. Note for other admins (optional):', 'Doesn\'t break the rules');
+    if(why === null) return;
+    setBusy(r.id);
+    const ok = await resolve(r, 'dismissed', why);
+    setBusy(null);
+    if(ok) done('Report dismissed.');
+  };
+  const markHandled = async(r)=>{
+    const how = window.prompt('How was it handled? (optional)', 'Talked to them');
+    if(how === null) return;
+    setBusy(r.id);
+    const ok = await resolve(r, 'actioned', how);
+    setBusy(null);
+    if(ok) done('✓ Marked handled.');
+  };
+  const reopen = async(r)=>{ setBusy(r.id); const ok = await resolve(r,'open',null); setBusy(null); if(ok) done('Report reopened.'); };
+
+  const btn = (label, onClick, bg, disabled)=>h('button',{onClick,disabled,
+    style:{background:bg,color:'#fff',border:'none',padding:'6px 11px',borderRadius:5,fontSize:11,
+      cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700,opacity:disabled?.6:1}},label);
+
+  const tab = (id,label)=>h('button',{onClick:()=>{setView(id);load(id);},
+    style:{background:view===id?'#1a1a2e':'transparent',color:view===id?'#f0c040':'#888',
+      border:'1px solid '+(view===id?'#1a1a2e':'#ddd'),borderRadius:20,padding:'4px 12px',fontSize:11,
+      cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},label);
+
+  return h('div',{style:{background:openCount>0?'#fdecea':'#faf8f5',border:'1px solid '+(openCount>0?'#e6b0aa':'#e5dece'),
+      borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?12:0},
+      onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8}},
+        '🚩 Reports',
+        openCount>0 && h('span',{style:{background:'#c0392b',color:'#fff',borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700}},openCount+' open'),
+        openCount===0 && !loading && !setupNeeded && h('span',{style:{fontSize:11,color:'#1a6b3c',fontWeight:400,fontFamily:"'Lora',serif"}},'All clear')
+      ),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open && h('div',null,
+      setupNeeded && h('div',{style:{fontSize:12,color:'#8a6000',background:'#fff8e7',padding:'8px 10px',borderRadius:6,marginBottom:10}},
+        'Reports need the October database update. Run tpv_admin_upgrade.sql in Supabase, then refresh.'),
+      h('div',{style:{display:'flex',gap:6,marginBottom:12,alignItems:'center',flexWrap:'wrap'}},
+        tab('open','Open'), tab('resolved','Resolved'),
+        h('span',{style:{fontSize:11,color:'#999',marginLeft:'auto',fontFamily:"'Lora',serif"}},'Showing: '+adminScopeLabel(profile))
+      ),
+      loading && h('div',{style:{textAlign:'center',padding:16,color:'#aaa'}},'Loading...'),
+      !loading && reports.length===0 && h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic',padding:'8px 0'}},
+        view==='open' ? 'No open reports. 🌱' : 'Nothing resolved yet.'),
+      reports.map(r=>{
+        const label = REPORT_TABLE_LABELS[r.content_table] || r.content_table;
+        const canAct = isAdminFor(profile, r.county) || isFullAdmin(profile);
+        return h('div',{key:r.id,style:{background:'#fff',border:'1px solid #eadfd8',borderRadius:8,padding:'12px 14px',marginBottom:10}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:6}},
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#922b21'}},r.reason),
+            h('div',{style:{fontSize:11,color:'#999'}},
+              label+' · '+(COUNTIES[r.county]?.short||'—')+' · '+timeSince(r.created_at))
+          ),
+          h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 10px',fontSize:13,color:'#333',
+            fontFamily:"'Lora',serif",lineHeight:1.55,whiteSpace:'pre-wrap',wordBreak:'break-word',marginBottom:6}},
+            r.content_snapshot || '(no text)'),
+          h('div',{style:{fontSize:11,color:'#777',marginBottom:r.note?4:8,fontFamily:"'Lora',serif"}},
+            'Posted by ', h('strong',null,r.content_author_name||'unknown'),
+            ' · reported by ', r.reporter_name||'a resident'),
+          r.note && h('div',{style:{fontSize:12,color:'#555',fontStyle:'italic',marginBottom:8,fontFamily:"'Lora',serif"}},'“'+r.note+'”'),
+          r.status==='open'
+            ? h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+                !canAct && h('span',{style:{fontSize:11,color:'#999'}},'Outside your counties'),
+                canAct && HIDEABLE_TABLES.has(r.content_table) && btn('🛡 Hide post',()=>hidePost(r),'#c0392b',busy===r.id),
+                canAct && (r.content_table==='exchange_listings'||r.content_table==='events') && btn('🗑 Take down',()=>takeDown(r),'#c0392b',busy===r.id),
+                canAct && r.content_author_id && r.content_author_id!==user?.id && btn('🚫 Remove poster',()=>removePoster(r),'#7b241c',busy===r.id),
+                canAct && r.content_table==='direct_messages' && btn('✓ Mark handled',()=>markHandled(r),'#1a5c8a',busy===r.id),
+                canAct && btn('Dismiss',()=>dismiss(r),'#888',busy===r.id)
+              )
+            : h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+                h('span',{style:{fontSize:11,color:r.status==='dismissed'?'#888':'#1a6b3c',fontWeight:700}},
+                  (r.status==='dismissed'?'Dismissed':'Handled')+(r.resolution?': '+r.resolution:'')+' · '+timeSince(r.resolved_at)),
+                canAct && h('button',{onClick:()=>reopen(r),disabled:busy===r.id,
+                  style:{background:'transparent',border:'none',color:'#1a5c8a',fontSize:11,cursor:'pointer',textDecoration:'underline'}},'Reopen')
+              )
+        );
+      }),
+      h('button',{onClick:()=>load(view),style:{marginTop:4,background:'transparent',border:'1px solid #ddd',color:'#888',
+        padding:'5px 12px',borderRadius:5,fontSize:11,cursor:'pointer'}},'↻ Refresh')
+    )
+  );
+}
+
+// ── Admin: Moderation log ────────────────────────────────────────────────────
+const ADMIN_ACTION_LABELS = {
+  remove_resident:'🚫 Removed resident', restore_resident:'↩ Restored resident',
+  hide_post:'🛡 Hid post', unhide_post:'↩ Unhid post',
+  dismiss_report:'Dismissed report', resolve_report:'✓ Handled report', reopen_report:'Reopened report',
+  ban_account:'🔒 Blocked login', unban_account:'🔓 Unblocked login', delete_account:'❌ Deleted account',
+};
+function ModerationLog({profile}) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const load = async()=>{
+    setLoading(true);
+    const {data} = await sb.from('admin_actions').select('*').order('created_at',{ascending:false}).limit(60);
+    setRows(data||[]); setLoading(false);
+  };
+  useEffect(()=>{ if(open) load(); },[open]);
+  return h('div',{style:{background:'#faf8f5',border:'1px solid #e5dece',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?12:0},
+      onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'📜 Moderation log'),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')
+    ),
+    open && h('div',null,
+      h('div',{style:{fontSize:12,color:'#888',marginBottom:10,fontFamily:"'Lora',serif",lineHeight:1.5}},
+        'Every removal, hide and report decision, so admins can see what each other did.'),
+      loading && h('div',{style:{color:'#aaa',fontSize:12}},'Loading...'),
+      !loading && rows.length===0 && h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'Nothing logged yet.'),
+      rows.map(r=>h('div',{key:r.id,style:{display:'flex',gap:10,padding:'7px 0',borderBottom:'1px solid #f0ece4',fontSize:12,fontFamily:"'Lora',serif"}},
+        h('div',{style:{width:62,flexShrink:0,color:'#aaa',fontSize:11}},timeSince(r.created_at)),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',null, h('strong',{style:{color:'#1a1a2e'}},r.admin_name||'System'),' · ',
+            ADMIN_ACTION_LABELS[r.action]||r.action,
+            r.county&&COUNTIES[r.county]&&h('span',{style:{color:'#aaa'}},' · '+COUNTIES[r.county].short)),
+          r.detail && h('div',{style:{color:'#777',wordBreak:'break-word',marginTop:1}},r.detail)
+        )
+      ))
+    )
+  );
+}
+
+function CommentItem({comment:c, user, billId, onEdited, onChanged}) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(c.content);
   const [saving, setSaving] = useState(false);
@@ -1442,11 +1923,14 @@ function CommentItem({comment:c, user, billId, onEdited}) {
         ),
         h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
           h('span',{style:{fontSize:11,color:'#bbb'}},c.created_at?new Date(c.created_at).toLocaleDateString():''),
-          isOwn&&!editing&&h('button',{onClick:()=>setEditing(true),
-            style:{background:'transparent',border:'none',color:'#aaa',fontSize:11,cursor:'pointer',padding:'0 4px',fontFamily:"'Lora',serif"}},'✏️ Edit')
+          isOwn&&!editing&&!c.hidden_at&&h('button',{onClick:()=>setEditing(true),
+            style:{background:'transparent',border:'none',color:'#aaa',fontSize:11,cursor:'pointer',padding:'0 4px',fontFamily:"'Lora',serif"}},'✏️ Edit'),
+          !editing&&h(ModMenu,{table:'bill_comments',row:c,user,onChanged})
         )
       ),
-      !editing
+      c.hidden_at
+        ? h(HiddenBody,{row:c,viewer:user})
+        : !editing
         ? h('div',{style:{fontSize:13,lineHeight:1.65,color:'#333'}},c.content)
         : h('div',null,
             h('textarea',{value:text,onChange:e=>setText(e.target.value),rows:3,
@@ -1519,9 +2003,9 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
   const postComment=async()=>{
     if(!commentText.trim()||!user)return;
     const name=commentAnon?'Anonymous':(user.display_name||user.email.split('@')[0]);
-    const {error}=await sb.from('bill_comments').insert({bill_id:bill.id,user_id:user.id,display_name:name,content:commentText.trim(),anonymous:commentAnon,badges:user.badges||[]});
+    const {data:saved,error}=await sb.from('bill_comments').insert({bill_id:bill.id,user_id:user.id,display_name:name,content:commentText.trim(),anonymous:commentAnon,badges:user.badges||[]}).select().single();
     if(!error){
-      setComments(prev=>[{id:Date.now(),display_name:name,content:commentText.trim(),created_at:new Date().toISOString(),anonymous:commentAnon,badges:user.badges||[]},...prev]);
+      setComments(prev=>[saved||{id:Date.now(),user_id:user.id,display_name:name,content:commentText.trim(),created_at:new Date().toISOString(),anonymous:commentAnon,badges:user.badges||[]},...prev]);
       setCommentText('');
       await sb.from('profiles').update({reputation:Math.min(9999,(user.reputation||0)+10)}).eq('id',user.id);
       const commentBadge = (user.badges||[]).includes('first_comment')?null:'first_comment';
@@ -1632,8 +2116,9 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
           )
         ):h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,marginBottom:14,fontSize:13,color:'#8a6000',textAlign:'center'}},"Sign in to join the discussion."),
         comments.length===0&&h('div',{style:{textAlign:'center',color:'#bbb',fontStyle:'italic',fontSize:13,padding:16}},"No comments yet. Be the first."),
-        comments.map((c,i)=>h(CommentItem,{key:c.id||i,comment:c,user,billId:bill.id,
-          onEdited:(updated)=>setComments(prev=>prev.map((x,j)=>j===i?{...x,content:updated}:x))
+        comments.filter(c=>!c.hidden_at||isAdminHere(user)).map((c,i)=>h(CommentItem,{key:c.id||i,comment:c,user,billId:bill.id,
+          onEdited:(updated)=>setComments(prev=>prev.map(x=>x===c?{...x,content:updated}:x)),
+          onChanged:(patch)=>setComments(prev=>prev.map(x=>x===c?{...x,...patch}:x))
         }))
       )
     )
@@ -1900,12 +2385,18 @@ function NewsStoryCard({story, user, profile}) {
     showComments&&h('div',{style:{borderTop:'1px solid #f0ece4',padding:'12px 16px',background:'#faf8f5'}},
       loadingComments&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic'}},"Loading..."),
       comments.length===0&&!loadingComments&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginBottom:10}},"No comments yet. Start the discussion."),
-      comments.map((c,i)=>h('div',{key:c.id||i,style:{marginBottom:10,paddingBottom:10,borderBottom:i<comments.length-1?'1px solid #f0ece4':'none'}},
-        h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+      comments.filter(c=>!c.hidden_at||isAdminHere(profile)).map((c,i,arr)=>h('div',{key:c.id||i,style:{marginBottom:10,paddingBottom:10,borderBottom:i<arr.length-1?'1px solid #f0ece4':'none'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3,gap:6}},
           h('span',{style:{fontWeight:700,fontSize:12,color:'#1a1a2e',fontFamily:"'Playfair Display',serif"}},c.display_name),
-          h('span',{style:{fontSize:10,color:'#bbb'}},new Date(c.created_at).toLocaleDateString())
+          h('span',{style:{display:'inline-flex',alignItems:'center',gap:4}},
+            h('span',{style:{fontSize:10,color:'#bbb'}},new Date(c.created_at).toLocaleDateString()),
+            h(ModMenu,{table:'news_comments',row:c,user,profile,align:'right',
+              onChanged:patch=>setComments(prev=>prev.map(x=>x.id===c.id?{...x,...patch}:x))})
+          )
         ),
-        h('div',{style:{fontSize:13,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6}},c.content)
+        c.hidden_at
+          ? h(HiddenBody,{row:c,viewer:{...(user||{}),...(profile||{})}})
+          : h('div',{style:{fontSize:13,color:'#444',fontFamily:"'Lora',serif",lineHeight:1.6}},c.content)
       )),
       user&&h('div',{style:{display:'flex',gap:8,marginTop:8}},
         h('input',{value:commentText,onChange:e=>setCommentText(e.target.value),onKeyDown:e=>e.key==='Enter'&&postComment(),placeholder:'Add to the discussion...',
@@ -2061,7 +2552,7 @@ function NewsTab({user, rep, profile}) {
   const [submitMsg, setSubmitMsg] = useState('');
   const [urlError, setUrlError] = useState('');
   const isTrusted = (rep||0) >= 50;
-  const isAdmin = profile?.is_admin===true;
+  const isAdmin = isAdminHere(profile);
   const [fetchingRss,setFetchingRss] = useState(false);
   const [rssMsg,setRssMsg] = useState('');
 
@@ -2379,6 +2870,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         const myCountyRooms = chatRoomsForCounty(countyTag()).map(r=>r.id);
         const {data} = await sb.from('community_chat')
           .select('id,room_id,user_id,display_name,content,created_at,parent_message_id,shared_event_id')
+          .is('hidden_at', null)
           .gte('created_at', since)
           .in('room_id', myCountyRooms)
           .order('created_at',{ascending:false}).limit(limit);
@@ -2493,6 +2985,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       await safe(async()=>{
         const {data} = await sb.from('community_ideas')
           .select('id,title,submitted_by_id,submitted_by_name,created_at')
+          .is('hidden_at', null)
           .gte('created_at', since)
           .eq('county', countyTag())
           .order('created_at',{ascending:false}).limit(limit);
@@ -2517,6 +3010,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
       await safe(async()=>{
         const {data} = await sb.from('bill_comments')
           .select('id,bill_id,user_id,display_name,content,created_at')
+          .is('hidden_at', null)
           .gte('created_at', since)
           .order('created_at',{ascending:false}).limit(limit);
         if(!data || data.length === 0) return;
@@ -2584,6 +3078,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate}){
         // Chat preview from user's ZIP room in this county (fallback: this
         // county's general room — namespaced for non-default counties)
         sb.from('community_chat').select('id,display_name,content,created_at')
+          .is('hidden_at', null)
           .eq('room_id', (()=>{ const rooms = chatRoomsForCounty(countyTag());
             const zipRoom = rooms.find(r=>r.displayId===userZip);
             return zipRoom ? zipRoom.id : (rooms[0] ? rooms[0].id : 'general'); })())
@@ -3666,7 +4161,7 @@ function CommunitySubmitPanel({user, bills, onToast, onSubmitted}) {
 
   if(!user) return null;
 
-  const JURISDICTIONS = ['Village of Concord','City of Jackson','Summit Township','Columbia Township','Napoleon Township','Grass Lake Township','Spring Arbor Township','Leoni Township','Blackman Township','Rives Township','Henrietta Township','Waterloo Township','Norvell Township','Hanover Township','Springport Township','Jackson County','State of Michigan','Federal'];
+  const JURISDICTIONS = jurisdictionsForCounty();
   const inp = (label,key,ph,type='text',rows=0) => h('div',{style:{marginBottom:10}},
     h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},label),
     rows>0
@@ -4169,9 +4664,9 @@ function ProjectCard({project,user,onRepGain}) {
   const postComment=async()=>{
     if(!commentText.trim()||!user)return;
     const name=user.display_name||user.email.split('@')[0];
-    const {error}=await sb.from('project_comments').insert({project_id:project.id,user_id:user.id,display_name:name,content:commentText.trim()});
+    const {data:saved,error}=await sb.from('project_comments').insert({project_id:project.id,user_id:user.id,display_name:name,content:commentText.trim()}).select().single();
     if(!error){
-      setComments(prev=>[{display_name:name,content:commentText.trim(),created_at:new Date().toISOString()},...prev]);
+      setComments(prev=>[saved||{user_id:user.id,display_name:name,content:commentText.trim(),created_at:new Date().toISOString()},...prev]);
       setCommentText('');
       await sb.from('profiles').update({reputation:Math.min(9999,(user.reputation||0)+10)}).eq('id',user.id);
       onRepGain(10);setToast("+10 reputation!");
@@ -4251,11 +4746,12 @@ function ProjectCard({project,user,onRepGain}) {
           h('div',{style:{textAlign:'right',marginTop:8}},h(Btn,{onClick:postComment},"Post +10 rep"))
         ):h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,marginBottom:14,fontSize:13,color:'#8a6000',textAlign:'center'}},"Sign in to join the discussion."),
         comments.length===0&&h('div',{style:{textAlign:'center',color:'#bbb',fontStyle:'italic',fontSize:13,padding:16}},"No discussion yet."),
-        comments.map((c,i)=>h('div',{key:i,style:{display:'flex',gap:10,marginBottom:12,paddingBottom:12,borderBottom:'1px solid #f0ece4'}},
+        comments.filter(c=>!c.hidden_at||isAdminHere(user)).map((c,i)=>h('div',{key:c.id||i,style:{display:'flex',gap:10,marginBottom:12,paddingBottom:12,borderBottom:'1px solid #f0ece4'}},
           h('div',{style:{width:36,height:36,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,flexShrink:0}},(c.display_name||'?')[0].toUpperCase()),
-          h('div',null,
-            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif",marginBottom:3}},c.display_name," ",h('span',{style:{color:'#bbb',fontWeight:400,fontSize:11}},c.created_at ? new Date(c.created_at).toLocaleDateString() : '')),
-            h('div',{style:{fontSize:13,lineHeight:1.65,color:'#333'}},c.content)
+          h('div',{style:{flex:1,minWidth:0}},
+            h('div',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e',fontFamily:"'Playfair Display',serif",marginBottom:3}},c.display_name," ",h('span',{style:{color:'#bbb',fontWeight:400,fontSize:11}},c.created_at ? new Date(c.created_at).toLocaleDateString() : ''),' ',
+              h(ModMenu,{table:'project_comments',row:c,user,onChanged:patch=>setComments(prev=>prev.map(x=>x===c?{...x,...patch}:x))})),
+            c.hidden_at ? h(HiddenBody,{row:c,viewer:user}) : h('div',{style:{fontSize:13,lineHeight:1.65,color:'#333'}},c.content)
           )
         ))
       )
@@ -5799,7 +6295,7 @@ function GroupsTab({user, profile, neighbors}) {
   const [activeGroup, setActiveGroup] = useState(null); // group object
   const [showCreate, setShowCreate] = useState(false);
   const [groupActivity, setGroupActivity] = useState({});
-  const isAdmin = profile?.is_admin===true;
+  const isAdmin = isAdminHere(profile);
 
   const EMPTY = {name:'',description:'',topic:'General',open:true};
   const [form, setForm] = useState(EMPTY);
@@ -6223,7 +6719,9 @@ function GroupRoom({group, user, profile, neighbors, myMemberships, onJoin, onLe
                 // Reply context
                 m.parent_message_id && h(ReplyContext, {parentSnippet: m.parent_snippet, parentAuthor: m.parent_author}),
                 // Body
-                m.image_url
+                m.hidden_at
+                  ? h(HiddenBody,{row:m,viewer:{...(user||{}),...(profile||{})}})
+                : m.image_url
                   ? h('img',{src:m.image_url,alt:'photo',style:{maxWidth:200,maxHeight:200,borderRadius:8,display:'block',cursor:'pointer'},onClick:()=>window.open(m.image_url,'_blank')})
                   : (m.content && m.content !== '[shared event]') && h('div',{style:{background:isMe?'#e8f2fa':'#f5f3ee',border:'1px solid '+(isMe?'#c8d8f0':'#e5dece'),
                       borderRadius:8,padding:'8px 11px',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.5,color:'#333',wordBreak:'break-word'}},
@@ -6231,10 +6729,14 @@ function GroupRoom({group, user, profile, neighbors, myMemberships, onJoin, onLe
                 // Inline event card
                 m.shared_event_id && h(ChatEventCard, {eventId: m.shared_event_id, currentUserId: user?.id, onToast: (msg)=>{}}),
                 // Reply button
-                user && isMember && h('button',{onClick:()=>setGroupReplyTo(m),
+                h('div',{style:{display:'flex',alignItems:'center',gap:6,justifyContent:isMe?'flex-end':'flex-start',flexWrap:'wrap'}},
+                user && isMember && !m.hidden_at && h('button',{onClick:()=>setGroupReplyTo(m),
                   style:{background:'transparent',border:'none',color:'#888',fontSize:10,
                     cursor:'pointer',padding:'2px 0',marginTop:2,fontFamily:"'Playfair Display',serif",
-                    fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}}, '\u21A9 Reply')
+                    fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}}, '\u21A9 Reply'),
+                h(ModMenu,{table:'community_chat',row:m,user,profile,align:isMe?'right':'left',
+                  onChanged:patch=>setMessages(prev=>prev.map(x=>x.id===m.id?{...x,...patch}:x))})
+                )
               )
             ),
             node.children.length > 0 && h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
@@ -6599,7 +7101,8 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
                           h('button',{onClick:()=>setDmReplyTo(m),
                             style:{background:'transparent',border:'none',color:'#888',fontSize:10,
                               cursor:'pointer',padding:0,fontFamily:"'Playfair Display',serif",
-                              fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}}, '\u21A9 Reply')
+                              fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}}, '\u21A9 Reply'),
+                          !isMe && h(ModMenu,{table:'direct_messages',row:m,user,profile})
                         )
                       )
                     ),
@@ -6984,7 +7487,9 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
                     // Reply context if this is a reply
                     m.parent_message_id && h(ReplyContext, {parentSnippet: m.parent_snippet, parentAuthor: m.parent_author}),
                     // Message body
-                    m.image_url
+                    m.hidden_at
+                      ? h(HiddenBody,{row:m,viewer:{...(user||{}),...(profile||{})}})
+                    : m.image_url
                       ? h('div',{style:{marginTop:2}},
                           h('img',{src:m.image_url,alt:'photo',
                             style:{maxWidth:220,maxHeight:220,borderRadius:8,display:'block',cursor:'pointer'},
@@ -6998,10 +7503,14 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
                     // Inline event card if a shared event exists
                     m.shared_event_id && h(ChatEventCard, {eventId: m.shared_event_id, currentUserId: user?.id, onToast: (msg)=>{} }),
                     // Reply button
-                    user && h('button',{onClick:()=>setChatReplyTo(m),
+                    h('div',{style:{display:'flex',alignItems:'center',gap:6,justifyContent:isMe?'flex-end':'flex-start',flexWrap:'wrap'}},
+                    user && !m.hidden_at && h('button',{onClick:()=>setChatReplyTo(m),
                       style:{background:'transparent',border:'none',color:'#888',fontSize:10,
                         cursor:'pointer',padding:'2px 0',marginTop:2,fontFamily:"'Playfair Display',serif",
-                        fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}},'\u21A9 Reply')
+                        fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase'}},'\u21A9 Reply'),
+                    h(ModMenu,{table:'community_chat',row:m,user,profile,align:isMe?'right':'left',
+                      onChanged:patch=>setMessages(prev=>prev.map(x=>x.id===m.id?{...x,...patch}:x))})
+                    )
                   )
                 ),
                 // Render children recursively
@@ -7350,7 +7859,7 @@ function AuthScreen({onAuth, onGuest}) {
     const displayName=name||email.split('@')[0];
     const {data,error:err}=await sb.auth.signUp({
       email,password:pass,
-      options:{data:{display_name:displayName,zip}}
+      options:{data:{display_name:displayName,zip},emailRedirectTo:authRedirectUrl(countyResolved()?urlCounty:zipCounty)}
     });
     if(err){
       let msg=err.message||'Something went wrong. Please try again.';
@@ -7392,6 +7901,12 @@ function AuthScreen({onAuth, onGuest}) {
     if(err){setError(err.message);setLoading(false);return;}
     if(data.user){
       let {data:prof} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+      if(prof && prof.deleted_at) {
+        await sb.auth.signOut();
+        setError('This account has been removed from The People\'s Voice. If you think this is a mistake, email chef.justinfairchild@gmail.com.');
+        setLoading(false);
+        return;
+      }
       // If profile row missing (can happen with broken signups), create it now
       if(!prof) {
         await sb.from('profiles').upsert({
@@ -7412,7 +7927,7 @@ function AuthScreen({onAuth, onGuest}) {
   const handleSendReset=async()=>{
     if(!email.trim()) { setError('Enter your email address.'); return; }
     setLoading(true); setError('');
-    const redirectTo = window.location.origin + window.location.pathname + '?reset=1';
+    const redirectTo = authRedirectUrl(null, '?reset=1');
     const {error:err} = await sb.auth.resetPasswordForEmail(email.trim(), {redirectTo});
     if(err) {
       setError(err.message);
@@ -7447,7 +7962,7 @@ function AuthScreen({onAuth, onGuest}) {
   const handleResendConfirmation=async()=>{
     if(!email.trim()) return;
     setResendStatus('sending');
-    const redirectTo = window.location.origin + window.location.pathname;
+    const redirectTo = authRedirectUrl();
     const {error:err} = await sb.auth.resend({
       type: 'signup',
       email: email.trim(),
@@ -8148,7 +8663,7 @@ function EventsTab({user, profile, onToast}) {
   const [showPast, setShowPast] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const isAdmin = profile?.is_admin===true;
+  const isAdmin = isAdminHere(profile);
 
   const EMPTY_FORM = {title:'',event_date:'',event_time:'',location:'',zip:'',category:'Farmers Market',description:'',link:'',
     is_recurring:false, recurrence:'weekly', custom_days:'7', recurrence_end:''};
@@ -9270,7 +9785,7 @@ function ExchangeTab({user, profile, onToast}) {
   const [catFilter, setCatFilter] = useState('All');
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const isAdmin = profile?.is_admin===true;
+  const isAdmin = isAdminHere(profile);
 
   const EMPTY = {listing_type:'offer',title:'',category:'Food & Produce',description:'',zip:profile?.zip||''};
   const [form, setForm] = useState(EMPTY);
@@ -9778,6 +10293,19 @@ const JURISDICTIONS_V1 = [
   { name:'Spring Arbor Township',      type:'Township', body:'Township Board' },
   { name:'Columbia Township',          type:'Township', body:'Township Board' },
 ];
+// Governing bodies whose meetings the Meeting Populator drafts. Jackson keeps
+// its hand-picked list above; other counties are built from their jurisdictions.
+function meetingBodiesForCounty(countyId) {
+  if(!countyId || countyId === 'jackson') return JURISDICTIONS_V1;
+  return jurisdictionsForCounty(countyId)
+    .filter(n=>n!=='State of Michigan' && n!=='Federal')
+    .map(n=>{
+      if(/County$/.test(n))      return {name:n, type:'County',   body:'Board of Commissioners'};
+      if(/^City of /.test(n))    return {name:n, type:'City',     body:'City Council'};
+      if(/^Village of /.test(n)) return {name:n, type:'Village',  body:'Village Council'};
+      return {name:n, type:'Township', body:'Township Board'};
+    });
+}
 // ═══════════════════════════════════════════════════════════════════════════════
 // THE QUESTION — bi-weekly civic discourse feature
 // Admin authors a question, AI generates a balanced briefing, residents respond
@@ -10380,7 +10908,9 @@ function StuckSignupsQueue({user, profile, onToast}) {
           setRows([]);
         } else {
           // Limit to 50 client-side to match previous behavior
-          setRows((data||[]).slice(0,50));
+          const mine = isFullAdmin(profile) ? (data||[])
+            : (data||[]).filter(r=>adminCounties(profile).includes(r.county || countyForZip(r.zip)));
+          setRows(mine.slice(0,50));
         }
         setLoading(false);
       })
@@ -10392,7 +10922,7 @@ function StuckSignupsQueue({user, profile, onToast}) {
     if(!row.email) return;
     setResending(row.id);
     try {
-      const redirectTo = window.location.origin + window.location.pathname;
+      const redirectTo = authRedirectUrl(row.county || countyForZip(row.zip));
       const {error} = await sb.auth.resend({
         type:'signup',
         email: row.email,
@@ -10678,12 +11208,11 @@ function MeetingPopulator({user, profile, onToast}) {
     const horizon = new Date(today.getTime() + 30*24*60*60*1000);
     const fmt = d => d.toISOString().slice(0,10);
 
-    // Split jurisdictions into 3 batches of ~5 to stay well under token limits
-    const batches = [
-      JURISDICTIONS_V1.slice(0, 5),
-      JURISDICTIONS_V1.slice(5, 10),
-      JURISDICTIONS_V1.slice(10),
-    ];
+    // Split this county's governing bodies into batches of ~5 to stay well
+    // under token limits
+    const bodies = meetingBodiesForCounty(countyTag());
+    const batches = [];
+    for(let i=0; i<bodies.length; i+=5) batches.push(bodies.slice(i, i+5));
 
     const systemPrompt =
       'You are a civic data analyst familiar with typical Michigan municipal meeting schedules. ' +
@@ -10714,7 +11243,7 @@ function MeetingPopulator({user, profile, onToast}) {
         'Generate likely public meetings from ' + fmt(today) + ' through ' + fmt(horizon) + '.\n\n' +
         'Jurisdictions:\n' + jurisdictionList + '\n\n' +
         'For each jurisdiction, include 2-4 meetings spanning their main legislative body plus other regular bodies you know patterns for. ' +
-        'Use real Jackson County, MI municipal addresses where confident; otherwise leave proposed_location empty. ' +
+        'Use real ' + getCurrentCounty().name + ', MI municipal addresses where confident; otherwise leave proposed_location empty. ' +
         'Leave proposed_date empty if you are not confident about the schedule.';
 
       try {
@@ -11328,7 +11857,7 @@ function IdeasTab({user, profile, rep, onToast}) {
 
   useEffect(()=>{
     sb.from('community_ideas').select('*').eq('county', countyTag()).order('upvotes',{ascending:false})
-      .then(({data})=>{ setIdeas(data||[]); setLoading(false); });
+      .then(({data})=>{ setIdeas((data||[]).filter(i=>!i.hidden_at||isAdminHere(profile))); setLoading(false); });
     if(user) sb.from('idea_upvotes').select('idea_id').eq('user_id',user.id)
       .then(({data})=>{ if(data){const v={};data.forEach(d=>v[d.idea_id]=true);setUpvoted(v);}});
   },[]);
@@ -11491,9 +12020,12 @@ function IdeasTab({user, profile, rep, onToast}) {
                   ? '✅ Forwarded to '+( idea.target_official||'local officials')
                   : pct+'% to '+IDEA_THRESHOLD+' upvotes needed to forward'
               ),
-              h('div',{style:{fontSize:11,color:'#aaa',marginTop:4}},
-                'Submitted by '+(idea.submitted_by_name||'neighbor')+' • '+(idea.created_at?new Date(idea.created_at).toLocaleDateString():'')
-              )
+              h('div',{style:{fontSize:11,color:'#aaa',marginTop:4,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
+                'Submitted by '+(idea.submitted_by_name||'neighbor')+' • '+(idea.created_at?new Date(idea.created_at).toLocaleDateString():''),
+                h(ModMenu,{table:'community_ideas',row:idea,user,profile,
+                  onChanged:patch=>setIdeas(prev=>prev.map(x=>x.id===idea.id?{...x,...patch}:x).filter(x=>!x.hidden_at||isAdminHere(profile)))})
+              ),
+              idea.hidden_at && h('div',{style:{marginTop:6}},h(HiddenBody,{row:{...idea,content:null},viewer:{...(user||{}),...(profile||{})}}))
             )
           )
         );
@@ -11859,7 +12391,7 @@ function OfficialManager({onToast}) {
                 style:{background:'transparent',border:'1px solid #ddd',color:'#c0392b',padding:'7px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}              },'Remove')        ))      )    )  );}
 
 // ── New Users Inbox (Admin) ───────────────────────────────────────────────────
-function NewUsersInbox({onToast}) {
+function NewUsersInbox({onToast, profile}) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -11867,10 +12399,11 @@ function NewUsersInbox({onToast}) {
   const load = async()=>{
     setLoading(true);
     try {
-      const {data} = await sb.from('profiles')
-        .select('id,display_name,email,zip,reputation,is_admin,is_official,created_at')
-        .order('created_at',{ascending:false})
-        .limit(30);
+      let q = sb.from('profiles')
+        .select('id,display_name,email,zip,county,reputation,is_admin,is_official,created_at')
+        .is('deleted_at', null);
+      if(!isFullAdmin(profile)) q = q.in('county', adminCounties(profile));
+      const {data} = await q.order('created_at',{ascending:false}).limit(30);
       setUsers(data||[]);
     } catch(e) { onToast('Could not load users: '+e.message); }
     setLoading(false);
@@ -11906,7 +12439,7 @@ function NewUsersInbox({onToast}) {
               u.is_press&&h('span',{style:{background:'#8a4000',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10}},'Press')
             ),
             h('div',{style:{fontSize:11,color:'#888',marginTop:2}},
-              (u.email||'no email')+' · ZIP: '+(u.zip||'—')+' · '+u.reputation+' rep'
+              (u.email||'no email')+' · ZIP: '+(u.zip||'—')+' · '+(COUNTIES[u.county]?.short||'no county')+' · '+u.reputation+' rep'
             ),
             h('div',{style:{fontSize:10,color:'#bbb',marginTop:1}},'Joined '+new Date(u.created_at).toLocaleDateString())
           )
@@ -12038,7 +12571,9 @@ function NominationsInbox({onToast}) {
 }
 
 // ── User Manager (Admin) ───────────────────────────────────────────────────────
-function UserManager({onToast}) {
+function UserManager({onToast, user, profile}) {
+  const full = isFullAdmin(profile);
+  const myCounties = adminCounties(profile);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
@@ -12046,23 +12581,76 @@ function UserManager({onToast}) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState({});
   const [saving, setSaving] = useState(false);
+  const [countyFilter, setCountyFilter] = useState('all');
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [removeReason, setRemoveReason] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   const searchUsers = async()=>{
     setLoading(true); setSelected(null);
-    if(search.trim()) {
-      const {data} = await sb.from('profiles')
-        .select('*')
-        .or(`email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`)
-        .limit(15);
-      setResults(data||[]);
-    } else {
-      const {data} = await sb.from('profiles')
-        .select('*')
-        .order('created_at',{ascending:false})
-        .limit(25);
-      setResults(data||[]);
-    }
+    // Strip characters that would break the PostgREST or() filter
+    const term = search.trim().replace(/[,()*%]/g,' ').trim();
+    let q = sb.from('profiles').select('*');
+    if(term) q = q.or(`email.ilike.%${term}%,display_name.ilike.%${term}%`);
+    if(countyFilter !== 'all') q = q.eq('county', countyFilter);
+    else if(!full) q = q.in('county', myCounties);
+    q = showRemoved ? q.not('deleted_at','is',null) : q.is('deleted_at', null);
+    const {data, error} = await q.order('created_at',{ascending:false}).limit(term ? 25 : 40);
+    if(error) onToast('❌ Search failed: '+error.message);
+    setResults(data||[]);
     setLoading(false);
+  };
+
+  // Soft-remove: hides the resident everywhere and blocks sign-in, but keeps
+  // their row so it can be restored. Their past votes/comments stay put.
+  const removeUser = async()=>{
+    if(!selected) return;
+    if(selected.id === user?.id) { onToast('You can\'t remove your own account.'); return; }
+    if(selected.is_admin) { onToast('Remove admin access first, then remove the account.'); return; }
+    if(!window.confirm('Remove '+(selected.display_name||selected.email)+' from The People\'s Voice?\n\nThey\'ll be signed out and blocked from signing in. You can restore them later.')) return;
+    setRemoving(true);
+    const res = await removeResident(selected.id, removeReason, user?.id);
+    if(!res.ok) onToast('❌ Could not remove: '+res.error);
+    else {
+      onToast('✓ '+(selected.display_name||'Resident')+' removed.' +
+        (res.banned ? ' Their login is blocked too.'
+          : res.notDeployed ? ' (Account-level block isn\'t set up yet, but they\'re locked out of the site.)'
+          : ' (Login block failed: '+res.banError+'. They\'re still locked out of the site.)'));
+      setResults(prev=>prev.filter(u=>u.id!==selected.id));
+      setSelected(null); setRemoveReason('');
+    }
+    setRemoving(false);
+  };
+
+  // Permanent: kills the login and scrubs the profile. Full admins only.
+  const deleteAccount = async()=>{
+    if(!selected || !full) return;
+    const name = selected.display_name || selected.email;
+    const typed = window.prompt('This permanently deletes '+name+'\'s account. It can\'t be undone.\n\nTheir past votes and posts stay, shown as "Former resident".\n\nType DELETE to confirm:');
+    if(typed !== 'DELETE') { if(typed !== null) onToast('Not deleted. You need to type DELETE.'); return; }
+    setRemoving(true);
+    const res = await adminManageUser('delete', selected.id, selected.removed_reason || 'Account deleted');
+    setRemoving(false);
+    if(!res.ok) {
+      onToast(res.notDeployed ? '❌ The admin-manage-user server function isn\'t deployed yet.' : '❌ '+res.error);
+      return;
+    }
+    onToast('✓ Account deleted.');
+    setResults(prev=>prev.filter(u=>u.id!==selected.id));
+    setSelected(null);
+  };
+
+  const restoreUser = async()=>{
+    if(!selected) return;
+    setRemoving(true);
+    const res = await restoreResident(selected.id);
+    if(!res.ok) onToast('❌ Could not restore: '+res.error);
+    else {
+      onToast('✓ '+(selected.display_name||'Resident')+' restored.');
+      setResults(prev=>prev.filter(u=>u.id!==selected.id));
+      setSelected(null);
+    }
+    setRemoving(false);
   };
 
   const selectUser = (u)=>{
@@ -12072,8 +12660,11 @@ function UserManager({onToast}) {
       zip: u.zip||'',
       reputation: u.reputation||0,
       is_admin: u.is_admin||false,
+      admin_counties: Array.isArray(u.admin_counties) && u.admin_counties.length ? u.admin_counties : null,
       show_in_directory: u.show_in_directory!==false,
+      county: u.county||'',
     });
+    setRemoveReason('');
   };
 
   const saveUser = async()=>{
@@ -12083,9 +12674,20 @@ function UserManager({onToast}) {
       display_name: editing.display_name.trim()||selected.display_name,
       zip: editing.zip.trim(),
       reputation: Math.max(0,Math.min(9999,parseInt(editing.reputation)||0)),
-      is_admin: editing.is_admin,
       show_in_directory: editing.show_in_directory,
+      county: editing.county || null,
     };
+    // Only full admins hand out admin access (the database enforces this too)
+    if(full) {
+      updates.is_admin = editing.is_admin;
+      updates.admin_counties = editing.is_admin ? (editing.admin_counties && editing.admin_counties.length ? editing.admin_counties : null) : null;
+      if(editing.is_admin && Array.isArray(editing.admin_counties) && editing.admin_counties.length===0) {
+        onToast('Pick at least one county, or choose "All counties".'); setSaving(false); return;
+      }
+    }
+    if(selected.id === user?.id && selected.is_admin && updates.is_admin === false) {
+      if(!window.confirm('You are about to remove your OWN admin access. Continue?')) { setSaving(false); return; }
+    }
     const {error} = await sb.from('profiles').update(updates).eq('id',selected.id);
     if(!error) {
       onToast('✅ User updated successfully.');
@@ -12141,10 +12743,24 @@ function UserManager({onToast}) {
           onKeyDown:e=>e.key==='Enter'&&searchUsers(),
           placeholder:'Search by email or name — or leave blank to show all...',
           style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'9px 12px',fontSize:13,fontFamily:"'Lora',serif"}}),
-        h('button',{onClick:searchUsers,disabled:loading||!search.trim(),
+        h('button',{onClick:searchUsers,disabled:loading,
           style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'9px 18px',borderRadius:6,
             fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}
         },loading?'Searching...':'Search')
+      ),
+
+      h('div',{style:{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginBottom:12,fontSize:12,color:'#555',fontFamily:"'Lora',serif"}},
+        h('label',null,'County: ',
+          h('select',{value:countyFilter,onChange:e=>setCountyFilter(e.target.value),
+            style:{border:'1px solid #ddd',borderRadius:5,padding:'4px 6px',fontSize:12}},
+            h('option',{value:'all'},full?'All counties':'My counties'),
+            Object.values(COUNTIES).filter(c=>full||myCounties.includes(c.id)).map(c=>h('option',{key:c.id,value:c.id},c.short))
+          )
+        ),
+        h('label',{style:{display:'flex',alignItems:'center',gap:5,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:showRemoved,onChange:e=>setShowRemoved(e.target.checked)}),
+          'Show removed residents only'
+        )
       ),
 
       // Results list
@@ -12162,7 +12778,7 @@ function UserManager({onToast}) {
               u.display_name||'(no name)'
             ),
             h('div',{style:{fontSize:11,color:selected?.id===u.id?'#aab':'#888',marginTop:2}},
-              u.email+' · ZIP: '+(u.zip||'none')+' · '+u.reputation+' rep'+(u.is_admin?' · 🔐 Admin':'')
+              (u.email||'no email')+' · ZIP: '+(u.zip||'none')+' · '+(COUNTIES[u.county]?.short||'no county')+' · '+(u.reputation||0)+' rep'+(u.is_admin?' · 🔐 Admin ('+adminScopeLabel(u)+')':'')+(u.deleted_at?' · 🚫 Removed':'')
             )
           ),
           h('span',{style:{fontSize:11,color:selected?.id===u.id?'#f0c040':'#aaa'}},
@@ -12186,15 +12802,48 @@ function UserManager({onToast}) {
         h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}},
           h('div',null, field('Display Name','display_name')),
           h('div',null, field('ZIP Code','zip')),
-          h('div',null, field('Reputation (0–9999)','reputation','number')),
           h('div',null,
-            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Is Admin'),
-            h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:8}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'County'),
+            h('select',{value:editing.county||'',onChange:e=>setEditing(v=>({...v,county:e.target.value})),
+              style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:"'Lora',serif"}},
+              full && h('option',{value:''},'— none —'),
+              Object.values(COUNTIES).filter(c=>full||myCounties.includes(c.id)).map(c=>h('option',{key:c.id,value:c.id},c.name))
+            ),
+            editing.zip && countyForZip(editing.zip) && countyForZip(editing.zip)!==editing.county &&
+              h('div',{style:{fontSize:11,color:'#8a6000',marginTop:3}},'ZIP '+editing.zip+' is in '+COUNTIES[countyForZip(editing.zip)].short)
+          ),
+          h('div',null, field('Reputation (0–9999)','reputation','number')),
+          full ? h('div',{style:{gridColumn:'1 / -1'}},
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Admin access'),
+            h('label',{style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:6}},
               h('input',{type:'checkbox',checked:!!editing.is_admin,
-                onChange:e=>setEditing(v=>({...v,is_admin:e.target.checked})),
+                onChange:e=>setEditing(v=>({...v,is_admin:e.target.checked,
+                  admin_counties: e.target.checked ? (v.admin_counties || (v.county ? [v.county] : null)) : null})),
                 style:{width:16,height:16,cursor:'pointer'}}),
-              h('span',{style:{fontSize:13,color:'#333',fontFamily:"'Lora',serif"}},editing.is_admin?'Yes — Admin access':'No — Regular user')
+              h('span',{style:{fontSize:13,color:'#333',fontFamily:"'Lora',serif"}},editing.is_admin?'Yes — Admin':'No — Regular resident')
+            ),
+            editing.is_admin && h('div',{style:{background:'#f5f8fc',border:'1px solid #d6e2f0',borderRadius:6,padding:'8px 10px',marginTop:8,fontSize:12,fontFamily:"'Lora',serif"}},
+              h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:6}},
+                h('input',{type:'radio',name:'tpv-admin-scope',checked:!editing.admin_counties,
+                  onChange:()=>setEditing(v=>({...v,admin_counties:null}))}),
+                h('strong',null,'All counties'),' (full admin: can make other admins)'),
+              h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:4}},
+                h('input',{type:'radio',name:'tpv-admin-scope',checked:!!editing.admin_counties,
+                  onChange:()=>setEditing(v=>({...v,admin_counties:v.admin_counties||(v.county?[v.county]:[])}))}),
+                h('strong',null,'Only these counties:')),
+              editing.admin_counties && h('div',{style:{display:'flex',gap:12,flexWrap:'wrap',paddingLeft:22}},
+                Object.values(COUNTIES).map(c=>h('label',{key:c.id,style:{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}},
+                  h('input',{type:'checkbox',checked:editing.admin_counties.includes(c.id),
+                    onChange:e=>setEditing(v=>({...v,admin_counties:e.target.checked
+                      ? [...new Set([...(v.admin_counties||[]),c.id])]
+                      : (v.admin_counties||[]).filter(x=>x!==c.id)}))}),
+                  c.short)))
             )
+          ) : h('div',null,
+            h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Admin access'),
+            h('div',{style:{fontSize:13,color:'#555',marginTop:8,fontFamily:"'Lora',serif"}},
+              selected.is_admin ? 'Admin · '+adminScopeLabel(selected) : 'Regular resident'),
+            h('div',{style:{fontSize:11,color:'#999',marginTop:2}},'Only a full admin can change this.')
           ),
           h('div',null,
             h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Show in Directory'),
@@ -12230,6 +12879,37 @@ function UserManager({onToast}) {
             },'📋 Copy User Info')
           )
         ),
+
+        selected.deleted_at
+          ? h('div',{style:{background:'#fdecea',border:'1px solid #e6b0aa',borderRadius:6,padding:'10px 12px',marginBottom:12}},
+              h('div',{style:{fontSize:13,color:'#922b21',fontWeight:700,marginBottom:4}},
+                '🚫 Removed '+new Date(selected.deleted_at).toLocaleDateString()),
+              selected.removed_reason&&h('div',{style:{fontSize:12,color:'#555',marginBottom:8,fontFamily:"'Lora',serif"}},'Reason: '+selected.removed_reason),
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('button',{onClick:restoreUser,disabled:removing,
+                  style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,
+                    fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+                  removing?'Working...':'↩ Restore resident'),
+                full && h('button',{onClick:deleteAccount,disabled:removing,
+                  style:{background:'transparent',color:'#922b21',border:'1px solid #922b21',padding:'7px 14px',borderRadius:5,
+                    fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+                  '❌ Delete account permanently')
+              )
+            )
+          : h('div',{style:{background:'#fdecea',border:'1px solid #e6b0aa',borderRadius:6,padding:'10px 12px',marginBottom:12}},
+              h('div',{style:{fontSize:11,color:'#922b21',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontWeight:700}},'Remove resident'),
+              h('div',{style:{fontSize:12,color:'#555',marginBottom:8,lineHeight:1.5,fontFamily:"'Lora',serif"}},
+                'Hides them from the directory and member lists and blocks sign-in. Their past votes and comments stay. You can restore them anytime.'),
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('input',{value:removeReason,onChange:e=>setRemoveReason(e.target.value),
+                  placeholder:'Reason (optional, admins only see this)',
+                  style:{flex:1,minWidth:160,border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif"}}),
+                h('button',{onClick:removeUser,disabled:removing,
+                  style:{background:'#c0392b',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,
+                    fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+                  removing?'Removing...':'🚫 Remove')
+              )
+            ),
 
         h('div',{style:{background:'#fff8e7',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:11,color:'#8a6000',lineHeight:1.6}},
           '⚠️ To fully confirm a user\'s email (fix login issues), go to ',
@@ -12542,7 +13222,7 @@ function AdminChat({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
 
 function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed}) {
   // Admin access is granted via is_admin flag on the profile — no password in source code
-  const isAdmin = profile?.is_admin === true;
+  const isAdmin = isAdminHere(profile);
   const [authed,setAuthed]=useState(isAdmin);
 
   // Re-check if profile loads after mount
@@ -12552,7 +13232,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
   const [saving,setSaving]=useState(false);
   const [deleting,setDeleting]=useState(null);
 
-  const EMPTY = {id:'',level:'city',jurisdiction:'City of Jackson',title:'',status:'',introduced:'',sponsor:'',summary:'',full_text:'',votes_yes:0,votes_no:0,votes_abstain:0,created_at:'2025-01-01'};
+  const EMPTY = {id:'',level:'city',jurisdiction:jurisdictionsForCounty()[0],title:'',status:'',introduced:'',sponsor:'',summary:'',full_text:'',votes_yes:0,votes_no:0,votes_abstain:0,created_at:'2025-01-01'};
   const [form,setForm]=useState(EMPTY);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
   const [sourceUrl,setSourceUrl]=useState('');
@@ -12623,6 +13303,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     setSaving(true);
     const billData={
       ...form,
+      county: form.county || countyTag(),
       id:editing||genId(),
       votes_yes:parseInt(form.votes_yes)||0,
       votes_no:parseInt(form.votes_no)||0,
@@ -12702,13 +13383,21 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     ),
 
     // Cross-county admin chat — coordination channel for admins
+    !isFullAdmin(profile) && h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a'}},
+      '🛡 You\'re an admin for ',h('strong',null,adminScopeLabel(profile).replace(' only','')),'. Residents, reports and removals outside your county stay with the other admins.'),
+
+    // Reports from residents come first: they're time-sensitive
+    h(ReportsQueue,{user,profile,onToast,autoOpen:navCtx?.openReports,onAutoOpenConsumed:onNavCtxConsumed}),
+
+    // Cross-county admin chat — coordination channel for admins
     h(AdminChat,{user,profile,onToast,autoOpen:navCtx?.openAdminChat,onAutoOpenConsumed:onNavCtxConsumed}),
 
     // Pending community submissions review queue
-    h(NewUsersInbox,{onToast}),
+    h(NewUsersInbox,{onToast,profile}),
     h(ProjectsManager,{onToast}),
     h(EventsApprovalQueue,{onToast}),
-    h(UserManager,{onToast}),
+    h(UserManager,{user,profile,onToast}),
+    h(ModerationLog,{profile}),
     h(OfficialBadgeInbox,{onToast}),
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
@@ -12788,7 +13477,10 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     h('div',{style:{background:'#fff',borderRadius:12,border:'1px solid #e5dece',padding:24}},
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}},
         h('div',{style:{paddingRight:12}},sel('Level *','level',LEVELS)),
-        h('div',{style:{paddingLeft:12}},sel('Jurisdiction *','jurisdiction',JURISDICTIONS))
+        h('div',{style:{paddingLeft:12}},sel('Jurisdiction *','jurisdiction',
+          jurisdictionsForCounty(form.county).includes(form.jurisdiction)||!form.jurisdiction
+            ? jurisdictionsForCounty(form.county)
+            : [form.jurisdiction, ...jurisdictionsForCounty(form.county)]))
       ),
       inp('Bill / Proposal Title *','title','e.g. Main Street Sidewalk Repair Ordinance'),
       inp('Status','status','e.g. Council Vote Pending, Passed, Under Review, Ballot Measure'),
@@ -12843,6 +13535,7 @@ const NOTIF_TYPES = {
   official:          {icon:'🏛', label:'Official badge approved', color:'#1a5c8a'},
   admin_chat:        {icon:'🛡', label:'Admin chat', color:'#1a4a1a'},
   admin_chat_reply:  {icon:'🛡', label:'Admin chat reply', color:'#1a4a1a'},
+  report:            {icon:'🚩', label:'New report', color:'#c0392b'},
   system:            {icon:'📢', label:'Platform update', color:'#555'},
 };
 
@@ -12887,7 +13580,7 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
       ),
       notifications.map((n,i)=>{
         const type = NOTIF_TYPES[n.type]||NOTIF_TYPES.system;
-        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update' || n.type === 'admin_chat' || n.type === 'admin_chat_reply';
+        const isClickable = n.type === 'dm' || n.type === 'mention' || n.type === 'comment_reply' || n.type === 'badge' || n.type === 'idea_update' || n.type === 'admin_chat' || n.type === 'admin_chat_reply' || n.type === 'report';
         return h('div',{key:n.id||i,
           onClick: isClickable ? ()=>{
             // Mark as read locally and in DB
@@ -12900,6 +13593,8 @@ function NotificationPanel({notifications, onClose, user, onOpenPrefs, chatRoomA
               onOpenChat && onOpenChat('dm');
             } else if(n.type === 'admin_chat' || n.type === 'admin_chat_reply') {
               onOpenAdmin && onOpenAdmin();
+            } else if(n.type === 'report') {
+              onOpenAdmin && onOpenAdmin('reports');
             } else {
               // Default: just close the panel, future routing can be added
               onClose && onClose();
@@ -13122,11 +13817,16 @@ function App() {
       const {data:{session}}=await sb.auth.getSession();
       if(session?.user){
         const {data:prof}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
+        if(prof && prof.deleted_at) {
+          await sb.auth.signOut();
+          setToast('This account has been removed. Email chef.justinfairchild@gmail.com if you think this is a mistake.');
+        } else {
         setUser({...session.user,...(prof||{})});setProfile(prof||{});setRep(prof?.reputation||0);
         loadUserVotes(session.user.id);
         loadNotifications(session.user.id);
         // Welcome-back + auto-welcome DM (fire and forget — don't block initApp)
         handleReturnVisit(session.user, prof||{}).catch(e=>console.error('return visit handler error:',e));
+        }
       }
       await loadBills();
       await loadProjects();
@@ -13364,7 +14064,7 @@ function App() {
 
   const repInfo=repLevel(rep);
   const canPropose=rep>=REP_TO_PROPOSE;
-  const isAdmin=profile?.is_admin===true;
+  const isAdmin=isAdminHere(profile);
 
   const searchedCommunity = ZIP_COMMUNITY[zipSearch.trim()] || null;
 
@@ -13431,11 +14131,11 @@ function App() {
         }
         setMainTab('connect');
       },
-      onOpenAdmin:()=>{
+      onOpenAdmin:(which)=>{
         setShowNotifications(false);
         setMainTab('admin');
-        // Signal to AdminChat that it should auto-open
-        setFeedNavCtx({openAdminChat:true});
+        // Signal which admin section should auto-open
+        setFeedNavCtx(which==='reports'?{openReports:true}:{openAdminChat:true});
       }
     }),
     showNotificationPrefs&&h(NotificationPreferences,{user,profile,
