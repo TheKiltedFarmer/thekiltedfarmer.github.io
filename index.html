@@ -2,9 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>The People's Voice</title>
-<meta name="description" content="A free, independent civic platform. Vote on real bills. Build community projects. Hold your representatives accountable."/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>The People's Voice — your local government, in plain language</title>
+<meta name="description" content="See what your city council, township board and county are deciding, weigh in, and find out whether officials listened. Free, nonpartisan, run by neighbors in Jackson, Calhoun and Washtenaw counties, Michigan."/>
+<meta name="theme-color" content="#1a1a2e"/>
+<link rel="canonical" href="https://thepeoplesvoices.org/"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="The People's Voice"/>
+<meta property="og:title" content="The People's Voice — your local government, in plain language"/>
+<meta property="og:description" content="See what's being decided near you, weigh in, and find out whether officials listened. Free and nonpartisan."/>
+<meta property="og:url" content="https://thepeoplesvoices.org/"/>
+<meta property="og:image" content="https://thepeoplesvoices.org/og-image.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="The People's Voice: Vote. Build. Change."/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="The People's Voice — your local government, in plain language"/>
+<meta name="twitter:description" content="See what's being decided near you, weigh in, and find out whether officials listened."/>
+<meta name="twitter:image" content="https://thepeoplesvoices.org/og-image.png"/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231a1a2e'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' fill='%23f0c040'%3EPV%3C/text%3E%3C/svg%3E"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -23,6 +39,7 @@ input,textarea,select{font-family:'Lora',serif}
 </style>
 </head>
 <body>
+<noscript><div style="padding:24px;font-family:Georgia,serif;background:#1a1a2e;color:#fff">The People's Voice needs JavaScript turned on. It's a free, nonpartisan site where residents of Jackson, Calhoun and Washtenaw counties, Michigan, see what local officials are deciding, weigh in, and see whether officials listened.</div></noscript>
 <div id="root">
   <div style="min-height:100vh;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
     <div class="spin" style="border-color:#444;border-top-color:#f0c040;width:32px;height:32px;border-width:4px"></div>
@@ -1393,19 +1410,22 @@ Full text: ${bill.full_text||bill.summary}`,
 
 function ShareButtons({bill,choice}) {
   const emoji = choice==='yes'?'✅':choice==='no'?'❌':'⬜';
-  const text = `${emoji} I voted ${choice.toUpperCase()} on "${bill.title}" via The People's Voice - a nonpartisan civic platform. See the community results: ${SITE_URL}`;
+  const link = billLink(bill);
+  const word = choice==='yes'?'support':choice==='no'?'oppose':'am undecided on';
+  const text = `${emoji} I ${word} "${bill.title}". See how my neighbors are voting, and add yours, on The People's Voice:`;
+  const [copied,setCopied] = useState(false);
   const share = (platform) => {
-    if(platform==='fb') window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SITE_URL)}&quote=${encodeURIComponent(text)}`,'_blank','width=600,height=400');
-    else if(platform==='x') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,'_blank','width=600,height=400');
+    if(platform==='fb') window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(text)}`,'_blank','width=600,height=400');
+    else if(platform==='x') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`,'_blank','width=600,height=400');
     else {
-      if(navigator.share) navigator.share({title:"My vote on The People's Voice",text,url:SITE_URL});
-      else { navigator.clipboard&&navigator.clipboard.writeText(text); alert("Copied! Paste to share anywhere."); }
+      if(navigator.share) navigator.share({title:"My vote on The People's Voice",text,url:link}).catch(()=>{});
+      else { navigator.clipboard&&navigator.clipboard.writeText(text+' '+link); setCopied(true); setTimeout(()=>setCopied(false),2500); }
     }
   };
   return h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}},
     h('button',{onClick:()=>share('fb'),style:{background:'#1877f2',color:'#fff',border:'none',padding:'7px 12px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},"f Share"),
     h('button',{onClick:()=>share('x'),style:{background:'#000',color:'#fff',border:'none',padding:'7px 12px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},"X Share"),
-    h('button',{onClick:()=>share('other'),style:{background:'#555',color:'#fff',border:'none',padding:'7px 12px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},"📋 Copy")
+    h('button',{onClick:()=>share('other'),style:{background:'#555',color:'#fff',border:'none',padding:'7px 12px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},copied?"✓ Copied":"📋 Copy")
   );
 }
 
@@ -2009,10 +2029,27 @@ function takeDeepLink() {
   return __DEEP_LINK;
 }
 
+// ── Guests: ask them to join only when they try to do something ─────────────
+function askToJoin(reason, mode) {
+  try { document.dispatchEvent(new CustomEvent('tpv:join', {detail:{reason:reason||null, mode:mode||'signup'}})); } catch(e) {}
+}
+function JoinPrompt({text, reason}) {
+  return h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 14px',marginBottom:14,
+      textAlign:'center',fontFamily:LB,fontSize:13,color:'#8a6000'}},
+    h('div',{style:{marginBottom:8}}, text || 'Join free to take part.'),
+    h('div',{style:{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}},
+      h('button',{onClick:()=>askToJoin(reason,'signup'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,
+        padding:'7px 16px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},'Join free'),
+      h('button',{onClick:()=>askToJoin(reason,'login'),style:{background:'transparent',color:'#1a5c8a',border:'1px solid #c8d8f0',borderRadius:6,
+        padding:'7px 14px',fontSize:12,cursor:'pointer'}},'Sign in')
+    )
+  );
+}
+
 // ── Follow button ────────────────────────────────────────────────────────────
 function FollowButton({bill, following, onToggle, user}) {
-  if(!user?.id || !onToggle) return null;
-  return h('button',{onClick:()=>onToggle(bill.id),
+  if(!onToggle) return null;
+  return h('button',{onClick:()=>user?.id ? onToggle(bill.id) : askToJoin('follow bills and get told when they\'re decided'),
     title: following ? 'You get a notification when this bill moves or is decided' : 'Get a notification when this bill moves or is decided',
     style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,cursor:'pointer',fontFamily:LB,
       borderRadius:5,padding:'4px 10px',
@@ -2075,8 +2112,16 @@ function OutcomePanel({bill, userZip, myVote}) {
       )
     ),
     bill.outcome_note && h('div',{style:{fontSize:12.5,color:'#555',fontFamily:LB,marginTop:10,lineHeight:1.6,fontStyle:'italic'}}, bill.outcome_note),
-    bill.outcome_source && h('a',{href:bill.outcome_source,target:'_blank',rel:'noopener',
-      style:{display:'inline-block',marginTop:8,fontSize:12,color:'#1a5c8a',fontFamily:LB}},'📎 Meeting minutes / source ↗')
+    h('div',{style:{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginTop:8}},
+      bill.outcome_source && h('a',{href:bill.outcome_source,target:'_blank',rel:'noopener',
+        style:{fontSize:12,color:'#1a5c8a',fontFamily:LB}},'📎 Meeting minutes / source ↗'),
+      h('button',{onClick:()=>{
+          const url = billLink(bill);
+          const text = (bill.outcome_body||'Officials')+' '+m.verb+tally+': "'+bill.title+'".'+(support!=null?' '+support+'% of residents on The People\'s Voice were for it.':'');
+          if(navigator.share) navigator.share({title:bill.title,text,url}).catch(()=>{});
+          else { navigator.clipboard && navigator.clipboard.writeText(text+' '+url); }
+        },
+        style:{background:'#fff',border:'1px solid '+m.color,color:m.color,borderRadius:5,padding:'3px 10px',fontSize:12,cursor:'pointer',fontFamily:LB}},'↗ Share the result'))
   );
 }
 
@@ -2198,8 +2243,7 @@ function AskComposer({bills, presetBill, officials, user, onAsked, onToast}) {
   const [err, setErr] = useState('');
   const [sent, setSent] = useState(null); // {id, rep}
 
-  if(!user?.id) return h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,fontSize:13,color:'#8a6000',textAlign:'center',marginBottom:14}},
-    'Sign in to ask an official a question.');
+  if(!user?.id) return h(JoinPrompt,{text:'Join free to ask an official a question and upvote the ones you want answered.',reason:'ask officials questions'});
 
   const submit = async()=>{
     if(question.trim().length < 15) { setErr('Ask a full question (at least a sentence).'); return; }
@@ -2299,7 +2343,7 @@ function QuestionCard({q, user, profile, voted, onVote, onChanged, bill, onOpenB
   return h('div',{ref,id:'q-'+q.id,style:{background:'#fff',border:'2px solid '+(highlighted?'#f0c040':'#e5dece'),borderRadius:10,
       padding:'14px 16px',marginBottom:12,display:'flex',gap:12}},
     h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',minWidth:42}},
-      h('button',{onClick:()=>onVote(q),disabled:!user?.id,title:voted?'Remove your upvote':'I want an answer to this too',
+      h('button',{onClick:()=>user?.id ? onVote(q) : askToJoin('upvote questions'),title:voted?'Remove your upvote':'I want an answer to this too',
         style:{background:voted?'#1a1a2e':'#f5f3ee',color:voted?'#f0c040':'#555',border:'1px solid '+(voted?'#1a1a2e':'#e5dece'),
           borderRadius:8,padding:'6px 8px',cursor:user?.id?'pointer':'default',fontFamily:PD,fontWeight:700,fontSize:13,lineHeight:1.1}},
         '▲', h('br'), q.upvotes||0)
@@ -2813,7 +2857,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
   };
 
   const castVote=async(choice,anon)=>{
-    if(!user){setToast("Please sign in to vote.");return;}
+    if(!user?.id){askToJoin('vote on bills');return;}
     if(!canVote(user)){
       setToast(accountTypeLabel(user.account_type)+" accounts cannot vote on bills, but you're welcome to comment.");
       setPending(null);
@@ -2904,7 +2948,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
       // Vote buttons or result
       !myVote?h(Fragment,null,
         h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
-          ['yes','no','abstain'].map(v=>h(Btn,{key:v,onClick:()=>setPending(v),disabled:saving,bg:v==='yes'?'#1a6b3c':v==='no'?'#c0392b':'#777',color:'#fff'},v==='yes'?'✅ Support':v==='no'?'❌ Oppose':'⬜ Abstain'))
+          ['yes','no','abstain'].map(v=>h(Btn,{key:v,onClick:()=>user?.id?setPending(v):askToJoin('vote on bills'),disabled:saving,bg:v==='yes'?'#1a6b3c':v==='no'?'#c0392b':'#777',color:'#fff'},v==='yes'?'✅ Support':v==='no'?'❌ Oppose':'⬜ Abstain'))
         ),
         pending&&h('div',{style:{marginTop:12,background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:8}},"Show your vote publicly?"),
@@ -2951,7 +2995,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         h(AIChat,{bill})
       ),
       tab==='forum'&&h('div',null,
-        user?h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
+        user?.id?h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
           h('textarea',{value:commentText,onChange:e=>setCommentText(e.target.value),placeholder:"Share your perspective with your community...",rows:3,style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,resize:'vertical',boxSizing:'border-box'}}),
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}},
             h('label',{style:{fontSize:13,color:'#555',cursor:'pointer',display:'flex',alignItems:'center',gap:6}},
@@ -2959,7 +3003,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
             ),
             h(Btn,{onClick:postComment},"Post +10 rep")
           )
-        ):h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,marginBottom:14,fontSize:13,color:'#8a6000',textAlign:'center'}},"Sign in to join the discussion."),
+        ):h(JoinPrompt,{text:'Join free to share your perspective with your neighbors.',reason:'join the discussion'}),
         comments.length===0&&h('div',{style:{textAlign:'center',color:'#bbb',fontStyle:'italic',fontSize:13,padding:16}},"No comments yet. Be the first."),
         comments.filter(c=>!c.hidden_at||isAdminHere(user)).map((c,i)=>h(CommentItem,{key:c.id||i,comment:c,user,billId:bill.id,
           onEdited:(updated)=>setComments(prev=>prev.map(x=>x===c?{...x,content:updated}:x)),
@@ -3187,7 +3231,7 @@ function NewsStoryCard({story, user, profile}) {
                     )
                   )
                 )
-              : h('div',{style:{textAlign:'center',padding:'8px 0',fontSize:12,color:'#888',fontStyle:'italic',fontFamily:"'Lora',serif"}},"Sign in to vote on this question")
+              : h('button',{onClick:()=>askToJoin('weigh in'),style:{display:'block',margin:'8px auto 0',background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'7px 16px',fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},"Join free to weigh in")
             : h('div',null,
                 h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:"'Lora',serif",marginBottom:8,textAlign:'center'}},"\u2713 Your vote recorded — here's how "+getCurrentCounty().name+" feels:"),
                 [['yes',"\u2705 Yes",pollCounts.yes,'#1a6b3c'],['no',"\u274C No",pollCounts.no,'#c0392b'],['unsure',"\uD83E\uDD14 Unsure",pollCounts.unsure,'#888']].map(([choice,label,count,color])=>
@@ -3250,7 +3294,7 @@ function NewsStoryCard({story, user, profile}) {
           style:{background:commentText.trim()&&!posting?'#1a1a2e':'#ddd',color:commentText.trim()&&!posting?'#f0c040':'#aaa',border:'none',borderRadius:20,padding:'8px 16px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:commentText.trim()&&!posting?'pointer':'default'}}
         ,'Post')
       ),
-      !user&&h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic'}},"Sign in to join the discussion.")
+      !user&&h('button',{onClick:()=>askToJoin('join the discussion'),style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',padding:0}},"Join free to join the discussion")
     )
   );
 }
@@ -5487,7 +5531,7 @@ function ProjectCard({project,user,onRepGain}) {
   const checkSupport=async()=>{if(!user)return;const {data}=await sb.from('project_supporters').select('id').eq('project_id',project.id).eq('user_id',user.id);if(data&&data.length)setSupported(true);};
 
   const addSupport=async()=>{
-    if(!user){setToast("Sign in to support projects.");return;}
+    if(!user?.id){askToJoin('support community projects');return;}
     if(supported)return;
     const {error}=await sb.from('project_supporters').insert({project_id:project.id,user_id:user.id});
     if(!error){
@@ -5587,13 +5631,13 @@ function ProjectCard({project,user,onRepGain}) {
           h('input',{value:pledgeVal,onChange:e=>setPledgeVal(e.target.value),placeholder:pledgeType==='labor'?'e.g. 4 hours on weekends':pledgeType==='skills'?'e.g. Carpentry, cooking':pledgeType==='materials'?'e.g. 10 bags of soil':'e.g. $50',style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',marginBottom:8}}),
           h('input',{value:pledgeDetail,onChange:e=>setPledgeDetail(e.target.value),placeholder:'Optional details...',style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',marginBottom:10}}),
           h(Btn,{onClick:submitPledge,bg:'#1a6b3c',color:'#fff'},"Pledge +15 rep ->")
-        ):h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,fontSize:13,color:'#8a6000',textAlign:'center'}},"Sign in to pledge resources.")
+        ):h(JoinPrompt,{text:'Join free to pledge time, skills or resources.',reason:'pledge to projects'})
       ),
       tab==='discuss'&&h('div',null,
-        user?h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
+        user?.id?h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:8,padding:14,marginBottom:14}},
           h('textarea',{value:commentText,onChange:e=>setCommentText(e.target.value),placeholder:'Ideas, questions, offers to help...',rows:3,style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'8px 10px',fontSize:13,resize:'vertical',boxSizing:'border-box'}}),
           h('div',{style:{textAlign:'right',marginTop:8}},h(Btn,{onClick:postComment},"Post +10 rep"))
-        ):h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:12,marginBottom:14,fontSize:13,color:'#8a6000',textAlign:'center'}},"Sign in to join the discussion."),
+        ):h(JoinPrompt,{text:'Join free to add ideas and offers of help.',reason:'join the discussion'}),
         comments.length===0&&h('div',{style:{textAlign:'center',color:'#bbb',fontStyle:'italic',fontSize:13,padding:16}},"No discussion yet."),
         comments.filter(c=>!c.hidden_at||isAdminHere(user)).map((c,i)=>h('div',{key:c.id||i,style:{display:'flex',gap:10,marginBottom:12,paddingBottom:12,borderBottom:'1px solid #f0ece4'}},
           h('div',{style:{width:36,height:36,borderRadius:'50%',background:'#1a1a2e',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,flexShrink:0}},(c.display_name||'?')[0].toUpperCase()),
@@ -5694,7 +5738,7 @@ function ChatEventCard({eventId, currentUserId, onToast}) {
   },[eventId, currentUserId]);
 
   const setRsvpStatus = async(status)=>{
-    if(!currentUserId) { onToast && onToast('Sign in to RSVP'); return; }
+    if(!currentUserId) { askToJoin('RSVP to events'); return; }
     setSubmitting(true);
     try {
       const {data: existing} = await sb.from('event_rsvps')
@@ -8373,8 +8417,8 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
           h('div',{ref:bottomRef})
         ),
         !user
-          ? h('div',{style:{padding:14,background:'#faf8f3',borderTop:'1px solid #e5dece',textAlign:'center',fontSize:13,color:'#888',fontStyle:'italic'}},
-              'Sign in to join the conversation'
+          ? h('div',{style:{padding:14,background:'#faf8f3',borderTop:'1px solid #e5dece',textAlign:'center'}},
+              h('button',{onClick:()=>askToJoin('chat with neighbors'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 18px',fontSize:13,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'Join free to chat with neighbors')
             )
           : h('div',null,
               // Reply preview when replying
@@ -8567,55 +8611,190 @@ function RepContactTracker({bill, user}) {
 // path. Lets them pick which county to enter.
 function CountyPickerLanding({onPick}) {
   const list = Object.values(COUNTIES);
-  return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',color:'#fff',
-    display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-    padding:'40px 20px',boxSizing:'border-box'}},
-    h('div',{style:{maxWidth:560,width:'100%',textAlign:'center'}},
-      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,
-        color:'#f0c040',margin:'0 0 8px',letterSpacing:'-.02em'}},
-        "The People's Voice"),
-      h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#8899aa',
-        marginBottom:32,fontStyle:'italic'}},
-        'Civic engagement platform · Pick your community'),
+  const [stats, setStats] = useState({});
+  const [spotlights, setSpotlights] = useState({});
+  const [lastCounty] = useState(()=>{ try { const c = localStorage.getItem('tpv_county'); return COUNTIES[c] ? c : null; } catch(e) { return null; } });
+  const [req, setReq] = useState({zip:'', email:'', note:''});
+  const [reqState, setReqState] = useState(''); // '' | sending | sent | already
+  const [reqErr, setReqErr] = useState('');
 
-      h('div',{style:{display:'grid',gap:14,marginBottom:24}},
-        list.map(c=>h('button',{key:c.id, onClick:()=>onPick(c.id),
-          disabled: c.status==='coming-soon',
-          style:{background:'rgba(255,255,255,.05)',
-            border:'1px solid '+(c.status==='active'?'#f0c040':'rgba(255,255,255,.15)'),
-            borderRadius:8,padding:'20px 24px',textAlign:'left',cursor: c.status==='coming-soon'?'default':'pointer',
-            transition:'all .15s ease',
-            opacity: c.status==='coming-soon' ? .4 : 1}},
-          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
-            h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,
-              color:'#fff'}}, c.name),
-            c.status==='beta' && h('span',{style:{background:'#f0c040',color:'#1a1a2e',
-              fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:12,
-              letterSpacing:'.08em'}}, 'BETA'),
-            c.status==='active' && h('span',{style:{color:'#4ade80',fontSize:11,
-              fontWeight:700,letterSpacing:'.08em'}}, '● ACTIVE'),
-            c.status==='coming-soon' && h('span',{style:{color:'#888',fontSize:10,
-              fontWeight:700,letterSpacing:'.08em'}}, 'COMING SOON')
-          ),
-          h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#8899aa',
-            marginBottom:8}}, c.description),
-          h('div',{style:{fontFamily:"'Lora',serif",fontSize:11,color:'#6a7888'}},
-            c.state + ' · ' + c.primaryCity + ' area')
-        ))
+  useEffect(()=>{
+    sb.rpc('tpv_public_stats').then(({data})=>{ if(data && typeof data === 'object') setStats(data); }, ()=>{});
+    list.filter(c=>c.status==='active'||c.status==='beta').forEach(c=>{
+      sb.rpc('tpv_weekly_spotlight',{p_county:c.id}).then(({data})=>{
+        if(data && data.id) setSpotlights(prev=>({...prev,[c.id]:data}));
+      }, ()=>{});
+    });
+  },[]);
+
+  const go = (slug, billId)=>{ onPick(slug, billId); };
+  const sendRequest = async()=>{
+    setReqErr('');
+    if(!/^\d{5}$/.test(req.zip.trim())) { setReqErr('Enter a 5-digit ZIP code.'); return; }
+    if(COUNTY_FOR_ZIP_SAFE(req.zip.trim())) { setReqErr('Good news — that ZIP is already covered. Pick your county above.'); return; }
+    setReqState('sending');
+    const {data, error} = await sb.rpc('tpv_request_county',{p_zip:req.zip.trim(), p_email:req.email.trim()||null, p_note:req.note.trim()||null});
+    if(error) { setReqState(''); setReqErr(error.message); return; }
+    setReqState(data === 'already' ? 'already' : 'sent');
+  };
+
+  const GOLD='#f0c040', SOFT='#c8d0dc', DIM='#a3afbf';
+  const fmt = n => (n == null ? '—' : Number(n).toLocaleString());
+  const howItWorks = [
+    ['📅','See what\'s being decided','Upcoming votes by your city council, township board and county, each with one plain sentence on what\'s at stake and whether you can speak.'],
+    ['🗳','Vote, and say why','Cast your own vote, read why neighbors on the other side disagree, and ask officials questions in public.'],
+    ['✅','See if they listened','When officials decide, you see the result next to how residents voted, and how each official voted.'],
+  ];
+  const inp = {width:'100%',boxSizing:'border-box',background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.18)',
+    borderRadius:6,padding:'10px 12px',color:'#fff',fontSize:14,fontFamily:"'Lora',serif"};
+
+  return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',color:'#fff',padding:'36px 16px 28px',boxSizing:'border-box'}},
+    h('div',{style:{maxWidth:600,margin:'0 auto'}},
+      // Hero
+      h('div',{style:{textAlign:'center',marginBottom:26}},
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,color:GOLD,margin:'0 0 10px',letterSpacing:'-.02em'}},"The People's Voice"),
+        h('p',{style:{fontFamily:"'Lora',serif",fontSize:17,color:'#fff',lineHeight:1.55,margin:'0 0 8px'}},
+          'Your local government, in plain language.'),
+        h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,color:SOFT,lineHeight:1.65,margin:0}},
+          'See what\'s being decided near you, weigh in, and find out whether officials listened. Free, nonpartisan, and run by neighbors.')
       ),
 
-      h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#6a7888',
-        lineHeight:1.6,marginTop:32}},
-        "Don't see your county yet? ",
-        h('a',{href:'mailto:hello@thepeoplesvoices.org',
-          style:{color:'#f0c040',textDecoration:'none'}}, 'Let us know'),
-        " — we're expanding county by county based on community demand.")
+      lastCounty && h('button',{onClick:()=>go(lastCounty),
+        style:{display:'block',width:'100%',background:GOLD,color:'#1a1a2e',border:'none',borderRadius:8,padding:'14px',marginBottom:18,
+          fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,cursor:'pointer'}},
+        'Continue to ' + COUNTIES[lastCounty].name + ' →'),
+
+      // How it works
+      h('div',{style:{background:'rgba(255,255,255,.05)',borderRadius:8,padding:'6px 16px',marginBottom:26}},
+        howItWorks.map(([icon,title,desc],i)=>h('div',{key:title,style:{display:'flex',gap:14,alignItems:'flex-start',padding:'12px 0',
+            borderTop:i?'1px solid rgba(255,255,255,.08)':'none'}},
+          h('div',{style:{fontSize:24,lineHeight:1,flexShrink:0,width:30,textAlign:'center'}},icon),
+          h('div',null,
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:GOLD,marginBottom:3}},title),
+            h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6}},desc))))
+      ),
+
+      // Counties
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,color:GOLD,letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10}},
+        'Pick your county · no account needed to look around'),
+      h('div',{style:{display:'grid',gap:12,marginBottom:28}},
+        list.map(c=>{
+          const st = stats[c.id] || {};
+          const spot = spotlights[c.id];
+          const live = c.status !== 'coming-soon';
+          return h('div',{key:c.id,style:{background:'rgba(255,255,255,.05)',
+              border:'1px solid '+(c.status==='active'?GOLD:'rgba(255,255,255,.15)'),borderRadius:8,overflow:'hidden',opacity:live?1:.5}},
+            h('button',{onClick:()=>live&&go(c.id),disabled:!live,'aria-label':'Open '+c.name,
+              style:{display:'block',width:'100%',background:'transparent',border:'none',color:'#fff',textAlign:'left',padding:'18px 20px',cursor:live?'pointer':'default'}},
+              h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}},
+                h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:'#fff'}}, c.name),
+                c.status==='beta' && h('span',{style:{background:GOLD,color:'#1a1a2e',fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:12,letterSpacing:'.08em'}},'BETA'),
+                c.status==='active' && h('span',{style:{color:'#4ade80',fontSize:11,fontWeight:700,letterSpacing:'.08em'}},'● ACTIVE'),
+                c.status==='coming-soon' && h('span',{style:{color:DIM,fontSize:10,fontWeight:700,letterSpacing:'.08em'}},'COMING SOON')
+              ),
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:12.5,color:DIM}}, c.primaryCity + ' area · ' + c.state),
+              (st.members != null) && h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',marginTop:10,fontFamily:"'Lora',serif",fontSize:12.5,color:SOFT}},
+                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.members)), ' members'),
+                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.open_bills)), ' open bills'),
+                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.votes_30d)), ' votes this month'),
+                st.decided > 0 && h('span',null, h('b',{style:{color:GOLD}}, fmt(st.decided)), ' decisions tracked'))
+            ),
+            spot && h('button',{onClick:()=>go(c.id, spot.id),
+              style:{display:'block',width:'100%',textAlign:'left',background:'rgba(240,192,64,.08)',border:'none',borderTop:'1px solid rgba(255,255,255,.08)',
+                padding:'12px 20px',cursor:'pointer',color:'#fff'}},
+              h('div',{style:{fontSize:10.5,color:GOLD,fontWeight:700,letterSpacing:'.12em',textTransform:'uppercase',fontFamily:"'Playfair Display',serif",marginBottom:3}},
+                spot.next_meeting_at && new Date(spot.next_meeting_at).getTime() > Date.now()
+                  ? '🗓 Decision ' + new Date(spot.next_meeting_at).toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'})
+                  : 'This week\'s bill'),
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#fff',lineHeight:1.4}}, spot.title),
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:DIM,marginTop:3}},
+                ((spot.votes_yes||0)+(spot.votes_no||0)) > 0
+                  ? Math.round(100*(spot.votes_yes||0)/((spot.votes_yes||0)+(spot.votes_no||0))) + '% of residents support it so far · see it →'
+                  : 'Be the first to weigh in →')
+            )
+          );
+        })
+      ),
+
+      // Request your county
+      h('div',{style:{background:'rgba(255,255,255,.04)',border:'1px dashed rgba(255,255,255,.2)',borderRadius:8,padding:'16px 18px',marginBottom:26}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'Want The People\'s Voice where you live?'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:12}},
+          'We open new counties where neighbors ask for them. Leave your ZIP, and your email if you\'d like to hear when it opens.'),
+        reqState==='sent'||reqState==='already'
+          ? h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#4ade80'}},
+              reqState==='sent' ? '✓ Counted. Thank you — every request helps us decide where to go next.' : '✓ You\'re already on the list for that ZIP.')
+          : h(Fragment,null,
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('input',{value:req.zip,onChange:e=>setReq(r=>({...r,zip:e.target.value})),placeholder:'ZIP code',inputMode:'numeric',maxLength:5,
+                  'aria-label':'ZIP code',style:{...inp,flex:'0 0 110px'}}),
+                h('input',{value:req.email,onChange:e=>setReq(r=>({...r,email:e.target.value})),placeholder:'Email (optional)',type:'email',
+                  'aria-label':'Email (optional)',style:{...inp,flex:'1 1 180px'}})),
+              h('input',{value:req.note,onChange:e=>setReq(r=>({...r,note:e.target.value})),placeholder:'Anything you\'d want it to cover? (optional)',
+                'aria-label':'Note (optional)',maxLength:300,style:{...inp,marginTop:8}}),
+              reqErr && h('div',{style:{color:'#ff8f80',fontSize:13,marginTop:6,fontFamily:"'Lora',serif"}},reqErr),
+              h('button',{onClick:sendRequest,disabled:reqState==='sending',
+                style:{marginTop:10,background:GOLD,color:'#1a1a2e',border:'none',borderRadius:6,padding:'9px 18px',
+                  fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}},
+                reqState==='sending'?'Sending...':'Request my county'))
+      ),
+
+      // Who runs this
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.7,borderTop:'1px solid rgba(255,255,255,.1)',paddingTop:18}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#fff',marginBottom:6}},'Who runs this'),
+        h('p',{style:{margin:'0 0 8px'}},
+          'The People\'s Voice is a volunteer project started in Concord, Michigan by Justin Fairchild. ',
+          'It isn\'t affiliated with any government, party or candidate, and it doesn\'t sell ads or data.'),
+        h('p',{style:{margin:'0 0 8px'}},
+          'Votes here are unofficial. They show officials where residents stand. To join, we ask for an email and your ZIP code. Never your street address.'),
+        h('div',{style:{display:'flex',gap:16,flexWrap:'wrap',fontSize:13}},
+          h('button',{onClick:()=>document.dispatchEvent(new CustomEvent('showPrivacy')),
+            style:{background:'none',border:'none',color:GOLD,cursor:'pointer',padding:0,fontSize:13,textDecoration:'underline',fontFamily:"'Lora',serif"}},'Privacy policy'),
+          h('a',{href:'mailto:hello@thepeoplesvoices.org',style:{color:GOLD}},'hello@thepeoplesvoices.org'))
+      )
     )
   );
 }
+// ZIP already served? (used by the request form)
+function COUNTY_FOR_ZIP_SAFE(zip) { try { return countyForZip(zip); } catch(e) { return null; } }
 
-function AuthScreen({onAuth, onGuest}) {
-  const [mode,setMode]=useState('login');
+// ── Admin: where people are asking for the platform ─────────────────────────
+function CountyRequestsPanel({profile}) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState(null);
+  useEffect(()=>{
+    if(!open || rows) return;
+    sb.from('county_requests').select('zip,email,note,created_at').order('created_at',{ascending:false}).limit(500)
+      .then(({data})=>setRows(data||[]), ()=>setRows([]));
+  },[open]);
+  if(!isFullAdmin(profile)) return null;
+  const byZip = {};
+  (rows||[]).forEach(r=>{ (byZip[r.zip] = byZip[r.zip] || []).push(r); });
+  const ranked = Object.entries(byZip).sort((a,b)=>b[1].length-a[1].length);
+  return h('div',{style:{background:'#faf8f5',border:'1px solid #e5dece',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?12:0},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'📍 County requests'),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')),
+    open && (rows===null
+      ? h('div',{style:{color:'#aaa',fontSize:12}},'Loading...')
+      : rows.length===0
+        ? h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'No requests yet. They come from the form on the county picker page.')
+        : h('div',null,
+            h('div',{style:{fontSize:12,color:'#888',marginBottom:8,fontFamily:"'Lora',serif"}}, rows.length+' requests from '+ranked.length+' ZIP codes'),
+            ranked.slice(0,40).map(([zip,list])=>h('div',{key:zip,style:{padding:'7px 0',borderTop:'1px solid #f0ece4',fontSize:13,fontFamily:"'Lora',serif"}},
+              h('strong',null,zip),' · ',list.length,' request',list.length===1?'':'s',
+              h('span',{style:{color:'#999'}},' · '+list.filter(r=>r.email).length+' left an email'),
+              list.some(r=>r.email) && h('button',{onClick:()=>{ navigator.clipboard && navigator.clipboard.writeText(list.filter(r=>r.email).map(r=>r.email).join(', ')); },
+                title:'Copy these emails so you can tell them when the county opens',
+                style:{marginLeft:8,background:'none',border:'1px solid #ddd',borderRadius:4,fontSize:11,color:'#1a5c8a',cursor:'pointer',padding:'1px 6px'}},'Copy emails'),
+              list.filter(r=>r.note).slice(0,2).map((r,i)=>h('div',{key:i,style:{fontSize:12,color:'#666',fontStyle:'italic',marginTop:2}},'“'+r.note+'”'))
+            ))
+          ))
+  );
+}
+
+function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
+  const [mode,setMode]=useState(initialMode||'login');
   const [email,setEmail]=useState('');
   const [pass,setPass]=useState('');
   const [name,setName]=useState('');
@@ -8829,8 +9008,14 @@ function AuthScreen({onAuth, onGuest}) {
     h('input',{value:val,onChange:e=>setter(e.target.value),placeholder,type,
       style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',marginBottom:10,fontSize:14,boxSizing:'border-box',...(extra.style||{})},...extra});
 
-  return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}},
-    h('div',{style:{background:'#fff',borderRadius:14,padding:28,width:440,maxWidth:'100%',boxShadow:'0 30px 80px rgba(0,0,0,.5)',margin:'20px auto'}},
+  return h('div',{onClick:e=>{ if(onClose && e.target===e.currentTarget) onClose(); },
+      style:{minHeight:'100%',background:onClose?'rgba(26,26,46,.85)':'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',padding:16}},
+    h('div',{style:{background:'#fff',borderRadius:14,padding:28,width:440,maxWidth:'100%',boxShadow:'0 30px 80px rgba(0,0,0,.5)',margin:'20px auto',position:'relative'}},
+      onClose&&h('button',{onClick:onClose,'aria-label':'Close',title:'Keep browsing',
+        style:{position:'absolute',top:10,right:12,background:'none',border:'none',fontSize:22,color:'#999',cursor:'pointer',lineHeight:1}},'✕'),
+      reason&&(mode==='signup'||mode==='login')&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'8px 12px',
+        marginBottom:14,fontSize:13,color:'#8a6000',fontFamily:"'Lora',serif",textAlign:'center'}},
+        'Join free to '+reason+'. It takes about a minute.'),
 
       // Header
       h('div',{style:{textAlign:'center',marginBottom:20}},
@@ -8855,7 +9040,7 @@ function AuthScreen({onAuth, onGuest}) {
             h('button',{onClick:onGuest,
               style:{background:'transparent',border:'none',color:'#aaa',fontSize:12,
                 cursor:'pointer',fontFamily:"'Lora',serif",textDecoration:'underline'}
-            },'👁 Browse as guest — view bills without an account')
+            },onClose ? '← Keep looking around first' : '👁 Browse as guest — view bills without an account')
           )
         )
       ),
@@ -8970,10 +9155,10 @@ function AuthScreen({onAuth, onGuest}) {
 
       // ── SIGNUP FORM - STEP INDICATOR ──
       mode==='signup'&&h('div',{style:{display:'flex',gap:0,marginBottom:20}},
-        [['1','Account'],['2','Address'],['3','Confirm']].map(([n,l],i)=>h('div',{key:n,style:{flex:1,textAlign:'center'}},
+        [['1','Your account'],['2','ZIP & confirm']].map(([n,l],i)=>h('div',{key:n,style:{flex:1,textAlign:'center'}},
           h('div',{style:{width:28,height:28,borderRadius:'50%',background:step>=parseInt(n)?'#1a1a2e':'#eee',color:step>=parseInt(n)?'#f0c040':'#aaa',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,margin:'0 auto 4px'}},n),
           h('div',{style:{fontSize:11,color:step>=parseInt(n)?'#1a1a2e':'#aaa',fontFamily:"'Lora',serif"}},l),
-          i<2&&h('div',{style:{position:'relative',top:-22,left:'50%',width:'100%',height:2,background:step>parseInt(n)?'#1a1a2e':'#eee',zIndex:0}})
+          null
         ))
       ),
 
@@ -9025,7 +9210,7 @@ function AuthScreen({onAuth, onGuest}) {
         ),
         error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
         h('button',{onClick:nextStep,style:{width:'100%',background:'#1a1a2e',color:'#f0c040',border:'none',padding:'13px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15}},
-          'Next: Enter Your Address ->'
+          'Next: Your ZIP code ->'
         )
       ),
 
@@ -9371,7 +9556,7 @@ function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin})
   },[event.id,user?.id]);
 
   const handleRsvp = async(response)=>{
-    if(!user) { onToast('Sign in to RSVP to events.'); return; }
+    if(!user?.id) { askToJoin('RSVP to events'); return; }
     setRsvpLoading(true);
     const prev = rsvp;
     const newResponse = prev===response ? null : response;
@@ -9939,7 +10124,7 @@ function ExchangeCard({item, user, profile, onToast, onDelete, onUpdate, isAdmin
   const catColor = EXCHANGE_CAT_COLORS[item.category]||'#888';
 
   const claim = async()=>{
-    if(!user) { onToast('Sign in to respond to listings.'); return; }
+    if(!user?.id) { askToJoin('respond to listings'); return; }
     setClaiming(true);
     try {
       await sb.from('exchange_listings').update({claimed:true,claimed_by_id:user.id,claimed_at:new Date().toISOString()}).eq('id',item.id);
@@ -12736,7 +12921,7 @@ function IdeasTab({user, profile, rep, onToast}) {
   };
 
   const upvote = async(idea)=>{
-    if(!user){onToast('Sign in to upvote.');return;}
+    if(!user?.id){askToJoin('upvote ideas');return;}
     if(!canVote(profile)){
       onToast(accountTypeLabel(profile?.account_type)+" accounts cannot upvote ideas, but you can comment and discuss.");
       return;
@@ -14210,7 +14395,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         h('a',{href:'mailto:chef.justinfairchild@gmail.com',style:{color:'#f0c040'}},"the platform admin"),
         "."
       ),
-      h('div',{style:{background:'rgba(255,255,255,.05)',borderRadius:8,padding:'12px 16px',fontSize:12,color:'#556677',fontFamily:"'Lora',serif"}},
+      h('div',{style:{background:'rgba(255,255,255,.05)',borderRadius:8,padding:'12px 16px',fontSize:12,color:'#9aa8b8',fontFamily:"'Lora',serif"}},
         "Signed in as: "+(profile?.display_name||user?.email||'Unknown')
       )
     )
@@ -14252,6 +14437,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     h(EventsApprovalQueue,{onToast}),
     h(UserManager,{user,profile,onToast}),
     h(ModerationLog,{profile}),
+    h(CountyRequestsPanel,{profile}),
     h(OfficialBadgeInbox,{onToast}),
     h(PressBadgeInbox,{onToast}),
     h(PendingReviewQueue,{onToast,setBills}),
@@ -14330,7 +14516,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         )
       ),
       fetchMsg&&h('div',{style:{marginTop:10,fontSize:13,fontFamily:"'Lora',serif",color:fetchMsg.startsWith('✅')?'#6bcf8a':fetchMsg.startsWith('❌')?'#e74c3c':'#f0c040',lineHeight:1.6}},fetchMsg),
-      h('div',{style:{marginTop:12,fontSize:11,color:'#556677',lineHeight:1.7}},
+      h('div',{style:{marginTop:12,fontSize:11,color:'#9aa8b8',lineHeight:1.7}},
         "💡 Works best with: Village of Concord (villageofconcord.com) · City of Jackson (cityofjackson.org) · Jackson County (co.jackson.mi.us) · Michigan Legislature (legislature.mi.gov) · Any public government meeting page"
       )
     ),
@@ -14655,8 +14841,25 @@ function App() {
   const [unreadNotifCount,setUnreadNotifCount]=useState(0);
   const [chatRoomActivity, setChatRoomActivity] = useState({}); // {roomId: count of new msgs since last seen}
   const [welcomeBack, setWelcomeBack] = useState(null); // {daysAway, summary} or null
-  const [guestMode,setGuestMode]=useState(false);
+  // Everyone can look around without an account. Sign-up appears only when a
+  // guest tries to do something (vote, comment, follow, ask...).
+  const [guestMode,setGuestMode]=useState(true);
+  const [authPrompt,setAuthPrompt]=useState(()=>{
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if(p.get('reset')==='1' || (window.location.hash||'').includes('type=recovery')) return {mode:'reset'};
+      if(p.get('join')==='1') return {mode:'signup'};
+      if(p.get('signin')==='1') return {mode:'login'};
+    } catch(e) {}
+    return null;
+  });
+  useEffect(()=>{
+    const handler = e=>setAuthPrompt({mode:(e.detail&&e.detail.mode)||'signup', reason:(e.detail&&e.detail.reason)||null});
+    document.addEventListener('tpv:join', handler);
+    return ()=>document.removeEventListener('tpv:join', handler);
+  },[]);
   const [followedIds,setFollowedIds]=useState(()=>new Set());
+  useEffect(()=>{ if(currentCountyId) { try { localStorage.setItem('tpv_county', currentCountyId); } catch(e) {} } },[currentCountyId]);
 
   // Deep links from emails and shared links: open straight to a bill or question
   useEffect(()=>{
@@ -14742,7 +14945,7 @@ function App() {
     } catch(e) {}
   };
   const toggleFollow=async(billId)=>{
-    if(!user?.id){ setToast('Sign in to follow bills.'); return; }
+    if(!user?.id){ askToJoin('follow bills'); return; }
     const id=String(billId);
     const was=followedIds.has(id);
     const flip=()=>setFollowedIds(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -14790,6 +14993,7 @@ function App() {
   };
 
   const handleAuth=(authUser,prof)=>{
+    setAuthPrompt(null);
     setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);loadFollows(authUser.id);
     // Show onboarding for brand new users
     if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
@@ -14961,18 +15165,18 @@ function App() {
     const search = (typeof window !== 'undefined' ? window.location.search : '') || '';
     if(!search.includes('nopicker')) {
       return h(CountyPickerLanding, {
-        onPick: (slug)=>{
-          // Update URL to /slug and re-load to apply
-          if(typeof window !== 'undefined') {
-            window.history.replaceState({}, '', '/'+slug+window.location.search+window.location.hash);
-          }
-          setCurrentCountyId(slug);
+        onPick: (slug, billId)=>{
+          // Full load so that county's bills, chat and members load (not the
+          // default county's)
+          window.location.href = '/' + slug + (billId ? '?bill=' + encodeURIComponent(billId) : '');
         }
       });
     }
   }
 
-  if(!user&&!guestMode)return h(AuthScreen,{onAuth:handleAuth,onGuest:()=>setGuestMode(true)});
+  const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch'}},
+    h(AuthScreen,{onAuth:handleAuth,initialMode:authPrompt.mode,reason:authPrompt.reason,
+      onGuest:()=>setAuthPrompt(null),onClose:()=>setAuthPrompt(null)}));
 
   const repInfo=repLevel(rep);
   const canPropose=rep>=REP_TO_PROPOSE;
@@ -15029,6 +15233,7 @@ function App() {
 
   return h('div',{style:{minHeight:'100vh',background:'#f4f1ea'}},
     toast&&h(Toast,{msg:toast,onDone:()=>setToast(null)}),
+    authOverlay,
     showPropose&&h(ProposeModal,{onClose:()=>setShowPropose(false),onSubmit:handlePropose}),
     showOnboarding&&h(OnboardingTour,{onDone:()=>setShowOnboarding(false),displayName:profile?.display_name||user.email?.split('@')[0],accountType:profile?.account_type}),
     showProfile&&h(ProfilePage,{user,profile,rep,bills,userVotes,onClose:()=>setShowProfile(false),onProfileUpdate:(updates)=>setProfile(p=>({...p,...updates})),onToast:setToast}),
@@ -15067,14 +15272,12 @@ function App() {
     showPrivacy&&h(PrivacyModal,{onClose:()=>setShowPrivacy(false)}),
 
     // Guest mode banner
-    guestMode&&h('div',{style:{background:'#f0c040',padding:'10px 16px',textAlign:'center',display:'flex',gap:12,alignItems:'center',justifyContent:'center',flexWrap:'wrap'}},
-      h('span',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e'}},
-        '👁 You are browsing as a guest — votes, comments and community features require an account.'
-      ),
-      h('button',{onClick:()=>setGuestMode(false),
-        style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'6px 16px',borderRadius:6,
-          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}
-      },'Sign Up / Sign In')
+    !user&&h('div',{style:{background:'#f0c040',padding:'8px 16px',textAlign:'center'}},
+      h('span',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#1a1a2e'}},
+        '👋 You\'re looking around as a guest. ',
+        h('button',{onClick:()=>askToJoin(null,'signup'),style:{background:'none',border:'none',padding:0,color:'#1a1a2e',
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,textDecoration:'underline',cursor:'pointer'}},'Join free'),
+        ' when you want to vote, comment or follow an issue.')
     ),
 
     // Header
@@ -15119,6 +15322,10 @@ function App() {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
         ),
         h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+          !user ? h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+            h('button',{onClick:()=>askToJoin(null,'login'),style:{background:'transparent',border:'none',color:'#c8d0dc',fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}},'Sign in'),
+            h('button',{onClick:()=>askToJoin(null,'signup'),style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:6,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'Join free')
+          ) :
           h('div',{style:{textAlign:'right'}},
             h('div',{style:{color:'#fff',fontSize:12,fontFamily:"'Playfair Display',serif",fontWeight:700}},displayName),
             h('div',{style:{color:'#f0c040',fontSize:10,marginBottom:2}},rep+' pts · '+repInfo.label),
@@ -15145,7 +15352,7 @@ function App() {
       // Stats bar — horizontally scrollable on mobile
       h('div',{style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'6px 14px',display:'flex',gap:16,flexWrap:'nowrap',minWidth:'max-content'}},
-          [[bills.length,"Bills"],[totalVotes.toLocaleString(),"Votes"],[projects.length,"Projects"],[memberCount!==null?memberCount:'...',"Members"],[rep+" pts","Your Rep"]].map(([v,l])=>
+          [[bills.length,"Bills"],[totalVotes.toLocaleString(),"Votes"],[projects.length,"Projects"],[memberCount!==null?memberCount:'...',"Members"],...(user?[[rep+" pts","Your Rep"]]:[])].map(([v,l])=>
             h('div',{key:l,style:{flexShrink:0}},
               h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:900,color:'#f0c040'}},v),
               h('div',{style:{fontSize:9,color:'#8899aa',textTransform:'uppercase',letterSpacing:1}},l)
@@ -15403,7 +15610,7 @@ function App() {
             )
           ),
           h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.08)',display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}},
-            h('span',{style:{fontSize:12,color:'#556677',fontFamily:"'Lora',serif"}},'Earn rep by participating:'),
+            h('span',{style:{fontSize:12,color:'#9aa8b8',fontFamily:"'Lora',serif"}},'Earn rep by participating:'),
             [["🗳 Vote","+5"],["💬 Comment","+10"],["🤲 Pledge","+15"],["🌱 Propose","50 req"]].map(([l,v])=>
               h('div',{key:l,style:{display:'flex',alignItems:'center',gap:4}},
                 h('span',{style:{fontSize:12,color:'#8899aa'}},l),
@@ -15418,7 +15625,7 @@ function App() {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#555',marginBottom:6}},'No projects yet'),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,lineHeight:1.6}},'Be the first to propose something your community needs.')
         ),
-        projects.map(proj=>h(ProjectCard,{key:proj.id,project:proj,user:{...user,reputation:rep},onRepGain:gainRep}))
+        projects.map(proj=>h(ProjectCard,{key:proj.id,project:proj,user:user?{...user,reputation:rep}:null,onRepGain:gainRep}))
       ),
 
       // Events tab
@@ -15459,7 +15666,7 @@ function App() {
     ),
 
     // Footer
-    h('div',{style:{background:'#1a1a2e',borderTop:'3px solid #f0c040',color:'#556677',textAlign:'center',padding:'20px 16px',fontSize:12,lineHeight:1.9}},
+    h('div',{style:{background:'#1a1a2e',borderTop:'3px solid #f0c040',color:'#9aa8b8',textAlign:'center',padding:'20px 16px',fontSize:12,lineHeight:1.9}},
       h('div',{style:{fontFamily:"'Playfair Display',serif",color:'#f0c040',fontSize:14,marginBottom:6}},"The People's Voice"),
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
