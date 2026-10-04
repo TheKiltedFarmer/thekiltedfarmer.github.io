@@ -8882,10 +8882,293 @@ function ClaimModal({candidate, race, user, onClose}) {
   );
 }
 
-function RaceCard({race, candidates, questions, user, onYourBallot}) {
+// ── Who's funding the candidates ─────────────────────────────────────────────
+// Every number comes from an official filing (FEC for Congress and U.S. Senate,
+// Michigan or the county clerk for everyone else) and links back to it.
+const MI_CFR_URL = 'https://www.michigan.gov/sos/elections/disclosure/cfr';
+const MONEY_COLORS = {small:'#7fb1c9', large:'#3d6f8e', pacs:'#c98a2e', party:'#8a7fb0', self:'#6f9a52', publicf:'#b07f9a', other:'#c9c4b8'};
+function fmtMoney(n) {
+  if(n === null || n === undefined || isNaN(n)) return '—';
+  const v = Math.abs(Number(n)), sign = Number(n) < 0 ? '−' : '';
+  if(v >= 1e6) return sign + '$' + (v/1e6).toFixed(v >= 1e7 ? 1 : 2).replace(/\.?0+$/,'') + 'M';
+  if(v >= 1e4) return sign + '$' + Math.round(v/1e3) + 'K';
+  return sign + '$' + Math.round(v).toLocaleString('en-US');
+}
+function pctOf(part, whole) {
+  if(!whole || part === null || part === undefined) return null;
+  const p = 100 * Number(part) / Number(whole);
+  return p > 0 && p < 1 ? '<1%' : Math.round(p) + '%';
+}
+// FEC names arrive in capitals: "AMERICAN BANKERS ASSOCIATION PAC (BANKPAC)"
+function filerCase(s) {
+  const str = String(s || '');
+  if(str !== str.toUpperCase()) return str;
+  const small = {OF:'of',AND:'and',FOR:'for',THE:'the',IN:'in',TO:'to',ON:'on',AT:'at'};
+  const keep = /^(PAC|PACS|LLC|INC|USA|US|U\.S\.|UAW|IBEW|AFL|CIO|AFSCME|SEIU|NRA|NEA|AFT|UFCW|IUOE|UA|IUPAT|NAR|AIPAC|BANKPAC|AT&T|II|III|IV|MI|DC|LP|CO|JR|SR)$/;
+  return str.split(/(\s+|-|\/|\()/).map((w,i)=>{
+    const bare = w.replace(/[^A-Z&.]/g,'');
+    if(!bare) return w;
+    if(keep.test(bare) || /^[A-Z]{2,5}PAC$/.test(bare)) return w;
+    if(i > 0 && small[bare]) return w.replace(bare, small[bare]);
+    if(bare.length <= 3 && !/[AEIOUY]/.test(bare)) return w;   // likely an acronym
+    return w.charAt(0) + w.slice(1).toLowerCase();
+  }).join('');
+}
+function moneySlices(f) {
+  const raised = Number(f.total_raised) || 0;
+  const ind = Number(f.from_individuals) || 0;
+  const small = f.from_unitemized === null || f.from_unitemized === undefined ? null : Number(f.from_unitemized) || 0;
+  const s = [];
+  if(small !== null) {
+    s.push({k:'small', label:'Small donors ($200 or less)', v:small});
+    s.push({k:'large', label:'Larger individual donors', v:Math.max(0, ind - small)});
+  } else s.push({k:'large', label:'Individual donors', v:ind});
+  s.push({k:'pacs', label:'PACs', v:Number(f.from_pacs)||0});
+  s.push({k:'party', label:'Party committees', v:Number(f.from_party)||0});
+  s.push({k:'self', label:'Candidate\'s own money', v:Number(f.self_funded)||0});
+  if(f.public_funds) s.push({k:'publicf', label:'Michigan public funding', v:Number(f.public_funds)||0});
+  const known = s.reduce((n,x)=>n+x.v,0);
+  if(raised > known + 1) s.push({k:'other', label:'Other (transfers, refunds, interest)', v:raised - known});
+  return s.filter(x=>x.v > 0);
+}
+function MoneyBar({f, scale, height}) {
+  const raised = Number(f.total_raised) || 0;
+  const slices = moneySlices(f);
+  const total = Math.max(raised, slices.reduce((n,x)=>n+x.v,0)) || 1;
+  const width = scale ? Math.max(2, 100 * total / scale) : 100;
+  return h('div',{style:{background:'#f0ece4',borderRadius:4,height:height||12,overflow:'hidden'}},
+    h('div',{style:{display:'flex',height:'100%',width:width+'%'}},
+      slices.map(x=>h('div',{key:x.k,title:x.label+': '+fmtMoney(x.v),style:{width:(100*x.v/total)+'%',background:MONEY_COLORS[x.k]}}))));
+}
+function PacMoneyExplainer() {
+  return h('div',{style:{fontSize:12,color:'#555',fontFamily:LB,lineHeight:1.65}},
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'PAC money'), ' is money given directly to a campaign by political action committees: ',
+      'company and trade-group PACs, union PACs, issue and ideological PACs, and other politicians\' "leadership" PACs. ',
+      'Federal PACs can give a candidate up to $5,000 per election.'),
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'Party money'), ' (from Democratic or Republican party committees) is shown separately.'),
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'Outside spending'), ' is different: super PACs and other groups can spend unlimited amounts on ads for or against a candidate, ',
+      'but can\'t give to the campaign or coordinate with it. The candidate doesn\'t control it.'),
+    h('p',{style:{margin:0}}, h('strong',null,'"No reports on file"'), ' means we found no filings. Federal candidates who raise or spend under $5,000 don\'t have to file, ',
+      'and many third-party and first-time candidates run small campaigns. It isn\'t an accusation of anything.'));
+}
+
+// One line under each candidate's name
+function FundingLine({f, open, onToggle}) {
+  if(!f || f.status === 'unchecked') return null;
+  const wrap = {display:'flex',flexWrap:'wrap',alignItems:'center',gap:'4px 8px',fontSize:12,fontFamily:LB,color:'#555',marginTop:4};
+  const pill = {fontSize:11,padding:'1px 8px',borderRadius:10,border:'1px solid #d8d2c4',background:'#faf8f3',color:'#444',whiteSpace:'nowrap'};
+  if(f.status === 'none_filed') return h('div',{style:wrap},
+    h('span',null,'💵'),
+    h('span',{style:pill}, f.source === 'fec' ? 'No FEC finance reports on file' : 'No finance reports on file'),
+    f.source_url && h('a',{href:f.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:11.5}},'Check ↗'));
+  const pacs = Number(f.from_pacs) || 0;
+  return h('div',{style:wrap},
+    h('span',null,'💵'),
+    h('span',null,'Raised ', h('strong',{style:{color:'#1a1a2e'}}, fmtMoney(f.total_raised))),
+    f.from_pacs !== null && f.from_pacs !== undefined && (pacs === 0
+      ? h('span',{style:{...pill,borderColor:'#9ab8a6',background:'#f1f7f3',color:'#2f5d43'}},'No PAC money reported')
+      : h('span',{style:pill}, 'From PACs: ', h('strong',null, fmtMoney(pacs)), ' (' + pctOf(pacs, f.total_raised) + ')')),
+    h('button',{onClick:onToggle,style:{background:'none',border:'none',color:'#1a5c8a',cursor:'pointer',fontSize:12,padding:0,textDecoration:'underline',fontFamily:LB}},
+      open ? 'Hide funding' : 'Who\'s funding them?'));
+}
+
+function FundingDetails({f}) {
+  const [why, setWhy] = useState(false);
+  const raised = Number(f.total_raised) || 0;
+  const slices = moneySlices(f);
+  const pacs = Number(f.from_pacs) || 0;
+  const tops = Array.isArray(f.top_pacs) ? f.top_pacs : [];
+  const groups = Array.isArray(f.outside_groups) ? f.outside_groups : [];
+  const asOf = f.coverage_end ? new Date(f.coverage_end+'T12:00:00').toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : null;
+  const sub = {fontFamily:PD,fontWeight:700,fontSize:12.5,color:'#1a1a2e',margin:'12px 0 4px'};
+  return h('div',{style:{background:'#faf8f3',borderRadius:6,padding:'10px 12px',marginTop:6,fontFamily:LB}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6,fontSize:12.5,color:'#333',marginBottom:6}},
+      h('span',null,'Raised ', h('strong',null, fmtMoney(raised)), f.period_label ? ' (' + f.period_label + ')' : ''),
+      f.cash_on_hand !== null && f.cash_on_hand !== undefined && h('span',null,'Cash on hand: ', h('strong',null, fmtMoney(f.cash_on_hand)))),
+    raised > 0 && h(MoneyBar,{f}),
+    raised > 0 && h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:'3px 12px',marginTop:8}},
+      slices.map(x=>h('div',{key:x.k,style:{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#444'}},
+        h('span',{style:{width:10,height:10,borderRadius:2,background:MONEY_COLORS[x.k],flexShrink:0}}),
+        h('span',{style:{flex:1,minWidth:0}}, x.label),
+        h('span',{style:{fontWeight:700,color:'#1a1a2e'}}, fmtMoney(x.v)),
+        h('span',{style:{color:'#888',width:34,textAlign:'right'}}, pctOf(x.v, raised))))),
+
+    h('div',{style:sub},'Biggest PAC contributors'),
+    pacs === 0 && f.from_pacs !== null && f.from_pacs !== undefined
+      ? h('div',{style:{fontSize:12.5,color:'#2f5d43'}},'None. This campaign reported no money from PACs.')
+      : tops.length
+        ? h('div',null, tops.map((p,i)=>h('div',{key:i,style:{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5,color:'#333',padding:'3px 0',borderBottom:'1px dotted #e5dece'}},
+            h('span',{style:{minWidth:0}}, filerCase(p.name)),
+            h('span',{style:{fontWeight:700,whiteSpace:'nowrap'}}, fmtMoney(p.amount)))),
+          (f.fec_committee_id || f.source_url) && h('a',{href:f.fec_committee_id ? 'https://www.fec.gov/data/receipts/?committee_id=' + f.fec_committee_id + '&two_year_transaction_period=2026&line_number=F3-11C' : f.source_url,
+            target:'_blank',rel:'noopener',style:{fontSize:11.5,color:'#1a5c8a',display:'inline-block',marginTop:4}},'See every PAC contribution ↗'))
+        : h('div',{style:{fontSize:12,color:'#888',fontStyle:'italic'}},
+            pacs > 0 ? 'The PAC-by-PAC list fills in after the next refresh. ' : 'Not listed. ',
+            f.source_url && h('a',{href:f.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'See the filings ↗')),
+
+    (f.outside_support || f.outside_oppose) ? h(Fragment,null,
+      h('div',{style:sub},'Outside spending (not controlled by the campaign)'),
+      h('div',{style:{fontSize:12.5,color:'#333'}},
+        f.outside_support ? h('span',null, fmtMoney(f.outside_support), ' spent supporting them') : null,
+        f.outside_support && f.outside_oppose ? ' · ' : '',
+        f.outside_oppose ? h('span',null, fmtMoney(f.outside_oppose), ' spent opposing them') : null),
+      groups.length > 0 && h('div',{style:{marginTop:4}}, groups.map((g,i)=>h('div',{key:i,style:{display:'flex',justifyContent:'space-between',gap:10,fontSize:12,color:'#444',padding:'2px 0'}},
+        h('span',{style:{minWidth:0}}, filerCase(g.name), h('span',{style:{color:'#888'}}, g.side === 'O' ? ' (against)' : ' (for)')),
+        h('span',{style:{fontWeight:700,whiteSpace:'nowrap'}}, fmtMoney(g.amount)))))) : null,
+
+    f.note && h('div',{style:{fontSize:12,color:'#555',marginTop:10,fontStyle:'italic'}}, f.note),
+    h('div',{style:{fontSize:11,color:'#888',marginTop:10,lineHeight:1.55}},
+      f.source === 'fec' ? 'From the campaign\'s reports to the Federal Election Commission' : 'From the campaign\'s official finance reports, entered by a local admin',
+      asOf ? ', through ' + asOf + '. ' : '. ',
+      f.source_url && h('a',{href:f.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'View the filings ↗'),
+      ' · ',
+      h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',fontSize:11,textDecoration:'underline',fontFamily:LB}},
+        why ? 'Hide' : 'What counts as PAC money?')),
+    why && h('div',{style:{marginTop:8}}, h(PacMoneyExplainer))
+  );
+}
+
+// Side by side: how big each campaign is and where the money came from
+function MoneyCompare({candidates, finance}) {
+  const rows = candidates.filter(c=>finance[c.id] && finance[c.id].status === 'reported');
+  const scale = Math.max(...rows.map(c=>Number(finance[c.id].total_raised)||0), 1);
+  return h('div',{style:{background:'#faf8f3',borderRadius:6,padding:'10px 12px',marginTop:8,fontFamily:LB}},
+    rows.map(c=>{ const f = finance[c.id]; const pacs = Number(f.from_pacs)||0;
+      return h('div',{key:c.id,style:{marginBottom:10}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',fontSize:12.5,marginBottom:3}},
+          h('span',{style:{fontWeight:700,color:'#1a1a2e'}}, c.name),
+          h('span',{style:{color:'#555'}}, fmtMoney(f.total_raised), ' raised · ',
+            pacs === 0 ? 'no PAC money' : pctOf(pacs, f.total_raised) + ' from PACs',
+            f.from_unitemized ? ' · ' + pctOf(f.from_unitemized, f.total_raised) + ' small donors' : '')),
+        h(MoneyBar,{f, scale, height:14})); }),
+    candidates.filter(c=>finance[c.id] && finance[c.id].status === 'none_filed').length > 0 &&
+      h('div',{style:{fontSize:12,color:'#666'}}, 'No reports on file: ',
+        candidates.filter(c=>finance[c.id] && finance[c.id].status === 'none_filed').map(c=>c.name).join(', ') + '.'),
+    h('div',{style:{display:'flex',flexWrap:'wrap',gap:'2px 12px',marginTop:6}},
+      [['small','Small donors'],['large','Larger donors'],['pacs','PACs'],['party','Party'],['self','Own money'],['other','Other']].map(([k,l])=>
+        h('span',{key:k,style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#666'}},
+          h('span',{style:{width:9,height:9,borderRadius:2,background:MONEY_COLORS[k]}}), l))),
+    h('div',{style:{fontSize:11,color:'#888',marginTop:6}},'Bars are drawn to the same scale, so you can see each campaign\'s size.'));
+}
+
+// Admins: enter numbers from a Michigan filing (or fix a federal one)
+function FinanceEditor({c, race, f, onClose, onSaved, onToast}) {
+  const federal = String(race.id||'').startsWith('US-');
+  const v = x => x === null || x === undefined ? '' : String(x);
+  const [form, setForm] = useState({
+    status: f?.status === 'unchecked' || !f ? 'reported' : f.status,
+    auto: federal && (!f || f.source === 'fec'),
+    fec_candidate_id: v(f?.fec_candidate_id),
+    period_label: f?.period_label || (federal ? '2025–26' : '2026 election'),
+    coverage_end: v(f?.coverage_end),
+    total_raised: v(f?.total_raised), from_individuals: v(f?.from_individuals), from_unitemized: v(f?.from_unitemized),
+    from_pacs: v(f?.from_pacs), from_party: v(f?.from_party), self_funded: v(f?.self_funded), public_funds: v(f?.public_funds),
+    cash_on_hand: v(f?.cash_on_hand), outside_support: v(f?.outside_support), outside_oppose: v(f?.outside_oppose),
+    top_pacs: (Array.isArray(f?.top_pacs) ? f.top_pacs : []).map(p=>p.name + ' — ' + p.amount).join('\n'),
+    source_url: v(f?.source_url) || (federal ? '' : MI_CFR_URL), note: v(f?.note),
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k, val)=>setForm(prev=>({...prev,[k]:val}));
+  const money = s => { const t = String(s||'').replace(/[$,\s]/g,''); if(t === '') return null; const n = Number(t); return isNaN(n) ? NaN : n; };
+  const save = async()=>{
+    setErr('');
+    if(form.auto) {
+      if(!/^[HS]\d[A-Z]{2}\d{5}$/i.test(form.fec_candidate_id.trim())) { setErr('Enter the FEC candidate ID (like H4MI07103). It\'s in the address of their fec.gov page.'); return; }
+      setSaving(true);
+      const {error} = await sb.from('guide_finance').upsert({candidate_id:c.id, source:'fec', status:f?.status||'unchecked',
+        fec_candidate_id:form.fec_candidate_id.trim().toUpperCase(), fec_committee_id:null, refreshed_at:null});
+      if(error) { setSaving(false); setErr(error.message); return; }
+      const {error:e2} = await sb.functions.invoke('finance-refresh',{body:{candidate_id:c.id}});
+      setSaving(false);
+      onToast(e2 ? '✓ Saved. The FEC refresh didn\'t run yet (is finance-refresh deployed?).' : '✓ Updated from the FEC.');
+      onSaved(); onClose(); return;
+    }
+    const nums = {};
+    for(const k of ['total_raised','from_individuals','from_unitemized','from_pacs','from_party','self_funded','public_funds','cash_on_hand','outside_support','outside_oppose']) {
+      const n = money(form[k]); if(Number.isNaN(n)) { setErr('"' + form[k] + '" isn\'t a number.'); return; } nums[k] = n;
+    }
+    const tops = [];
+    for(const line of form.top_pacs.split('\n').map(s=>s.trim()).filter(Boolean)) {
+      const m = line.match(/^(.*?)[\s—–\-:,]+\$?([\d,]+(?:\.\d+)?)$/);
+      if(!m) { setErr('Couldn\'t read "' + line + '". Use: Name — amount'); return; }
+      tops.push({name:m[1].trim(), amount:Number(m[2].replace(/,/g,''))});
+    }
+    if(form.status === 'reported' && nums.total_raised === null) { setErr('Enter the total raised.'); return; }
+    if(!/^https?:\/\//i.test(form.source_url.trim())) { setErr('Add a link to the filing (or the search page you used) so readers can check it.'); return; }
+    setSaving(true);
+    const row = {candidate_id:c.id, source:'manual', status:form.status, period_label:form.period_label.trim()||null,
+      coverage_end:form.coverage_end||null, top_pacs:form.status==='reported'?tops.sort((a,b)=>b.amount-a.amount):[],
+      source_url:form.source_url.trim(), note:form.note.trim()||null,
+      fec_candidate_id: form.fec_candidate_id.trim().toUpperCase() || null,
+      ...(form.status === 'reported' ? nums : Object.fromEntries(Object.keys(nums).map(k=>[k,null])))};
+    const {error} = await sb.from('guide_finance').upsert(row);
+    setSaving(false);
+    if(error) { setErr(error.message); return; }
+    onToast('✓ Funding saved.'); onSaved(); onClose();
+  };
+  const clear = async()=>{
+    if(!f) { onClose(); return; }
+    setSaving(true);
+    const {error} = await sb.from('guide_finance').delete().eq('candidate_id', c.id);
+    setSaving(false);
+    if(error) { setErr(error.message); return; }
+    onToast('Funding info removed.'); onSaved(); onClose();
+  };
+  const inp = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'6px 8px',fontSize:13,fontFamily:LB};
+  const lab = {fontSize:11,color:'#666',display:'block',marginTop:8,marginBottom:2};
+  const field = (k, label, ph)=>h('div',{key:k}, h('label',{style:lab},label), h('input',{value:form[k],onChange:e=>set(k,e.target.value),placeholder:ph||'',inputMode:'decimal',style:inp}));
+  return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:3000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:16,overflowY:'auto'}},
+    h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:12,padding:20,width:520,maxWidth:'100%',fontFamily:LB,margin:'20px 0'}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e'}},'💵 Funding: ' + c.name),
+      h('div',{style:{fontSize:12,color:'#666',lineHeight:1.55,margin:'4px 0 8px'}},
+        federal ? 'Federal candidates refresh from the FEC automatically. Turn that off only to correct something by hand.'
+        : h(Fragment,null,'Copy the numbers from the candidate committee\'s latest report in ',
+            h('a',{href:MI_CFR_URL,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Michigan\'s campaign finance search ↗'),
+            ' (or the county clerk\'s filings for local races), and link to it. Only enter what the report says.')),
+      federal && h('label',{style:{display:'flex',gap:8,alignItems:'center',fontSize:13,margin:'6px 0'}},
+        h('input',{type:'checkbox',checked:form.auto,onChange:e=>set('auto',e.target.checked)}), 'Keep refreshing from the FEC'),
+      federal && field('fec_candidate_id','FEC candidate ID','e.g. H4MI07103'),
+      !form.auto && h(Fragment,null,
+        h('label',{style:lab},'What the filings show'),
+        h('select',{value:form.status,onChange:e=>set('status',e.target.value),style:inp},
+          h('option',{value:'reported'},'They\'ve filed finance reports'),
+          h('option',{value:'none_filed'},'No finance reports on file')),
+        form.status === 'reported' && h(Fragment,null,
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 10px'}},
+            h('div',null, h('label',{style:lab},'Period'), h('input',{value:form.period_label,onChange:e=>set('period_label',e.target.value),style:inp})),
+            h('div',null, h('label',{style:lab},'Reports run through'), h('input',{type:'date',value:form.coverage_end,onChange:e=>set('coverage_end',e.target.value),style:inp})),
+            field('total_raised','Total raised ($)'), field('cash_on_hand','Cash on hand ($)'),
+            field('from_individuals','From individuals ($)'), field('from_unitemized','…of that, small donors ($)','if listed'),
+            field('from_pacs','From PACs / committees ($)','0 if none'), field('from_party','From party committees ($)'),
+            field('self_funded','Candidate\'s own money & loans ($)'), field('public_funds','Public funding ($)','governor only'),
+            field('outside_support','Outside spending for ($)','optional'), field('outside_oppose','Outside spending against ($)','optional')),
+          h('label',{style:lab},'Biggest PAC contributors, one per line: Name — amount'),
+          h('textarea',{value:form.top_pacs,onChange:e=>set('top_pacs',e.target.value),rows:4,placeholder:'Michigan Realtors PAC — 2500',style:{...inp,resize:'vertical'}})),
+        h('label',{style:lab},'Link to the filing'),
+        h('input',{value:form.source_url,onChange:e=>set('source_url',e.target.value),placeholder:'https://',style:inp}),
+        h('label',{style:lab},'Note (optional, shown to readers)'),
+        h('input',{value:form.note,onChange:e=>set('note',e.target.value),maxLength:240,style:inp})),
+      err && h('div',{style:{color:'#c0392b',fontSize:12.5,marginTop:8}},err),
+      h('div',{style:{display:'flex',gap:8,marginTop:14,flexWrap:'wrap'}},
+        h(Btn,{onClick:save,disabled:saving}, saving ? 'Saving...' : form.auto ? 'Save & refresh from FEC' : 'Save'),
+        h(Btn,{onClick:onClose,bg:'transparent',color:'#888',border:'1px solid #ddd'},'Cancel'),
+        f && h('button',{onClick:clear,disabled:saving,style:{marginLeft:'auto',background:'none',border:'none',color:'#c0392b',fontSize:12,cursor:'pointer'}},'Remove funding info')))
+  );
+}
+
+function RaceCard({race, candidates, questions, user, profile, finance, onYourBallot, onToast, onReload}) {
   const [openId, setOpenId] = useState(null);
   const [compare, setCompare] = useState(false);
   const [claiming, setClaiming] = useState(null);
+  const [moneyOpen, setMoneyOpen] = useState({});
+  const [moneyCompare, setMoneyCompare] = useState(false);
+  const [editingMoney, setEditingMoney] = useState(null);
+  const fin = finance || {};
+  const canEditMoney = race.county ? isAdminFor(profile, race.county) : isFullAdmin(profile);
+  const federal = String(race.id).startsWith('US-');
+  const reportedCount = candidates.filter(c=>fin[c.id] && fin[c.id].status === 'reported').length;
+  const anyMoney = candidates.some(c=>fin[c.id] && fin[c.id].status !== 'unchecked');
   const anyWords = candidates.some(c=>c.statement || (c.answers && Object.keys(c.answers).length));
   return h('div',{style:{background:'#fff',border:'1px solid '+(onYourBallot?'#f0c040':'#e5dece'),borderRadius:10,padding:'14px 16px',marginBottom:12}},
     h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline',flexWrap:'wrap'}},
@@ -8912,9 +9195,22 @@ function RaceCard({race, candidates, questions, user, onYourBallot}) {
             c.website && h('a',{href:c.website,target:'_blank',rel:'noopener nofollow',style:{color:'#1a5c8a'}},'Website ↗'),
             h('a',{href:ballotpediaSearch(c.name),target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Look up ↗'))),
         openId===c.id && h(CandidateWords,{c,questions}),
-        !c.claimed_by && h('button',{onClick:()=>setClaiming(c),style:{background:'none',border:'none',color:'#aaa',cursor:'pointer',fontSize:10.5,padding:0,marginTop:2,fontFamily:LB}},
-          'Are you this candidate?')
+        h(FundingLine,{f:fin[c.id], open:!!moneyOpen[c.id], onToggle:()=>setMoneyOpen(m=>({...m,[c.id]:!m[c.id]}))}),
+        moneyOpen[c.id] && fin[c.id] && fin[c.id].status === 'reported' && h(FundingDetails,{f:fin[c.id]}),
+        h('div',{style:{display:'flex',gap:12}},
+          !c.claimed_by && h('button',{onClick:()=>setClaiming(c),style:{background:'none',border:'none',color:'#aaa',cursor:'pointer',fontSize:10.5,padding:0,marginTop:2,fontFamily:LB}},
+            'Are you this candidate?'),
+          canEditMoney && h('button',{onClick:()=>setEditingMoney(c),style:{background:'none',border:'none',color:'#8a6000',cursor:'pointer',fontSize:10.5,padding:0,marginTop:2,fontFamily:LB}},
+            '💵 ' + (fin[c.id] ? 'Edit funding' : 'Add funding') + ' (admin)'))
       ))),
+    !anyMoney && !federal && h('div',{style:{fontSize:11.5,color:'#888',fontFamily:LB,marginTop:6,lineHeight:1.5}},
+      '💵 Campaign money: ', race.section === 'local'
+        ? 'local candidates file their reports with the county clerk. We haven\'t added numbers for this race yet.'
+        : h(Fragment,null,'state candidates report to Michigan. We haven\'t added numbers for this race yet. ',
+            h('a',{href:MI_CFR_URL,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Look up their filings ↗'))),
+    reportedCount > 1 && h('button',{onClick:()=>setMoneyCompare(!moneyCompare),
+      style:{marginTop:8,marginRight:8,background:'#fbf6ea',border:'1px solid #e2cf9f',color:'#7a5a12',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}},
+      moneyCompare ? 'Hide the money comparison' : '💵 Compare the money'),
     anyWords && candidates.length > 1 && h('button',{onClick:()=>setCompare(!compare),
       style:{marginTop:8,background:'#f5f0ff',border:'1px solid #c8b8e8',color:'#5b3a8c',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}},
       compare?'Hide comparison':'Compare their answers side by side'),
@@ -8926,7 +9222,9 @@ function RaceCard({race, candidates, questions, user, onYourBallot}) {
           c.answers && c.answers[q.id]
             ? h('div',{style:{color:'#333',lineHeight:1.6,whiteSpace:'pre-wrap'}}, c.answers[q.id])
             : h('div',{style:{color:'#aaa',fontStyle:'italic'}},'No answer yet.')))))),
-    claiming && h(ClaimModal,{candidate:claiming,race,user,onClose:()=>setClaiming(null)})
+    moneyCompare && reportedCount > 1 && h(MoneyCompare,{candidates, finance:fin}),
+    claiming && h(ClaimModal,{candidate:claiming,race,user,onClose:()=>setClaiming(null)}),
+    editingMoney && h(FinanceEditor,{c:editingMoney, race, f:fin[editingMoney.id], onClose:()=>setEditingMoney(null), onSaved:onReload||(()=>{}), onToast:onToast||(()=>{})})
   );
 }
 
@@ -8966,6 +9264,9 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
   const [questions, setQuestions] = useState([]);
   const [group, setGroup] = useState('proposals');
   const [unavailable, setUnavailable] = useState(false);
+  const [finance, setFinance] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [moneyHelp, setMoneyHelp] = useState(false);
   const zip = profile?.zip || '';
   const community = communityForZip(zip);
 
@@ -8978,6 +9279,23 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
       sb.from('guide_questions').select('*').order('sort'),
     ]);
     setRaces(r||[]); setCands(c||[]); setQuestions(q||[]);
+    loadFinance((c||[]).map(x=>x.id));
+  };
+  const loadFinance = async(candIds)=>{
+    if(!candIds.length) { setFinance({}); return; }
+    const {data, error} = await sb.from('guide_finance').select('*').in('candidate_id', candIds);
+    if(error) return;   // money table not set up yet; the guide works without it
+    const m = {}; (data||[]).forEach(f=>{ m[f.candidate_id] = f; }); setFinance(m);
+  };
+  const refreshMoney = async()=>{
+    setRefreshing(true);
+    const {data, error} = await sb.functions.invoke('finance-refresh',{body:{}});
+    setRefreshing(false);
+    if(error) { const st = error.context && error.context.status; onToast(st===404 ? '❌ The finance-refresh server function isn\'t deployed yet.' : '❌ '+(error.message||'Refresh failed')); return; }
+    onToast(data && data.stopped_early
+      ? '✓ Refreshed ' + data.refreshed + '. The FEC\'s hourly limit stopped it early: ' + data.remaining + ' left. ' + (data.using_demo_key ? 'Add a free FEC_API_KEY to fix this.' : 'Try again in an hour.')
+      : '✓ Money numbers refreshed from the FEC (' + ((data && data.refreshed) || 0) + ' candidates).');
+    loadFinance(cands.map(x=>x.id));
   };
   useEffect(()=>{ load(); },[]);
 
@@ -8998,7 +9316,7 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
       h('div',{style:{fontFamily:LB,fontSize:12.5,color:'#c8d0dc',lineHeight:1.6,marginTop:8}},
         'Everything on the ballot in ' + getCurrentCounty().name + ', from the official county candidate lists. ',
         'Every candidate is listed in ballot order and in the same format. We don\'t endorse anyone. ',
-        'Anything a candidate says here, they wrote themselves.')),
+        'Anything a candidate says here, they wrote themselves. Money numbers come from official finance reports.')),
 
     h(HowToVoteCard),
 
@@ -9033,7 +9351,16 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
       group === 'local' && h('div',{style:{fontSize:12.5,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.6}},
         'Main city and county races. School board, library, village and township races are on your ',
         h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'sample ballot ↗'), '.'),
-      sortedRaces.map(r=>h(RaceCard,{key:r.id,race:r,candidates:cands.filter(c=>c.race_id===r.id),questions,user,onYourBallot:group==='local'&&nearYou(r)}))),
+      (group === 'federal' || Object.keys(finance).length > 0) && h('div',{style:{fontSize:12.5,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.6}},
+        '💵 Under each candidate: how much they\'ve raised and how much came from PACs, from their campaign finance reports. ',
+        h('button',{onClick:()=>setMoneyHelp(!moneyHelp),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
+          moneyHelp ? 'Hide' : 'What counts as PAC money?'),
+        moneyHelp && h('div',{style:{background:'#faf8f3',borderRadius:6,padding:'10px 12px',marginTop:6}}, h(PacMoneyExplainer)),
+        isFullAdmin(profile) && group === 'federal' && h('div',{style:{marginTop:6}},
+          h('button',{onClick:refreshMoney,disabled:refreshing,style:{background:'#fff8e7',border:'1px solid #e2cf9f',color:'#8a6000',borderRadius:6,padding:'4px 10px',fontSize:11.5,cursor:'pointer',fontFamily:LB}},
+            refreshing ? 'Checking the FEC...' : '↻ Refresh from FEC (admin)'))),
+      sortedRaces.map(r=>h(RaceCard,{key:r.id,race:r,candidates:cands.filter(c=>c.race_id===r.id),questions,user,profile,finance,onToast,
+        onReload:()=>loadFinance(cands.map(x=>x.id)),onYourBallot:group==='local'&&nearYou(r)}))),
 
     h('div',{style:{fontSize:11.5,color:'#999',fontFamily:LB,lineHeight:1.6,marginTop:16,borderTop:'1px solid #e5dece',paddingTop:10}},
       'Write-in candidates aren\'t listed. Party labels are as they appear on the ballot. "Look up" searches Ballotpedia, an independent encyclopedia of elections. ',
