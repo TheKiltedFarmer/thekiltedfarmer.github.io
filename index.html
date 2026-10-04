@@ -113,6 +113,7 @@ const HUBS = [
     { id:'feed', label:'Feed' }
   ]},
   { id:'civic',     icon:'\uD83C\uDFDB', label:'Civic',     subs:[
+    { id:'guide',     label:'Voters Guide' },
     { id:'bills',     label:'Bills' },
     { id:'news',      label:'News' },
     { id:'thequestion', label:'The Question' },
@@ -4451,6 +4452,9 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
       )
     ),
 
+    // ── Election countdown (shows in the 60 days before Election Day) ──
+    h(ElectionCountdownCard,{onNavigate}),
+
     // ── What's being decided near you + issues you follow ─────────
     h(ThisWeekNearYou,{bills,profile,userVotes,onNavigate}),
     h(FollowingCard,{bills,followedIds,onNavigate}),
@@ -8759,6 +8763,320 @@ function CountyPickerLanding({onPick}) {
 }
 // ZIP already served? (used by the request form)
 function COUNTY_FOR_ZIP_SAFE(zip) { try { return countyForZip(zip); } catch(e) { return null; } }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 2026 VOTERS GUIDE
+// Nonpartisan by design: every candidate on the ballot, in ballot order, in
+// the same format. Nothing is written about candidates except what they
+// write themselves (after an admin verifies them).
+// ═════════════════════════════════════════════════════════════════════════════
+const ELECTION_2026 = {
+  date:'2026-11-03', regOnline:'2026-10-19', earlyStart:'2026-10-24', earlyEnd:'2026-11-01', absenteeRequest:'2026-10-30',
+  mvic:'https://mvic.sos.state.mi.us/', sos:'https://www.michigan.gov/sos/elections/voting',
+  earlyInfo:'https://www.michigan.gov/sos/elections/voting/early-in-person-voting',
+};
+const PARTY_NAMES = {DEM:'Democratic', REP:'Republican', LIB:'Libertarian', UST:'U.S. Taxpayers', GRN:'Green', NLP:'Natural Law',
+  WCP:'Working Class', NPA:'No Party Affiliation', NP:'Nonpartisan'};
+const GUIDE_GROUPS = [
+  {id:'proposals',   label:'Proposals'},
+  {id:'statewide',   label:'Statewide offices'},
+  {id:'federal',     label:'Congress'},
+  {id:'legislature', label:'State Legislature'},
+  {id:'courts',      label:'Courts'},
+  {id:'education',   label:'Education boards'},
+  {id:'local',       label:'Local'},
+];
+function raceGroup(r) {
+  if(r.section === 'nonpartisan') return 'courts';
+  if(r.section === 'statewide') return Number(r.sort) >= 60 ? 'education' : 'statewide';
+  return r.section;
+}
+function daysUntilDate(d) { return Math.ceil((new Date(d+'T00:00:00').getTime() - Date.now())/86400000); }
+function fmtGuideDate(d) { return new Date(d+'T12:00:00').toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}); }
+function ballotpediaSearch(name) { return 'https://ballotpedia.org/wiki/index.php?search=' + encodeURIComponent(name.split(' / ')[0]); }
+
+// ── Home page: election countdown card ───────────────────────────────────────
+function ElectionCountdownCard({onNavigate}) {
+  const days = daysUntilDate(ELECTION_2026.date);
+  if(days < 0 || days > 60) return null;
+  const regDays = daysUntilDate(ELECTION_2026.regOnline);
+  return h('div',{style:{background:'#1a1a2e',color:'#fff',borderRadius:8,padding:'16px 18px',marginBottom:18,borderLeft:'4px solid #f0c040'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:18,color:'#f0c040'}},
+        days === 0 ? '🗳 Today is Election Day' : '🗳 Election Day is Tuesday, Nov 3'),
+      days > 0 && h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#fff'}}, days + ' day' + (days===1?'':'s') + ' away')),
+    h('div',{style:{fontFamily:LB,fontSize:13,color:'#c8d0dc',lineHeight:1.6,marginTop:6}},
+      days === 0 ? 'Polls are open 7 a.m. to 8 p.m. If you\'re in line by 8, you can vote. You can still register at your clerk\'s office today.'
+      : regDays >= 0 ? 'Register online or by mail by ' + fmtGuideDate(ELECTION_2026.regOnline) + ' (after that, in person at your clerk). Early voting runs ' + fmtGuideDate(ELECTION_2026.earlyStart) + ' – ' + fmtGuideDate(ELECTION_2026.earlyEnd) + '.'
+      : 'Early voting runs ' + fmtGuideDate(ELECTION_2026.earlyStart) + ' – ' + fmtGuideDate(ELECTION_2026.earlyEnd) + '. You can still register in person at your clerk\'s office, right up to Election Day.'),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}},
+      h('button',{onClick:()=>onNavigate('guide'),style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:6,padding:'7px 14px',
+        fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},'Open the voters guide →'),
+      h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{color:'#f0c040',fontSize:12.5,fontFamily:LB,alignSelf:'center'}},'Check your registration ↗'))
+  );
+}
+
+// ── How to vote ──────────────────────────────────────────────────────────────
+function HowToVoteCard() {
+  const row = (icon, title, body)=>h('div',{style:{display:'flex',gap:12,padding:'10px 0',borderTop:'1px solid #f0ece4'}},
+    h('div',{style:{fontSize:20,width:28,textAlign:'center',flexShrink:0}},icon),
+    h('div',null, h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e'}},title),
+      h('div',{style:{fontFamily:LB,fontSize:13,color:'#444',lineHeight:1.6}},body)));
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'14px 18px',marginBottom:16}},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'How to vote in Michigan'),
+    h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{display:'inline-block',background:'#1a5c8a',color:'#fff',borderRadius:6,
+      padding:'8px 14px',fontSize:13,fontFamily:PD,fontWeight:700,textDecoration:'none',margin:'6px 0 8px'}},'Check your registration & see your exact ballot ↗'),
+    row('📝','Register', 'Online or by mail through ' + fmtGuideDate(ELECTION_2026.regOnline) + '. After that, register in person at your city or township clerk\'s office with proof of where you live — right up through Election Day.'),
+    row('🗓','Vote early in person', fmtGuideDate(ELECTION_2026.earlyStart) + ' through ' + fmtGuideDate(ELECTION_2026.earlyEnd) + ', at least nine days. Some communities offer more. Your clerk sets the hours and place.'),
+    row('✉️','Vote by mail (absentee)', 'Any registered voter can. Request a ballot online or from your clerk by ' + fmtGuideDate(ELECTION_2026.absenteeRequest) + ' at 5 p.m. (or in person at your clerk until Monday, Nov 2 at 4 p.m.). Your ballot must reach your clerk by 8 p.m. on Election Day, so use your clerk\'s drop box if it\'s late.'),
+    row('🏫','Election Day: Tuesday, Nov 3', 'Polls are open 7 a.m. to 8 p.m. If you\'re in line by 8, you can vote.'),
+    row('🪪','ID', 'You\'ll be asked for a photo ID. If you don\'t have one, you can sign a short form and vote a regular ballot.'),
+    h('div',{style:{fontSize:11.5,color:'#999',fontFamily:LB,marginTop:8}},
+      'From the Michigan Secretary of State. ', h('a',{href:ELECTION_2026.sos,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Full details ↗'))
+  );
+}
+
+// ── A candidate's own words ──────────────────────────────────────────────────
+function CandidateWords({c, questions}) {
+  const answered = questions.filter(q=>c.answers && c.answers[q.id]);
+  if(!c.statement && answered.length === 0) return h('div',{style:{fontSize:12,color:'#999',fontStyle:'italic',fontFamily:LB,padding:'4px 0'}},
+    'This candidate hasn\'t added a statement yet.');
+  return h('div',{style:{background:'#faf8f3',borderRadius:6,padding:'10px 12px',marginTop:6}},
+    c.statement && h('div',{style:{fontSize:13,color:'#333',fontFamily:LB,lineHeight:1.65,whiteSpace:'pre-wrap',marginBottom:answered.length?10:0}}, c.statement),
+    answered.map(q=>h('div',{key:q.id,style:{marginBottom:8}},
+      h('div',{style:{fontSize:11.5,color:'#5b3a8c',fontFamily:PD,fontWeight:700,marginBottom:2}}, q.text),
+      h('div',{style:{fontSize:13,color:'#333',fontFamily:LB,lineHeight:1.6,whiteSpace:'pre-wrap'}}, c.answers[q.id]))),
+    h('div',{style:{fontSize:10.5,color:'#aaa',fontFamily:LB,marginTop:4}},'Written by the candidate.')
+  );
+}
+
+function ClaimModal({candidate, race, user, onClose}) {
+  const [note, setNote] = useState('');
+  const [state, setState] = useState('');
+  const [err, setErr] = useState('');
+  const send = async()=>{
+    setErr(''); setState('sending');
+    const {data, error} = await sb.rpc('tpv_claim_candidate',{p_candidate_id:candidate.id, p_note:note});
+    if(error) { setState(''); setErr(error.message); return; }
+    setState(data === 'already' ? 'already' : 'sent');
+  };
+  return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}},
+    h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:12,padding:20,width:420,maxWidth:'100%',fontFamily:LB}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Are you ' + candidate.name.split(' / ')[0] + '?'),
+      h('div',{style:{fontSize:13,color:'#555',lineHeight:1.6,marginBottom:12}},
+        'Verified candidates can add a short statement (about 150 words), a website, and answers to the same three questions every candidate gets. ',
+        'A local admin will confirm it\'s really you before anything you write appears.'),
+      !user?.id ? h(JoinPrompt,{text:'First, create a free account (or sign in). Then come back to this page.',reason:'claim your candidate listing'})
+      : state==='sent' ? h('div',{style:{color:'#1a6b3c',fontSize:14}},'✓ Sent. You\'ll get a notification once an admin verifies you.')
+      : state==='already' ? h('div',{style:{color:'#1a6b3c',fontSize:14}},'✓ Your request is already waiting for an admin.')
+      : h(Fragment,null,
+          h('textarea',{value:note,onChange:e=>setNote(e.target.value),rows:3,maxLength:500,
+            placeholder:'How can we confirm it\'s you? e.g. your campaign email or phone, or the website listed with the clerk.',
+            style:{width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB,resize:'vertical'}}),
+          err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:6}},err),
+          h('div',{style:{display:'flex',gap:8,marginTop:10}},
+            h(Btn,{onClick:send,disabled:state==='sending'}, state==='sending'?'Sending...':'Request verification'),
+            h(Btn,{onClick:onClose,bg:'transparent',color:'#aaa',border:'1px solid #ddd'},'Cancel'))),
+      (state==='sent'||state==='already'||!user?.id) && h('div',{style:{marginTop:12}}, h(Btn,{onClick:onClose,bg:'transparent',color:'#888',border:'1px solid #ddd'},'Close'))
+    )
+  );
+}
+
+function RaceCard({race, candidates, questions, user, onYourBallot}) {
+  const [openId, setOpenId] = useState(null);
+  const [compare, setCompare] = useState(false);
+  const [claiming, setClaiming] = useState(null);
+  const anyWords = candidates.some(c=>c.statement || (c.answers && Object.keys(c.answers).length));
+  return h('div',{style:{background:'#fff',border:'1px solid '+(onYourBallot?'#f0c040':'#e5dece'),borderRadius:10,padding:'14px 16px',marginBottom:12}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline',flexWrap:'wrap'}},
+      h('div',null,
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:16,color:'#1a1a2e'}}, race.office),
+        race.district && h('div',{style:{fontSize:12.5,color:'#888',fontFamily:LB}}, race.district)),
+      h('div',{style:{display:'flex',gap:6,alignItems:'center'}},
+        onYourBallot && h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:10.5,fontWeight:700,padding:'2px 8px',borderRadius:10}},'NEAR YOU'),
+        h('span',{style:{fontSize:11,color:'#999',fontFamily:LB}}, race.vote_for > 1 ? 'Vote for up to ' + race.vote_for : 'Vote for 1'))),
+    race.note && h('div',{style:{fontSize:12,color:'#777',fontFamily:LB,lineHeight:1.5,marginTop:4}}, race.note),
+    h('div',{style:{marginTop:8}},
+      candidates.map(c=>h('div',{key:c.id,style:{borderTop:'1px solid #f3efe6',padding:'8px 0'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',flexWrap:'wrap'}},
+          h('div',{style:{minWidth:0}},
+            h('span',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e'}}, c.name),
+            race.partisan && c.party && h('span',{style:{marginLeft:8,fontSize:11.5,color:'#555',fontFamily:LB}}, PARTY_NAMES[c.party] || c.party),
+            c.incumbent && h('span',{style:{marginLeft:6,fontSize:10,color:'#555',border:'1px solid #ccc',borderRadius:8,padding:'0 5px'}},'Incumbent'),
+            c.claimed_by && h('span',{title:'Verified by a local admin',style:{marginLeft:6,fontSize:10,color:'#1a6b3c'}},'✓ verified')),
+          h('div',{style:{display:'flex',gap:10,alignItems:'center',fontSize:12,fontFamily:LB}},
+            (c.statement || (c.answers && Object.keys(c.answers).length>0))
+              ? h('button',{onClick:()=>setOpenId(openId===c.id?null:c.id),style:{background:'none',border:'none',color:'#5b3a8c',cursor:'pointer',fontSize:12,padding:0,textDecoration:'underline'}},
+                  openId===c.id?'Hide':'In their words')
+              : null,
+            c.website && h('a',{href:c.website,target:'_blank',rel:'noopener nofollow',style:{color:'#1a5c8a'}},'Website ↗'),
+            h('a',{href:ballotpediaSearch(c.name),target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Look up ↗'))),
+        openId===c.id && h(CandidateWords,{c,questions}),
+        !c.claimed_by && h('button',{onClick:()=>setClaiming(c),style:{background:'none',border:'none',color:'#aaa',cursor:'pointer',fontSize:10.5,padding:0,marginTop:2,fontFamily:LB}},
+          'Are you this candidate?')
+      ))),
+    anyWords && candidates.length > 1 && h('button',{onClick:()=>setCompare(!compare),
+      style:{marginTop:8,background:'#f5f0ff',border:'1px solid #c8b8e8',color:'#5b3a8c',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}},
+      compare?'Hide comparison':'Compare their answers side by side'),
+    compare && h('div',{style:{marginTop:8}},
+      questions.map(q=>h('div',{key:q.id,style:{marginBottom:12}},
+        h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:13,color:'#5b3a8c',marginBottom:6}}, q.text),
+        candidates.map(c=>h('div',{key:c.id,style:{background:'#faf8f3',borderRadius:6,padding:'7px 10px',marginBottom:5,fontFamily:LB,fontSize:13}},
+          h('div',{style:{fontWeight:700,color:'#1a1a2e',fontSize:12}}, c.name),
+          c.answers && c.answers[q.id]
+            ? h('div',{style:{color:'#333',lineHeight:1.6,whiteSpace:'pre-wrap'}}, c.answers[q.id])
+            : h('div',{style:{color:'#aaa',fontStyle:'italic'}},'No answer yet.')))))),
+    claiming && h(ClaimModal,{candidate:claiming,race,user,onClose:()=>setClaiming(null)})
+  );
+}
+
+// Verified candidates edit their own listing
+function CandidateEditor({c, race, questions, onSaved, onToast}) {
+  const [statement, setStatement] = useState(c.statement || '');
+  const [website, setWebsite] = useState(c.website || '');
+  const [answers, setAnswers] = useState(c.answers || {});
+  const [saving, setSaving] = useState(false);
+  const save = async()=>{
+    setSaving(true);
+    const {error} = await sb.rpc('tpv_update_candidate_profile',{p_candidate_id:c.id, p_statement:statement, p_website:website.trim()||null, p_answers:answers});
+    setSaving(false);
+    if(error) { onToast('❌ '+error.message); return; }
+    onToast('✓ Saved. Voters can see it now.');
+    onSaved && onSaved();
+  };
+  const ta = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB,resize:'vertical'};
+  return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:16}},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:16,color:'#1a1a2e'}},'Your listing: ' + c.name),
+    h('div',{style:{fontSize:12,color:'#555',fontFamily:LB,marginBottom:10}}, race.office + (race.district ? ' · ' + race.district : '') +
+      '. Every candidate gets the same space and the same questions. Keep it about what you\'d do, not about your opponents.'),
+    h('label',{style:{fontSize:11,color:'#666',textTransform:'uppercase',letterSpacing:1}},'Statement (' + statement.length + '/1200)'),
+    h('textarea',{value:statement,onChange:e=>setStatement(e.target.value.slice(0,1200)),rows:5,style:ta}),
+    h('label',{style:{fontSize:11,color:'#666',textTransform:'uppercase',letterSpacing:1,display:'block',marginTop:8}},'Campaign website'),
+    h('input',{value:website,onChange:e=>setWebsite(e.target.value),placeholder:'https://',style:{...ta,resize:'none'}}),
+    questions.map(q=>h('div',{key:q.id,style:{marginTop:10}},
+      h('label',{style:{fontSize:12.5,color:'#5b3a8c',fontFamily:PD,fontWeight:700}}, q.text),
+      h('textarea',{value:answers[q.id]||'',onChange:e=>setAnswers(a=>({...a,[q.id]:e.target.value.slice(0,1000)})),rows:3,style:ta}))),
+    h('div',{style:{marginTop:10}}, h(Btn,{onClick:save,disabled:saving,bg:'#1a6b3c',color:'#fff'}, saving?'Saving...':'Save my listing'))
+  );
+}
+
+function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
+  const [races, setRaces] = useState(null);
+  const [cands, setCands] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  const [group, setGroup] = useState('proposals');
+  const [unavailable, setUnavailable] = useState(false);
+  const zip = profile?.zip || '';
+  const community = communityForZip(zip);
+
+  const load = async()=>{
+    const {data:r, error} = await sb.from('guide_races').select('*').or('county.is.null,county.eq.'+countyTag()).order('sort');
+    if(error) { setUnavailable(true); setRaces([]); return; }
+    const ids = (r||[]).map(x=>x.id);
+    const [{data:c}, {data:q}] = await Promise.all([
+      ids.length ? sb.from('guide_candidates').select('*').in('race_id', ids).order('ballot_order') : Promise.resolve({data:[]}),
+      sb.from('guide_questions').select('*').order('sort'),
+    ]);
+    setRaces(r||[]); setCands(c||[]); setQuestions(q||[]);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const proposals = (bills||[]).filter(b=>String(b.id).startsWith('BALLOT-2026')
+    || (b.next_meeting_body||'').toLowerCase().startsWith('voters'));
+  const days = daysUntilDate(ELECTION_2026.date);
+  const myListings = user?.id ? cands.filter(c=>c.claimed_by === user.id) : [];
+  const nearYou = r => !!community && !!r.jurisdiction && r.jurisdiction.toLowerCase().includes(community.toLowerCase());
+  const inGroup = (races||[]).filter(r=>raceGroup(r) === group);
+  const sortedRaces = group === 'local' ? [...inGroup].sort((a,b)=>(nearYou(b)?1:0)-(nearYou(a)?1:0) || a.sort-b.sort) : inGroup;
+  const counts = {}; (races||[]).forEach(r=>{ const g = raceGroup(r); counts[g] = (counts[g]||0)+1; }); counts.proposals = proposals.length;
+
+  return h('div',null,
+    h('div',{style:{background:'linear-gradient(135deg,#1a1a2e,#2a2a4e)',borderRadius:10,padding:'18px 20px',marginBottom:16,borderLeft:'4px solid #f0c040'}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#f0c040'}},'🗳 2026 Voters Guide'),
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#fff',marginTop:4}},
+        'General election · Tuesday, November 3' + (days > 0 ? ' · ' + days + ' day' + (days===1?'':'s') + ' away' : days === 0 ? ' · today' : '')),
+      h('div',{style:{fontFamily:LB,fontSize:12.5,color:'#c8d0dc',lineHeight:1.6,marginTop:8}},
+        'Everything on the ballot in ' + getCurrentCounty().name + ', from the official county candidate lists. ',
+        'Every candidate is listed in ballot order and in the same format. We don\'t endorse anyone. ',
+        'Anything a candidate says here, they wrote themselves.')),
+
+    h(HowToVoteCard),
+
+    myListings.map(c=>h(CandidateEditor,{key:c.id,c,race:(races||[]).find(r=>r.id===c.race_id)||{},questions,onToast,onSaved:load})),
+
+    h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
+      GUIDE_GROUPS.filter(g=>counts[g.id]).map(g=>h('button',{key:g.id,onClick:()=>setGroup(g.id),
+        style:{background:group===g.id?'#1a1a2e':'#fff',color:group===g.id?'#f0c040':'#555',border:'1px solid '+(group===g.id?'#1a1a2e':'#ddd'),
+          padding:'6px 12px',borderRadius:20,fontFamily:PD,fontSize:12.5,fontWeight:group===g.id?700:400,cursor:'pointer'}},
+        g.label + ' (' + counts[g.id] + ')'))),
+
+    unavailable && h('div',{style:{fontSize:13,color:'#8a6000',background:'#fff8e7',padding:'10px 12px',borderRadius:8,marginBottom:12}},
+      'The candidate list isn\'t loaded yet. (Admins: run tpv_voters_guide.sql in Supabase.)'),
+    races === null && h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+
+    group === 'proposals' && h('div',null,
+      h('div',{style:{fontSize:12.5,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.6}},
+        'Each proposal links to its full page, where you can vote in our community poll, read why neighbors support or oppose it, and ask officials questions.'),
+      proposals.length === 0 && h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13}},'No proposals listed for this county yet.'),
+      [...proposals].sort((a,b)=>({state:0,county:1,city:2,village:3,township:4}[a.level]??5)-({state:0,county:1,city:2,village:3,township:4}[b.level]??5))
+        .map(b=>h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+          style:{background:'#fff',border:'1px solid '+(billRelevantToZip(b,zip)&&billIsLocal(b)?'#f0c040':'#e5dece'),borderRadius:10,padding:'12px 16px',marginBottom:10,cursor:'pointer'}},
+          h('div',{style:{fontSize:11,color:'#888',fontFamily:LB}}, b.jurisdiction),
+          h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',margin:'2px 0 4px'}}, b.title),
+          h('div',{style:{fontSize:13,color:'#444',fontFamily:LB,lineHeight:1.55}}, h('strong',{style:{color:'#7a2838'}},'At stake: '), b.at_stake || firstSentence(b.summary)),
+          h('div',{style:{fontSize:12,color:'#1a5c8a',marginTop:6,fontFamily:LB}},'Read more & weigh in →')))),
+
+    group !== 'proposals' && h('div',null,
+      group === 'legislature' && h('div',{style:{fontSize:12.5,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.6}},
+        'You vote in one State Senate and one State House district, depending on your address. ',
+        h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'See which districts are on your ballot ↗')),
+      group === 'local' && h('div',{style:{fontSize:12.5,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.6}},
+        'Main city and county races. School board, library, village and township races are on your ',
+        h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'sample ballot ↗'), '.'),
+      sortedRaces.map(r=>h(RaceCard,{key:r.id,race:r,candidates:cands.filter(c=>c.race_id===r.id),questions,user,onYourBallot:group==='local'&&nearYou(r)}))),
+
+    h('div',{style:{fontSize:11.5,color:'#999',fontFamily:LB,lineHeight:1.6,marginTop:16,borderTop:'1px solid #e5dece',paddingTop:10}},
+      'Write-in candidates aren\'t listed. Party labels are as they appear on the ballot. "Look up" searches Ballotpedia, an independent encyclopedia of elections. ',
+      'Spot a mistake? Use the Feedback button and we\'ll fix it.')
+  );
+}
+
+// ── Admin: candidate verification requests ──────────────────────────────────
+function CandidateClaimsPanel({onToast}) {
+  const [rows, setRows] = useState(null);
+  const load = async()=>{
+    const {data, error} = await sb.from('guide_claims').select('*').eq('status','pending').order('created_at');
+    if(error) { setRows([]); return; }
+    const list = data || [];
+    if(list.length) {
+      const [{data:c}, {data:p}] = await Promise.all([
+        sb.from('guide_candidates').select('id,name,race_id').in('id', list.map(x=>x.candidate_id)),
+        sb.from('profiles').select('id,display_name,email').in('id', list.map(x=>x.user_id)),
+      ]);
+      list.forEach(x=>{ x.cand = (c||[]).find(y=>y.id===x.candidate_id); x.who = (p||[]).find(y=>y.id===x.user_id); });
+    }
+    setRows(list);
+  };
+  useEffect(()=>{ load(); },[]);
+  const review = async(cl, ok)=>{
+    const {error} = await sb.rpc('tpv_review_candidate_claim',{p_claim_id:cl.id, p_approve:ok});
+    if(error) { onToast('❌ '+error.message); return; }
+    onToast(ok ? '✓ Verified. They can add their statement now.' : 'Request declined.');
+    load();
+  };
+  if(!rows || rows.length === 0) return null;
+  return h('div',{style:{background:'#f5f0ff',border:'1px solid #c8b8e8',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🗳 Candidates asking to be verified (' + rows.length + ')'),
+    h('div',{style:{fontSize:12,color:'#666',fontFamily:LB,marginBottom:10,lineHeight:1.5}},
+      'Before approving, confirm it\'s really them: email or call the campaign contact on file with the clerk, or check their official campaign site.'),
+    rows.map(cl=>h('div',{key:cl.id,style:{background:'#fff',borderRadius:8,padding:'10px 12px',marginBottom:8,fontFamily:LB,fontSize:13}},
+      h('div',null, h('strong',null, cl.cand?.name || cl.candidate_id), ' · requested by ', (cl.who?.display_name || 'a member'), cl.who?.email ? ' (' + cl.who.email + ')' : ''),
+      h('div',{style:{color:'#555',fontStyle:'italic',margin:'4px 0 8px'}}, '“' + (cl.note||'') + '”'),
+      h('div',{style:{display:'flex',gap:8}},
+        h('button',{onClick:()=>review(cl,true),style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:5,padding:'5px 12px',fontSize:12,cursor:'pointer'}},'✓ Verify'),
+        h('button',{onClick:()=>review(cl,false),style:{background:'#888',color:'#fff',border:'none',borderRadius:5,padding:'5px 12px',fontSize:12,cursor:'pointer'}},'Decline'))))
+  );
+}
 
 // ── Admin: calendars that feed the events page automatically ────────────────
 const SOURCE_KINDS = {civicplus:'City/county website (CivicPlus)', legistar:'Legistar meetings', tribe:'WordPress events calendar', ical:'.ics calendar feed'};
@@ -14581,6 +14899,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     // Pending community submissions review queue
     h(NewUsersInbox,{onToast,profile}),
     h(ProjectsManager,{onToast}),
+    h(CandidateClaimsPanel,{onToast}),
     h(CalendarSourcesPanel,{profile,onToast}),
     h(EventsApprovalQueue,{onToast}),
     h(UserManager,{user,profile,onToast}),
@@ -15649,6 +15968,7 @@ function App() {
 
       mainTab==='news'&&h(NewsTab,{user,rep,profile}),
 
+      mainTab==='guide'&&h(VotersGuideTab,{user,profile,bills,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
       mainTab==='ask'&&h(AskOfficialTab,{user,profile,bills,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),
         onOpenBill:(b)=>{setFeedNavCtx({billId:String(b.id)});setMainTab('bills');}}),
       mainTab==='thequestion'&&h(TheQuestionTab,{user,profile,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
