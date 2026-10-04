@@ -3309,9 +3309,11 @@ const COUNTY_RSS_FEEDS = {
   jackson: [
     {name:'WLNS 6 (Lansing/Jackson)', url:'https://www.wlns.com/news/michigan/feed', category:'Michigan'},
     {name:'MLive Jackson',            url:'https://www.mlive.com/arc/outboundfeeds/rss/category/news/jackson/?outputType=xml', category:'Local'},
+    {name:'City of Jackson news',     url:'https://www.cityofjackson.org/RSSFeed.aspx?ModID=1&CID=All-newsflash.xml', category:'Local'},
     {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
   ],
   calhoun: [
+    {name:'City of Battle Creek news', url:'https://www.battlecreekmi.gov/RSSFeed.aspx?ModID=1&CID=All-newsflash.xml', category:'Local'},
     {name:'FOX 17 (West Michigan)',   url:'https://www.fox17online.com/index.rss',   category:'Michigan'},
     {name:'WLNS 6 (Mid-Michigan)',    url:'https://www.wlns.com/news/michigan/feed', category:'Michigan'},
     {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
@@ -8758,6 +8760,142 @@ function CountyPickerLanding({onPick}) {
 // ZIP already served? (used by the request form)
 function COUNTY_FOR_ZIP_SAFE(zip) { try { return countyForZip(zip); } catch(e) { return null; } }
 
+// ── Admin: calendars that feed the events page automatically ────────────────
+const SOURCE_KINDS = {civicplus:'City/county website (CivicPlus)', legistar:'Legistar meetings', tribe:'WordPress events calendar', ical:'.ics calendar feed'};
+function guessSourceKind(u) {
+  const s = (u||'').toLowerCase();
+  if(s.includes('legistar')) return 'legistar';
+  if(s.includes('wp-json/tribe')) return 'tribe';
+  if(s.includes('rssfeed.aspx')) return 'civicplus';
+  if(s.endsWith('.ics') || s.includes('ical') || s.startsWith('webcal:')) return 'ical';
+  return 'civicplus';
+}
+function normalizeSourceUrl(u, kind) {
+  let s = (u||'').trim().replace(/^webcal:/i,'https:');
+  if(!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  // A bare CivicPlus site address → its "all calendars" feed
+  if(kind === 'civicplus' && !/rssfeed\.aspx/i.test(s)) s = s.replace(/\/+(Calendar\.aspx.*)?$/i,'') + '/RSSFeed.aspx?ModID=58&CID=All-calendar.xml';
+  if(kind === 'tribe' && !/wp-json/i.test(s)) s = s.replace(/\/+(events\/?)?$/i,'') + '/wp-json/tribe/events/v1/events';
+  return s;
+}
+
+function CalendarSourcesPanel({profile, onToast}) {
+  const [open, setOpen] = useState(false);
+  const [sources, setSources] = useState(null);
+  const [running, setRunning] = useState(null); // 'all' | id
+  const [lastResult, setLastResult] = useState(null);
+  const [form, setForm] = useState({name:'', url:'', county: countyTag(), auto_publish_other:false});
+  const counties = adminCounties(profile);
+
+  const load = async()=>{
+    const {data, error} = await sb.from('event_sources').select('*').order('county').order('name');
+    if(error) { setSources([]); if(/event_sources|does not exist|schema cache/i.test(error.message)) setLastResult({setup:true}); return; }
+    setSources(data||[]);
+  };
+  useEffect(()=>{ if(open && sources===null) load(); },[open]);
+
+  const run = async(id)=>{
+    setRunning(id||'all'); setLastResult(null);
+    const {data, error} = await sb.functions.invoke('events-import',{body: id ? {source_id:id} : {}});
+    setRunning(null);
+    if(error) {
+      const status = error.context && error.context.status;
+      onToast(status===404 ? '❌ The events-import server function isn\'t deployed yet.' : '❌ '+(error.message||'Import failed'));
+      return;
+    }
+    const rs = (data && data.results) || [];
+    const added = rs.reduce((n,r)=>n+(r.added||0),0), updated = rs.reduce((n,r)=>n+(r.updated||0),0);
+    setLastResult({rows:rs});
+    onToast('✓ Calendars checked: '+added+' new event'+(added===1?'':'s')+(updated?', '+updated+' updated':'')+'.');
+    load();
+  };
+
+  const patch = async(src, fields)=>{
+    const {error} = await sb.from('event_sources').update(fields).eq('id', src.id);
+    if(error) { onToast('❌ '+error.message); return; }
+    setSources(prev=>prev.map(s=>s.id===src.id?{...s,...fields}:s));
+  };
+  const remove = async(src)=>{
+    if(!window.confirm('Stop importing from '+src.name+'? Events already imported stay on the calendar.')) return;
+    const {error} = await sb.from('event_sources').delete().eq('id', src.id);
+    if(error) { onToast('❌ '+error.message); return; }
+    setSources(prev=>prev.filter(s=>s.id!==src.id));
+  };
+  const add = async()=>{
+    if(!form.name.trim() || !form.url.trim()) { onToast('Give the calendar a name and a web address.'); return; }
+    const kind = guessSourceKind(form.url);
+    const url = normalizeSourceUrl(form.url, kind);
+    const {data, error} = await sb.from('event_sources').insert({
+      name: form.name.trim(), url, kind, county: form.county,
+      auto_publish_meetings: true, auto_publish_other: !!form.auto_publish_other,
+      exclude_words: 'private rental,recycling,trash,office closed,closed for'}).select().single();
+    if(error) { onToast('❌ '+(/duplicate|unique/i.test(error.message)?'That calendar is already on the list.':error.message)); return; }
+    setSources(prev=>[...(prev||[]), data]);
+    setForm(f=>({...f, name:'', url:''}));
+    onToast('✓ Added. Checking it now...');
+    run(data.id);
+  };
+
+  const inp = {border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:"'Lora',serif",boxSizing:'border-box'};
+  const chk = (label, val, on)=>h('label',{style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,color:'#555',cursor:'pointer',fontFamily:"'Lora',serif"}},
+    h('input',{type:'checkbox',checked:!!val,onChange:e=>on(e.target.checked)}), label);
+
+  return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?12:0},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'📅 Calendar sources (automatic events)'),
+      h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')),
+    open && h('div',null,
+      h('div',{style:{fontSize:12.5,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6,marginBottom:12}},
+        'Every morning these official calendars are checked and new events are added to the Events page. ',
+        h('strong',null,'Council, board and commission meetings publish on their own. '),
+        'Other events (festivals, open houses...) wait in Pending Events for an admin to approve, unless you tick "publish everything".'),
+      lastResult && lastResult.setup && h('div',{style:{fontSize:12,color:'#8a6000',background:'#fff8e7',padding:'8px 10px',borderRadius:6,marginBottom:10}},
+        'Run tpv_oct_refresh.sql in Supabase first, then refresh this page.'),
+      h('div',{style:{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}},
+        h('button',{onClick:()=>run(null),disabled:!!running,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'8px 14px',
+          fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}}, running==='all'?'Checking all calendars...':'↻ Check all calendars now')),
+      sources===null && h('div',{style:{fontSize:12,color:'#aaa'}},'Loading...'),
+      (sources||[]).map(src=>h('div',{key:src.id,style:{background:'#fff',border:'1px solid #d8eede',borderRadius:8,padding:'10px 12px',marginBottom:8,opacity:src.enabled?1:.6}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'baseline'}},
+          h('div',null,
+            h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:14,color:'#1a1a2e'}}, src.name),
+            h('span',{style:{fontSize:11,color:'#888',marginLeft:6}}, (COUNTIES[src.county]?.short||src.county)+' · '+(SOURCE_KINDS[src.kind]||src.kind))),
+          h('div',{style:{fontSize:11,color:/^error/.test(src.last_status||'')?'#c0392b':'#1a6b3c',fontFamily:"'Lora',serif"}},
+            src.last_run_at
+              ? 'Checked '+timeSince(src.last_run_at)+' · '+(src.last_added||0)+' new'+(src.last_updated?', '+src.last_updated+' updated':'')+(src.last_status&&src.last_status!=='ok'?' · '+src.last_status:'')
+              : 'Not checked yet')),
+        h('div',{style:{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',marginTop:6}},
+          chk('On', src.enabled, v=>patch(src,{enabled:v})),
+          chk('Publish meetings automatically', src.auto_publish_meetings, v=>patch(src,{auto_publish_meetings:v})),
+          chk('Publish everything automatically', src.auto_publish_other, v=>patch(src,{auto_publish_other:v})),
+          h('button',{onClick:()=>run(src.id),disabled:!!running,style:{background:'none',border:'1px solid #a8e6c0',color:'#1a6b3c',borderRadius:5,padding:'3px 10px',fontSize:11,cursor:'pointer'}},
+            running===src.id?'Checking...':'Check now'),
+          h('a',{href:src.url,target:'_blank',rel:'noopener',style:{fontSize:11,color:'#1a5c8a'}},'feed ↗'),
+          h('button',{onClick:()=>remove(src),style:{background:'none',border:'none',color:'#c0392b',fontSize:11,cursor:'pointer',marginLeft:'auto'}},'Remove')),
+        h('div',{style:{marginTop:6}},
+          h('input',{defaultValue:src.exclude_words||'',onBlur:e=>{ if((e.target.value||'')!==(src.exclude_words||'')) patch(src,{exclude_words:e.target.value.trim()||null}); },
+            placeholder:'Skip events whose titles contain... (comma-separated)',style:{...inp,width:'100%',fontSize:11,padding:'5px 8px'}}))
+      )),
+      lastResult && lastResult.rows && lastResult.rows.some(r=>r.status && r.status!=='ok') && h('div',{style:{fontSize:12,color:'#c0392b',marginBottom:8}},
+        lastResult.rows.filter(r=>r.status && r.status!=='ok').map((r,i)=>h('div',{key:i},r.source+': '+r.status))),
+      h('div',{style:{background:'#fff',border:'1px dashed #a8e6c0',borderRadius:8,padding:12,marginTop:10}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#1a1a2e',marginBottom:6}},'+ Add a calendar'),
+        h('div',{style:{fontSize:11.5,color:'#777',fontFamily:"'Lora',serif",lineHeight:1.5,marginBottom:8}},
+          'Most Michigan city, village, township and county websites run on CivicPlus — just paste the site\'s address (like https://www.marshallmi.org) and we\'ll find its calendar. ',
+          'Also works with Legistar meeting calendars, WordPress event calendars, and any .ics calendar link (Google Calendar\'s "public address in iCal format").'),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          h('input',{value:form.name,onChange:e=>setForm(f=>({...f,name:e.target.value})),placeholder:'Name (e.g. Marshall Township)',style:{...inp,flex:'1 1 160px'}}),
+          h('input',{value:form.url,onChange:e=>setForm(f=>({...f,url:e.target.value})),placeholder:'Website or calendar link',style:{...inp,flex:'2 1 220px'}}),
+          h('select',{value:form.county,onChange:e=>setForm(f=>({...f,county:e.target.value})),style:inp},
+            counties.map(c=>h('option',{key:c,value:c},COUNTIES[c].short)))),
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,gap:8,flexWrap:'wrap'}},
+          chk('Publish everything automatically (not just meetings)', form.auto_publish_other, v=>setForm(f=>({...f,auto_publish_other:v}))),
+          h('button',{onClick:add,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'7px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},'Add & check'))
+      )
+    )
+  );
+}
+
 // ── Admin: where people are asking for the platform ─────────────────────────
 function CountyRequestsPanel({profile}) {
   const [open, setOpen] = useState(false);
@@ -10059,7 +10197,10 @@ function EventsApprovalQueue({onToast}) {
 
   const load = async()=>{
     setLoading(true);
-    const {data} = await sb.from('events').select('*').eq('approved',false).eq('county', countyTag()).order('created_at',{ascending:false});
+    // Only upcoming, not-deleted events (imported calendars can add a lot)
+    const {data} = await sb.from('events').select('*').eq('approved',false).eq('county', countyTag())
+      .is('deleted_at', null).gte('event_date', new Date().toISOString().slice(0,10))
+      .order('event_date',{ascending:true}).limit(100);
     setEvents(data||[]);
     setLoading(false);
   };
@@ -11672,9 +11813,15 @@ function TheQuestionTab({user, profile, onToast, onNavigate}) {
         sb.from('the_questions').select('*').eq('status','active').eq('county', countyTag()).limit(1).maybeSingle(),
         sb.from('the_questions').select('*').eq('status','archived').eq('county', countyTag()).order('active_from',{ascending:false}).limit(20),
       ]);
-      const active = activeRes.data;
+      let active = activeRes.data;
+      let archivedList = archiveRes.data || [];
+      // A question past its end date is over, even if nobody archived it
+      if(active && active.active_until && new Date(active.active_until).getTime() < Date.now()) {
+        archivedList = [active, ...archivedList];
+        active = null;
+      }
       setActiveQ(active);
-      setArchived(archiveRes.data || []);
+      setArchived(archivedList);
       if(active && user) {
         const {data: respRows} = await sb.from('the_question_responses')
           .select('*').eq('question_id', active.id);
@@ -14434,6 +14581,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     // Pending community submissions review queue
     h(NewUsersInbox,{onToast,profile}),
     h(ProjectsManager,{onToast}),
+    h(CalendarSourcesPanel,{profile,onToast}),
     h(EventsApprovalQueue,{onToast}),
     h(UserManager,{user,profile,onToast}),
     h(ModerationLog,{profile}),
