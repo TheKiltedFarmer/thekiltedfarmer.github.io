@@ -7194,8 +7194,12 @@ async function uploadProfileImage(userId, file, kind, maxDim) {
   if(file.size > 25*1024*1024) throw new Error('That photo is too big (over 25 MB).');
   const blob = await resizeImageFile(file, maxDim || 1400, 0.82);
   const path = 'chat/profile-' + userId + '-' + kind + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,7) + '.jpg';
-  const {error} = await sb.storage.from('chat-photos').upload(path, blob, {upsert:true, contentType:'image/jpeg'});
-  if(error) throw error;
+  const {error} = await sb.storage.from('chat-photos').upload(path, blob, {contentType:'image/jpeg'});
+  if(error) {
+    if(/bucket not found/i.test(error.message||'')) throw new Error('Photo storage isn\'t set up yet. (Admins: run tpv_photo_storage.sql in Supabase.)');
+    if(/row-level security|unauthorized|403/i.test(error.message||'')) throw new Error('Photo upload isn\'t allowed for this account yet. (Admins: run tpv_photo_storage.sql in Supabase.)');
+    throw error;
+  }
   const {data:{publicUrl}} = sb.storage.from('chat-photos').getPublicUrl(path);
   return publicUrl;
 }
