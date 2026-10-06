@@ -141,6 +141,7 @@ const HUBS = [
   { id:'community', icon:'\uD83E\uDD1D', label:'Community', subs:[
     { id:'connect',  label:'Connect' },
     { id:'events',   label:'Events' },
+    { id:'organize', label:'Organize It' },
     { id:'exchange', label:'Exchange' },
     { id:'projects', label:'Projects' }
   ]},
@@ -1553,7 +1554,7 @@ function OfficialBadge({title, small}) {
 // All of it goes through server functions (tpv_report_content,
 // tpv_hide_content, tpv_unhide_content) that re-check permissions.
 const HIDEABLE_TABLES = new Set(['bill_comments','news_comments','project_comments','community_chat','community_ideas',
-  'bill_reasons','official_questions','the_question_responses','profile_photos','guestbook_entries']);
+  'bill_reasons','official_questions','the_question_responses','profile_photos','guestbook_entries','efforts','effort_posts']);
 const REPORT_REASONS = [
   'Harassment or personal attack',
   'Hate speech or threats',
@@ -1563,7 +1564,7 @@ const REPORT_REASONS = [
   'Something else',
 ];
 
-function postAuthorId(row){ return row ? (row.user_id || row.sender_id || row.submitted_by_id || row.asker_id || row.author_id || null) : null; }
+function postAuthorId(row){ return row ? (row.user_id || row.sender_id || row.submitted_by_id || row.asker_id || row.author_id || row.organizer_id || null) : null; }
 
 // Hidden posts: residents see a short note; admins also see the original, faded.
 function HiddenBody({row, viewer}) {
@@ -2043,6 +2044,8 @@ const __DEEP_LINK = (function(){
     const q = p.get('q');
     const u = p.get('u');
     if(u && /^[0-9a-f-]{36}$/i.test(u)) return {userId:u};
+    const o = p.get('o');
+    if(o && /^\d+$/.test(o)) return {effortId:Number(o)};
     if(!billId) {
       const m = (window.location.hash||'').match(/^#bill\/(.+)$/);
       if(m) billId = decodeURIComponent(m[1]);
@@ -2057,7 +2060,7 @@ function takeDeepLink() {
   __deepLinkUsed = true;
   try {
     const p = new URLSearchParams(window.location.search);
-    ['bill','act','q','u'].forEach(k=>p.delete(k));
+    ['bill','act','q','u','o'].forEach(k=>p.delete(k));
     const rest = p.toString();
     const hash = /^#bill\//.test(window.location.hash||'') ? '' : (window.location.hash||'');
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : '') + hash);
@@ -3825,6 +3828,502 @@ function HomeActionCards({ballotCount, nextMeeting, questionCount, recentChat, o
       h('div',{style:{marginTop:'auto',paddingTop:6,fontFamily:PD,fontSize:12.5,fontWeight:700,color:'#1a6b3c'}}, c.cta + ' →'))));
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// ORGANIZE IT
+// Get neighbors together for something real: invite people, they answer
+// Going / Maybe / Can't, and everyone stays in the loop until it happens.
+// ═════════════════════════════════════════════════════════════════════════════
+const EFFORT_KINDS = {
+  cleanup: {icon:'🧹', label:'Cleanup'},
+  meeting: {icon:'🏛', label:'Show up at a meeting'},
+  potluck: {icon:'🍲', label:'Potluck or get-together'},
+  workday: {icon:'🔨', label:'Work day'},
+  drive:   {icon:'📦', label:'Drive or collection'},
+  carpool: {icon:'🚗', label:'Carpool'},
+  learn:   {icon:'📚', label:'Learn together'},
+  other:   {icon:'✨', label:'Something else'},
+};
+const MEMBER_STATUS = {
+  going:    {label:'Going',  color:'#1a6b3c', bg:'#e8f4ec'},
+  maybe:    {label:'Maybe',  color:'#8a6000', bg:'#fff8e7'},
+  declined: {label:'Can\'t make it', color:'#888', bg:'#f2f2f2'},
+  invited:  {label:'Invited', color:'#1a5c8a', bg:'#e8f2fa'},
+};
+function fmtEffortWhen(e) {
+  if(!e || !e.starts_at) return 'Date to be set';
+  const d = new Date(e.starts_at);
+  return d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}) + ' · ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+}
+function effortLink(id) { return SITE_URL + '/' + countyTag() + '?o=' + id; }
+function toLocalDT(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function effortIsPast(e) { return e.starts_at && new Date(e.starts_at).getTime() < Date.now() - 6*3600000; }
+
+// ── Start or edit an effort ──────────────────────────────────────────────────
+function EffortForm({user, initial, onClose, onSaved, onToast}) {
+  const editing = !!(initial && initial.id);
+  const [f, setF] = useState({
+    kind: initial?.kind || 'cleanup', title: initial?.title || '', description: initial?.description || '',
+    starts_at: toLocalDT(initial?.starts_at), location: initial?.location || '',
+    capacity: initial?.capacity ? String(initial.capacity) : '', visibility: initial?.visibility || 'public',
+    roles: Array.isArray(initial?.roles) && initial.roles.length ? initial.roles.map(r=>({name:r.name, count:String(r.count)})) : [],
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k,v)=>setF(x=>({...x,[k]:v}));
+  const save = async()=>{
+    setErr('');
+    if(!f.title.trim()) { setErr('Give it a name, like "Riverside cleanup" or "Carpool to Tuesday\'s council meeting".'); return; }
+    const row = {
+      kind: f.kind, title: f.title.trim(), description: f.description.trim() || null,
+      starts_at: f.starts_at ? new Date(f.starts_at).toISOString() : null,
+      location: f.location.trim() || null, capacity: f.capacity ? Math.max(1, parseInt(f.capacity,10) || 0) || null : null,
+      visibility: f.visibility,
+      roles: f.roles.filter(r=>r.name.trim()).map(r=>({name:r.name.trim(), count:Math.max(1, parseInt(r.count,10) || 1)})),
+    };
+    setSaving(true);
+    const res = editing
+      ? await sb.from('efforts').update(row).eq('id', initial.id).select().single()
+      : await sb.from('efforts').insert({...row, county:countyTag(), organizer_id:user.id}).select().single();
+    setSaving(false);
+    if(res.error) {
+      setErr(/relation|schema cache|does not exist/i.test(res.error.message) ? 'Organize It isn\'t switched on yet. (Admins: run tpv_organize.sql in Supabase.)' : res.error.message);
+      return;
+    }
+    onToast && onToast(editing ? '✓ Saved. Anyone coming gets a heads-up if the time or place changed.' : '✓ It\'s posted. Now invite some neighbors!');
+    onSaved && onSaved(res.data);
+  };
+  const inp = {width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:7,padding:'9px 11px',fontSize:13.5,fontFamily:"'Lora',serif"};
+  const lab = {fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',margin:'10px 0 4px'};
+  return h('div',{onClick:e=>{ if(e.target===e.currentTarget) onClose(); },
+    style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:9400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'16px 10px',overflowY:'auto'}},
+    h('div',{style:{background:'#fff',borderRadius:14,width:560,maxWidth:'100%',padding:'18px 18px 14px',margin:'10px 0 30px',fontFamily:"'Lora',serif"}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#1a1a2e'}}, editing ? 'Edit details' : '📣 Start something'),
+        h('button',{onClick:onClose,style:{background:'none',border:'none',fontSize:22,color:'#999',cursor:'pointer'}},'×')),
+      !editing && h('div',{style:{fontSize:12.5,color:'#777',marginTop:2}},'Set it up, then invite neighbors. They\'ll get a bell and can answer Going, Maybe or Can\'t.'),
+      h('label',{style:lab},'What kind of thing?'),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:6}},
+        Object.entries(EFFORT_KINDS).map(([k,v])=>h('button',{key:k,onClick:()=>set('kind',k),
+          style:{textAlign:'left',padding:'8px 10px',borderRadius:8,cursor:'pointer',fontSize:12.5,fontFamily:"'Lora',serif",
+            border:'1.5px solid '+(f.kind===k?'#1a1a2e':'#e5dece'),background:f.kind===k?'#1a1a2e':'#faf8f3',color:f.kind===k?'#f0c040':'#333'}}, v.icon+' '+v.label))),
+      h('label',{style:lab},'Name it'),
+      h('input',{value:f.title,onChange:e=>set('title',e.target.value.slice(0,120)),placeholder:'e.g. Riverside cleanup at Ella Sharp',style:inp}),
+      h('label',{style:lab},'What\'s the plan? (optional)'),
+      h('textarea',{value:f.description,onChange:e=>set('description',e.target.value.slice(0,3000)),rows:4,placeholder:'What you\'ll do, why it matters, what to wear or bring...',style:{...inp,resize:'vertical'}}),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'0 10px'}},
+        h('div',null, h('label',{style:lab},'When (leave blank if not set yet)'), h('input',{type:'datetime-local',value:f.starts_at,onChange:e=>set('starts_at',e.target.value),style:inp})),
+        h('div',null, h('label',{style:lab},'Where'), h('input',{value:f.location,onChange:e=>set('location',e.target.value.slice(0,200)),placeholder:'Address or place name',style:inp}))),
+      h('label',{style:lab},'How many people can come? (optional)'),
+      h('input',{value:f.capacity,onChange:e=>set('capacity',e.target.value.replace(/[^0-9]/g,'').slice(0,5)),inputMode:'numeric',placeholder:'No limit',style:{...inp,maxWidth:160}}),
+      h('label',{style:lab},'Sign-up spots (optional)'),
+      h('div',{style:{fontSize:12,color:'#888',marginBottom:6}},'Jobs people can claim, like "Bring trash bags" or "Drive 3 people".'),
+      f.roles.map((r,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6}},
+        h('input',{value:r.name,onChange:e=>set('roles',f.roles.map((x,j)=>j===i?{...x,name:e.target.value.slice(0,60)}:x)),placeholder:'What\'s needed',style:{...inp,flex:1}}),
+        h('input',{value:r.count,onChange:e=>set('roles',f.roles.map((x,j)=>j===i?{...x,count:e.target.value.replace(/[^0-9]/g,'').slice(0,3)}:x)),inputMode:'numeric',title:'How many people',style:{...inp,width:64}}),
+        h('button',{onClick:()=>set('roles',f.roles.filter((x,j)=>j!==i)),style:{background:'none',border:'1px solid #ddd',borderRadius:7,color:'#c0392b',cursor:'pointer',padding:'0 10px'}},'✕'))),
+      f.roles.length < 10 && h('button',{onClick:()=>set('roles',[...f.roles,{name:'',count:'1'}]),style:{background:'#faf8f3',border:'1px dashed #ccc',borderRadius:7,padding:'6px 12px',fontSize:12.5,cursor:'pointer',color:'#555'}},'+ Add a spot'),
+      h('label',{style:lab},'Who can join?'),
+      [['public','Anyone in ' + getCurrentCounty().name + ' can see it and say they\'re coming'],['invite','Only people I invite (it stays private)']].map(([v,l])=>
+        h('label',{key:v,style:{display:'flex',gap:8,alignItems:'center',fontSize:13,padding:'3px 0',cursor:'pointer'}},
+          h('input',{type:'radio',name:'tpv-eff-vis',checked:f.visibility===v,onChange:()=>set('visibility',v)}), l)),
+      err && h('div',{style:{background:'#fdecea',color:'#a03020',borderRadius:8,padding:'8px 12px',fontSize:13,marginTop:10}}, err),
+      h('div',{style:{display:'flex',gap:8,marginTop:14}},
+        h('button',{onClick:save,disabled:saving,style:{flex:1,background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:8,padding:'11px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}},
+          saving ? 'Saving...' : editing ? 'Save changes' : 'Post it'),
+        h('button',{onClick:onClose,style:{background:'transparent',border:'1px solid #ddd',color:'#888',borderRadius:8,padding:'11px 16px',cursor:'pointer'}},'Cancel'))));
+}
+
+// ── Pick neighbors to invite ─────────────────────────────────────────────────
+function InvitePicker({effort, user, profile, already, onClose, onDone, onToast}) {
+  const [people, setPeople] = useState([]);
+  const [picked, setPicked] = useState({});
+  const [search, setSearch] = useState('');
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState('');
+  const merge = list=>setPeople(prev=>{ const seen = new Set(prev.map(x=>x.id)); return [...prev, ...(list||[]).filter(x=>!seen.has(x.id))]; });
+  useEffect(()=>{
+    (async()=>{
+      const ids = new Set();
+      const {data:conn} = await sb.from('neighbor_connections').select('neighbor_id').eq('user_id', user.id);
+      (conn||[]).forEach(c=>c.neighbor_id && ids.add(c.neighbor_id));
+      (profile?.top_neighbors||[]).forEach(id=>id && ids.add(id));
+      if(ids.size) {
+        const {data} = await sb.from('profiles').select('id,display_name,avatar_url,zip').in('id',[...ids]).is('deleted_at',null);
+        merge((data||[]).map(p=>({...p, _mine:true})));
+      }
+      const {data:recent} = await sb.from('profiles').select('id,display_name,avatar_url,zip').eq('county', countyTag()).is('deleted_at',null)
+        .neq('id', user.id).order('created_at',{ascending:false}).limit(24);
+      merge(recent);
+    })();
+  },[]);
+  const find = async()=>{
+    const term = search.trim().replace(/[,()*%]/g,' ').trim();
+    if(term.length < 2) return;
+    const {data} = await sb.from('profiles').select('id,display_name,avatar_url,zip').ilike('display_name','%'+term+'%')
+      .eq('county', countyTag()).is('deleted_at',null).neq('id', user.id).limit(15);
+    setPeople(prev=>{ const seen = new Set((data||[]).map(x=>x.id)); return [...(data||[]), ...prev.filter(x=>!seen.has(x.id))]; });
+  };
+  const chosen = Object.keys(picked).filter(k=>picked[k]);
+  const send = async()=>{
+    setErr(''); setSending(true);
+    const {data, error} = await sb.rpc('tpv_invite_to_effort',{p_effort:effort.id, p_users:chosen});
+    setSending(false);
+    if(error) { setErr(error.message); return; }
+    onToast && onToast('📣 Invited ' + (data||0) + ' neighbor' + (data===1?'':'s') + '. They\'ll get a bell.');
+    onDone && onDone();
+  };
+  const term = search.trim().toLowerCase();
+  const shown = people.filter(p=>p.id !== user.id && (!term || (p.display_name||'').toLowerCase().includes(term)));
+  return h('div',{onClick:e=>{ if(e.target===e.currentTarget) onClose(); },
+    style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:9450,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'16px 10px',overflowY:'auto'}},
+    h('div',{style:{background:'#fff',borderRadius:14,width:480,maxWidth:'100%',padding:18,margin:'10px 0 30px',fontFamily:"'Lora',serif"}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:18,color:'#1a1a2e'}},'Invite neighbors'),
+        h('button',{onClick:onClose,style:{background:'none',border:'none',fontSize:22,color:'#999',cursor:'pointer'}},'×')),
+      h('div',{style:{fontSize:12.5,color:'#777',marginBottom:10}},'To: ' + effort.title),
+      h('div',{style:{display:'flex',gap:6,marginBottom:10}},
+        h('input',{value:search,onChange:e=>setSearch(e.target.value),onKeyDown:e=>{ if(e.key==='Enter') find(); },placeholder:'Search neighbors by name',
+          style:{flex:1,border:'1px solid #ddd',borderRadius:7,padding:'8px 10px',fontSize:13,fontFamily:"'Lora',serif"}}),
+        h('button',{onClick:find,style:{background:'#f5f1e6',border:'1px solid #e0d9c5',borderRadius:7,padding:'0 12px',cursor:'pointer',fontSize:12.5}},'Search')),
+      h('div',{style:{maxHeight:360,overflowY:'auto',border:'1px solid #f0ece4',borderRadius:8}},
+        shown.length === 0 && h('div',{style:{padding:16,fontSize:12.5,color:'#999',textAlign:'center'}},'Search for a neighbor by name.'),
+        shown.map(p=>{
+          const st = already[p.id];
+          return h('label',{key:p.id,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid #f5f2ea',cursor:st?'default':'pointer',opacity:st?.55:1}},
+            h('input',{type:'checkbox',disabled:!!st,checked:!!picked[p.id]||!!st,onChange:e=>setPicked(x=>({...x,[p.id]:e.target.checked}))}),
+            h(Avatar,{p,size:30}),
+            h('div',{style:{flex:1,minWidth:0}},
+              h('div',{style:{fontSize:13.5,color:'#1a1a2e'}}, p.display_name || 'Neighbor'),
+              h('div',{style:{fontSize:11,color:'#999'}}, [communityForZip(p.zip), p._mine?'your neighbor':null, st?(MEMBER_STATUS[st]?.label||st):null].filter(Boolean).join(' · '))));
+        })),
+      err && h('div',{style:{color:'#c0392b',fontSize:12.5,marginTop:8}}, err),
+      h('div',{style:{display:'flex',gap:8,marginTop:12}},
+        h('button',{onClick:send,disabled:sending||chosen.length===0,style:{flex:1,background:chosen.length?'#1a6b3c':'#9bbfa8',color:'#fff',border:'none',borderRadius:8,padding:'11px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:chosen.length?'pointer':'default'}},
+          sending ? 'Sending...' : chosen.length ? 'Invite ' + chosen.length + ' neighbor' + (chosen.length===1?'':'s') : 'Pick people to invite'),
+        h('button',{onClick:onClose,style:{background:'transparent',border:'1px solid #ddd',color:'#888',borderRadius:8,padding:'11px 16px',cursor:'pointer'}},'Done'))));
+}
+
+// ── One effort, in full ──────────────────────────────────────────────────────
+function EffortDetail({effortId, user, profile, onClose, onToast, onChanged}) {
+  const [e, setE] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const load = async()=>{
+    const [er, mr, pr] = await Promise.all([
+      sb.from('efforts').select('*').eq('id', effortId).maybeSingle(),
+      sb.from('effort_members').select('*').eq('effort_id', effortId),
+      sb.from('effort_posts').select('*').eq('effort_id', effortId).order('created_at',{ascending:true}).limit(200),
+    ]);
+    setE(er.data || null); setMembers(mr.data || []); setPosts(pr.data || []); setLoading(false);
+    const mine = (mr.data||[]).find(m=>user && m.user_id===user.id);
+    if(mine) { setRole(mine.role||''); setNote(mine.note||''); }
+  };
+  useEffect(()=>{ load(); },[effortId]);
+
+  const isOrg = !!(user && e && e.organizer_id === user.id);
+  const adminHere = !!(e && profile && isAdminFor(profile, e.county));
+  const mine = user ? members.find(m=>m.user_id===user.id) : null;
+  const going = members.filter(m=>m.status==='going');
+  const maybe = members.filter(m=>m.status==='maybe');
+  const invited = members.filter(m=>m.status==='invited');
+  const declined = members.filter(m=>m.status==='declined');
+  const insider = isOrg || adminHere || (mine && mine.status !== 'declined');
+  const roles = (e && Array.isArray(e.roles)) ? e.roles : [];
+  const k = EFFORT_KINDS[e?.kind] || EFFORT_KINDS.other;
+  const full = e && e.capacity && going.length >= e.capacity;
+
+  const answer = async(status)=>{
+    if(!user) { askToJoin('answer this invitation'); return; }
+    setErr(''); setBusy(true);
+    const {error} = await sb.rpc('tpv_respond_effort',{p_effort:e.id, p_status:status, p_role:status==='going'?role:null, p_note:note});
+    setBusy(false);
+    if(error) { setErr(error.message); return; }
+    onToast && onToast(status==='going' ? '✅ You\'re in! ' + (e.organizer_name||'The organizer') + ' will see it.' : status==='maybe' ? '🤔 Marked as maybe.' : 'Got it. Thanks for letting them know.');
+    load(); onChanged && onChanged();
+  };
+  const post = async()=>{
+    if(!msg.trim()) return;
+    setErr(''); setBusy(true);
+    const {error} = await sb.rpc('tpv_post_effort',{p_effort:e.id, p_content:msg});
+    setBusy(false);
+    if(error) { setErr(error.message); return; }
+    setMsg(''); load();
+  };
+  const nudge = async()=>{
+    const {data, error} = await sb.rpc('tpv_nudge_effort',{p_effort:e.id});
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast(data ? '⏰ Reminded ' + data + ' neighbor' + (data===1?'':'s') + '.' : 'Everyone you reminded today already got a nudge. Try again tomorrow.');
+    load();
+  };
+  const setStatus = async(status)=>{
+    let patch = {status};
+    if(status === 'canceled' && !window.confirm('Cancel "' + e.title + '"? Everyone invited or coming gets a bell.')) return;
+    if(status === 'done') {
+      const recap = window.prompt('How did it go? A sentence or two goes out to everyone who came (optional).', '');
+      if(recap === null) return;
+      patch.recap = recap;
+    }
+    const {error} = await sb.from('efforts').update(patch).eq('id', e.id);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast(status === 'done' ? '🎉 Marked as done. Nice work!' : status === 'open' ? 'Reopened.' : 'Canceled. Everyone was told.');
+    load(); onChanged && onChanged();
+  };
+  const removePerson = async(m)=>{
+    if(!window.confirm('Take ' + (m.display_name||'this person') + ' off the list?')) return;
+    const {error} = await sb.rpc('tpv_remove_from_effort',{p_effort:e.id, p_user:m.user_id});
+    if(!error) load();
+  };
+  const share = ()=>{
+    const link = effortLink(e.id);
+    const text = e.title + (e.starts_at ? ' · ' + fmtEffortWhen(e) : '') + (e.location ? ' · ' + e.location : '');
+    if(navigator.share) { navigator.share({title:e.title, text, url:link}).catch(()=>{}); return; }
+    try { navigator.clipboard.writeText(text + '\n' + link); setCopied(true); setTimeout(()=>setCopied(false), 2500); } catch(x) { window.prompt('Copy this link:', link); }
+  };
+  const personRow = (m, showRemove)=>h('div',{key:m.user_id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0'}},
+    h('button',{onClick:()=>openProfile(m.user_id),style:{background:'none',border:'none',padding:0,cursor:'pointer'}}, h(Avatar,{p:{display_name:m.display_name},size:28})),
+    h('button',{onClick:()=>openProfile(m.user_id),style:{background:'none',border:'none',padding:0,cursor:'pointer',fontSize:13,color:'#1a1a2e',fontFamily:"'Lora',serif",textAlign:'left'}},
+      (m.display_name||'Neighbor') + (e && m.user_id===e.organizer_id ? ' (organizer)' : '')),
+    m.role && h('span',{style:{fontSize:11,background:'#f5f1e6',borderRadius:10,padding:'1px 8px',color:'#555'}}, m.role),
+    m.note && h('span',{style:{fontSize:11.5,color:'#888',fontStyle:'italic',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, '“'+m.note+'”'),
+    showRemove && (isOrg || adminHere) && m.user_id !== e.organizer_id && h('button',{onClick:()=>removePerson(m),title:'Take off the list',style:{marginLeft:'auto',background:'none',border:'none',color:'#bbb',cursor:'pointer',fontSize:13}},'✕'));
+  const box = (title, body)=>h('div',{style:{borderTop:'1px solid #efeae0',paddingTop:12,marginTop:12}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14.5,color:'#1a1a2e',marginBottom:6}}, title), body);
+  const btn = (bg, color, border)=>({background:bg,color,border:border||'none',borderRadius:8,padding:'9px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'});
+
+  return h('div',{onClick:ev=>{ if(ev.target===ev.currentTarget) onClose(); },
+    style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:9300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'16px 10px',overflowY:'auto'}},
+    h('div',{style:{background:'#fff',borderRadius:14,width:620,maxWidth:'100%',margin:'10px 0 30px',fontFamily:"'Lora',serif",overflow:'hidden'}},
+      loading ? h('div',{style:{padding:40,textAlign:'center',color:'#999'}},'Loading...')
+      : !e ? h('div',{style:{padding:30,textAlign:'center'}},
+          h('div',{style:{fontSize:15,color:'#555',marginBottom:12}},'This one isn\'t available. It may be invitation-only, or it was taken down.'),
+          h('button',{onClick:onClose,style:btn('#1a1a2e','#f0c040')},'Close'))
+      : h(Fragment,null,
+          h('div',{style:{background:e.status==='canceled'?'#6b6b6b':'linear-gradient(135deg,#1a1a2e,#2a2a4e)',color:'#fff',padding:'16px 18px',position:'relative'}},
+            h('button',{onClick:onClose,style:{position:'absolute',top:10,right:12,background:'none',border:'none',color:'#aab',fontSize:22,cursor:'pointer'}},'×'),
+            h('div',{style:{fontSize:11,letterSpacing:'.12em',textTransform:'uppercase',color:'#f0c040',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+              k.icon + ' ' + k.label + (e.visibility==='invite' ? ' · 🔒 Invitation only' : '')),
+            h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,lineHeight:1.2,margin:'4px 30px 6px 0',textDecoration:e.status==='canceled'?'line-through':'none'}}, e.title),
+            h('div',{style:{fontSize:13,color:'#d8d3c4',lineHeight:1.6}},
+              '🗓 ' + fmtEffortWhen(e), e.location ? h(Fragment,null, h('br'), '📍 ', h('a',{href:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(e.location),target:'_blank',rel:'noopener',style:{color:'#f0c040'}}, e.location)) : null,
+              h('br'), 'Organized by ', h('button',{onClick:()=>openProfile(e.organizer_id),style:{background:'none',border:'none',padding:0,color:'#f0c040',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:"'Lora',serif"}}, e.organizer_name || 'a neighbor')),
+            e.status==='canceled' && h('div',{style:{marginTop:8,fontWeight:700,color:'#ffd6d6'}},'This was canceled.'),
+            e.status==='done' && h('div',{style:{marginTop:8,fontWeight:700,color:'#c8f0d4'}},'🎉 This one\'s done.')),
+
+          h('div',{style:{padding:'14px 18px 18px'}},
+            e.description && h('div',{style:{fontSize:14,lineHeight:1.65,color:'#333',whiteSpace:'pre-wrap'}}, e.description),
+            e.recap && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 12px',marginTop:10,fontSize:13.5,color:'#1a4a2a'}}, h('strong',null,'How it went: '), e.recap),
+            h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,fontSize:12.5}},
+              h('span',{style:{background:'#e8f4ec',color:'#1a6b3c',borderRadius:12,padding:'3px 10px',fontWeight:700}}, going.length + ' going' + (e.capacity ? ' of ' + e.capacity : '')),
+              maybe.length > 0 && h('span',{style:{background:'#fff8e7',color:'#8a6000',borderRadius:12,padding:'3px 10px'}}, maybe.length + ' maybe'),
+              (isOrg || adminHere) && invited.length > 0 && h('span',{style:{background:'#e8f2fa',color:'#1a5c8a',borderRadius:12,padding:'3px 10px'}}, invited.length + ' haven\'t answered'),
+              full && h('span',{style:{background:'#fdecea',color:'#a03020',borderRadius:12,padding:'3px 10px'}}, 'Full')),
+
+            // Your answer
+            e.status === 'open' && !isOrg && box(mine && mine.status==='invited' ? '📣 You\'re invited. Can you come?' : 'Are you coming?',
+              !user ? h(JoinPrompt,{text:'Join free (or sign in) to say you\'re coming.', reason:'join ' + e.title})
+              : (!mine && e.visibility === 'invite') ? h('div',{style:{fontSize:13,color:'#888'}},'This one is invitation-only.')
+              : h(Fragment,null,
+                  mine && mine.status !== 'invited' && h('div',{style:{fontSize:13,marginBottom:8}},'Your answer: ',
+                    h('span',{style:{background:MEMBER_STATUS[mine.status].bg,color:MEMBER_STATUS[mine.status].color,borderRadius:10,padding:'2px 9px',fontWeight:700}}, MEMBER_STATUS[mine.status].label),
+                    mine.role ? ' · ' + mine.role : ''),
+                  roles.length > 0 && h('div',{style:{marginBottom:8}},
+                    h('div',{style:{fontSize:12,color:'#777',marginBottom:4}},'Want to take on a spot? (optional)'),
+                    h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+                      roles.map(r=>{
+                        const taken = going.filter(m=>m.role===r.name && m.user_id!==user.id).length;
+                        const left = r.count - taken;
+                        const on = role === r.name;
+                        return h('button',{key:r.name,disabled:left<=0&&!on,onClick:()=>setRole(on?'':r.name),
+                          style:{padding:'5px 10px',borderRadius:14,fontSize:12.5,cursor:left<=0&&!on?'default':'pointer',fontFamily:"'Lora',serif",
+                            border:'1.5px solid '+(on?'#1a6b3c':'#ddd'),background:on?'#1a6b3c':left<=0?'#f3f3f3':'#fff',color:on?'#fff':left<=0?'#aaa':'#333'}},
+                          (on?'✓ ':'') + r.name + ' · ' + (left<=0&&!on ? 'filled' : (left) + ' left'));
+                      }))),
+                  h('input',{value:note,onChange:ev=>setNote(ev.target.value.slice(0,200)),placeholder:'Add a note (optional), e.g. "Bringing my two kids"',
+                    style:{width:'100%',boxSizing:'border-box',border:'1px solid #ddd',borderRadius:7,padding:'8px 10px',fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}),
+                  h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                    h('button',{onClick:()=>answer('going'),disabled:busy||(full&&mine?.status!=='going'),style:{...btn('#1a6b3c','#fff'),opacity:full&&mine?.status!=='going'?.5:1}},'✅ Going'),
+                    h('button',{onClick:()=>answer('maybe'),disabled:busy,style:btn('#fff8e7','#8a6000','1px solid #e2cf9f')},'🤔 Maybe'),
+                    h('button',{onClick:()=>answer('declined'),disabled:busy,style:btn('#fff','#777','1px solid #ddd')},'Can\'t make it')))),
+
+            err && h('div',{style:{color:'#c0392b',fontSize:13,marginTop:8}}, err),
+
+            // Organizer tools
+            (isOrg || adminHere) && box(isOrg ? '🛠 Organizer tools' : '🛡 Admin tools', h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+              e.status==='open' && isOrg && h('button',{onClick:()=>setInviting(true),style:btn('#1a6b3c','#fff')},'📣 Invite neighbors'),
+              e.status==='open' && isOrg && invited.length > 0 && h('button',{onClick:nudge,style:btn('#e8f2fa','#1a5c8a','1px solid #c8d8f0')},'⏰ Remind ' + invited.length + ' who haven\'t answered'),
+              isOrg && h('button',{onClick:()=>setEditing(true),style:btn('#fff','#1a1a2e','1px solid #ccc')},'✏️ Edit details'),
+              e.status==='open' && isOrg && h('button',{onClick:()=>setStatus('done'),style:btn('#fff','#1a6b3c','1px solid #a8e6c0')},'🎉 Mark as done'),
+              e.status==='open' && h('button',{onClick:()=>setStatus('canceled'),style:btn('#fff','#c0392b','1px solid #f0c0b8')},'Cancel it'),
+              e.status!=='open' && isOrg && h('button',{onClick:()=>setStatus('open'),style:btn('#fff','#555','1px solid #ccc')},'Reopen'))),
+
+            h('div',{style:{marginTop:12}},
+              h('button',{onClick:share,style:btn('#faf8f3','#1a1a2e','1px solid #e5dece')}, copied ? '✓ Link copied' : '📤 Share this')),
+
+            // Sign-up spots
+            roles.length > 0 && box('Sign-up spots', roles.map(r=>{
+              const who = going.filter(m=>m.role===r.name);
+              return h('div',{key:r.name,style:{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:13}},
+                h('span',null, r.name),
+                h('span',{style:{color:who.length>=r.count?'#1a6b3c':'#888'}}, who.length + ' of ' + r.count + (who.length ? ': ' + who.map(m=>(m.display_name||'').split(' ')[0]).join(', ') : '')));
+            })),
+
+            // Who's coming
+            box('Who\'s coming', h(Fragment,null,
+              going.length === 0 ? h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'No one yet.') : going.map(m=>personRow(m, true)),
+              maybe.length > 0 && h('div',{style:{marginTop:8}}, h('div',{style:{fontSize:11,color:'#8a6000',textTransform:'uppercase',letterSpacing:1}},'Maybe'), maybe.map(m=>personRow(m, true))),
+              (isOrg || adminHere) && invited.length > 0 && h('div',{style:{marginTop:8}}, h('div',{style:{fontSize:11,color:'#1a5c8a',textTransform:'uppercase',letterSpacing:1}},'Invited, no answer yet'), invited.map(m=>personRow(m, true))),
+              (isOrg || adminHere) && declined.length > 0 && h('div',{style:{marginTop:8}}, h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1}},'Can\'t make it'), declined.map(m=>personRow(m, true))))),
+
+            // Updates & chat
+            (e.visibility === 'public' || insider) && box('💬 Updates & chat', h(Fragment,null,
+              posts.length === 0 && h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic',marginBottom:8}}, isOrg ? 'Post an update and everyone going or maybe gets a bell.' : 'Nothing yet.'),
+              posts.map(p=>h('div',{key:p.id,style:{padding:'8px 10px',margin:'6px 0',borderRadius:8,background:p.is_update?'#fff8e7':'#faf8f3',border:p.is_update?'1px solid #f0dca0':'1px solid transparent'}},
+                h('div',{style:{display:'flex',gap:8,alignItems:'baseline',flexWrap:'wrap'}},
+                  h('button',{onClick:()=>openProfile(p.user_id),style:{background:'none',border:'none',padding:0,fontWeight:700,fontSize:13,color:'#1a1a2e',cursor:'pointer',fontFamily:"'Lora',serif"}}, p.display_name||'A neighbor'),
+                  p.is_update && h('span',{style:{fontSize:10,color:'#8a6000',fontWeight:700,textTransform:'uppercase'}},'📢 Update'),
+                  h('span',{style:{fontSize:11,color:'#999'}}, timeAgo(p.created_at)),
+                  user && h('span',{style:{marginLeft:'auto'}}, h(ModMenu,{table:'effort_posts',row:p,user,profile,onChanged:()=>load()}))),
+                p.hidden_at ? h(HiddenBody,{row:p,viewer:{...(user||{}),...(profile||{})}})
+                  : h('div',{style:{fontSize:13.5,color:'#333',lineHeight:1.55,whiteSpace:'pre-wrap',wordBreak:'break-word'}}, p.content))),
+              user && insider && e.status !== 'canceled' && h('div',{style:{display:'flex',gap:6,marginTop:6}},
+                h('textarea',{value:msg,onChange:ev=>setMsg(ev.target.value.slice(0,1000)),rows:2,placeholder:isOrg?'Post an update for everyone coming...':'Ask a question or chime in...',
+                  style:{flex:1,border:'1px solid #ddd',borderRadius:8,padding:'8px 10px',fontSize:13,fontFamily:"'Lora',serif",resize:'vertical'}}),
+                h('button',{onClick:post,disabled:busy||!msg.trim(),style:{...btn('#1a1a2e','#f0c040'),alignSelf:'flex-end',opacity:msg.trim()?1:.5}}, isOrg?'Post update':'Send')),
+              user && !insider && e.status === 'open' && h('div',{style:{fontSize:12,color:'#999',marginTop:4}},'Say you\'re going (or maybe) to join the conversation.'))),
+
+            user && !isOrg && h('div',{style:{marginTop:14,textAlign:'right'}}, h(ModMenu,{table:'efforts',row:e,user,profile,onChanged:()=>load()}))
+          ),
+          editing && h(EffortForm,{user, initial:e, onClose:()=>setEditing(false), onToast, onSaved:()=>{ setEditing(false); load(); onChanged && onChanged(); }}),
+          inviting && h(InvitePicker,{effort:e, user, profile, onToast, already:Object.fromEntries(members.map(m=>[m.user_id, m.status])),
+            onClose:()=>setInviting(false), onDone:()=>{ setInviting(false); load(); onChanged && onChanged(); }})
+        )));
+}
+
+// ── The tab ──────────────────────────────────────────────────────────────────
+function EffortCard({e, my, counts, onOpen}) {
+  const k = EFFORT_KINDS[e.kind] || EFFORT_KINDS.other;
+  const c = counts[e.id] || {going:0, maybe:0};
+  const st = my && my.status && MEMBER_STATUS[my.status];
+  return h('button',{onClick:onOpen,style:{display:'flex',gap:12,width:'100%',textAlign:'left',background:'#fff',border:'1px solid '+(my&&my.status==='invited'?'#f0c040':'#e5dece'),
+      borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer',fontFamily:"'Lora',serif",opacity:e.status==='canceled'?.6:1}},
+    h('div',{style:{fontSize:26,lineHeight:1,flexShrink:0,marginTop:2}}, k.icon),
+    h('div',{style:{flex:1,minWidth:0}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',lineHeight:1.3,textDecoration:e.status==='canceled'?'line-through':'none'}}, e.title),
+      h('div',{style:{fontSize:12.5,color:'#777',marginTop:2}}, fmtEffortWhen(e) + (e.location ? ' · ' + e.location : '')),
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6,fontSize:11.5}},
+        h('span',{style:{background:'#e8f4ec',color:'#1a6b3c',borderRadius:10,padding:'1px 8px',fontWeight:700}}, c.going + ' going' + (e.capacity ? ' of ' + e.capacity : '')),
+        c.maybe > 0 && h('span',{style:{background:'#fff8e7',color:'#8a6000',borderRadius:10,padding:'1px 8px'}}, c.maybe + ' maybe'),
+        e.visibility==='invite' && h('span',{style:{background:'#f3eefa',color:'#5b3a8c',borderRadius:10,padding:'1px 8px'}},'🔒 Invite only'),
+        st && h('span',{style:{background:st.bg,color:st.color,borderRadius:10,padding:'1px 8px',fontWeight:700}}, my.status==='invited' ? '📣 You\'re invited' : 'You: ' + st.label),
+        h('span',{style:{color:'#999'}}, 'by ' + (e.organizer_name||'a neighbor')))));
+}
+
+function OrganizeTab({user, profile, onToast, navCtx, onNavCtxConsumed}) {
+  const [efforts, setEfforts] = useState(null);
+  const [mine, setMine] = useState({});
+  const [counts, setCounts] = useState({});
+  const [openId, setOpenId] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [showPast, setShowPast] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const load = async()=>{
+    const {data, error} = await sb.from('efforts').select('*').eq('county', countyTag()).is('hidden_at', null)
+      .order('starts_at',{ascending:true, nullsFirst:false}).limit(200);
+    if(error) { setUnavailable(/relation|does not exist|schema cache/i.test(error.message)); setEfforts([]); return; }
+    const list = data || [];
+    setEfforts(list);
+    if(list.length) {
+      const {data:m} = await sb.from('effort_members').select('effort_id,user_id,status,role').in('effort_id', list.map(x=>x.id));
+      const c = {}, my = {};
+      (m||[]).forEach(r=>{ c[r.effort_id] = c[r.effort_id] || {going:0, maybe:0}; if(r.status==='going') c[r.effort_id].going++; if(r.status==='maybe') c[r.effort_id].maybe++; if(user && r.user_id===user.id) my[r.effort_id] = r; });
+      setCounts(c); setMine(my);
+    }
+  };
+  useEffect(()=>{ load(); },[user?.id]);
+  useEffect(()=>{
+    if(navCtx && navCtx.effortId) { setOpenId(Number(navCtx.effortId)); onNavCtxConsumed && onNavCtxConsumed(); }
+  },[navCtx && navCtx.effortId]);
+
+  const all = efforts || [];
+  const upcoming = all.filter(e=>e.status==='open' && !effortIsPast(e));
+  const invites = upcoming.filter(e=>mine[e.id] && mine[e.id].status==='invited');
+  const organizing = upcoming.filter(e=>user && e.organizer_id===user.id);
+  const imIn = upcoming.filter(e=>mine[e.id] && ['going','maybe'].includes(mine[e.id].status) && !(user && e.organizer_id===user.id));
+  const openToAll = upcoming.filter(e=>e.visibility==='public' && !mine[e.id]);
+  const past = all.filter(e=>e.status!=='open' || effortIsPast(e)).sort((a,b)=>new Date(b.starts_at||b.updated_at)-new Date(a.starts_at||a.updated_at));
+  const section = (title, list, emptyText)=>h('div',{style:{marginBottom:18}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,color:'#7a2838',letterSpacing:'.12em',textTransform:'uppercase',marginBottom:8}}, title + (list.length ? ' (' + list.length + ')' : '')),
+    list.length === 0 ? (emptyText && h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}}, emptyText))
+      : list.map(e=>h(EffortCard,{key:e.id,e,my:mine[e.id],counts,onOpen:()=>setOpenId(e.id)})));
+  const start = ()=>{ if(!user) { askToJoin('organize something'); return; } setStarting(true); };
+
+  return h('div',null,
+    h('div',{style:{background:'linear-gradient(135deg,#1a1a2e,#2a2a4e)',borderRadius:10,padding:'16px 18px',marginBottom:16,borderLeft:'4px solid #f0c040',color:'#fff'}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:21,color:'#f0c040'}},'📣 Organize It'),
+      h('div',{style:{fontSize:13,color:'#d8d3c4',lineHeight:1.6,margin:'4px 0 12px'}},
+        'Get neighbors together for something real: a cleanup, a potluck, a carpool to the council meeting, a work day. Invite people, see who\'s in, and keep everyone posted.'),
+      h('button',{onClick:start,style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:7,padding:'9px 16px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}},'+ Start something')),
+
+    unavailable && h('div',{style:{fontSize:13,color:'#8a6000',background:'#fff8e7',padding:'10px 12px',borderRadius:8,marginBottom:12}},
+      'Organize It isn\'t switched on yet. (Admins: run tpv_organize.sql in Supabase.)'),
+    efforts === null && h('div',{style:{textAlign:'center',padding:20,color:'#aaa'}},'Loading...'),
+
+    efforts !== null && h(Fragment,null,
+      invites.length > 0 && section('📣 Invitations for you', invites),
+      organizing.length > 0 && section('You\'re organizing', organizing),
+      imIn.length > 0 && section('You\'re in', imIn),
+      section('Open to everyone in ' + getCurrentCounty().name, openToAll,
+        upcoming.length === 0 ? 'Nothing planned yet. Got an idea? Start it, and invite a few neighbors to help.' : 'Nothing else open right now.'),
+      past.length > 0 && h('div',null,
+        h('button',{onClick:()=>setShowPast(!showPast),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}},
+          (showPast ? 'Hide' : 'Show') + ' past and finished (' + past.length + ')'),
+        showPast && past.slice(0,30).map(e=>h(EffortCard,{key:e.id,e,my:mine[e.id],counts,onOpen:()=>setOpenId(e.id)})))),
+
+    starting && h(EffortForm,{user, onClose:()=>setStarting(false), onToast,
+      onSaved:(row)=>{ setStarting(false); load(); if(row && row.id) setOpenId(row.id); }}),
+    openId && h(EffortDetail,{key:openId, effortId:openId, user, profile, onToast, onClose:()=>setOpenId(null), onChanged:load})
+  );
+}
+
+// ── Home: invitations waiting ────────────────────────────────────────────────
+function PendingInvitesBanner({user, onNavigate}) {
+  const [list, setList] = useState([]);
+  useEffect(()=>{
+    if(!user?.id) return;
+    let alive = true;
+    (async()=>{
+      const {data:m, error} = await sb.from('effort_members').select('effort_id').eq('user_id', user.id).eq('status','invited');
+      if(error || !m || !m.length || !alive) return;
+      const {data:e} = await sb.from('efforts').select('id,title,starts_at,status').in('id', m.map(x=>x.effort_id)).eq('status','open');
+      if(alive) setList((e||[]).filter(x=>!effortIsPast(x)));
+    })();
+    return ()=>{ alive = false; };
+  },[user?.id]);
+  if(!list.length) return null;
+  const first = list[0];
+  return h('button',{onClick:()=>onNavigate('organize',{effortId:first.id}),
+    style:{display:'flex',gap:12,alignItems:'center',width:'100%',textAlign:'left',background:'#fff8e7',border:'2px solid #f0c040',borderRadius:10,padding:'12px 14px',marginBottom:16,cursor:'pointer',fontFamily:"'Lora',serif"}},
+    h('div',{style:{fontSize:26}},'📣'),
+    h('div',{style:{flex:1,minWidth:0}},
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},
+        list.length === 1 ? 'You\'re invited: ' + first.title : 'You have ' + list.length + ' invitations waiting'),
+      h('div',{style:{fontSize:12.5,color:'#8a6000'}}, list.length === 1 ? fmtEffortWhen(first) + ' · Tap to answer' : 'Tap to see them and answer')),
+    h('span',{style:{color:'#8a6000',fontWeight:700}},'→'));
+}
+
 function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, followedIds, voteUser, onVoteCast, onRepGain, onToast, memberCount:sharedMemberCount}){
   // ── Color palette ────────────────────────────────────────────────
   const NAVY='#1a1a2e', GOLD='#f0c040', CREAM='#f4f1ea';
@@ -4647,6 +5146,9 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
           h('span',{style:{fontSize:12,color:'#c8d0dc',fontFamily:FONT_B}},'Free, nonpartisan, run by volunteers. Read everything without an account.'))
       );
     })(),
+
+    // ── Invitations from neighbors ─────────────────────────────────
+    user && h(PendingInvitesBanner,{user, onNavigate:(t,c)=>onNavigate && onNavigate(t,c)}),
 
     // ── The one decision worth your 20 seconds ─────────────────────
     homeDecision && h(DecisionOfWeek,{key:homeDecision.id, bill:homeDecision, user:voteUser, userVotes, onRepGain, onNavigate, onToast,
@@ -16058,6 +16560,7 @@ const NOTIF_TYPES = {
   report:            {icon:'🚩', label:'New report', color:'#c0392b'},
   new_member:        {icon:'👋', label:'New neighbor', color:'#1a6b3c'},
   guestbook:         {icon:'✍️', label:'Guestbook note', color:'#9b3f86'},
+  organize:          {icon:'📣', label:'Organize It', color:'#8a6000'},
   admin_queue:       {icon:'📥', label:'Waiting for an admin', color:'#8a6000'},
   outcome:           {icon:'🗳', label:'Decision made', color:'#1a6b3c'},
   bill_update:       {icon:'📅', label:'Bill update', color:'#8a6000'},
@@ -16367,6 +16870,7 @@ function App() {
     const dl = takeDeepLink();
     if(!dl) return;
     if(dl.userId) { setProfileModalId(dl.userId); }
+    else if(dl.effortId) { setFeedNavCtx({tab:'organize',effortId:dl.effortId}); setMainTab('organize'); }
     else if(dl.questionId) { setFeedNavCtx({tab:'ask',questionId:dl.questionId}); setMainTab('ask'); }
     else if(dl.billId) { setFeedNavCtx({billId:String(dl.billId),act:dl.act}); setMainTab('bills'); }
   },[loading, user?.id, guestMode, bills.length]);
@@ -17156,6 +17660,7 @@ function App() {
 
       // Exchange tab
       mainTab==='exchange'&&h(ExchangeTab,{user,profile,onToast:setToast}),
+      mainTab==='organize'&&h(OrganizeTab,{user:user?{...user,...(profile||{})}:null,profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)}),
 
       // Map tab — live community map
       mainTab==='map'&&h(MapTab,{user,profile}),
