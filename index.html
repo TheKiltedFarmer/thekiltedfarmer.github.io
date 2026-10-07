@@ -251,6 +251,10 @@ const COUNTIES = {
   },
 };
 
+// Hyphenated or spelled-out URLs that should reach the same county
+const COUNTY_SLUG_ALIASES = {'grand-traverse':'grandtraverse','st-clair':'stclair','saint-clair':'stclair','stclaire':'stclair',
+  'st-joseph':'stjoseph','saint-joseph':'stjoseph','van-buren':'vanburen','presque-isle':'presqueisle'};
+
 // Default county for backward compatibility — used when URL has no county prefix
 // and when existing data has no county field set.
 const DEFAULT_COUNTY = 'jackson';
@@ -268,12 +272,13 @@ function aiEnabled(countyId){
   return c ? c.aiFeatures !== false : true;
 }
 function signupCapForCounty(countyId){
+  // A county can set an explicit signupCap; otherwise there's no per-county
+  // limit, only the platform-wide TOTAL_SIGNUP_BUDGET (checked at sign-up).
   const c = COUNTIES[countyId || DEFAULT_COUNTY];
   if(!c) return null;
-  if(typeof c.signupCap === 'number') return c.signupCap; // explicit override
-  const liveCounties = Object.values(COUNTIES).filter(x=>x.status==='active'||x.status==='beta').length;
-  return Math.floor(TOTAL_SIGNUP_BUDGET / Math.max(1, liveCounties));
+  return typeof c.signupCap === 'number' ? c.signupCap : null;
 }
+function isStarterCounty(id) { const c = COUNTIES[id || countyTag()]; return !!(c && c.status === 'starter'); }
 
 // Parse the current county from the URL. Path like /jackson or /calhoun.
 // Falls back to DEFAULT_COUNTY if nothing matches.
@@ -298,6 +303,7 @@ function getCountyFromUrl() {
   // Strip leading slash, take first segment
   const seg = path.replace(/^\/+/, '').split('/')[0].split('?')[0].toLowerCase();
   if(seg && COUNTIES[seg]) return seg;
+  if(seg && COUNTY_SLUG_ALIASES[seg]) return COUNTY_SLUG_ALIASES[seg];
   return null; // null means "no county in URL" — caller decides what to do
 }
 
@@ -317,6 +323,8 @@ function setCountyTag(id) {
   __CURRENT_COUNTY_ID = ok ? id : DEFAULT_COUNTY;
 }
 function countyTag() { return __CURRENT_COUNTY_ID; }
+// The current county's name, for copy ("Kent County")
+function CNAME() { return getCurrentCounty().name; }
 function countyResolved() { return __COUNTY_RESOLVED; }
 
 // Get the current county object (with all its metadata).
@@ -475,6 +483,123 @@ const ZIP_TO_COUNTY = {
   "49092":"calhoun","49096":"calhoun","49099":"calhoun",
 };
 
+
+// ── All 83 Michigan counties ─────────────────────────────────────────────────
+// Generated from USPS ZIP code data (the "zipcodes" dataset): every Michigan
+// ZIP with its primary county, town and location. Counties beyond the three
+// that launched first open as "starter" counties: fully usable, with
+// statewide content on day one, and looking for local volunteers.
+// [id, name, county seat, best-known city, main ZIP, lat, lng]
+const MI_COUNTY_LIST = [
+  ["alcona", "Alcona", "Harrisville", "Harrisville", "48740", 44.681, -83.496],
+  ["alger", "Alger", "Munising", "Munising", "49862", 46.36, -86.808],
+  ["allegan", "Allegan", "Allegan", "Allegan", "49010", 42.582, -85.825],
+  ["alpena", "Alpena", "Alpena", "Alpena", "49707", 44.988, -83.586],
+  ["antrim", "Antrim", "Bellaire", "Bellaire", "49615", 44.997, -85.208],
+  ["arenac", "Arenac", "Standish", "Standish", "48658", 44.061, -83.848],
+  ["baraga", "Baraga", "L'Anse", "L'Anse", "49908", 46.708, -88.426],
+  ["barry", "Barry", "Hastings", "Hastings", "49058", 42.605, -85.299],
+  ["bay", "Bay", "Bay City", "Bay City", "48706", 43.685, -83.964],
+  ["benzie", "Benzie", "Beulah", "Beulah", "49617", 44.634, -86.026],
+  ["berrien", "Berrien", "St. Joseph", "Benton Harbor", "49022", 41.951, -86.463],
+  ["branch", "Branch", "Coldwater", "Coldwater", "49036", 41.932, -85.05],
+  ["calhoun", "Calhoun", "Marshall", "Battle Creek", "49014", 42.222, -85.079],
+  ["cass", "Cass", "Cassopolis", "Dowagiac", "49047", 41.9, -85.928],
+  ["charlevoix", "Charlevoix", "Charlevoix", "Charlevoix", "49720", 45.307, -85.16],
+  ["cheboygan", "Cheboygan", "Cheboygan", "Cheboygan", "49721", 45.421, -84.54],
+  ["chippewa", "Chippewa", "Sault Ste. Marie", "Sault Ste. Marie", "49783", 46.272, -84.468],
+  ["clare", "Clare", "Harrison", "Harrison", "48625", 43.886, -84.858],
+  ["clinton", "Clinton", "St. Johns", "St. Johns", "48879", 42.938, -84.586],
+  ["crawford", "Crawford", "Grayling", "Grayling", "49738", 44.755, -84.687],
+  ["delta", "Delta", "Escanaba", "Escanaba", "49829", 45.844, -87.038],
+  ["dickinson", "Dickinson", "Iron Mountain", "Iron Mountain", "49801", 45.892, -87.94],
+  ["eaton", "Eaton", "Charlotte", "Charlotte", "48813", 42.628, -84.825],
+  ["emmet", "Emmet", "Petoskey", "Petoskey", "49770", 45.57, -84.825],
+  ["genesee", "Genesee", "Flint", "Flint", "48502", 43.009, -83.7],
+  ["gladwin", "Gladwin", "Gladwin", "Gladwin", "48624", 43.923, -84.378],
+  ["gogebic", "Gogebic", "Bessemer", "Ironwood", "49938", 46.406, -89.808],
+  ["grandtraverse", "Grand Traverse", "Traverse City", "Traverse City", "49684", 44.72, -85.615],
+  ["gratiot", "Gratiot", "Ithaca", "Alma", "48801", 43.307, -84.622],
+  ["hillsdale", "Hillsdale", "Hillsdale", "Hillsdale", "49242", 41.928, -84.575],
+  ["houghton", "Houghton", "Houghton", "Houghton", "49931", 47.034, -88.603],
+  ["huron", "Huron", "Bad Axe", "Bad Axe", "48413", 43.839, -83.061],
+  ["ingham", "Ingham", "Mason", "Lansing", "48906", 42.662, -84.451],
+  ["ionia", "Ionia", "Ionia", "Ionia", "48846", 42.971, -85.043],
+  ["iosco", "Iosco", "Tawas City", "Tawas City", "48763", 44.358, -83.681],
+  ["iron", "Iron", "Crystal Falls", "Iron River", "49935", 46.085, -88.529],
+  ["isabella", "Isabella", "Mount Pleasant", "Mount Pleasant", "48858", 43.604, -84.842],
+  ["jackson", "Jackson", "Jackson", "Jackson", "49201", 42.243, -84.434],
+  ["kalamazoo", "Kalamazoo", "Kalamazoo", "Kalamazoo", "49001", 42.253, -85.519],
+  ["kalkaska", "Kalkaska", "Kalkaska", "Kalkaska", "49646", 44.698, -85.229],
+  ["kent", "Kent", "Grand Rapids", "Grand Rapids", "49503", 42.996, -85.608],
+  ["keweenaw", "Keweenaw", "Eagle River", "Eagle River", "49805", 47.32, -88.351],
+  ["lake", "Lake", "Baldwin", "Baldwin", "49304", 43.963, -85.783],
+  ["lapeer", "Lapeer", "Lapeer", "Lapeer", "48446", 43.085, -83.225],
+  ["leelanau", "Leelanau", "Suttons Bay", "Suttons Bay", "49682", 44.944, -85.833],
+  ["lenawee", "Lenawee", "Adrian", "Adrian", "49221", 41.908, -84.053],
+  ["livingston", "Livingston", "Howell", "Brighton", "48114", 42.588, -83.895],
+  ["luce", "Luce", "Newberry", "Newberry", "49868", 46.36, -85.627],
+  ["mackinac", "Mackinac", "St. Ignace", "St. Ignace", "49781", 46.048, -85.055],
+  ["macomb", "Macomb", "Mount Clemens", "Warren", "48088", 42.618, -82.946],
+  ["manistee", "Manistee", "Manistee", "Manistee", "49660", 44.364, -86.078],
+  ["marquette", "Marquette", "Marquette", "Marquette", "49855", 46.446, -87.669],
+  ["mason", "Mason", "Ludington", "Ludington", "49431", 43.991, -86.237],
+  ["mecosta", "Mecosta", "Big Rapids", "Big Rapids", "49307", 43.667, -85.344],
+  ["menominee", "Menominee", "Menominee", "Menominee", "49858", 45.537, -87.559],
+  ["midland", "Midland", "Midland", "Midland", "48640", 43.707, -84.356],
+  ["missaukee", "Missaukee", "Lake City", "Lake City", "49651", 44.3, -85.057],
+  ["monroe", "Monroe", "Monroe", "Monroe", "48161", 41.892, -83.506],
+  ["montcalm", "Montcalm", "Stanton", "Greenville", "48838", 43.307, -85.164],
+  ["montmorency", "Montmorency", "Atlanta", "Atlanta", "49709", 44.972, -84.131],
+  ["muskegon", "Muskegon", "Muskegon", "Muskegon", "49440", 43.277, -86.151],
+  ["newaygo", "Newaygo", "White Cloud", "White Cloud", "49349", 43.499, -85.839],
+  ["oakland", "Oakland", "Pontiac", "Pontiac", "48340", 42.595, -83.328],
+  ["oceana", "Oceana", "Hart", "Hart", "49420", 43.656, -86.294],
+  ["ogemaw", "Ogemaw", "West Branch", "West Branch", "48661", 44.289, -84.111],
+  ["ontonagon", "Ontonagon", "Ontonagon", "Ontonagon", "49953", 46.62, -89.253],
+  ["osceola", "Osceola", "Reed City", "Reed City", "49677", 43.953, -85.346],
+  ["oscoda", "Oscoda", "Mio", "Mio", "48647", 44.703, -84.127],
+  ["otsego", "Otsego", "Gaylord", "Gaylord", "49735", 45.06, -84.57],
+  ["ottawa", "Ottawa", "Grand Haven", "Holland", "49423", 42.966, -86.012],
+  ["presqueisle", "Presque Isle", "Rogers City", "Rogers City", "49779", 45.333, -83.855],
+  ["roscommon", "Roscommon", "Roscommon", "Roscommon", "48653", 44.366, -84.628],
+  ["saginaw", "Saginaw", "Saginaw", "Saginaw", "48601", 43.356, -84.043],
+  ["sanilac", "Sanilac", "Sandusky", "Sandusky", "48471", 43.396, -82.777],
+  ["schoolcraft", "Schoolcraft", "Manistique", "Manistique", "49854", 46.108, -86.139],
+  ["shiawassee", "Shiawassee", "Corunna", "Owosso", "48867", 42.943, -84.107],
+  ["stclair", "St. Clair", "Port Huron", "Port Huron", "48060", 42.903, -82.649],
+  ["stjoseph", "St. Joseph", "Centreville", "Sturgis", "49091", 41.908, -85.487],
+  ["tuscola", "Tuscola", "Caro", "Caro", "48723", 43.446, -83.399],
+  ["vanburen", "Van Buren", "Paw Paw", "South Haven", "49090", 42.276, -86.025],
+  ["washtenaw", "Washtenaw", "Ann Arbor", "Ann Arbor", "48103", 42.25, -83.761],
+  ["wayne", "Wayne", "Detroit", "Detroit", "48201", 42.321, -83.196],
+  ["wexford", "Wexford", "Cadillac", "Cadillac", "49601", 44.364, -85.601]
+];
+// Hyphenated or spelled-out URLs that should reach the same county
+// zip,county,town,lat,lng;...
+const MI_ZIP_DATA = "48001,stclair,Algonac,42.6367,-82.5866;48002,stclair,Allenton,42.9388,-82.9198;48003,lapeer,Almont,42.926,-83.0362;48004,stclair,Anchorville,42.8241,-82.6652;48005,macomb,Armada,42.8409,-82.8899;48006,stclair,Avoca,43.0752,-82.6955;48007,oakland,Troy,42.6061,-83.2976;48009,oakland,Birmingham,42.5444,-83.2133;48012,oakland,Birmingham,42.5467,-83.2113;48014,stclair,Capac,43.0263,-82.9298;48015,macomb,Center Line,42.4788,-83.0248;48017,oakland,Clawson,42.5365,-83.1503;48021,macomb,Eastpointe,42.4658,-82.9459;48022,stclair,Emmett,42.9872,-82.7854;48023,stclair,Fair Haven,42.7023,-82.6688;48025,oakland,Franklin,42.5219,-83.2519;48026,macomb,Fraser,42.5423,-82.947;48027,stclair,Goodells,42.9443,-82.6916;48028,stclair,Harsens Island,42.585,-82.586;48030,oakland,Hazel Park,42.4608,-83.0982;48032,stclair,Jeddo,43.1223,-82.5998;48033,oakland,Southfield,42.4723,-83.294;48034,oakland,Southfield,42.4969,-83.2911;48035,macomb,Clinton Township,42.5512,-82.9167;48036,macomb,Clinton Township,42.5938,-82.9133;48037,oakland,Southfield,42.5675,-83.15;48038,macomb,Clinton Township,42.6206,-82.9608;48039,stclair,Marine City,42.6859,-82.5499;48040,stclair,Marysville,42.9135,-82.4813;48041,stclair,Memphis,42.941,-82.8046;48042,macomb,Macomb,42.6735,-82.9163;48043,macomb,Mount Clemens,42.5978,-82.8823;48044,macomb,Macomb,42.6442,-82.8985;48045,macomb,Harrison Township,42.5856,-82.8172;48046,macomb,Mount Clemens,42.5973,-82.878;48047,macomb,New Baltimore,42.673,-82.7753;48048,macomb,New Haven,42.7443,-82.8042;48049,stclair,North Street,43.0361,-82.5744;48050,macomb,New Haven,42.7859,-82.7979;48051,macomb,New Baltimore,42.6938,-82.8207;48054,stclair,East China,42.771,-82.5427;48059,stclair,Fort Gratiot,43.0869,-82.5002;48060,stclair,Port Huron,42.9958,-82.4599;48061,stclair,Port Huron,42.9709,-82.4249;48062,macomb,Richmond,42.8389,-82.7996;48063,stclair,Columbus,42.8892,-82.6675;48064,stclair,Casco,42.7674,-82.6728;48065,macomb,Romeo,42.84,-83.0388;48066,macomb,Roseville,42.5034,-82.9387;48067,oakland,Royal Oak,42.4906,-83.1366;48068,oakland,Royal Oak,42.4895,-83.1446;48069,oakland,Pleasant Ridge,42.471,-83.1438;48070,oakland,Huntington Woods,42.4825,-83.1749;48071,oakland,Madison Heights,42.5016,-83.1027;48072,oakland,Berkley,42.5028,-83.1887;48073,oakland,Royal Oak,42.519,-83.157;48074,stclair,Smiths Creek,42.9051,-82.5679;48075,oakland,Southfield,42.4638,-83.2255;48076,oakland,Southfield,42.4981,-83.2058;48079,stclair,Saint Clair,42.8255,-82.5133;48080,macomb,Saint Clair Shores,42.4706,-82.9022;48081,macomb,Saint Clair Shores,42.4941,-82.899;48082,macomb,Saint Clair Shores,42.5269,-82.8841;48083,oakland,Troy,42.5597,-83.1138;48084,oakland,Troy,42.5627,-83.1799;48085,oakland,Troy,42.6006,-83.1198;48086,oakland,Southfield,42.4734,-83.2219;48088,macomb,Warren,42.5164,-82.9832;48089,macomb,Warren,42.4685,-82.9974;48090,macomb,Warren,42.4775,-83.0277;48091,macomb,Warren,42.4665,-83.0593;48092,macomb,Warren,42.5125,-83.0643;48093,macomb,Warren,42.5149,-82.9968;48094,macomb,Washington,42.7262,-83.0268;48095,macomb,Washington,42.7682,-83.0395;48096,macomb,Ray,42.754,-82.9163;48097,stclair,Yale,43.126,-82.8295;48098,oakland,Troy,42.5991,-83.1789;48099,oakland,Troy,42.5876,-83.1737;48101,wayne,Allen Park,42.2522,-83.212;48103,washtenaw,Ann Arbor,42.2794,-83.784;48104,washtenaw,Ann Arbor,42.2694,-83.7282;48105,washtenaw,Ann Arbor,42.3042,-83.7068;48106,washtenaw,Ann Arbor,42.2535,-83.8366;48107,washtenaw,Ann Arbor,42.2535,-83.8366;48108,washtenaw,Ann Arbor,42.2328,-83.7015;48109,washtenaw,Ann Arbor,42.2776,-83.7409;48110,monroe,Azalia,42.0082,-83.6643;48111,wayne,Belleville,42.1949,-83.4854;48112,wayne,Belleville,42.2048,-83.4852;48113,washtenaw,Ann Arbor,42.2535,-83.8366;48114,livingston,Brighton,42.57,-83.7484;48115,washtenaw,Bridgewater,42.1602,-83.9117;48116,livingston,Brighton,42.5371,-83.7756;48117,monroe,Carleton,42.0529,-83.3755;48118,washtenaw,Chelsea,42.3207,-84.0334;48120,wayne,Dearborn,42.3223,-83.1763;48121,wayne,Dearborn,42.2399,-83.1508;48122,wayne,Melvindale,42.2812,-83.1826;48123,wayne,Dearborn,42.2399,-83.1508;48124,wayne,Dearborn,42.2941,-83.2536;48125,wayne,Dearborn Heights,42.2768,-83.2606;48126,wayne,Dearborn,42.3349,-83.1801;48127,wayne,Dearborn Heights,42.3353,-83.2864;48128,wayne,Dearborn,42.32,-83.2701;48130,washtenaw,Dexter,42.3583,-83.9;48131,monroe,Dundee,41.9514,-83.6522;48133,monroe,Erie,41.7829,-83.4958;48134,wayne,Flat Rock,42.1055,-83.2795;48135,wayne,Garden City,42.3242,-83.3402;48136,wayne,Garden City,42.2399,-83.1508;48137,livingston,Gregory,42.496,-84.0847;48138,wayne,Grosse Ile,42.1352,-83.1561;48139,livingston,Hamburg,42.4523,-83.8147;48140,monroe,Ida,41.8549,-83.5916;48141,wayne,Inkster,42.294,-83.3146;48143,livingston,Lakeland,42.4573,-83.8366;48144,monroe,Lambertville,41.7531,-83.6259;48145,monroe,La Salle,41.8585,-83.4715;48146,wayne,Lincoln Park,42.2422,-83.1807;48150,wayne,Livonia,42.3615,-83.3649;48151,wayne,Livonia,42.3684,-83.3527;48152,wayne,Livonia,42.4258,-83.3636;48153,wayne,Livonia,42.3684,-83.3527;48154,wayne,Livonia,42.3958,-83.3772;48157,monroe,Luna Pier,41.8146,-83.4382;48158,washtenaw,Manchester,42.1555,-84.0332;48159,monroe,Maybee,42.0288,-83.5179;48160,washtenaw,Milan,42.0914,-83.6776;48161,monroe,Monroe,41.908,-83.4719;48162,monroe,Monroe,41.9293,-83.4448;48164,wayne,New Boston,42.1449,-83.3589;48165,oakland,New Hudson,42.5076,-83.6342;48166,monroe,Newport,41.9766,-83.2804;48167,oakland,Northville,42.4262,-83.4794;48168,wayne,Northville,42.4086,-83.4978;48169,livingston,Pinckney,42.4596,-83.9099;48170,wayne,Plymouth,42.3688,-83.4799;48173,wayne,Rockwood,42.0731,-83.2127;48174,wayne,Romulus,42.2223,-83.3966;48175,washtenaw,Salem,42.4056,-83.5781;48176,washtenaw,Saline,42.1698,-83.7849;48177,monroe,Samaria,41.8076,-83.5793;48178,oakland,South Lyon,42.4567,-83.659;48179,monroe,South Rockwood,42.0624,-83.2663;48180,wayne,Taylor,42.2317,-83.2673;48182,monroe,Temperance,41.7682,-83.5797;48183,wayne,Trenton,42.1382,-83.2179;48184,wayne,Wayne,42.2768,-83.3758;48185,wayne,Westland,42.3358,-83.3846;48186,wayne,Westland,42.289,-83.3686;48187,wayne,Canton,42.332,-83.4695;48188,wayne,Canton,42.291,-83.465;48189,washtenaw,Whitmore Lake,42.4289,-83.7828;48190,washtenaw,Whittaker,42.1244,-83.5946;48191,washtenaw,Willis,42.1292,-83.5687;48192,wayne,Wyandotte,42.2084,-83.1616;48193,wayne,Riverview,42.1782,-83.2461;48195,wayne,Southgate,42.2044,-83.1999;48197,washtenaw,Ypsilanti,42.2325,-83.6336;48198,washtenaw,Ypsilanti,42.2439,-83.583;48201,wayne,Detroit,42.3474,-83.0604;48202,wayne,Detroit,42.377,-83.0796;48203,wayne,Highland Park,42.4212,-83.1009;48204,wayne,Detroit,42.3661,-83.1422;48205,wayne,Detroit,42.4313,-82.9813;48206,wayne,Detroit,42.3749,-83.1087;48207,wayne,Detroit,42.3524,-83.0271;48208,wayne,Detroit,42.3495,-83.0927;48209,wayne,Detroit,42.3097,-83.1155;48210,wayne,Detroit,42.3376,-83.1303;48211,wayne,Detroit,42.3809,-83.0409;48212,wayne,Hamtramck,42.4081,-83.0583;48213,wayne,Detroit,42.3982,-82.9925;48214,wayne,Detroit,42.3669,-82.9938;48215,wayne,Detroit,42.3773,-82.9513;48216,wayne,Detroit,42.3275,-83.0827;48217,wayne,Detroit,42.2719,-83.1545;48218,wayne,River Rouge,42.2692,-83.1364;48219,wayne,Detroit,42.426,-83.2495;48220,oakland,Ferndale,42.4586,-83.1363;48221,wayne,Detroit,42.426,-83.15;48222,wayne,Detroit,42.2399,-83.1508;48223,wayne,Detroit,42.3945,-83.2454;48224,wayne,Detroit,42.4098,-82.9441;48225,wayne,Harper Woods,42.4377,-82.9289;48226,wayne,Detroit,42.3333,-83.0484;48227,wayne,Detroit,42.3883,-83.1937;48228,wayne,Detroit,42.3547,-83.2168;48229,wayne,Ecorse,42.2519,-83.1489;48230,wayne,Grosse Pointe,42.3847,-82.9244;48231,wayne,Detroit,42.3314,-83.0458;48232,wayne,Detroit,42.3314,-83.0458;48233,wayne,Detroit,42.2399,-83.1508;48234,wayne,Detroit,42.4337,-83.0434;48235,wayne,Detroit,42.4261,-83.1951;48236,wayne,Grosse Pointe,42.4274,-82.9002;48237,oakland,Oak Park,42.4662,-83.184;48238,wayne,Detroit,42.3959,-83.1411;48239,wayne,Redford,42.3756,-83.2889;48240,wayne,Redford,42.4264,-83.3017;48242,wayne,Detroit,42.2166,-83.3532;48243,wayne,Detroit,42.3314,-83.0458;48244,wayne,Detroit,42.2399,-83.1508;48255,wayne,Detroit,42.3314,-83.0458;48260,wayne,Detroit,42.2399,-83.1508;48264,wayne,Detroit,42.3314,-83.0458;48265,wayne,Detroit,42.2399,-83.1508;48266,wayne,Detroit,42.2399,-83.1508;48267,wayne,Detroit,42.3314,-83.0458;48268,wayne,Detroit,42.3314,-83.0458;48269,wayne,Detroit,42.3314,-83.0458;48272,wayne,Detroit,42.3314,-83.0458;48275,wayne,Detroit,42.3314,-83.0458;48277,wayne,Detroit,42.2399,-83.1508;48278,wayne,Detroit,42.2399,-83.1508;48279,wayne,Detroit,42.3314,-83.0458;48288,wayne,Detroit,42.2399,-83.1508;48301,oakland,Bloomfield Hills,42.5445,-83.2792;48302,oakland,Bloomfield Hills,42.5848,-83.2821;48303,oakland,Bloomfield Hills,42.5836,-83.2455;48304,oakland,Bloomfield Hills,42.587,-83.2359;48306,oakland,Rochester,42.7262,-83.1566;48307,oakland,Rochester,42.6593,-83.1225;48308,oakland,Rochester,42.6806,-83.1338;48309,oakland,Rochester,42.6626,-83.1837;48310,macomb,Sterling Heights,42.5648,-83.0701;48311,macomb,Sterling Heights,42.5803,-83.0302;48312,macomb,Sterling Heights,42.5592,-83.0029;48313,macomb,Sterling Heights,42.6005,-82.9998;48314,macomb,Sterling Heights,42.6124,-83.0345;48315,macomb,Utica,42.671,-82.9988;48316,macomb,Utica,42.6885,-83.0548;48317,macomb,Utica,42.6413,-83.0504;48318,macomb,Utica,42.6261,-83.0335;48320,oakland,Keego Harbor,42.6114,-83.3356;48321,oakland,Auburn Hills,42.6601,-83.3863;48322,oakland,West Bloomfield,42.5424,-83.3793;48323,oakland,West Bloomfield,42.5683,-83.3805;48324,oakland,West Bloomfield,42.5961,-83.3819;48325,oakland,West Bloomfield,42.6601,-83.3863;48326,oakland,Auburn Hills,42.6583,-83.2375;48327,oakland,Waterford,42.6438,-83.4076;48328,oakland,Waterford,42.6429,-83.3546;48329,oakland,Waterford,42.6877,-83.3879;48330,oakland,Drayton Plains,42.6754,-83.3637;48331,oakland,Farmington,42.5051,-83.4072;48332,oakland,Farmington,42.4645,-83.3763;48333,oakland,Farmington,42.4645,-83.3763;48334,oakland,Farmington,42.5065,-83.3484;48335,oakland,Farmington,42.4617,-83.4053;48336,oakland,Farmington,42.4656,-83.3638;48340,oakland,Pontiac,42.668,-83.2893;48341,oakland,Pontiac,42.6294,-83.3041;48342,oakland,Pontiac,42.6439,-83.2792;48343,oakland,Pontiac,42.6389,-83.291;48346,oakland,Clarkston,42.7239,-83.4232;48347,oakland,Clarkston,42.6601,-83.3863;48348,oakland,Clarkston,42.7605,-83.404;48350,oakland,Davisburg,42.7496,-83.5358;48353,livingston,Hartland,42.6356,-83.7147;48356,oakland,Highland,42.6692,-83.5895;48357,oakland,Highland,42.6595,-83.637;48359,oakland,Lake Orion,42.7231,-83.2769;48360,oakland,Lake Orion,42.7429,-83.272;48361,oakland,Lake Orion,42.7845,-83.2397;48362,oakland,Lake Orion,42.7763,-83.2748;48363,oakland,Oakland,42.7697,-83.1594;48366,oakland,Lakeville,42.8214,-83.1502;48367,oakland,Leonard,42.8437,-83.1406;48370,oakland,Oxford,42.8265,-83.2005;48371,oakland,Oxford,42.8223,-83.2829;48374,oakland,Novi,42.4735,-83.5224;48375,oakland,Novi,42.4604,-83.4577;48376,oakland,Novi,42.471,-83.4748;48377,oakland,Novi,42.4992,-83.4773;48380,oakland,Milford,42.602,-83.6508;48381,oakland,Milford,42.5758,-83.5924;48382,oakland,Commerce Township,42.5848,-83.5008;48383,oakland,White Lake,42.658,-83.5398;48386,oakland,White Lake,42.641,-83.4738;48387,oakland,Union Lake,42.6148,-83.4469;48390,oakland,Walled Lake,42.5582,-83.4773;48391,oakland,Walled Lake,42.5378,-83.481;48393,oakland,Wixom,42.534,-83.5285;48397,macomb,Warren,42.4917,-83.0402;48401,sanilac,Applegate,43.3619,-82.6479;48410,sanilac,Argyle,43.5589,-82.9455;48411,genesee,Atlas,42.94,-83.5369;48412,lapeer,Attica,43.0547,-83.1668;48413,huron,Bad Axe,43.8067,-83.0054;48414,shiawassee,Bancroft,42.882,-84.1207;48415,saginaw,Birch Run,43.2649,-83.7903;48416,sanilac,Brown City,43.2171,-82.9978;48417,saginaw,Burt,43.2404,-83.9511;48418,shiawassee,Byron,42.8059,-83.973;48419,sanilac,Carsonville,43.4258,-82.6022;48420,genesee,Clio,43.1779,-83.7249;48421,lapeer,Columbiaville,43.1503,-83.3811;48422,sanilac,Croswell,43.2622,-82.6337;48423,genesee,Davison,43.0348,-83.5268;48426,sanilac,Decker,43.4775,-83.0638;48427,sanilac,Deckerville,43.5151,-82.7191;48428,lapeer,Dryden,42.9378,-83.1501;48429,shiawassee,Durand,42.9117,-83.9877;48430,genesee,Fenton,42.7851,-83.7294;48432,huron,Filion,43.9014,-82.9825;48433,genesee,Flushing,43.072,-83.8424;48434,sanilac,Forestville,43.6632,-82.6133;48435,tuscola,Fostoria,43.2645,-83.3796;48436,genesee,Gaines,42.8813,-83.8855;48437,genesee,Genesee,43.1123,-83.6154;48438,genesee,Goodrich,42.9147,-83.4845;48439,genesee,Grand Blanc,42.9282,-83.6264;48440,lapeer,Hadley,42.9545,-83.4033;48441,huron,Harbor Beach,43.8312,-82.6886;48442,oakland,Holly,42.7905,-83.6127;48444,lapeer,Imlay City,43.0425,-83.0708;48445,huron,Kinde,43.948,-82.9755;48446,lapeer,Lapeer,43.0579,-83.3332;48449,shiawassee,Lennon,42.9693,-83.9279;48450,sanilac,Lexington,43.2435,-82.5301;48451,genesee,Linden,42.8104,-83.7993;48453,sanilac,Marlette,43.3399,-83.0573;48454,sanilac,Melvin,43.193,-82.8393;48455,lapeer,Metamora,42.9414,-83.2891;48456,sanilac,Minden City,43.6814,-82.7299;48457,genesee,Montrose,43.1754,-83.8824;48458,genesee,Mount Morris,43.116,-83.6895;48460,shiawassee,New Lothrop,43.1388,-83.9851;48461,lapeer,North Branch,43.2069,-83.2267;48462,oakland,Ortonville,42.8409,-83.4288;48463,genesee,Otisville,43.1706,-83.5172;48464,lapeer,Otter Lake,43.2183,-83.4242;48465,sanilac,Palms,43.6257,-82.7017;48466,sanilac,Peck,43.2694,-82.8193;48467,huron,Port Austin,44.0223,-82.9984;48468,huron,Port Hope,43.928,-82.7529;48469,sanilac,Port Sanilac,43.4329,-82.5468;48470,huron,Ruth,43.7404,-82.7414;48471,sanilac,Sandusky,43.4055,-82.8409;48472,sanilac,Snover,43.4886,-82.9301;48473,genesee,Swartz Creek,42.9468,-83.817;48475,huron,Ubly,43.6896,-82.964;48476,shiawassee,Vernon,42.9406,-84.0328;48480,genesee,Grand Blanc,42.918,-83.617;48501,genesee,Flint,42.9659,-83.7808;48502,genesee,Flint,43.0151,-83.6948;48503,genesee,Flint,43.0128,-83.6914;48504,genesee,Flint,43.0573,-83.7498;48505,genesee,Flint,43.0634,-83.7001;48506,genesee,Flint,43.0653,-83.631;48507,genesee,Flint,42.9821,-83.734;48509,genesee,Burton,43.0259,-83.6041;48519,genesee,Burton,42.9859,-83.6135;48529,genesee,Burton,42.9744,-83.6629;48531,genesee,Flint,43.002,-83.6925;48532,genesee,Flint,43.0111,-83.803;48550,genesee,Flint,43.0349,-83.6887;48551,genesee,Flint,42.979,-83.7131;48552,genesee,Flint,42.9779,-83.7131;48553,genesee,Flint,42.9736,-83.7203;48554,genesee,Flint,42.9722,-83.7946;48555,genesee,Flint,43.0113,-83.7108;48556,genesee,Flint,43.0327,-83.6463;48557,genesee,Flint,43.0806,-83.7837;48559,genesee,Flint,43.02,-83.68;48601,saginaw,Saginaw,43.4047,-83.9156;48602,saginaw,Saginaw,43.4248,-83.9745;48603,saginaw,Saginaw,43.4631,-84.0297;48604,saginaw,Saginaw,43.4732,-83.9514;48605,saginaw,Saginaw,43.4588,-84.0518;48606,saginaw,Saginaw,43.3485,-84.0326;48607,saginaw,Saginaw,43.4301,-83.9319;48608,saginaw,Saginaw,43.3485,-84.0326;48609,saginaw,Saginaw,43.3869,-84.0926;48610,ogemaw,Alger,44.1395,-84.1872;48611,bay,Auburn,43.608,-84.1027;48612,gladwin,Beaverton,43.8866,-84.4241;48613,bay,Bentley,43.9267,-84.1053;48614,saginaw,Brant,43.2548,-84.2978;48615,gratiot,Breckenridge,43.3935,-84.5023;48616,saginaw,Chesaning,43.1824,-84.1122;48617,clare,Clare,43.8223,-84.7635;48618,midland,Coleman,43.7494,-84.5911;48619,oscoda,Comins,44.8264,-84.0261;48620,midland,Edenville,43.7774,-84.3813;48621,oscoda,Fairview,44.7205,-84.0525;48622,clare,Farwell,43.8342,-84.8754;48623,saginaw,Freeland,43.5161,-84.1822;48624,gladwin,Gladwin,44.0296,-84.4968;48625,clare,Harrison,44.0285,-84.7729;48626,saginaw,Hemlock,43.4099,-84.2266;48627,roscommon,Higgins Lake,44.3871,-84.7013;48628,midland,Hope,43.7882,-84.3296;48629,roscommon,Houghton Lake,44.3147,-84.7647;48630,roscommon,Houghton Lake Heights,44.3275,-84.7745;48631,bay,Kawkawlin,43.6794,-83.9927;48632,clare,Lake,43.8575,-85.0219;48633,clare,Lake George,43.9634,-84.947;48634,bay,Linwood,43.7714,-84.0513;48635,ogemaw,Lupton,44.3976,-83.9905;48636,oscoda,Luzerne,44.6001,-84.2931;48637,saginaw,Merrill,43.3939,-84.3308;48638,saginaw,Saginaw,43.4343,-84.0091;48640,midland,Midland,43.6376,-84.268;48641,midland,Midland,43.5383,-84.3878;48642,midland,Midland,43.6375,-84.1979;48647,oscoda,Mio,44.6665,-84.1353;48649,saginaw,Oakley,43.1505,-84.2094;48650,bay,Pinconning,43.8491,-84.0082;48651,roscommon,Prudenville,44.2974,-84.6627;48652,gladwin,Rhodes,43.8517,-84.2134;48653,roscommon,Roscommon,44.4839,-84.6601;48654,ogemaw,Rose City,44.4167,-84.1256;48655,saginaw,Saint Charles,43.2863,-84.1598;48656,roscommon,Saint Helen,44.3665,-84.4247;48657,midland,Sanford,43.7204,-84.3954;48658,arenac,Standish,43.9733,-83.9433;48659,arenac,Sterling,44.0669,-84.0505;48661,ogemaw,West Branch,44.279,-84.2286;48662,gratiot,Wheeler,43.3962,-84.4243;48663,saginaw,Saginaw,43.4195,-83.9508;48667,midland,Midland,43.6156,-84.2472;48670,midland,Midland,43.6375,-84.2568;48674,midland,Midland,43.6129,-84.1971;48686,midland,Midland,43.6473,-84.3873;48701,tuscola,Akron,43.5844,-83.5393;48703,arenac,Au Gres,44.0338,-83.702;48705,alcona,Barton City,44.702,-83.5994;48706,bay,Bay City,43.6088,-83.953;48707,bay,Bay City,43.7378,-83.9333;48708,bay,Bay City,43.5821,-83.8781;48710,bay,University Center,43.5594,-83.9841;48720,huron,Bay Port,43.8377,-83.3525;48721,alcona,Black River,44.8138,-83.3407;48722,saginaw,Bridgeport,43.3553,-83.8549;48723,tuscola,Caro,43.4833,-83.3835;48724,saginaw,Carrollton,43.4586,-83.9303;48725,huron,Caseville,43.9429,-83.2659;48726,tuscola,Cass City,43.5797,-83.1733;48727,lapeer,Clifford,43.31,-83.1741;48728,alcona,Curran,44.7336,-83.832;48729,tuscola,Deford,43.4735,-83.1702;48730,iosco,East Tawas,44.3008,-83.4776;48731,huron,Elkton,43.8344,-83.1786;48732,bay,Essexville,43.6069,-83.8217;48733,tuscola,Fairgrove,43.5126,-83.5835;48734,saginaw,Frankenmuth,43.341,-83.7475;48735,tuscola,Gagetown,43.6543,-83.2628;48736,tuscola,Gilford,43.49,-83.62;48737,alcona,Glennie,44.5582,-83.6899;48738,alcona,Greenbush,44.548,-83.3269;48739,iosco,Hale,44.3819,-83.8359;48740,alcona,Harrisville,44.6546,-83.3424;48741,tuscola,Kingston,43.3982,-83.1847;48742,alcona,Lincoln,44.7111,-83.3947;48743,iosco,Long Lake,44.4197,-83.8719;48744,tuscola,Mayville,43.3562,-83.3725;48745,alcona,Mikado,44.5833,-83.4355;48746,tuscola,Millington,43.2718,-83.5619;48747,bay,Munger,43.5286,-83.7672;48748,iosco,National City,44.3137,-83.6839;48749,arenac,Omer,44.0499,-83.843;48750,iosco,Oscoda,44.4465,-83.3619;48754,huron,Owendale,43.7206,-83.2307;48755,huron,Pigeon,43.8179,-83.2755;48756,ogemaw,Prescott,44.21,-84.0212;48757,tuscola,Reese,43.4531,-83.7015;48758,tuscola,Richville,43.4073,-83.6762;48759,huron,Sebewaing,43.7289,-83.4366;48760,tuscola,Silverwood,43.3141,-83.272;48761,iosco,South Branch,44.5014,-83.8686;48762,alcona,Spruce,44.8224,-83.5044;48763,iosco,Tawas City,44.2675,-83.5449;48764,iosco,Tawas City,44.2665,-83.5192;48765,arenac,Turner,44.1105,-83.7019;48766,arenac,Twining,44.1293,-83.8491;48767,tuscola,Unionville,43.6473,-83.4699;48768,tuscola,Vassar,43.3691,-83.5844;48769,tuscola,Vassar,43.33,-83.34;48770,iosco,Whittemore,44.2325,-83.8068;48787,saginaw,Frankenmuth,43.335,-83.7494;48801,gratiot,Alma,43.3809,-84.6635;48802,gratiot,Alma,43.37,-84.65;48804,isabella,Mount Pleasant,43.6406,-84.8474;48805,ingham,Okemos,42.5992,-84.372;48806,gratiot,Ashley,43.1891,-84.488;48807,gratiot,Bannister,43.1615,-84.3597;48808,clinton,Bath,42.8206,-84.4545;48809,ionia,Belding,43.0885,-85.2313;48811,montcalm,Carson City,43.1695,-84.8653;48812,montcalm,Cedar Lake,43.4138,-84.9753;48813,eaton,Charlotte,42.5702,-84.8352;48815,ionia,Clarksville,42.8302,-85.2494;48816,livingston,Cohoctah,42.7598,-83.9486;48817,shiawassee,Corunna,43.0414,-84.0276;48818,montcalm,Crystal,43.2624,-84.8993;48819,ingham,Dansville,42.5505,-84.2939;48820,clinton,Dewitt,42.8428,-84.5797;48821,eaton,Dimondale,42.6501,-84.6486;48822,clinton,Eagle,42.8263,-84.759;48823,ingham,East Lansing,42.7388,-84.4764;48824,ingham,East Lansing,42.7283,-84.4882;48825,ingham,East Lansing,42.7238,-84.4648;48826,ingham,East Lansing,42.737,-84.4839;48827,eaton,Eaton Rapids,42.5166,-84.6565;48829,montcalm,Edmore,43.4116,-85.028;48830,gratiot,Elm Hall,43.3639,-84.8362;48831,clinton,Elsie,43.0886,-84.3869;48832,gratiot,Elwell,43.4106,-84.7631;48833,clinton,Eureka,43.1036,-84.5139;48834,montcalm,Fenwick,43.1497,-85.0666;48835,clinton,Fowler,42.9941,-84.76;48836,livingston,Fowlerville,42.6614,-84.0721;48837,eaton,Grand Ledge,42.7529,-84.7373;48838,montcalm,Greenville,43.1793,-85.2497;48840,ingham,Haslett,42.7531,-84.3989;48841,shiawassee,Henderson,43.1143,-84.2369;48842,ingham,Holt,42.6394,-84.5242;48843,livingston,Howell,42.6159,-83.9248;48844,livingston,Howell,42.6035,-83.9112;48845,ionia,Hubbardston,43.0923,-84.8422;48846,ionia,Ionia,42.9859,-85.071;48847,gratiot,Ithaca,43.2828,-84.6088;48848,shiawassee,Laingsburg,42.8627,-84.353;48849,ionia,Lake Odessa,42.7863,-85.1357;48850,montcalm,Lakeview,43.4269,-85.2924;48851,ionia,Lyons,42.9634,-84.9209;48852,montcalm,Mcbrides,43.3553,-85.0433;48853,clinton,Maple Rapids,43.0992,-84.6898;48854,ingham,Mason,42.5796,-84.4561;48855,livingston,Howell,42.6871,-83.914;48856,gratiot,Middleton,43.1689,-84.7552;48857,shiawassee,Morrice,42.8385,-84.1768;48858,isabella,Mount Pleasant,43.6013,-84.7736;48859,isabella,Mount Pleasant,43.5647,-84.8473;48860,ionia,Muir,43.0439,-84.9391;48861,eaton,Mulliken,42.7377,-84.8979;48862,gratiot,North Star,43.2484,-84.5433;48863,livingston,Howell,42.63,-83.91;48864,ingham,Okemos,42.7053,-84.4187;48865,ionia,Orleans,43.0895,-85.1165;48866,clinton,Ovid,42.9969,-84.3649;48867,shiawassee,Owosso,42.9934,-84.1595;48870,ionia,Palo,43.1125,-84.9856;48871,gratiot,Perrinton,43.1649,-84.666;48872,shiawassee,Perry,42.82,-84.2313;48873,ionia,Pewamo,43.0007,-84.8492;48874,gratiot,Pompeii,43.1863,-84.6017;48875,ionia,Portland,42.8624,-84.9139;48876,eaton,Potterville,42.6398,-84.7346;48877,gratiot,Riverdale,43.4017,-84.8429;48878,isabella,Rosebush,43.6843,-84.7833;48879,clinton,Saint Johns,43.0059,-84.5719;48880,gratiot,Saint Louis,43.4278,-84.5952;48881,ionia,Saranac,42.9357,-85.203;48882,shiawassee,Shaftsburg,42.804,-84.2959;48883,isabella,Shepherd,43.5657,-84.5873;48884,montcalm,Sheridan,43.2126,-85.0468;48885,montcalm,Sidney,43.2358,-85.1207;48886,montcalm,Six Lakes,43.4337,-85.1416;48887,ionia,Smyrna,43.0595,-85.2628;48888,montcalm,Stanton,43.3058,-85.0995;48889,gratiot,Sumner,43.3091,-84.7907;48890,eaton,Sunfield,42.7693,-84.9813;48891,montcalm,Vestaburg,43.387,-84.9082;48892,ingham,Webberville,42.663,-84.1701;48893,isabella,Weidman,43.6453,-85.0046;48894,clinton,Westphalia,42.9328,-84.8083;48895,ingham,Williamston,42.6967,-84.2926;48896,isabella,Winn,43.5234,-84.9017;48897,barry,Woodland,42.7057,-85.1326;48901,ingham,Lansing,42.7325,-84.5555;48906,ingham,Lansing,42.7635,-84.558;48908,ingham,Lansing,42.5961,-84.8382;48909,ingham,Lansing,42.7325,-84.5555;48910,ingham,Lansing,42.7008,-84.549;48911,ingham,Lansing,42.6797,-84.5772;48912,ingham,Lansing,42.7371,-84.5244;48913,ingham,Lansing,42.7325,-84.5555;48915,ingham,Lansing,42.7391,-84.5704;48916,ingham,Lansing,42.7325,-84.5555;48917,eaton,Lansing,42.7376,-84.6244;48918,ingham,Lansing,42.7325,-84.5555;48919,ingham,Lansing,42.7286,-84.5517;48921,ingham,Lansing,42.72,-84.56;48922,ingham,Lansing,42.7325,-84.5587;48924,ingham,Lansing,42.7325,-84.5555;48929,ingham,Lansing,42.7325,-84.5587;48930,ingham,Lansing,42.7325,-84.5587;48933,ingham,Lansing,42.7334,-84.5571;48937,ingham,Lansing,42.7487,-84.559;48950,ingham,Lansing,42.7,-84.55;48951,ingham,Lansing,42.7035,-84.5365;48956,ingham,Lansing,42.7325,-84.5587;48980,ingham,Lansing,42.7325,-84.5555;49001,kalamazoo,Kalamazoo,42.2736,-85.5457;49002,kalamazoo,Portage,42.1938,-85.5639;49003,kalamazoo,Kalamazoo,42.2454,-85.5299;49004,kalamazoo,Kalamazoo,42.3518,-85.5621;49005,kalamazoo,Kalamazoo,42.2917,-85.5872;49006,kalamazoo,Kalamazoo,42.2922,-85.633;49007,kalamazoo,Kalamazoo,42.3024,-85.5882;49008,kalamazoo,Kalamazoo,42.2624,-85.6096;49009,kalamazoo,Kalamazoo,42.2809,-85.6863;49010,allegan,Allegan,42.5256,-85.8661;49011,calhoun,Athens,42.103,-85.2317;49012,kalamazoo,Augusta,42.3563,-85.354;49013,vanburen,Bangor,42.3312,-86.1311;49014,calhoun,Battle Creek,42.303,-85.1304;49015,calhoun,Battle Creek,42.3028,-85.2128;49016,calhoun,Battle Creek,42.2464,-85.0045;49017,calhoun,Battle Creek,42.3173,-85.1782;49018,calhoun,Battle Creek,42.2464,-85.0045;49019,kalamazoo,Kalamazoo,42.2454,-85.5299;49020,calhoun,Bedford,42.3953,-85.2322;49021,eaton,Bellevue,42.4525,-85.0489;49022,berrien,Benton Harbor,42.1086,-86.4234;49023,berrien,Benton Harbor,42.1167,-86.4542;49024,kalamazoo,Portage,42.1974,-85.6194;49026,vanburen,Bloomingdale,42.3842,-85.9568;49027,vanburen,Breedsville,42.3465,-86.0725;49028,branch,Bronson,41.8643,-85.1838;49029,calhoun,Burlington,42.1239,-85.105;49030,stjoseph,Burr Oak,41.8459,-85.3345;49031,cass,Cassopolis,41.8968,-85.9923;49032,stjoseph,Centreville,41.9217,-85.4963;49033,calhoun,Ceresco,42.2127,-85.1128;49034,kalamazoo,Climax,42.234,-85.3238;49035,barry,Cloverdale,42.5951,-85.3086;49036,branch,Coldwater,41.9255,-85.0057;49037,calhoun,Battle Creek,42.3453,-85.2178;49038,berrien,Coloma,42.203,-86.3225;49039,berrien,Hagar Shores,42.1862,-86.3085;49040,stjoseph,Colon,41.9576,-85.3306;49041,kalamazoo,Comstock,42.2867,-85.5133;49042,stjoseph,Constantine,41.846,-85.6571;49043,vanburen,Covert,42.2911,-86.2743;49045,vanburen,Decatur,42.1012,-86.0338;49046,barry,Delton,42.5141,-85.4067;49047,cass,Dowagiac,41.991,-86.1168;49048,kalamazoo,Kalamazoo,42.3189,-85.5152;49050,barry,Dowling,42.5015,-85.2495;49051,calhoun,East Leroy,42.1961,-85.2311;49052,kalamazoo,Fulton,42.1391,-85.3227;49053,kalamazoo,Galesburg,42.2948,-85.4237;49055,vanburen,Gobles,42.3702,-85.8536;49056,vanburen,Grand Junction,42.3761,-86.0541;49057,vanburen,Hartford,42.2088,-86.1687;49058,barry,Hastings,42.643,-85.2937;49060,barry,Hickory Corners,42.4237,-85.3998;49061,cass,Jones,41.9129,-85.8341;49062,vanburen,Kendall,42.3618,-85.8141;49063,vanburen,Lacota,42.4136,-86.1298;49064,vanburen,Lawrence,42.2076,-86.0525;49065,vanburen,Lawton,42.1545,-85.829;49066,stjoseph,Leonidas,42.0294,-85.3497;49067,cass,Marcellus,42.0275,-85.7988;49068,calhoun,Marshall,42.272,-84.9583;49069,calhoun,Marshall,42.27,-84.95;49070,allegan,Martin,42.537,-85.6417;49071,vanburen,Mattawan,42.2451,-85.7943;49072,stjoseph,Mendon,42.0143,-85.4727;49073,barry,Nashville,42.5937,-85.122;49074,kalamazoo,Nazareth,42.2584,-85.5748;49075,stjoseph,Nottawa,41.9189,-85.4489;49076,eaton,Olivet,42.4459,-84.8973;49077,kalamazoo,Oshtemo,42.2589,-85.6775;49078,allegan,Otsego,42.4723,-85.7035;49079,vanburen,Paw Paw,42.2349,-85.9005;49080,allegan,Plainwell,42.4544,-85.5994;49081,kalamazoo,Portage,42.1718,-85.6178;49082,branch,Quincy,41.9442,-84.8839;49083,kalamazoo,Richland,42.3757,-85.4447;49084,berrien,Riverside,42.1834,-86.3828;49085,berrien,Saint Joseph,42.064,-86.4783;49087,kalamazoo,Schoolcraft,42.1329,-85.6637;49088,kalamazoo,Scotts,42.1819,-85.4685;49089,branch,Sherwood,42.0107,-85.2408;49090,vanburen,South Haven,42.4041,-86.2542;49091,stjoseph,Sturgis,41.8089,-85.4264;49092,calhoun,Tekonsha,42.0863,-84.9926;49093,stjoseph,Three Rivers,41.9596,-85.6371;49094,branch,Union City,42.0551,-85.1356;49095,cass,Vandalia,41.8955,-85.8755;49096,eaton,Vermontville,42.6392,-85.011;49097,kalamazoo,Vicksburg,42.1209,-85.5024;49098,berrien,Watervliet,42.1938,-86.2604;49099,stjoseph,White Pigeon,41.7929,-85.675;49101,berrien,Baroda,41.9488,-86.4913;49102,berrien,Berrien Center,41.9484,-86.285;49103,berrien,Berrien Springs,41.948,-86.354;49104,berrien,Berrien Springs,41.9464,-86.3389;49106,berrien,Bridgman,41.9362,-86.5543;49107,berrien,Buchanan,41.8327,-86.3708;49111,berrien,Eau Claire,42.0151,-86.2972;49112,cass,Edwardsburg,41.7913,-86.0263;49113,berrien,Galien,41.8198,-86.5035;49115,berrien,Harbert,41.8771,-86.6302;49116,berrien,Lakeside,41.8485,-86.6694;49117,berrien,New Buffalo,41.7927,-86.746;49119,berrien,New Troy,41.8744,-86.549;49120,berrien,Niles,41.8202,-86.2368;49121,berrien,Niles,41.82,-86.25;49125,berrien,Sawyer,41.8829,-86.5885;49126,berrien,Sodus,42.0521,-86.3921;49127,berrien,Stevensville,42.022,-86.5119;49128,berrien,Three Oaks,41.815,-86.6154;49129,berrien,Union Pier,41.8255,-86.6911;49130,cass,Union,41.7827,-85.8529;49201,jackson,Jackson,42.2545,-84.3875;49202,jackson,Jackson,42.2634,-84.4083;49203,jackson,Jackson,42.229,-84.4132;49204,jackson,Jackson,42.2459,-84.4013;49220,lenawee,Addison,42.0036,-84.3122;49221,lenawee,Adrian,41.9005,-84.0446;49224,calhoun,Albion,42.2581,-84.7561;49227,hillsdale,Allen,41.957,-84.7677;49228,lenawee,Blissfield,41.8276,-83.8773;49229,lenawee,Britton,41.9887,-83.8377;49230,jackson,Brooklyn,42.1044,-84.2414;49232,hillsdale,Camden,41.7361,-84.7245;49233,hillsdale,Cement City,42.0604,-84.3254;49234,jackson,Clarklake,42.1235,-84.3521;49235,lenawee,Clayton,41.8636,-84.2147;49236,lenawee,Clinton,42.0639,-83.9442;49237,jackson,Concord,42.1875,-84.6529;49238,lenawee,Deerfield,41.8909,-83.7847;49239,hillsdale,Frontier,41.7825,-84.6047;49240,jackson,Grass Lake,42.2711,-84.194;49241,jackson,Hanover,42.1025,-84.5848;49242,hillsdale,Hillsdale,41.924,-84.6208;49245,calhoun,Homer,42.1416,-84.8157;49246,jackson,Horton,42.1191,-84.4976;49247,lenawee,Hudson,41.8581,-84.338;49248,lenawee,Jasper,41.7704,-84.0011;49249,hillsdale,Jerome,42.0484,-84.4455;49250,hillsdale,Jonesville,41.9798,-84.6451;49251,ingham,Leslie,42.4603,-84.4207;49252,hillsdale,Litchfield,42.0369,-84.7673;49253,lenawee,Manitou Beach,41.9671,-84.2767;49254,jackson,Michigan Center,42.2271,-84.3161;49255,branch,Montgomery,41.7928,-84.8496;49256,lenawee,Morenci,41.7386,-84.2192;49257,hillsdale,Moscow,42.0548,-84.5039;49258,hillsdale,Mosherville,42.0603,-84.6594;49259,jackson,Munith,42.3703,-84.2485;49261,jackson,Napoleon,42.1643,-84.2458;49262,hillsdale,North Adams,41.9715,-84.5208;49263,jackson,Norvell,42.1582,-84.1838;49264,ingham,Onondaga,42.4487,-84.5535;49265,lenawee,Onsted,42.0295,-84.1839;49266,hillsdale,Osseo,41.8384,-84.5974;49267,monroe,Ottawa Lake,41.7683,-83.6856;49268,lenawee,Palmyra,41.8729,-83.9263;49269,jackson,Parma,42.2739,-84.5999;49270,monroe,Petersburg,41.8757,-83.6877;49271,hillsdale,Pittsford,41.8963,-84.444;49272,jackson,Pleasant Lake,42.3903,-84.3428;49274,hillsdale,Reading,41.8442,-84.7648;49276,lenawee,Riga,41.7953,-83.8011;49277,jackson,Rives Junction,42.3887,-84.4589;49279,lenawee,Sand Creek,41.8259,-84.1016;49281,hillsdale,Somerset,42.023,-84.3794;49282,hillsdale,Somerset Center,42.0388,-84.406;49283,jackson,Spring Arbor,42.2069,-84.5501;49284,jackson,Springport,42.3805,-84.7039;49285,ingham,Stockbridge,42.4604,-84.1752;49286,lenawee,Tecumseh,41.9953,-83.9555;49287,lenawee,Tipton,42.0369,-84.0768;49288,hillsdale,Waldron,41.7386,-84.4496;49289,lenawee,Weston,41.7683,-84.1076;49301,kent,Ada,42.9566,-85.481;49302,kent,Alto,42.8243,-85.4256;49303,muskegon,Bailey,43.2768,-85.8313;49304,lake,Baldwin,43.8894,-85.8819;49305,mecosta,Barryton,43.7507,-85.1547;49306,kent,Belmont,43.075,-85.5632;49307,mecosta,Big Rapids,43.6897,-85.4797;49309,newaygo,Bitely,43.7321,-85.8778;49310,isabella,Blanchard,43.5228,-85.0589;49311,allegan,Bradley,42.633,-85.643;49312,newaygo,Brohman,43.6853,-85.8159;49314,allegan,Burnips,42.7312,-85.8404;49315,kent,Byron Center,42.8016,-85.7136;49316,kent,Caledonia,42.8187,-85.5244;49317,kent,Cannonsburg,43.0712,-85.4809;49318,muskegon,Casnovia,43.2381,-85.8254;49319,kent,Cedar Springs,43.2215,-85.5452;49320,mecosta,Chippewa Lake,43.7553,-85.2783;49321,kent,Comstock Park,43.0578,-85.6845;49322,montcalm,Coral,43.3645,-85.3792;49323,allegan,Dorr,42.7231,-85.7628;49325,barry,Freeport,42.7661,-85.3133;49326,kent,Gowen,43.2239,-85.3159;49327,newaygo,Grant,43.3392,-85.8368;49328,allegan,Hopkins,42.6421,-85.7322;49329,montcalm,Howard City,43.4083,-85.4856;49330,kent,Kent City,43.2362,-85.7399;49331,kent,Lowell,42.955,-85.3653;49332,mecosta,Mecosta,43.6813,-85.228;49333,barry,Middleville,42.6932,-85.4759;49335,allegan,Moline,42.737,-85.6635;49336,mecosta,Morley,43.506,-85.4473;49337,newaygo,Newaygo,43.4198,-85.7594;49338,mecosta,Paris,43.7677,-85.5213;49339,montcalm,Pierson,43.3355,-85.5134;49340,mecosta,Remus,43.6032,-85.1574;49341,kent,Rockford,43.1152,-85.5136;49342,mecosta,Rodney,43.7379,-85.3219;49343,kent,Sand Lake,43.2981,-85.5367;49344,allegan,Shelbyville,42.5936,-85.6282;49345,kent,Sparta,43.1619,-85.6877;49346,mecosta,Stanwood,43.6017,-85.4446;49347,montcalm,Trufant,43.3156,-85.3685;49348,allegan,Wayland,42.6643,-85.6191;49349,newaygo,White Cloud,43.5398,-85.7586;49351,kent,Rockford,43.12,-85.56;49355,kent,Ada,42.9542,-85.4889;49356,kent,Ada,42.9542,-85.4889;49357,kent,Ada,42.9542,-85.4889;49401,ottawa,Allendale,42.9711,-85.9249;49402,mason,Branch,43.9425,-86.0394;49403,ottawa,Conklin,43.1494,-85.8538;49404,ottawa,Coopersville,43.0601,-85.9517;49405,mason,Custer,43.9324,-86.1777;49406,allegan,Douglas,42.6369,-86.2022;49408,allegan,Fennville,42.5777,-86.1249;49409,ottawa,Ferrysburg,43.0809,-86.2154;49410,mason,Fountain,44.0363,-86.2169;49411,mason,Free Soil,44.112,-86.2652;49412,newaygo,Fremont,43.4652,-85.9626;49413,newaygo,Fremont,43.5543,-85.8009;49415,muskegon,Fruitport,43.1443,-86.1388;49416,allegan,Glenn,42.5203,-86.2275;49417,ottawa,Grand Haven,43.0378,-86.1912;49418,kent,Grandville,42.8939,-85.7619;49419,allegan,Hamilton,42.6881,-85.9747;49420,oceana,Hart,43.7068,-86.3142;49421,oceana,Hesperia,43.5965,-86.0607;49422,ottawa,Holland,42.7875,-86.1089;49423,ottawa,Holland,42.7692,-86.1164;49424,ottawa,Holland,42.8135,-86.1426;49425,muskegon,Holton,43.4415,-86.1509;49426,ottawa,Hudsonville,42.8748,-85.8751;49427,ottawa,Jamestown,42.8267,-85.8444;49428,ottawa,Jenison,42.9104,-85.8276;49429,ottawa,Jenison,42.9072,-85.792;49430,ottawa,Lamont,43.0103,-85.8975;49431,mason,Ludington,43.9688,-86.4403;49434,ottawa,Macatawa,42.7697,-86.2055;49435,ottawa,Marne,43.0532,-85.842;49436,oceana,Mears,43.6825,-86.4533;49437,muskegon,Montague,43.4242,-86.374;49440,muskegon,Muskegon,43.2326,-86.2492;49441,muskegon,Muskegon,43.1962,-86.2738;49442,muskegon,Muskegon,43.2329,-86.1885;49443,muskegon,Muskegon,43.2342,-86.2484;49444,muskegon,Muskegon,43.1791,-86.1989;49445,muskegon,Muskegon,43.2952,-86.279;49446,oceana,New Era,43.5556,-86.3448;49448,ottawa,Nunica,43.0883,-86.1028;49449,oceana,Pentwater,43.8237,-86.3868;49450,allegan,Pullman,42.4651,-86.0799;49451,muskegon,Ravenna,43.2091,-85.9648;49452,oceana,Rothbury,43.5116,-86.3446;49453,allegan,Saugatuck,42.6456,-86.1655;49454,mason,Scottville,43.9547,-86.2801;49455,oceana,Shelby,43.6079,-86.3615;49456,ottawa,Spring Lake,43.0887,-86.1915;49457,muskegon,Twin Lake,43.3414,-86.1633;49458,mason,Walhalla,43.9536,-86.1148;49459,oceana,Walkerville,43.7626,-86.083;49460,ottawa,West Olive,42.9099,-86.1317;49461,muskegon,Whitehall,43.3904,-86.3315;49463,muskegon,Sylvan Beach,43.372,-86.4237;49464,ottawa,Zeeland,42.8256,-86.0104;49468,kent,Grandville,42.9097,-85.7631;49501,kent,Grand Rapids,42.9842,-85.6291;49502,kent,Grand Rapids,42.9634,-85.6681;49503,kent,Grand Rapids,42.9659,-85.6527;49504,kent,Grand Rapids,42.9737,-85.7265;49505,kent,Grand Rapids,43.012,-85.6309;49506,kent,Grand Rapids,42.944,-85.6213;49507,kent,Grand Rapids,42.9318,-85.6542;49508,kent,Grand Rapids,42.8894,-85.6219;49509,kent,Wyoming,42.9134,-85.7053;49510,kent,Grand Rapids,43.0314,-85.5503;49512,kent,Grand Rapids,42.8802,-85.5352;49514,kent,Grand Rapids,43.0314,-85.5503;49515,kent,Grand Rapids,43.0314,-85.5503;49516,kent,Grand Rapids,43.0314,-85.5503;49518,kent,Grand Rapids,43.0314,-85.5503;49519,kent,Wyoming,42.8977,-85.7186;49523,kent,Grand Rapids,42.9634,-85.6681;49525,kent,Grand Rapids,43.0135,-85.6027;49528,kent,Grand Rapids,42.8811,-85.6239;49530,kent,Grand Rapids,43.0314,-85.5503;49534,kent,Grand Rapids,43.0141,-85.7543;49544,kent,Grand Rapids,43.0073,-85.7255;49546,kent,Grand Rapids,42.928,-85.5483;49548,kent,Grand Rapids,42.8697,-85.6628;49550,kent,Grand Rapids,42.97,-85.67;49555,kent,Grand Rapids,42.9634,-85.6681;49560,kent,Grand Rapids,43.0314,-85.5503;49588,kent,Grand Rapids,43.0314,-85.5503;49599,kent,Grand Rapids,43.0314,-85.5503;49601,wexford,Cadillac,44.2504,-85.43;49610,grandtraverse,Acme,44.7894,-85.4884;49611,antrim,Alba,44.9737,-84.9745;49612,antrim,Alden,44.8779,-85.2241;49613,manistee,Arcadia,44.5232,-86.2061;49614,manistee,Bear Lake,44.4311,-86.1425;49615,antrim,Bellaire,44.9765,-85.2265;49616,benzie,Benzonia,44.5955,-86.0961;49617,benzie,Beulah,44.6306,-86.0025;49618,wexford,Boon,44.2916,-85.6144;49619,manistee,Brethren,44.2966,-85.9964;49620,wexford,Buckley,44.5199,-85.6935;49621,leelanau,Cedar,44.8605,-85.8138;49622,antrim,Central Lake,45.0748,-85.2673;49623,lake,Chase,43.8892,-85.6356;49625,manistee,Copemish,44.4503,-85.8879;49626,manistee,Eastlake,44.2449,-86.2954;49627,antrim,Eastport,45.1072,-85.3501;49628,benzie,Elberta,44.6194,-86.2265;49629,antrim,Elk Rapids,44.8955,-85.4082;49630,leelanau,Empire,44.8144,-85.9999;49631,osceola,Evart,43.8888,-85.2649;49632,missaukee,Falmouth,44.2529,-85.017;49633,kalkaska,Fife Lake,44.5721,-85.2531;49634,manistee,Filer City,44.2153,-86.2873;49635,benzie,Frankfort,44.6311,-86.2212;49636,leelanau,Glen Arbor,44.8734,-85.9887;49637,grandtraverse,Grawn,44.6428,-85.7113;49638,wexford,Harrietta,44.2972,-85.7396;49639,osceola,Hersey,43.8481,-85.4059;49640,benzie,Honor,44.6954,-86.0376;49642,lake,Idlewild,43.8872,-85.7759;49643,grandtraverse,Interlochen,44.6518,-85.8022;49644,lake,Irons,44.0966,-85.939;49645,manistee,Kaleva,44.3692,-86.0467;49646,kalkaska,Kalkaska,44.7355,-85.1207;49648,antrim,Kewadin,45.0126,-85.3539;49649,grandtraverse,Kingsley,44.5756,-85.5262;49650,benzie,Lake Ann,44.7317,-85.8528;49651,missaukee,Lake City,44.3767,-85.0946;49653,leelanau,Lake Leelanau,44.9856,-85.7329;49654,leelanau,Leland,45.0793,-85.9896;49655,osceola,Leroy,44.0175,-85.4449;49656,lake,Luther,44.0545,-85.6826;49657,missaukee,Mc Bain,44.2291,-85.1715;49659,antrim,Mancelona,44.9116,-85.0634;49660,manistee,Manistee,44.2635,-86.1825;49663,wexford,Manton,44.4152,-85.4202;49664,leelanau,Maple City,44.859,-85.8814;49665,osceola,Marion,44.0463,-85.155;49666,grandtraverse,Mayfield,44.6261,-85.5287;49667,missaukee,Merritt,44.3433,-84.9446;49668,wexford,Mesick,44.4075,-85.7061;49670,leelanau,Northport,45.1157,-85.6173;49673,grandtraverse,Old Mission,44.9559,-85.49;49674,leelanau,Omena,45.0556,-85.589;49675,manistee,Onekama,44.3646,-86.21;49676,kalkaska,Rapid City,44.8449,-85.2943;49677,osceola,Reed City,43.8868,-85.513;49679,osceola,Sears,43.8776,-85.1465;49680,kalkaska,South Boardman,44.6401,-85.2472;49682,leelanau,Suttons Bay,44.9656,-85.6423;49683,benzie,Thompsonville,44.5198,-85.946;49684,grandtraverse,Traverse City,44.694,-85.6763;49685,grandtraverse,Traverse City,44.8162,-85.5751;49686,grandtraverse,Traverse City,44.7631,-85.6206;49688,osceola,Tustin,44.1072,-85.4901;49689,manistee,Wellston,44.2133,-85.9555;49690,grandtraverse,Williamsburg,44.802,-85.4347;49696,grandtraverse,Traverse City,44.8162,-85.5751;49701,emmet,Mackinaw City,45.7777,-84.7298;49705,cheboygan,Afton,45.3637,-84.4695;49706,emmet,Alanson,45.4405,-84.7924;49707,alpena,Alpena,45.079,-83.4602;49709,montmorency,Atlanta,44.9924,-84.148;49710,chippewa,Barbeau,46.2848,-84.2173;49711,charlevoix,Bay Shore,45.3583,-85.0973;49712,charlevoix,Boyne City,45.2052,-85.0183;49713,charlevoix,Boyne Falls,45.2116,-84.8916;49715,chippewa,Brimley,46.3891,-84.6981;49716,emmet,Brutus,45.5068,-84.7467;49717,cheboygan,Burt Lake,45.4408,-84.7112;49718,emmet,Carp Lake,45.7424,-84.7735;49719,mackinac,Cedarville,46.0024,-84.3488;49720,charlevoix,Charlevoix,45.2654,-85.2297;49721,cheboygan,Cheboygan,45.608,-84.4867;49722,emmet,Conway,45.4167,-84.867;49723,emmet,Cross Village,45.6254,-85.0419;49724,chippewa,Dafter,46.327,-84.3878;49725,chippewa,De Tour Village,45.9939,-83.9396;49726,chippewa,Drummond Island,46.0092,-83.6783;49727,charlevoix,East Jordan,45.1539,-85.1387;49728,chippewa,Eckerman,46.4088,-85.0136;49729,antrim,Ellsworth,45.1599,-85.2633;49730,antrim,Elmira,45.0645,-84.8562;49733,crawford,Frederic,44.8382,-84.6824;49734,otsego,Gaylord,45.0275,-84.6748;49735,otsego,Gaylord,45.0125,-84.6723;49736,chippewa,Goetzville,46.079,-84.145;49737,emmet,Good Hart,45.5802,-85.1137;49738,crawford,Grayling,44.671,-84.6913;49739,crawford,Grayling,44.683,-84.6104;49740,emmet,Harbor Springs,45.5251,-85.0062;49743,presqueisle,Hawks,45.2975,-83.8542;49744,alpena,Herron,45.0124,-83.6535;49745,mackinac,Hessel,46.0217,-84.4284;49746,montmorency,Hillman,45.0691,-83.9468;49747,alpena,Hubbard Lake,44.8947,-83.6059;49748,chippewa,Hulbert,46.3908,-85.1764;49749,cheboygan,Indian River,45.427,-84.5956;49751,otsego,Johannesburg,45.0152,-84.3857;49752,chippewa,Kinross,46.275,-84.5148;49753,alpena,Lachine,45.0429,-83.7491;49755,emmet,Levering,45.6377,-84.7986;49756,montmorency,Lewiston,44.8538,-84.2973;49757,mackinac,Mackinac Island,45.8578,-84.6245;49759,presqueisle,Millersburg,45.4309,-84.0854;49760,mackinac,Moran,46.0441,-85.0078;49761,cheboygan,Mullett Lake,45.5595,-84.5221;49762,mackinac,Naubinway,46.126,-85.4462;49764,emmet,Oden,45.4236,-84.8281;49765,presqueisle,Onaway,45.3365,-84.2123;49766,alpena,Ossineke,44.9104,-83.4592;49768,chippewa,Paradise,46.5951,-85.0973;49769,emmet,Pellston,45.5703,-84.8425;49770,emmet,Petoskey,45.3559,-84.9133;49774,chippewa,Pickford,46.1559,-84.3663;49775,mackinac,Pointe Aux Pins,45.7549,-84.447;49776,presqueisle,Posen,45.2233,-83.6393;49777,presqueisle,Presque Isle,45.2969,-83.5023;49779,presqueisle,Rogers City,45.4123,-83.8355;49780,chippewa,Rudyard,46.2585,-84.8004;49781,mackinac,Saint Ignace,45.9985,-84.6978;49782,charlevoix,Beaver Island,45.6966,-85.5202;49783,chippewa,Sault Sainte Marie,46.4151,-84.2854;49784,chippewa,Kincheloe,46.2376,-84.5006;49785,chippewa,Kincheloe,46.2433,-84.4988;49786,chippewa,Kincheloe,46.2427,-84.4975;49788,chippewa,Kincheloe,46.2735,-84.4467;49790,chippewa,Eckerman,46.35,-84.96;49791,cheboygan,Topinabee,45.4838,-84.5936;49792,cheboygan,Tower,45.3588,-84.2953;49793,chippewa,Trout Lake,46.1936,-85.019;49795,otsego,Vanderbilt,45.1532,-84.6511;49796,charlevoix,Walloon Lake,45.2661,-84.9337;49797,otsego,Waters,44.8702,-84.6598;49799,cheboygan,Wolverine,45.2861,-84.6065;49801,dickinson,Iron Mountain,45.8219,-88.0683;49802,dickinson,Kingsford,45.8006,-88.0773;49805,keweenaw,Allouez,47.2879,-88.4129;49806,alger,Au Train,46.4446,-86.9115;49807,delta,Bark River,45.6956,-87.2073;49808,marquette,Big Bay,46.8158,-87.7285;49812,menominee,Carney,45.5917,-87.5439;49814,marquette,Champion,46.4685,-87.8306;49815,dickinson,Channing,46.1546,-88.0772;49816,alger,Chatham,46.3477,-86.929;49817,schoolcraft,Cooks,45.8997,-86.5307;49818,delta,Cornell,45.9104,-87.2237;49819,marquette,Arnold,46.0508,-87.4921;49820,mackinac,Curtis,46.2048,-85.7865;49821,menominee,Daggett,45.4887,-87.6079;49822,alger,Deerton,46.427,-87.0497;49825,alger,Eben Junction,46.3549,-86.9701;49826,alger,Rumely,46.3483,-87.0332;49827,mackinac,Engadine,46.204,-85.6005;49829,delta,Escanaba,45.7659,-87.089;49831,dickinson,Felch,45.9972,-87.8257;49833,marquette,Little Lake,46.2888,-87.3418;49834,dickinson,Foster City,45.9438,-87.7584;49835,delta,Garden,45.7549,-86.5776;49836,schoolcraft,Germfask,46.2363,-85.9159;49837,delta,Gladstone,45.8813,-87.1152;49838,mackinac,Gould City,46.0747,-85.7338;49839,alger,Grand Marais,46.6529,-85.9836;49840,schoolcraft,Gulliver,46.0115,-86.0214;49841,marquette,Gwinn,46.3311,-87.4397;49845,menominee,Harris,45.6922,-87.3513;49847,menominee,Hermansville,45.7149,-87.6227;49848,menominee,Ingalls,45.3748,-87.6206;49849,marquette,Ishpeming,46.4387,-87.7091;49852,dickinson,Loretto,45.7772,-87.8151;49853,luce,Mc Millan,46.3753,-85.7394;49854,schoolcraft,Manistique,46.0062,-86.2555;49855,marquette,Marquette,46.5786,-87.4545;49858,menominee,Menominee,45.1343,-87.6215;49861,marquette,Michigamme,46.5308,-88.0914;49862,alger,Munising,46.3994,-86.6983;49863,menominee,Nadeau,45.6089,-87.5529;49864,delta,Nahma,45.8424,-86.6558;49865,marquette,National Mine,46.6041,-87.6148;49866,marquette,Negaunee,46.5007,-87.5829;49868,luce,Newberry,46.3438,-85.515;49870,dickinson,Norway,45.7862,-87.9047;49871,marquette,Palmer,46.4416,-87.5764;49872,delta,Perkins,45.9925,-87.0792;49873,menominee,Perronville,45.841,-87.4816;49874,menominee,Powers,45.6792,-87.5319;49876,dickinson,Quinnesec,45.7999,-87.9922;49877,dickinson,Ralph,46.1297,-87.7367;49878,delta,Rapid River,45.9107,-86.8845;49879,marquette,Republic,46.368,-87.9938;49880,delta,Rock,46.0503,-87.1331;49881,dickinson,Sagola,46.0813,-88.0676;49883,schoolcraft,Seney,46.388,-85.9708;49884,alger,Shingleton,46.3512,-86.4823;49885,marquette,Skandia,46.349,-87.2481;49886,menominee,Spalding,45.6958,-87.511;49887,menominee,Stephenson,45.4166,-87.6258;49891,alger,Trenary,46.1947,-86.9502;49892,dickinson,Vulcan,45.7623,-87.8168;49893,menominee,Wallace,45.3017,-87.5805;49894,delta,Wells,45.7849,-87.0734;49895,alger,Wetmore,46.3535,-86.6345;49896,menominee,Wilson,45.6649,-87.3997;49901,keweenaw,Ahmeek,47.2933,-88.3897;49902,iron,Alpha,46.0438,-88.3771;49903,iron,Amasa,46.2321,-88.4508;49905,houghton,Atlantic Mine,47.0937,-88.6613;49908,baraga,Baraga,46.8048,-88.5758;49910,ontonagon,Bergland,46.5881,-89.5973;49911,gogebic,Bessemer,46.4802,-90.0515;49912,ontonagon,Bruce Crossing,46.528,-89.168;49913,houghton,Calumet,47.2439,-88.4588;49915,iron,Caspian,46.0643,-88.6329;49916,houghton,Chassell,47.002,-88.5546;49917,houghton,Copper City,47.2842,-88.3875;49918,keweenaw,Copper Harbor,47.4688,-87.8884;49919,baraga,Covington,46.5413,-88.5371;49920,iron,Crystal Falls,46.1093,-88.3505;49921,houghton,Dodgeville,47.0914,-88.5809;49922,houghton,Dollar Bay,47.1196,-88.5115;49925,ontonagon,Ewen,46.5404,-89.3145;49927,iron,Gaastra,46.0526,-88.5917;49929,ontonagon,Greenland,46.7809,-89.1146;49930,houghton,Hancock,47.1367,-88.5654;49931,houghton,Houghton,47.1158,-88.558;49934,houghton,Hubbell,47.1733,-88.4293;49935,iron,Iron River,46.093,-88.646;49938,gogebic,Ironwood,46.4638,-90.1588;49942,houghton,Kearsarge,47.2694,-88.4184;49945,houghton,Lake Linden,47.1784,-88.2973;49946,baraga,Lanse,46.7794,-88.2409;49947,gogebic,Marenisco,46.3551,-89.6774;49948,ontonagon,Mass City,46.7474,-89.0649;49950,keweenaw,Mohawk,47.3526,-88.2889;49952,houghton,Nisula,46.7748,-88.8799;49953,ontonagon,Ontonagon,46.8275,-89.3485;49955,houghton,Painesdale,47.0404,-88.6704;49958,houghton,Pelkie,46.7949,-88.6251;49959,gogebic,Ramsay,46.4727,-89.9976;49960,ontonagon,Rockland,46.7537,-89.1958;49961,houghton,Sidnaw,46.5047,-88.7085;49962,baraga,Skanee,46.8747,-88.1732;49963,houghton,South Range,47.0719,-88.652;49964,iron,Stambaugh,46.0797,-88.629;49965,houghton,Toivola,46.9109,-88.8532;49967,ontonagon,Trout Creek,46.4864,-89.027;49968,gogebic,Wakefield,46.4752,-89.9424;49969,gogebic,Watersmeet,46.2542,-89.2108;49970,baraga,Watton,46.5413,-88.6049;49971,ontonagon,White Pine,46.7538,-89.584";
+// Starter chat rooms: [zip, town] for the biggest towns in each county
+const MI_STARTER_ROOMS = {"alcona":[["48740","Harrisville"],["48705","Barton City"],["48721","Black River"],["48728","Curran"],["48737","Glennie"],["48738","Greenbush"]],"alger":[["49862","Munising"],["49806","Au Train"],["49816","Chatham"],["49822","Deerton"],["49884","Shingleton"],["49891","Trenary"]],"allegan":[["49010","Allegan"],["49323","Dorr"],["49408","Fennville"],["49419","Hamilton"],["49328","Hopkins"],["49070","Martin"]],"alpena":[["49707","Alpena"],["49744","Herron"],["49747","Hubbard Lake"],["49753","Lachine"],["49766","Ossineke"]],"antrim":[["49615","Bellaire"],["49612","Alden"],["49622","Central Lake"],["49629","Elk Rapids"],["49729","Ellsworth"],["49730","Elmira"]],"arenac":[["48658","Standish"],["48703","Au Gres"],["48749","Omer"],["48659","Sterling"],["48765","Turner"],["48766","Twining"]],"baraga":[["49908","Baraga"],["49919","Covington"],["49946","Lanse"],["49962","Skanee"],["49970","Watton"]],"barry":[["49058","Hastings"],["49046","Delton"],["49050","Dowling"],["49325","Freeport"],["49060","Hickory Corners"],["49333","Middleville"]],"bay":[["48706","Bay City"],["48611","Auburn"],["48613","Bentley"],["48732","Essexville"],["48631","Kawkawlin"],["48634","Linwood"]],"benzie":[["49617","Beulah"],["49616","Benzonia"],["49635","Frankfort"],["49640","Honor"],["49650","Lake Ann"],["49683","Thompsonville"]],"berrien":[["49022","Benton Harbor"],["49085","Saint Joseph"],["49101","Baroda"],["49102","Berrien Center"],["49103","Berrien Springs"],["49106","Bridgman"]],"branch":[["49036","Coldwater"],["49028","Bronson"],["49255","Montgomery"],["49082","Quincy"],["49089","Sherwood"],["49094","Union City"]],"calhoun":[["49014","Battle Creek"],["49068","Marshall"],["49224","Albion"],["49011","Athens"],["49029","Burlington"],["49033","Ceresco"]],"cass":[["49047","Dowagiac"],["49031","Cassopolis"],["49112","Edwardsburg"],["49061","Jones"],["49067","Marcellus"],["49130","Union"]],"charlevoix":[["49720","Charlevoix"],["49782","Beaver Island"],["49712","Boyne City"],["49713","Boyne Falls"],["49727","East Jordan"]],"cheboygan":[["49721","Cheboygan"],["49705","Afton"],["49749","Indian River"],["49799","Wolverine"]],"chippewa":[["49783","Sault Sainte Marie"],["49728","Eckerman"],["49710","Barbeau"],["49715","Brimley"],["49724","Dafter"],["49725","De Tour Village"]],"clare":[["48625","Harrison"],["48617","Clare"],["48622","Farwell"],["48632","Lake"]],"clinton":[["48879","Saint Johns"],["48808","Bath"],["48820","Dewitt"],["48822","Eagle"],["48831","Elsie"],["48835","Fowler"]],"crawford":[["49738","Grayling"],["49733","Frederic"]],"delta":[["49829","Escanaba"],["49807","Bark River"],["49818","Cornell"],["49835","Garden"],["49837","Gladstone"],["49878","Rapid River"]],"dickinson":[["49801","Iron Mountain"],["49815","Channing"],["49831","Felch"],["49834","Foster City"],["49802","Kingsford"],["49852","Loretto"]],"eaton":[["48813","Charlotte"],["49021","Bellevue"],["48821","Dimondale"],["48827","Eaton Rapids"],["48837","Grand Ledge"],["48917","Lansing"]],"emmet":[["49770","Petoskey"],["49706","Alanson"],["49716","Brutus"],["49718","Carp Lake"],["49740","Harbor Springs"],["49755","Levering"]],"genesee":[["48502","Flint"],["48509","Burton"],["48420","Clio"],["48423","Davison"],["48430","Fenton"],["48433","Flushing"]],"gladwin":[["48624","Gladwin"],["48612","Beaverton"],["48652","Rhodes"]],"gogebic":[["49938","Ironwood"],["49911","Bessemer"],["49947","Marenisco"],["49968","Wakefield"],["49969","Watersmeet"]],"grandtraverse":[["49684","Traverse City"],["49637","Grawn"],["49643","Interlochen"],["49649","Kingsley"],["49690","Williamsburg"]],"gratiot":[["48801","Alma"],["48847","Ithaca"],["48806","Ashley"],["48807","Bannister"],["48615","Breckenridge"],["48832","Elwell"]],"hillsdale":[["49242","Hillsdale"],["49227","Allen"],["49232","Camden"],["49233","Cement City"],["49249","Jerome"],["49250","Jonesville"]],"houghton":[["49931","Houghton"],["49905","Atlantic Mine"],["49913","Calumet"],["49916","Chassell"],["49921","Dodgeville"],["49930","Hancock"]],"huron":[["48413","Bad Axe"],["48720","Bay Port"],["48725","Caseville"],["48731","Elkton"],["48432","Filion"],["48441","Harbor Beach"]],"ingham":[["48906","Lansing"],["48854","Mason"],["48823","East Lansing"],["48819","Dansville"],["48840","Haslett"],["48842","Holt"]],"ionia":[["48846","Ionia"],["48809","Belding"],["48815","Clarksville"],["48845","Hubbardston"],["48849","Lake Odessa"],["48851","Lyons"]],"iosco":[["48763","Tawas City"],["48730","East Tawas"],["48739","Hale"],["48743","Long Lake"],["48748","National City"],["48750","Oscoda"]],"iron":[["49935","Iron River"],["49920","Crystal Falls"],["49927","Gaastra"]],"isabella":[["48858","Mount Pleasant"],["49310","Blanchard"],["48878","Rosebush"],["48883","Shepherd"],["48893","Weidman"]],"jackson":[["49201","Jackson"],["49230","Brooklyn"],["49234","Clarklake"],["49237","Concord"],["49240","Grass Lake"],["49241","Hanover"]],"kalamazoo":[["49001","Kalamazoo"],["49002","Portage"],["49012","Augusta"],["49034","Climax"],["49052","Fulton"],["49053","Galesburg"]],"kalkaska":[["49646","Kalkaska"],["49633","Fife Lake"],["49676","Rapid City"],["49680","South Boardman"]],"kent":[["49503","Grand Rapids"],["49509","Wyoming"],["49301","Ada"],["49302","Alto"],["49306","Belmont"],["49315","Byron Center"]],"keweenaw":[["49805","Allouez"],["49950","Mohawk"]],"lake":[["49304","Baldwin"],["49623","Chase"],["49642","Idlewild"],["49644","Irons"],["49656","Luther"]],"lapeer":[["48446","Lapeer"],["48003","Almont"],["48412","Attica"],["48727","Clifford"],["48421","Columbiaville"],["48428","Dryden"]],"leelanau":[["49682","Suttons Bay"],["49621","Cedar"],["49630","Empire"],["49636","Glen Arbor"],["49653","Lake Leelanau"],["49654","Leland"]],"lenawee":[["49221","Adrian"],["49220","Addison"],["49228","Blissfield"],["49229","Britton"],["49235","Clayton"],["49236","Clinton"]],"livingston":[["48114","Brighton"],["48843","Howell"],["48836","Fowlerville"],["48137","Gregory"],["48353","Hartland"],["48169","Pinckney"]],"luce":[["49868","Newberry"],["49853","Mc Millan"]],"mackinac":[["49781","Saint Ignace"],["49719","Cedarville"],["49820","Curtis"],["49827","Engadine"],["49838","Gould City"],["49745","Hessel"]],"macomb":[["48088","Warren"],["48043","Mount Clemens"],["48310","Sterling Heights"],["48035","Clinton Township"],["48080","Saint Clair Shores"],["48315","Utica"]],"manistee":[["49660","Manistee"],["49613","Arcadia"],["49614","Bear Lake"],["49619","Brethren"],["49625","Copemish"],["49645","Kaleva"]],"marquette":[["49855","Marquette"],["49814","Champion"],["49841","Gwinn"],["49849","Ishpeming"],["49861","Michigamme"],["49866","Negaunee"]],"mason":[["49431","Ludington"],["49402","Branch"],["49405","Custer"],["49410","Fountain"],["49411","Free Soil"],["49454","Scottville"]],"mecosta":[["49307","Big Rapids"],["49305","Barryton"],["49332","Mecosta"],["49336","Morley"],["49338","Paris"],["49340","Remus"]],"menominee":[["49858","Menominee"],["49812","Carney"],["49821","Daggett"],["49847","Hermansville"],["49848","Ingalls"],["49873","Perronville"]],"midland":[["48640","Midland"],["48618","Coleman"],["48628","Hope"],["48657","Sanford"]],"missaukee":[["49651","Lake City"],["49632","Falmouth"],["49657","Mc Bain"],["49667","Merritt"]],"monroe":[["48161","Monroe"],["48117","Carleton"],["48131","Dundee"],["48133","Erie"],["48140","Ida"],["48145","La Salle"]],"montcalm":[["48838","Greenville"],["48888","Stanton"],["48811","Carson City"],["49322","Coral"],["48818","Crystal"],["48829","Edmore"]],"montmorency":[["49709","Atlanta"],["49746","Hillman"],["49756","Lewiston"]],"muskegon":[["49440","Muskegon"],["49303","Bailey"],["49318","Casnovia"],["49415","Fruitport"],["49425","Holton"],["49437","Montague"]],"newaygo":[["49349","White Cloud"],["49309","Bitely"],["49412","Fremont"],["49327","Grant"],["49337","Newaygo"]],"oakland":[["48340","Pontiac"],["48331","Farmington"],["48033","Southfield"],["48083","Troy"],["48301","Bloomfield Hills"],["48359","Lake Orion"]],"oceana":[["49420","Hart"],["49421","Hesperia"],["49436","Mears"],["49446","New Era"],["49449","Pentwater"],["49452","Rothbury"]],"ogemaw":[["48661","West Branch"],["48610","Alger"],["48635","Lupton"],["48756","Prescott"],["48654","Rose City"]],"ontonagon":[["49953","Ontonagon"],["49910","Bergland"],["49912","Bruce Crossing"],["49925","Ewen"],["49948","Mass City"],["49967","Trout Creek"]],"osceola":[["49677","Reed City"],["49631","Evart"],["49639","Hersey"],["49655","Leroy"],["49665","Marion"],["49679","Sears"]],"oscoda":[["48647","Mio"],["48619","Comins"],["48621","Fairview"],["48636","Luzerne"]],"otsego":[["49735","Gaylord"],["49751","Johannesburg"],["49795","Vanderbilt"]],"ottawa":[["49423","Holland"],["49417","Grand Haven"],["49401","Allendale"],["49403","Conklin"],["49404","Coopersville"],["49426","Hudsonville"]],"presqueisle":[["49779","Rogers City"],["49743","Hawks"],["49759","Millersburg"],["49765","Onaway"],["49776","Posen"],["49777","Presque Isle"]],"roscommon":[["48653","Roscommon"],["48629","Houghton Lake"],["48651","Prudenville"],["48656","Saint Helen"]],"saginaw":[["48601","Saginaw"],["48415","Birch Run"],["48614","Brant"],["48722","Bridgeport"],["48417","Burt"],["48616","Chesaning"]],"sanilac":[["48471","Sandusky"],["48401","Applegate"],["48416","Brown City"],["48419","Carsonville"],["48422","Croswell"],["48426","Decker"]],"schoolcraft":[["49854","Manistique"],["49817","Cooks"],["49836","Germfask"],["49840","Gulliver"],["49883","Seney"]],"shiawassee":[["48867","Owosso"],["48817","Corunna"],["48414","Bancroft"],["48418","Byron"],["48429","Durand"],["48841","Henderson"]],"stclair":[["48060","Port Huron"],["48001","Algonac"],["48002","Allenton"],["48006","Avoca"],["48014","Capac"],["48064","Casco"]],"stjoseph":[["49091","Sturgis"],["49032","Centreville"],["49030","Burr Oak"],["49040","Colon"],["49042","Constantine"],["49066","Leonidas"]],"tuscola":[["48723","Caro"],["48768","Vassar"],["48701","Akron"],["48726","Cass City"],["48729","Deford"],["48733","Fairgrove"]],"vanburen":[["49090","South Haven"],["49079","Paw Paw"],["49013","Bangor"],["49026","Bloomingdale"],["49043","Covert"],["49045","Decatur"]],"washtenaw":[["48103","Ann Arbor"],["48197","Ypsilanti"],["48118","Chelsea"],["48130","Dexter"],["48158","Manchester"],["48160","Milan"]],"wayne":[["48201","Detroit"],["48120","Dearborn"],["48150","Livonia"],["48187","Canton"],["48125","Dearborn Heights"],["48230","Grosse Pointe"]],"wexford":[["49601","Cadillac"],["49618","Boon"],["49620","Buckley"],["49638","Harrietta"],["49663","Manton"],["49668","Mesick"]]};
+const MI_ZIP_INFO = {};
+MI_ZIP_DATA.split(';').forEach(row=>{ const p = row.split(','); MI_ZIP_INFO[p[0]] = {county:p[1], town:p[2], lat:+p[3], lng:+p[4]}; });
+MI_COUNTY_LIST.forEach(([id, short, seat, city, zip, lat, lng])=>{
+  if(COUNTIES[id]) { COUNTIES[id].seat = seat; COUNTIES[id].center = COUNTIES[id].center || [lat, lng]; return; }
+  COUNTIES[id] = {
+    id, slug:id, name:short+' County', state:'Michigan', displayName:short+' County, Michigan', short,
+    timezone:'America/Detroit', description:'Civic engagement platform for '+short+' County, MI residents.',
+    primaryCity:city, seat, launched:'2026-10-06', status:'starter', defaultZip:zip, accentColor:'#f0c040',
+    center:[lat, lng],
+    jurisdictions:[short+' County','State of Michigan','Federal'],
+  };
+});
+// Every Michigan ZIP gets a county and a town name. The hand-written names for
+// the first three counties stay, except where they named the wrong town.
+const ZIP_LABEL_FIXES = {"49249": "Jerome", "49250": "Jonesville", "49252": "Litchfield", "49285": "Stockbridge", "49012": "Augusta", "49020": "Bedford", "49021": "Bellevue", "49029": "Burlington", "49033": "Ceresco", "49034": "Climax", "49050": "Dowling", "49070": "Martin", "49096": "Vermontville", "49099": "White Pigeon"};
+Object.entries(MI_ZIP_INFO).forEach(([zip, info])=>{
+  ZIP_TO_COUNTY[zip] = info.county;
+  if(!ZIP_COMMUNITY[zip] || ZIP_LABEL_FIXES[zip]) ZIP_COMMUNITY[zip] = info.town;
+});
+
 // Lookup: which county does a ZIP belong to? Returns county slug or null.
 function countyForZip(zip) {
   if(!zip) return null;
@@ -513,7 +638,7 @@ const BADGES = {
   zip_49201:        {id:'zip_49201',         icon:'📍',  label:'Jackson Resident',   desc:'Verified resident of City of Jackson (49201-49204)', color:'#1a1a2e', bg:'#f0f0f8'},
   zip_49237:        {id:'zip_49237',         icon:'📍',  label:'Concord Neighbor',   desc:'Verified resident of Concord (49237)',         color:'#1a6b3c', bg:'#eef7f1'},
   zip_49230:        {id:'zip_49230',         icon:'📍',  label:'Brooklyn Resident',  desc:'Verified resident of Brooklyn area (49230)',   color:'#5b3a8c', bg:'#f0ebf8'},
-  zip_49285:        {id:'zip_49285',         icon:'📍',  label:'Summit Neighbor',    desc:'Verified resident of Summit Township (49285)', color:'#1a5c8a', bg:'#e8f2fa'},
+  zip_49285:        {id:'zip_49285',         icon:'📍',  label:'Stockbridge Area',   desc:'Verified resident of the Stockbridge ZIP (49285)', color:'#1a5c8a', bg:'#e8f2fa'},
   zip_jackson_co:   {id:'zip_jackson_co',    icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
   // ZIP / community identity — Calhoun County
   zip_49014:        {id:'zip_49014',         icon:'📍',  label:'Battle Creek',       desc:'Verified resident of Battle Creek (49014-49017, 49037)', color:'#1a1a2e', bg:'#f0f0f8'},
@@ -526,9 +651,24 @@ const BADGES = {
   zip_washtenaw_co: {id:'zip_washtenaw_co',  icon:'📍',  label:'Washtenaw County',   desc:'Verified Washtenaw County resident',            color:'#888',    bg:'#f5f5f5'},
   // Legacy alias: existing rows still reference 'zip_other'. Keep it pointing
   // at the Jackson County badge so old profiles don't show a broken chip.
-  zip_other:        {id:'zip_other',         icon:'📍',  label:'Jackson County',     desc:'Verified Jackson County resident',             color:'#888',    bg:'#f5f5f5'},
+  zip_other:        {id:'zip_other',         icon:'📍',  label:'Verified Resident',  desc:'Verified Michigan resident',                   color:'#888',    bg:'#f5f5f5'},
   youth_voice:      {id:'youth_voice',       icon:'⭐',  label:'Youth Voice',        desc:'Under-25 member making civic impact',          color:'#5b3a8c', bg:'#f0ebf8'},
 };
+
+// Every other county gets its own "<County> resident" badge
+Object.values(COUNTIES).forEach(c=>{
+  const k = 'zip_co_' + c.id;
+  if(!['jackson','calhoun','washtenaw'].includes(c.id) && !BADGES[k])
+    BADGES[k] = {id:k, icon:'📍', label:c.name, desc:'Verified '+c.name+' resident', color:'#888', bg:'#f5f5f5'};
+});
+// The home-town badge for a ZIP code (same rules as computeBadges below)
+function zipBadgeFor(zip) {
+  const zc = ZIP_TO_COUNTY[zip] || null;
+  if(zc === 'jackson') return ['49201','49202','49203','49204'].includes(zip) ? 'zip_49201' : zip==='49237' ? 'zip_49237' : zip==='49230' ? 'zip_49230' : zip==='49285' ? 'zip_49285' : 'zip_jackson_co';
+  if(zc === 'calhoun') return ['49014','49015','49016','49017','49037'].includes(zip) ? 'zip_49014' : zip==='49068' ? 'zip_49068' : zip==='49224' ? 'zip_49224' : 'zip_calhoun_co';
+  if(zc === 'washtenaw') return ['48103','48104','48105','48108','48109'].includes(zip) ? 'zip_48104' : ['48197','48198'].includes(zip) ? 'zip_48197' : 'zip_washtenaw_co';
+  return zc ? 'zip_co_' + zc : null;
+}
 
 // Determine which badges a profile has earned based on their data
 const computeBadges = (profile, voteCounts, commentCount) => {
@@ -561,6 +701,8 @@ const computeBadges = (profile, voteCounts, commentCount) => {
     if(['48103','48104','48105','48108','48109'].includes(zip)) earned.add('zip_48104');
     else if(['48197','48198'].includes(zip)) earned.add('zip_48197');
     else earned.add('zip_washtenaw_co');
+  } else if(zipCounty) {
+    earned.add('zip_co_' + zipCounty);
   }
   // Existing legacy data may have 'zip_other' badge stored on profiles;
   // it stays earned because we start `earned` from profile.badges.
@@ -1468,6 +1610,8 @@ function EmailRepButtons({bill,choice,user}) {
   const getRelevantReps = ()=>{
     const level = bill.level||'';
     const juris = (bill.jurisdiction||'').toLowerCase();
+    // Outside Jackson we don't have local officials on file yet
+    if(countyTag() !== 'jackson') return level === 'federal' ? REPS.filter(r=>r.body==='U.S. Senate') : [];
 
     if(level==='federal') {
       // Federal bills — show both state reps + state senator (they vote on federal too)
@@ -1499,7 +1643,8 @@ function EmailRepButtons({bill,choice,user}) {
 
   const relevant = getRelevantReps().slice(0,4);
 
-  if(!relevant.length) return h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginTop:6}},"No rep contact info on file for this bill yet.");
+  if(!relevant.length) return countyTag() !== 'jackson' ? h('div',{style:{marginTop:6}}, h(FindYourOfficials,{compact:true}))
+    : h('div',{style:{fontSize:12,color:'#aaa',fontStyle:'italic',marginTop:6}},"No rep contact info on file for this bill yet.");
 
   return h('div',null,
     contactCount>0&&h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:600,marginBottom:6}},
@@ -2267,7 +2412,24 @@ function WhyPanel({bill, user, myVote}) {
 }
 
 // ── Ask an Official ──────────────────────────────────────────────────────────
-function repsForCounty() { return countyTag() === 'jackson' ? REPS : []; }
+// Jackson's list of local officials only applies in Jackson; every county
+// shares Michigan's two U.S. Senators.
+function repsForCounty() { return countyTag() === 'jackson' ? REPS : REPS.filter(r=>r.body==='U.S. Senate'); }
+const FIND_OFFICIALS_LINKS = [
+  ['Your districts & exact ballot (Michigan Voter Information Center)', 'https://mvic.sos.state.mi.us/'],
+  ['Find your State Representative', 'https://www.house.mi.gov/'],
+  ['Find your State Senator', 'https://senate.michigan.gov/'],
+  ['Find your U.S. Representative', 'https://www.house.gov/representatives/find-your-representative'],
+];
+function FindYourOfficials({compact}) {
+  const c = getCurrentCounty();
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:compact?'10px 12px':'14px 16px',marginBottom:14,fontFamily:"'Lora',serif"}},
+    !compact && h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:4}},'Find your officials'),
+    h('div',{style:{fontSize:12.5,color:'#666',lineHeight:1.55,marginBottom:6}},
+      'We haven\'t added ' + c.name + '\'s local officials yet. Your state legislators and U.S. Representative depend on your address:'),
+    FIND_OFFICIALS_LINKS.map(([label, url])=>h('div',{key:url,style:{padding:'2px 0'}},
+      h('a',{href:url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:13}}, label + ' ↗'))));
+}
 
 function AskComposer({bills, presetBill, officials, user, onAsked, onToast}) {
   const [question, setQuestion] = useState('');
@@ -3363,8 +3525,20 @@ const COUNTY_RSS_FEEDS = {
     {name:'NPR News',                 url:'https://feeds.npr.org/1001/rss.xml',      category:'Federal'},
   ],
 };
+const STATEWIDE_RSS_FEEDS = [
+  {name:'Michigan Advance',       url:'https://michiganadvance.com/feed/',          category:'Michigan'},
+  {name:'WLNS 6 (Michigan news)', url:'https://www.wlns.com/news/michigan/feed',    category:'Michigan'},
+  {name:'NPR News',               url:'https://feeds.npr.org/1001/rss.xml',         category:'Federal'},
+];
+// MLive's regional sections, for the counties they cover
+const MLIVE_REGION = {kent:'grand-rapids', ottawa:'grand-rapids', genesee:'flint', saginaw:'saginaw', bay:'bay-city',
+  kalamazoo:'kalamazoo', ingham:'lansing', eaton:'lansing', clinton:'lansing', muskegon:'muskegon', wayne:'detroit', oakland:'detroit', macomb:'detroit'};
 function rssFeedsForCounty(countyId){
-  return COUNTY_RSS_FEEDS[countyId || DEFAULT_COUNTY] || COUNTY_RSS_FEEDS[DEFAULT_COUNTY];
+  const id = countyId || DEFAULT_COUNTY;
+  if(COUNTY_RSS_FEEDS[id]) return COUNTY_RSS_FEEDS[id];
+  const region = MLIVE_REGION[id];
+  return (region ? [{name:'MLive ' + region.replace(/-/g,' ').replace(/\b\w/g,x=>x.toUpperCase()), url:'https://www.mlive.com/arc/outboundfeeds/rss/category/news/' + region + '/?outputType=xml', category:'Local'}] : [])
+    .concat(STATEWIDE_RSS_FEEDS);
 }
 // Legacy alias — resolved per current county at fetch time.
 const RSS_FEEDS = rssFeedsForCounty(getCountyFromUrl() || DEFAULT_COUNTY);
@@ -5010,7 +5184,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
         h('span',{style:{fontFamily:FONT_D,fontSize:10.5,fontWeight:700,color:'#c0392b',letterSpacing:'.15em',textTransform:'uppercase'}},
           'Live this week'),
         h('span',{style:{fontSize:11,color:MUTED,marginLeft:'auto',fontStyle:'italic'}},
-          bill.jurisdiction || 'Jackson County')
+          bill.jurisdiction || CNAME())
       ),
 
       h('div',{style:{fontFamily:FONT_D,fontSize:featured?13:11,fontWeight:700,color:MAROON,
@@ -5146,6 +5320,9 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
           h('span',{style:{fontSize:12,color:'#c8d0dc',fontFamily:FONT_B}},'Free, nonpartisan, run by volunteers. Read everything without an account.'))
       );
     })(),
+
+    // ── New county? Say so, and invite people to help ──────────────
+    h(StarterCountyBanner,{user, onNavigate}),
 
     // ── Invitations from neighbors ─────────────────────────────────
     user && h(PendingInvitesBanner,{user, onNavigate:(t,c)=>onNavigate && onNavigate(t,c)}),
@@ -5521,7 +5698,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
                   style:{color:NAVY,fontWeight:700,textDecoration:'none',
                     borderBottom:'1px dotted '+NAVY, cursor:'pointer'}
                 }, item.zip)
-              : h('b',{style:{color:NAVY}}, item.zip || 'Jackson County'),
+              : h('b',{style:{color:NAVY}}, item.zip || CNAME()),
             h('div',{style:{fontSize:11,color:MUTED,fontStyle:'italic',marginTop:2}}, timeAgo(item.created_at))
           ),
           isNew && !isAdded && user && h('button',{onClick:()=>addNeighbor(item.id),
@@ -5599,13 +5776,13 @@ function NominateBillPanel({user, onToast}) {
           style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 12px',fontSize:14,boxSizing:'border-box',fontFamily:"'Lora',serif"}})
       ),
       h('div',{style:{marginBottom:14}},
-        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Why does this matter to Jackson County? (optional)'),
+        h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:4}},'Why does this matter to '+CNAME()+'? (optional)'),
         h('textarea',{value:form.note,onChange:set('note'),rows:2,
           placeholder:'Briefly explain why this legislation is relevant to our community...',
           style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 12px',fontSize:13,boxSizing:'border-box',resize:'vertical',fontFamily:"'Lora',serif",lineHeight:1.6}})
       ),
       h('div',{style:{background:'#e8f2fa',borderRadius:7,padding:'10px 12px',marginBottom:12,fontSize:12,color:'#1a5c8a',lineHeight:1.6}},
-        '📬 Your nomination goes directly to Justin. He reviews it and — if it\'s a real bill affecting Jackson County residents — adds it to the platform so everyone can vote on it.'
+        '📬 Your nomination goes directly to Justin. He reviews it and — if it\'s a real bill affecting '+CNAME()+' residents — adds it to the platform so everyone can vote on it.'
       ),
       h('button',{onClick:submit,disabled:saving||!form.title.trim(),
         style:{background:saving||!form.title.trim()?'#ccc':'#1a5c8a',color:'#fff',border:'none',
@@ -6012,14 +6189,16 @@ function RepTracker({bills, userZip}) {
   const [zipInput,setZipInput]=useState(userZip||'');
   const [activeZip,setActiveZip]=useState(userZip||'');
 
+  const ALL_REPS = repsForCounty();
   const getRepsForZip=(zip)=>{
-    if(!zip) return REPS;
+    if(!zip) return ALL_REPS;
+    if(countyTag() !== 'jackson') return ALL_REPS;
     const ids=ZIP_REPS[zip];
     if(!ids) return REPS.filter(r=>r.jurisdiction==='State of Michigan'||r.jurisdiction==='Jackson County');
     return REPS.filter(r=>ids.includes(r.id));
   };
 
-  const baseReps = activeZip ? getRepsForZip(activeZip) : REPS;
+  const baseReps = activeZip ? getRepsForZip(activeZip) : ALL_REPS;
   const filtered = filter==='all' ? baseReps : baseReps.filter(r=>r.jurisdiction===filter);
 
   const getAlignment=rep=>{
@@ -6046,7 +6225,7 @@ function RepTracker({bills, userZip}) {
       h('div',{style:{display:'flex',gap:8}},
         h('input',{value:zipInput,onChange:e=>setZipInput(e.target.value),
           onKeyDown:e=>e.key==='Enter'&&setActiveZip(zipInput),
-          placeholder:'e.g. 49237, 49201, 49230...',
+          placeholder:'Your ZIP code, e.g. ' + (getCurrentCounty().defaultZip || '49201'),
           style:{flex:1,border:'1px solid #ddd',borderRadius:6,padding:'9px 12px',fontSize:14,fontFamily:"'Lora',serif"}
         }),
         h('button',{onClick:()=>setActiveZip(zipInput),
@@ -6061,7 +6240,7 @@ function RepTracker({bills, userZip}) {
       )
     ),
     h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}},
-      [['all','All'],['City of Jackson','Jackson City'],['Village of Concord','Concord'],['State of Michigan','State MI'],['Jackson County','County'],['Federal','🇺🇸 Federal']].map(([v,l])=>
+      (countyTag()==='jackson' ? [['all','All'],['City of Jackson','Jackson City'],['Village of Concord','Concord'],['State of Michigan','State MI'],['Jackson County','County'],['Federal','🇺🇸 Federal']] : [['all','All']]).map(([v,l])=>
         h('button',{key:v,onClick:()=>setFilter(v),
           style:{background:filter===v?'#1a1a2e':'#fff',color:filter===v?'#f0c040':'#555',
             border:'1px solid '+(filter===v?'#1a1a2e':'#ddd'),padding:'7px 14px',borderRadius:20,
@@ -6547,7 +6726,7 @@ const TOUR_RESIDENT = [
   {
     icon:'👋',
     title:"Welcome to The People's Voice",
-    body:"This is a free, nonpartisan civic platform built for Jackson County residents. Everything here is real — real bills, real representatives, real neighbors. No ads, no algorithms, no party spin.",
+    body:"This is a free, nonpartisan civic platform built for "+CNAME()+" residents. Everything here is real — real bills, real representatives, real neighbors. No ads, no algorithms, no party spin.",
     tip:"Your voice matters. Let's show you around."
   },
   {
@@ -6577,7 +6756,7 @@ const TOUR_RESIDENT = [
   {
     icon:'📅',
     title:"Events — RSVP & Share",
-    body:"See what's happening across Jackson County — farmers markets, town halls, volunteer days, candidate forums. RSVP so neighbors know you're coming, and share events to spread the word.",
+    body:"See what's happening across "+CNAME()+" — farmers markets, town halls, volunteer days, candidate forums. RSVP so neighbors know you're coming, and share events to spread the word.",
     tip:"Going, Maybe, or Can't Go — your RSVP shows up on the event for everyone to see."
   },
   {
@@ -6589,7 +6768,7 @@ const TOUR_RESIDENT = [
   {
     icon:'🗺',
     title:"Live Community Map",
-    body:"See your community on a map — upcoming events, exchange offers, active projects, and member density by neighborhood. Everything is pinned to real locations across Jackson County.",
+    body:"See your community on a map — upcoming events, exchange offers, active projects, and member density by neighborhood. Everything is pinned to real locations across "+CNAME()+".",
     tip:"Toggle layers on and off using the buttons above the map."
   },
   {
@@ -6616,7 +6795,7 @@ const TOUR_BUSINESS = [
   {
     icon:'🏪',
     title:"Welcome, local business",
-    body:"The People's Voice is a civic platform for Jackson County, and you're now part of it as a local business. You're here as a community presence, not a campaign — no ads, no promotions, no spam. Just real participation.",
+    body:"The People's Voice is a civic platform for "+CNAME()+", and you're now part of it as a local business. You're here as a community presence, not a campaign — no ads, no promotions, no spam. Just real participation.",
     tip:"Business accounts can post events, list resources, and message neighbors — but cannot vote on bills, since civic votes are reserved for residents."
   },
   {
@@ -6706,7 +6885,7 @@ const TOUR_PRESS = [
   {
     icon:'📰',
     title:"Welcome, press",
-    body:"You're signing up as press — a journalist, blogger, newsletter writer, or community reporter covering Jackson County. The platform is a free civic tool you can use as background for your work.",
+    body:"You're signing up as press — a journalist, blogger, newsletter writer, or community reporter covering "+CNAME()+". The platform is a free civic tool you can use as background for your work.",
     tip:"Press accounts cannot vote on bills, news polls, or ideas — but you can read and comment on everything."
   },
   {
@@ -7413,7 +7592,7 @@ function PressBadgeRequest({user, profile, onToast}) {
       : h('div',{style:{background:'#fff8f0',border:'1px solid #f0c8a0',borderRadius:8,padding:14,marginTop:8}},
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},'Press Badge Application'),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#888',lineHeight:1.5,marginBottom:12}},
-            'For journalists, bloggers, newsletter writers, and community reporters covering Jackson County. Verified press get a badge on their profile and their news submissions go live immediately.'),
+            'For journalists, bloggers, newsletter writers, and community reporters covering '+CNAME()+'. Verified press get a badge on their profile and their news submissions go live immediately.'),
           h('div',{style:{marginBottom:10}},
             h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Publication / Outlet *'),
             h('input',{value:outlet,onChange:e=>setOutlet(e.target.value),
@@ -9073,7 +9252,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
             h('div',{style:{fontSize:40}},'✉️'),
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#1a1a2e'}},'Private Messages'),
             h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,textAlign:'center',lineHeight:1.7,color:'#888',maxWidth:280}},
-              'Select a conversation or click + New to send a private message to any Jackson County resident.'
+              'Select a conversation or click + New to send a private message to any '+CNAME()+' resident.'
             )
           )
         : h('div',{style:{flex:1,display:'flex',flexDirection:'column'}},
@@ -9211,7 +9390,7 @@ const COUNTY_CHAT_ROOMS = {
     {id:'49203', label:'📍 49203 · South Jackson', desc:'South Jackson area'},
     {id:'49237', label:'📍 49237 · Concord', desc:'Village of Concord and surroundings'},
     {id:'49230', label:'📍 49230 · Brooklyn', desc:'Brooklyn and Columbia Township'},
-    {id:'49285', label:'📍 49285 · Summit Twp', desc:'Summit Township area'},
+    {id:'49285', label:'📍 49285 · Stockbridge area', desc:'Northeast Jackson County (Stockbridge ZIP)'},
   ],
   calhoun: [
     {id:'general', label:'🏙 Calhoun County', desc:'General community chat for all residents'},
@@ -9239,7 +9418,11 @@ const COUNTY_CHAT_ROOMS = {
 // county-prefixed IDs like 'calhoun-general' to namespace them.
 function chatRoomsForCounty(countyId) {
   const cid = countyId || DEFAULT_COUNTY;
-  const list = COUNTY_CHAT_ROOMS[cid] || COUNTY_CHAT_ROOMS[DEFAULT_COUNTY];
+  const starter = !COUNTY_CHAT_ROOMS[cid] && COUNTIES[cid] && MI_STARTER_ROOMS[cid];
+  const list = COUNTY_CHAT_ROOMS[cid] || (starter
+    ? [{id:'general', label:'🏙 '+COUNTIES[cid].name, desc:'General community chat for all residents'}]
+        .concat(MI_STARTER_ROOMS[cid].map(([zip, town])=>({id:zip, label:'📍 '+zip+' · '+town, desc:town+' and the surrounding area'})))
+    : COUNTY_CHAT_ROOMS[DEFAULT_COUNTY]);
   if(cid === DEFAULT_COUNTY) {
     // Default county (Jackson) — keep legacy IDs unchanged
     return list.map(r => ({...r, displayId: r.id}));
@@ -9747,14 +9930,137 @@ function RepContactTracker({bill, user}) {
 // ── County Picker Landing ────────────────────────────────────────────────────
 // Shown when user visits the root URL (thepeoplesvoices.org) with no /county
 // path. Lets them pick which county to enter.
+// ── Finding a county: type a ZIP, a town, or a county name ───────────────────
+function searchCounties(q) {
+  const t = String(q||'').trim().toLowerCase().replace(/\s+county$/,'').replace(/^saint /,'st. ');
+  if(!t) return [];
+  if(/^\d{5}$/.test(t)) {
+    const z = MI_ZIP_INFO[t];
+    const id = (z && z.county) || countyForZip(t);
+    return id && COUNTIES[id] ? [{id, why:t + ' · ' + (ZIP_COMMUNITY[t] || (z && z.town) || '')}] : [];
+  }
+  if(/^\d+$/.test(t)) return [];
+  const out = [], seen = new Set();
+  const add = (id, why)=>{ if(COUNTIES[id] && !seen.has(id)) { seen.add(id); out.push({id, why}); } };
+  const flat = x=>x.toLowerCase().replace(/[^a-z]/g,'');
+  Object.values(COUNTIES).filter(c=>flat(c.short).startsWith(flat(t))).forEach(c=>add(c.id, c.seat ? 'County seat: ' + c.seat : ''));
+  Object.values(COUNTIES).filter(c=>flat(c.short).includes(flat(t))).forEach(c=>add(c.id, c.seat ? 'County seat: ' + c.seat : ''));
+  if(t.length >= 3) {
+    Object.values(MI_ZIP_INFO).filter(z=>z.town.toLowerCase().startsWith(t)).slice(0,40)
+      .forEach(z=>add(z.county, z.town + ' is in ' + (COUNTIES[z.county] ? COUNTIES[z.county].name : '')));
+  }
+  return out.slice(0, 8);
+}
+
+function CountyFinder({onGo, dark, autoFocus, placeholder}) {
+  const [q, setQ] = useState('');
+  const results = searchCounties(q);
+  const fg = dark ? '#fff' : '#1a1a2e', sub = dark ? '#a3afbf' : '#888';
+  return h('div',null,
+    h('input',{value:q,onChange:e=>setQ(e.target.value),autoFocus:!!autoFocus,
+      onKeyDown:e=>{ if(e.key==='Enter' && results[0]) onGo(results[0].id); },
+      placeholder:placeholder || 'Your ZIP code, town, or county',
+      'aria-label':'Find your county by ZIP code, town or county name',
+      style:{width:'100%',boxSizing:'border-box',background:dark?'rgba(255,255,255,.08)':'#fff',border:'1px solid '+(dark?'rgba(255,255,255,.25)':'#ddd'),
+        borderRadius:8,padding:'12px 14px',color:fg,fontSize:16,fontFamily:"'Lora',serif"}}),
+    q.trim() && h('div',{style:{marginTop:6}},
+      results.length === 0
+        ? h('div',{style:{fontSize:13,color:sub,fontFamily:"'Lora',serif",padding:'6px 2px'}},
+            /^\d{5}$/.test(q.trim()) ? 'That ZIP isn\'t a Michigan ZIP code. The People\'s Voice covers Michigan for now.' : 'No match yet. Try your ZIP code.')
+        : results.map(r=>{ const c = COUNTIES[r.id]; return h('button',{key:r.id,onClick:()=>onGo(r.id),
+            style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:dark?'rgba(255,255,255,.05)':'#faf8f3',
+              border:'1px solid '+(dark?'rgba(255,255,255,.12)':'#eee'),borderRadius:8,padding:'10px 12px',marginBottom:6,cursor:'pointer',color:fg}},
+            h('div',null,
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15}}, c.name),
+              r.why && h('div',{style:{fontSize:12,color:sub,fontFamily:"'Lora',serif"}}, r.why)),
+            h('span',{style:{color:'#f0c040',fontWeight:700,whiteSpace:'nowrap'}}, 'Go →')); })));
+}
+
+// ── Volunteers: people who want to help run their county ─────────────────────
+function VolunteerForm({countyId, dark, onDone}) {
+  const viewer = TPV_VIEWER;
+  const [county, setCounty] = useState(countyId || '');
+  const [name, setName] = useState(viewer.profile?.display_name || '');
+  const [email, setEmail] = useState(viewer.user?.email || '');
+  const [note, setNote] = useState('');
+  const [state, setState] = useState('');
+  const [err, setErr] = useState('');
+  const send = async()=>{
+    setErr('');
+    if(!COUNTIES[county]) { setErr('Pick your county.'); return; }
+    if(!viewer.user && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Leave an email so we can reach you.'); return; }
+    setState('sending');
+    const {data, error} = await sb.rpc('tpv_county_volunteer',{p_county:county, p_name:name.trim()||null, p_email:email.trim()||null, p_note:note.trim()||null});
+    if(error) { setState(''); setErr(/function|schema cache/i.test(error.message) ? 'This form isn\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
+    setState(data === 'already' ? 'already' : 'sent');
+    onDone && onDone();
+  };
+  const fg = dark ? '#fff' : '#1a1a2e', sub = dark ? '#c8d0dc' : '#666';
+  const inp = {width:'100%',boxSizing:'border-box',background:dark?'rgba(255,255,255,.06)':'#fff',border:'1px solid '+(dark?'rgba(255,255,255,.18)':'#ddd'),
+    borderRadius:6,padding:'10px 12px',color:fg,fontSize:14,fontFamily:"'Lora',serif",marginTop:8};
+  if(state === 'sent' || state === 'already') return h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:dark?'#4ade80':'#1a6b3c',lineHeight:1.6}},
+    state === 'sent' ? '✓ Thank you! Justin will reach out about helping run ' + COUNTIES[county].name + '.' : '✓ You\'re already on the list for ' + COUNTIES[county].name + '. We\'ll be in touch.');
+  return h('div',null,
+    !countyId && h('select',{value:county,onChange:e=>setCounty(e.target.value),'aria-label':'Your county',style:{...inp,marginTop:0}},
+      h('option',{value:''},'Your county...'),
+      Object.values(COUNTIES).sort((a,b)=>a.short.localeCompare(b.short)).map(c=>h('option',{key:c.id,value:c.id},c.name))),
+    h('input',{value:name,onChange:e=>setName(e.target.value.slice(0,80)),placeholder:'Your name',style:inp}),
+    !viewer.user && h('input',{value:email,onChange:e=>setEmail(e.target.value),placeholder:'Email',type:'email',style:inp}),
+    h('input',{value:note,onChange:e=>setNote(e.target.value.slice(0,300)),placeholder:'What would you like to help with? (optional)',style:inp}),
+    err && h('div',{style:{color:dark?'#ff8f80':'#c0392b',fontSize:13,marginTop:6,fontFamily:"'Lora',serif"}}, err),
+    h('button',{onClick:send,disabled:state==='sending',style:{marginTop:10,background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:6,padding:'9px 18px',
+      fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}}, state==='sending' ? 'Sending...' : 'I\'d like to help'),
+    h('div',{style:{fontSize:11.5,color:sub,marginTop:8,fontFamily:"'Lora',serif",lineHeight:1.5}},
+      'Volunteers add local meetings and decisions, welcome new neighbors, and keep things civil. A few hours a month goes a long way.'));
+}
+
+// ── Home: a county that's just getting started ───────────────────────────────
+function StarterCountyBanner({user, onNavigate}) {
+  const c = getCurrentCounty();
+  const [helping, setHelping] = useState(false);
+  const [copied, setCopied] = useState(false);
+  if(!isStarterCounty(c.id)) return null;
+  const invite = ()=>{
+    const url = countyUrl(c.id);
+    if(navigator.share) { navigator.share({title:'The People\'s Voice · ' + c.name, text:'Our county is on The People\'s Voice. See what\'s being decided and weigh in.', url}).catch(()=>{}); return; }
+    try { navigator.clipboard.writeText(url); setCopied(true); setTimeout(()=>setCopied(false), 2500); } catch(e) { window.prompt('Copy this link:', url); }
+  };
+  return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:16,fontFamily:"'Lora',serif"}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a4a2a'}},'🌱 ' + c.name + ' is just getting started here'),
+    h('div',{style:{fontSize:13.5,color:'#2f4a36',lineHeight:1.6,margin:'4px 0 10px'}},
+      'Right now you\'ll find the statewide decisions, the 2026 voters guide, neighbors to meet, and tools to organize. ',
+      'Local meetings and ' + (c.seat ? c.seat + '\'s ' : 'local ') + 'decisions get added as people from ' + c.short + ' County pitch in.'),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+      h('button',{onClick:invite,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+        copied ? '✓ Link copied' : '🔗 Invite a neighbor'),
+      h('button',{onClick:()=>setHelping(!helping),style:{background:'#fff',color:'#1a6b3c',border:'1px solid #a8e6c0',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+        '🙋 Help run it here'),
+      h('button',{onClick:()=>onNavigate && onNavigate('guide'),style:{background:'transparent',color:'#1a5c8a',border:'none',padding:'8px 4px',fontSize:13,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
+        'Open the voters guide')),
+    helping && h('div',{style:{marginTop:12,background:'#fff',borderRadius:8,padding:12}}, h(VolunteerForm,{countyId:c.id})));
+}
+
+// ── Header: switch counties ──────────────────────────────────────────────────
+function CountySwitcherMenu({currentCountyId, onClose}) {
+  const featured = Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta');
+  const go = id=>{ if(id === currentCountyId) { onClose(); return; } window.location.href = '/' + COUNTIES[id].slug; };
+  return h('div',{style:{position:'absolute',top:'115%',left:0,zIndex:2000,background:'#1a1a2e',border:'1px solid #f0c040',borderRadius:8,
+      padding:8,width:280,maxWidth:'86vw',boxShadow:'0 8px 24px rgba(0,0,0,.5)',textTransform:'none',letterSpacing:0}},
+    h(CountyFinder,{dark:true,autoFocus:true,onGo:go,placeholder:'ZIP, town or county'}),
+    h('div',{style:{fontSize:10,color:'#8899aa',letterSpacing:1.5,textTransform:'uppercase',margin:'10px 4px 4px'}},'Up and running'),
+    featured.map(c=>h('button',{key:c.id,onClick:()=>go(c.id),
+      style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,width:'100%',background:c.id===currentCountyId?'rgba(240,192,64,.12)':'transparent',
+        border:'none',color:'#fff',padding:'7px 8px',borderRadius:6,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:700,textAlign:'left'}},
+      c.name, c.id===currentCountyId ? h('span',{style:{color:'#f0c040',fontSize:11}},'✓') : null)),
+    h('a',{href:'/',style:{display:'block',color:'#f0c040',fontSize:12,fontFamily:"'Lora',serif",padding:'8px 8px 2px'}},'See all 83 Michigan counties →'));
+}
+
 function CountyPickerLanding({onPick}) {
   const list = Object.values(COUNTIES);
   const [stats, setStats] = useState({});
   const [spotlights, setSpotlights] = useState({});
   const [lastCounty] = useState(()=>{ try { const c = localStorage.getItem('tpv_county'); return COUNTIES[c] ? c : null; } catch(e) { return null; } });
-  const [req, setReq] = useState({zip:'', email:'', note:''});
-  const [reqState, setReqState] = useState(''); // '' | sending | sent | already
-  const [reqErr, setReqErr] = useState('');
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(()=>{
     sb.rpc('tpv_public_stats').then(({data})=>{ if(data && typeof data === 'object') setStats(data); }, ()=>{});
@@ -9765,16 +10071,9 @@ function CountyPickerLanding({onPick}) {
     });
   },[]);
 
-  const go = (slug, billId)=>{ onPick(slug, billId); };
-  const sendRequest = async()=>{
-    setReqErr('');
-    if(!/^\d{5}$/.test(req.zip.trim())) { setReqErr('Enter a 5-digit ZIP code.'); return; }
-    if(COUNTY_FOR_ZIP_SAFE(req.zip.trim())) { setReqErr('Good news — that ZIP is already covered. Pick your county above.'); return; }
-    setReqState('sending');
-    const {data, error} = await sb.rpc('tpv_request_county',{p_zip:req.zip.trim(), p_email:req.email.trim()||null, p_note:req.note.trim()||null});
-    if(error) { setReqState(''); setReqErr(error.message); return; }
-    setReqState(data === 'already' ? 'already' : 'sent');
-  };
+  const go = (slug, billId)=>{ onPick(COUNTIES[slug] ? COUNTIES[slug].slug : slug, billId); };
+  const featured = list.filter(c=>c.status==='active'||c.status==='beta');
+  const starters = list.filter(c=>c.status==='starter').sort((a,b)=>a.short.localeCompare(b.short));
 
   const GOLD='#f0c040', SOFT='#c8d0dc', DIM='#a3afbf';
   const fmt = n => (n == null ? '—' : Number(n).toLocaleString());
@@ -9812,38 +10111,41 @@ function CountyPickerLanding({onPick}) {
             h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6}},desc))))
       ),
 
-      // Counties
+      // Find your county
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,color:GOLD,letterSpacing:'.15em',textTransform:'uppercase',marginBottom:8}},
+        'Find your county · all 83 in Michigan · no account needed'),
+      h('div',{style:{marginBottom:22}}, h(CountyFinder,{dark:true,onGo:id=>go(id)})),
+
+      // Counties that are up and running
       h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,color:GOLD,letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10}},
-        'Pick your county · no account needed to look around'),
-      h('div',{style:{display:'grid',gap:12,marginBottom:28}},
-        list.map(c=>{
+        'Up and running'),
+      h('div',{style:{display:'grid',gap:12,marginBottom:22}},
+        featured.map(c=>{
           const st = stats[c.id] || {};
           const spot = spotlights[c.id];
-          const live = c.status !== 'coming-soon';
           return h('div',{key:c.id,style:{background:'rgba(255,255,255,.05)',
-              border:'1px solid '+(c.status==='active'?GOLD:'rgba(255,255,255,.15)'),borderRadius:8,overflow:'hidden',opacity:live?1:.5}},
-            h('button',{onClick:()=>live&&go(c.id),disabled:!live,'aria-label':'Open '+c.name,
-              style:{display:'block',width:'100%',background:'transparent',border:'none',color:'#fff',textAlign:'left',padding:'18px 20px',cursor:live?'pointer':'default'}},
+              border:'1px solid '+(c.status==='active'?GOLD:'rgba(255,255,255,.15)'),borderRadius:8,overflow:'hidden'}},
+            h('button',{onClick:()=>go(c.id),'aria-label':'Open '+c.name,
+              style:{display:'block',width:'100%',background:'transparent',border:'none',color:'#fff',textAlign:'left',padding:'16px 18px',cursor:'pointer'}},
               h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}},
                 h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:'#fff'}}, c.name),
                 c.status==='beta' && h('span',{style:{background:GOLD,color:'#1a1a2e',fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:12,letterSpacing:'.08em'}},'BETA'),
-                c.status==='active' && h('span',{style:{color:'#4ade80',fontSize:11,fontWeight:700,letterSpacing:'.08em'}},'● ACTIVE'),
-                c.status==='coming-soon' && h('span',{style:{color:DIM,fontSize:10,fontWeight:700,letterSpacing:'.08em'}},'COMING SOON')
+                c.status==='active' && h('span',{style:{color:'#4ade80',fontSize:11,fontWeight:700,letterSpacing:'.08em'}},'● ACTIVE')
               ),
               h('div',{style:{fontFamily:"'Lora',serif",fontSize:12.5,color:DIM}}, c.primaryCity + ' area · ' + c.state),
               (st.members != null) && h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',marginTop:10,fontFamily:"'Lora',serif",fontSize:12.5,color:SOFT}},
                 h('span',null, h('b',{style:{color:GOLD}}, fmt(st.members)), ' members'),
-                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.open_bills)), ' open bills'),
-                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.votes_30d)), ' votes this month'),
+                h('span',null, h('b',{style:{color:GOLD}}, fmt(st.open_bills)), ' open decisions'),
+                st.votes_30d > 0 && h('span',null, h('b',{style:{color:GOLD}}, fmt(st.votes_30d)), ' votes this month'),
                 st.decided > 0 && h('span',null, h('b',{style:{color:GOLD}}, fmt(st.decided)), ' decisions tracked'))
             ),
             spot && h('button',{onClick:()=>go(c.id, spot.id),
               style:{display:'block',width:'100%',textAlign:'left',background:'rgba(240,192,64,.08)',border:'none',borderTop:'1px solid rgba(255,255,255,.08)',
-                padding:'12px 20px',cursor:'pointer',color:'#fff'}},
+                padding:'12px 18px',cursor:'pointer',color:'#fff'}},
               h('div',{style:{fontSize:10.5,color:GOLD,fontWeight:700,letterSpacing:'.12em',textTransform:'uppercase',fontFamily:"'Playfair Display',serif",marginBottom:3}},
                 spot.next_meeting_at && new Date(spot.next_meeting_at).getTime() > Date.now()
                   ? '🗓 Decision ' + new Date(spot.next_meeting_at).toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'})
-                  : 'This week\'s bill'),
+                  : 'This week\'s decision'),
               h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#fff',lineHeight:1.4}}, spot.title),
               h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:DIM,marginTop:3}},
                 ((spot.votes_yes||0)+(spot.votes_no||0)) > 0
@@ -9854,27 +10156,27 @@ function CountyPickerLanding({onPick}) {
         })
       ),
 
-      // Request your county
+      // Every other county
+      h('div',{style:{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'14px 16px',marginBottom:22}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},
+          '🌱 Just getting started: ' + starters.length + ' more counties'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:10}},
+          'Every Michigan county is open. The newer ones start with statewide decisions, the voters guide, neighbors and organizing tools, and grow as local people pitch in.'),
+        h('button',{onClick:()=>setShowAll(!showAll),style:{background:'transparent',border:'1px solid rgba(255,255,255,.25)',color:GOLD,borderRadius:6,padding:'7px 14px',
+          fontFamily:"'Lora',serif",fontSize:13,cursor:'pointer'}}, showAll ? 'Hide the list' : 'Browse all ' + starters.length),
+        showAll && h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:6,marginTop:12}},
+          starters.map(c=>{ const m = (stats[c.id]||{}).members;
+            return h('button',{key:c.id,onClick:()=>go(c.id),
+              style:{textAlign:'left',background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.1)',borderRadius:6,padding:'7px 9px',color:'#fff',cursor:'pointer'}},
+              h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:13.5,fontWeight:700}}, c.short),
+              h('div',{style:{fontFamily:"'Lora',serif",fontSize:11,color:DIM}}, m ? m + ' member' + (m===1?'':'s') : c.primaryCity)); }))),
+
+      // Volunteers
       h('div',{style:{background:'rgba(255,255,255,.04)',border:'1px dashed rgba(255,255,255,.2)',borderRadius:8,padding:'16px 18px',marginBottom:26}},
-        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'Want The People\'s Voice where you live?'),
-        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:12}},
-          'We open new counties where neighbors ask for them. Leave your ZIP, and your email if you\'d like to hear when it opens.'),
-        reqState==='sent'||reqState==='already'
-          ? h('div',{style:{fontFamily:"'Lora',serif",fontSize:14,color:'#4ade80'}},
-              reqState==='sent' ? '✓ Counted. Thank you — every request helps us decide where to go next.' : '✓ You\'re already on the list for that ZIP.')
-          : h(Fragment,null,
-              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
-                h('input',{value:req.zip,onChange:e=>setReq(r=>({...r,zip:e.target.value})),placeholder:'ZIP code',inputMode:'numeric',maxLength:5,
-                  'aria-label':'ZIP code',style:{...inp,flex:'0 0 110px'}}),
-                h('input',{value:req.email,onChange:e=>setReq(r=>({...r,email:e.target.value})),placeholder:'Email (optional)',type:'email',
-                  'aria-label':'Email (optional)',style:{...inp,flex:'1 1 180px'}})),
-              h('input',{value:req.note,onChange:e=>setReq(r=>({...r,note:e.target.value})),placeholder:'Anything you\'d want it to cover? (optional)',
-                'aria-label':'Note (optional)',maxLength:300,style:{...inp,marginTop:8}}),
-              reqErr && h('div',{style:{color:'#ff8f80',fontSize:13,marginTop:6,fontFamily:"'Lora',serif"}},reqErr),
-              h('button',{onClick:sendRequest,disabled:reqState==='sending',
-                style:{marginTop:10,background:GOLD,color:'#1a1a2e',border:'none',borderRadius:6,padding:'9px 18px',
-                  fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,cursor:'pointer'}},
-                reqState==='sending'?'Sending...':'Request my county'))
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'Help get your county going'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:6}},
+          'Every county runs on a few neighbors who care. If that\'s you, say so.'),
+        h(VolunteerForm,{dark:true})
       ),
 
       // Who runs this
@@ -10452,6 +10754,12 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
 
     h(HowToVoteCard),
 
+    isStarterCounty() && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 14px',marginBottom:14,fontFamily:LB,fontSize:13,color:'#2f4a36',lineHeight:1.6}},
+      h('strong',null,'🌱 ' + getCurrentCounty().name + ' is new here. '),
+      'This guide has everything on every Michigan ballot: the statewide proposals, Governor, Secretary of State, Attorney General, U.S. Senate, the education boards and the Supreme Court. ',
+      'Your U.S. House, State House and Senate, and local races depend on your address. ',
+      h('a',{href:ELECTION_2026.mvic,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'See your exact ballot ↗')),
+
     myListings.map(c=>h(CandidateEditor,{key:c.id,c,race:(races||[]).find(r=>r.id===c.race_id)||{},questions,onToast,onSaved:load})),
 
     h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
@@ -10679,31 +10987,36 @@ function CountyRequestsPanel({profile}) {
   const [rows, setRows] = useState(null);
   useEffect(()=>{
     if(!open || rows) return;
-    sb.from('county_requests').select('zip,email,note,created_at').order('created_at',{ascending:false}).limit(500)
+    sb.from('county_requests').select('*').order('created_at',{ascending:false}).limit(1000)
       .then(({data})=>setRows(data||[]), ()=>setRows([]));
   },[open]);
   if(!isFullAdmin(profile)) return null;
-  const byZip = {};
-  (rows||[]).forEach(r=>{ (byZip[r.zip] = byZip[r.zip] || []).push(r); });
-  const ranked = Object.entries(byZip).sort((a,b)=>b[1].length-a[1].length);
+  const byCounty = {};
+  (rows||[]).forEach(r=>{ const c = r.county || countyForZip(r.zip) || 'unknown'; (byCounty[c] = byCounty[c] || []).push(r); });
+  const ranked = Object.entries(byCounty).sort((a,b)=>b[1].filter(r=>r.kind==='volunteer').length-a[1].filter(r=>r.kind==='volunteer').length || b[1].length-a[1].length);
+  const volunteers = (rows||[]).filter(r=>r.kind==='volunteer').length;
   return h('div',{style:{background:'#faf8f5',border:'1px solid #e5dece',borderRadius:10,padding:16,marginBottom:20}},
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:open?12:0},onClick:()=>setOpen(!open)},
-      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'📍 County requests'),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e'}},'🙋 County volunteers & requests'),
       h('span',{style:{color:'#888',fontSize:14}},open?'▲':'▼')),
     open && (rows===null
       ? h('div',{style:{color:'#aaa',fontSize:12}},'Loading...')
       : rows.length===0
-        ? h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'No requests yet. They come from the form on the county picker page.')
+        ? h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'No one yet. Volunteers sign up from the front page and the 🌱 banner in new counties.')
         : h('div',null,
-            h('div',{style:{fontSize:12,color:'#888',marginBottom:8,fontFamily:"'Lora',serif"}}, rows.length+' requests from '+ranked.length+' ZIP codes'),
-            ranked.slice(0,40).map(([zip,list])=>h('div',{key:zip,style:{padding:'7px 0',borderTop:'1px solid #f0ece4',fontSize:13,fontFamily:"'Lora',serif"}},
-              h('strong',null,zip),' · ',list.length,' request',list.length===1?'':'s',
-              h('span',{style:{color:'#999'}},' · '+list.filter(r=>r.email).length+' left an email'),
-              list.some(r=>r.email) && h('button',{onClick:()=>{ navigator.clipboard && navigator.clipboard.writeText(list.filter(r=>r.email).map(r=>r.email).join(', ')); },
-                title:'Copy these emails so you can tell them when the county opens',
-                style:{marginLeft:8,background:'none',border:'1px solid #ddd',borderRadius:4,fontSize:11,color:'#1a5c8a',cursor:'pointer',padding:'1px 6px'}},'Copy emails'),
-              list.filter(r=>r.note).slice(0,2).map((r,i)=>h('div',{key:i,style:{fontSize:12,color:'#666',fontStyle:'italic',marginTop:2}},'“'+r.note+'”'))
-            ))
+            h('div',{style:{fontSize:12,color:'#888',marginBottom:8,fontFamily:"'Lora',serif"}}, volunteers + ' volunteer' + (volunteers===1?'':'s') + ' · ' + rows.length + ' total, across ' + ranked.length + ' counties. To make someone a county admin, find them in User Manager.'),
+            ranked.slice(0,90).map(([cid,list])=>{
+              const vols = list.filter(r=>r.kind==='volunteer');
+              return h('div',{key:cid,style:{padding:'8px 0',borderTop:'1px solid #f0ece4',fontSize:13,fontFamily:"'Lora',serif"}},
+                h('strong',null, COUNTIES[cid] ? COUNTIES[cid].name : cid), ' · ',
+                vols.length ? vols.length + ' volunteer' + (vols.length===1?'':'s') : list.length + ' request' + (list.length===1?'':'s'),
+                list.some(r=>r.email) && h('button',{onClick:()=>{ navigator.clipboard && navigator.clipboard.writeText(list.filter(r=>r.email).map(r=>r.email).join(', ')); },
+                  style:{marginLeft:8,background:'none',border:'1px solid #ddd',borderRadius:4,fontSize:11,color:'#1a5c8a',cursor:'pointer',padding:'1px 6px'}},'Copy emails'),
+                vols.map((r,i)=>h('div',{key:i,style:{fontSize:12.5,color:'#444',marginTop:3,paddingLeft:10}},
+                  '🙋 ', r.user_id ? h('button',{onClick:()=>openProfile(r.user_id),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12.5}}, r.name || 'A member') : (r.name || 'Someone'),
+                  r.email ? ' · ' + r.email : '', r.note ? h('span',{style:{color:'#777',fontStyle:'italic'}},' · “' + r.note + '”') : null)),
+                !vols.length && list.filter(r=>r.note).slice(0,2).map((r,i)=>h('div',{key:i,style:{fontSize:12,color:'#666',fontStyle:'italic',marginTop:2}},'“'+r.note+'”')));
+            })
           ))
   );
 }
@@ -10767,14 +11080,14 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
     const urlCounty = countyTag();
     const currentCountyName = (COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY]).short;
     if(!zipValid){
-      setError('Sorry — your ZIP code (' + zip.trim() + ') is not yet in our service area. We are currently active in: ' +
-        Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta').map(c=>c.short).join(', ') + '.');
+      setError('That ZIP code (' + zip.trim() + ') isn\'t a Michigan ZIP. The People\'s Voice covers Michigan for now. Use the ZIP where you live.');
       return;
     }
     // Warn if ZIP belongs to a different county than the URL
     if(zipCounty && zipCounty !== urlCounty) {
       const zipCountyName = COUNTIES[zipCounty]?.short || zipCounty;
-      if(!window.confirm('Your ZIP code is in ' + zipCountyName + ' County, but you\'re signing up under ' + currentCountyName + ' County. Are you sure?')) {
+      if(!window.confirm('Your ZIP code (' + zip.trim() + ') is mostly in ' + zipCountyName + ' County, and you\'re joining ' + currentCountyName + ' County.\n\n' +
+          'ZIP codes cross county lines, so this can be right. Press OK to join ' + currentCountyName + ' County, or Cancel and switch counties at the top of the page.')) {
         return;
       }
     }
@@ -10786,6 +11099,17 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
     // null/undefined = unlimited. Checked at signup time against live count.
     const capCounty = COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY];
     const countyCap = signupCapForCounty(capCounty.id);
+    if(!countyCap) {
+      // One budget for the whole platform (the free database tier)
+      try {
+        const {count: total} = await sb.from('profiles').select('id',{count:'exact',head:true});
+        if((total||0) >= TOTAL_SIGNUP_BUDGET) {
+          setError('The People\'s Voice is full for the moment. We\'re making room. Please check back soon!');
+          setLoading(false);
+          return;
+        }
+      } catch(e) { /* if count fails, don't block signup */ }
+    }
     if(countyCap) {
       try {
         const {count: memberCount} = await sb.from('profiles')
@@ -11141,7 +11465,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
         community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},"✓ "+community+" — welcome to The People's Voice!"),
         zip.trim().length===5&&!zipValid&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:8,fontSize:13,color:'#c0392b',lineHeight:1.6}},
           h('strong',null,"❌ ZIP code not in our service area. "),
-          "The People's Voice is currently active in: "+Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta').map(c=>c.name).join(', ')+".",
+          "The People's Voice is open in all 83 Michigan counties.",
           h('br'),
           h('span',{style:{color:'#555',fontSize:12}},"You can still ",
             h('button',{onClick:onGuest,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',padding:0,fontFamily:"'Lora',serif",fontWeight:700}},"browse as a guest"),
@@ -12172,8 +12496,11 @@ const COUNTY_MAP_CENTERS = {
 };
 
 function countyMapCenter(countyId) {
-  return COUNTY_MAP_CENTERS[countyId || DEFAULT_COUNTY] || COUNTY_MAP_CENTERS[DEFAULT_COUNTY];
+  const id = countyId || DEFAULT_COUNTY;
+  return COUNTY_MAP_CENTERS[id] || (COUNTIES[id] && COUNTIES[id].center) || COUNTY_MAP_CENTERS[DEFAULT_COUNTY];
 }
+// Every Michigan ZIP gets a map point
+Object.entries(MI_ZIP_INFO).forEach(([zip, info])=>{ if(!ZIP_COORDS[zip]) ZIP_COORDS[zip] = [info.lat, info.lng]; });
 
 const MAP_LAYERS = [
   {id:'events',    label:'📅 Events',     color:'#5b3a8c'},
@@ -12277,7 +12604,7 @@ function MapTab({user, profile}) {
         fillOpacity: 0.06,
       }).addTo(map);
     } else {
-      map.flyTo([42.25,-84.40], 10, {duration:0.8});
+      map.flyTo(countyMapCenter(countyTag()), 10, {duration:0.8});
     }
   },[zipFocus]);
 
@@ -12333,19 +12660,25 @@ function MapTab({user, profile}) {
         // 1. Check for ZIP in location string
         const zipMatch = loc.match(/\b(4920[0-9]|4923[0-9]|4924[0-9]|4925[0-9]|4926[0-9]|4827[0-9]|48158|48827)\b/);
         if(zipMatch && ZIP_COORDS[zipMatch[1]]) return ZIP_COORDS[zipMatch[1]];
-        // 2. Match known place names
-        for(const [place, coords] of Object.entries(PLACE_COORDS)) {
-          if(loc.includes(place)) return coords;
+        // 2. Match known place names (Jackson's list, or any town in this county)
+        if(countyTag() === 'jackson') {
+          for(const [place, coords] of Object.entries(PLACE_COORDS)) {
+            if(loc.includes(place)) return coords;
+          }
+        } else {
+          const town = Object.values(MI_ZIP_INFO).find(z=>z.county===countyTag() && z.town.length > 3 && loc.includes(z.town.toLowerCase()));
+          if(town) return [town.lat, town.lng];
         }
         // 3. Try Nominatim geocoding for specific addresses
         try {
-          const q = encodeURIComponent((e.location||'')+', Jackson County, Michigan');
+          const q = encodeURIComponent((e.location||'')+', '+CNAME()+', Michigan');
           const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`);
           const data = await res.json();
           if(data&&data[0]) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
         } catch(err) {}
         // 4. Fallback — random scatter around Jackson center
-        return [42.25+((Math.random()-.5)*.12), -84.40+((Math.random()-.5)*.15)];
+        const cc = countyMapCenter(countyTag());
+        return [cc[0]+((Math.random()-.5)*.12), cc[1]+((Math.random()-.5)*.15)];
       };
 
       for(const e of mapData.events) {
@@ -12418,7 +12751,7 @@ function MapTab({user, profile}) {
         if(r.lat&&r.lng) return r;
         if(!r.address) return null;
         try{
-          const q=encodeURIComponent(r.address+', Jackson County, Michigan');
+          const q=encodeURIComponent(r.address+', '+CNAME()+', Michigan');
           const res=await fetch('https://nominatim.openstreetmap.org/search?q='+q+'&format=json&limit=1&countrycodes=us');
           const geo=await res.json();
           if(geo&&geo[0]){
@@ -12727,7 +13060,7 @@ function PulseTab({bills, user, profile, onNavigate}) {
           'Every vote, comment, and idea on this platform is a real act of civic participation. Share this platform with a neighbor and double our impact.')
       ),
       h('button',{onClick:()=>{
-        if(navigator.share){navigator.share({title:"The People's Voice",text:"A free civic platform for Jackson County neighbors.",url:'https://thepeoplesvoices.org'});}
+        if(navigator.share){navigator.share({title:"The People's Voice",text:"A free civic platform for "+CNAME()+" neighbors.",url:'https://thepeoplesvoices.org'});}
         else{navigator.clipboard.writeText('https://thepeoplesvoices.org');alert('Link copied!');}
       },style:{background:'#f0c040',color:'#1a1a2e',border:'none',padding:'10px 18px',borderRadius:7,
         fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',flexShrink:0}},
@@ -13275,7 +13608,7 @@ function meetingBodiesForCounty(countyId) {
 
 // ── Sample question seeds (suggestions for admins) ───────────────────────────
 const QUESTION_SEEDS = [
-  "What's the biggest barrier to healthcare access for Jackson County families, and what could a local response look like?",
+  "What's the biggest barrier to healthcare access for "+CNAME()+" families, and what could a local response look like?",
   "If our community had to choose between investing in better roads, better schools, or better mental health services, what's the priority?",
   "What's something both political parties get wrong about our community?",
   "Should small towns like Concord prioritize economic growth or preserving their character?",
@@ -13325,7 +13658,7 @@ function QuestionAuthorPanel({user, profile, onToast}) {
     setGenerating(true);
     onToast('AI is drafting a balanced briefing...');
     const systemPrompt =
-      'You are a careful, nonpartisan civic facilitator generating briefing material for a small community discourse platform in Jackson County, Michigan. ' +
+      'You are a careful, nonpartisan civic facilitator generating briefing material for a small community discourse platform in '+CNAME()+', Michigan. ' +
       'Your job is to produce a balanced briefing that treats residents as adults capable of holding complexity. ' +
       'Avoid partisan framing. Avoid the structure of "two sides." Instead, surface the underlying values question and shared facts. ' +
       'Do NOT take a position. Do NOT load language toward either ideological pole. ' +
@@ -13335,7 +13668,7 @@ function QuestionAuthorPanel({user, profile, onToast}) {
         '"options":["Option A label (5-10 words)","Option B label","Option C label"],' +
         '"agreed":"3-5 sentences on the empirical facts and shared context that anyone honest acknowledges. No opinions, just what is.",' +
         '"disagreement":"3-5 sentences on the values question underneath the surface debate. Frame as a tension between legitimate concerns, not a battle.",' +
-        '"local":"2-4 sentences on what this question means specifically for Jackson County — concrete examples where possible.",' +
+        '"local":"2-4 sentences on what this question means specifically for '+CNAME()+' — concrete examples where possible.",' +
         '"blindspots":"2-3 sentences naming what this briefing is NOT addressing and why (e.g., national-level dynamics, certain stakeholder voices, technical complexities)."' +
       '}';
     const userPrompt = 'Question: ' + title.trim() + '\n\nGenerate the briefing.';
@@ -13555,7 +13888,7 @@ function QuestionAuthorPanel({user, profile, onToast}) {
             style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
         ),
         h('div',{style:{marginBottom:8}},
-          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Local stakes (Jackson County)'),
+          h('label',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:3}},'Local stakes ('+CNAME()+')'),
           h('textarea',{value:briefingLocal, onChange:e=>setBriefingLocal(e.target.value), rows:3,
             style:{width:'100%',border:'1px solid #ddd',borderRadius:5,padding:'7px 10px',fontSize:12,fontFamily:"'Lora',serif",boxSizing:'border-box',resize:'vertical'}})
         ),
@@ -14705,7 +15038,7 @@ function ResourcesTab({user, profile, onToast, isAdmin}) {
       h('div',null,
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},'🧡 Community Resources'),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
-          'Blessing boxes, food pantries, free stores, and more — mapped across Jackson County.')
+          'Blessing boxes, food pantries, free stores, and more — mapped across '+CNAME()+'.')
       ),
       user&&h('button',{onClick:()=>setShowAdd(!showAdd),
         style:{background:showAdd?'#555':'#c0392b',color:'#fff',border:'none',padding:'10px 18px',
@@ -14783,7 +15116,7 @@ function ResourcesTab({user, profile, onToast, isAdmin}) {
       h('div',{style:{fontSize:40,marginBottom:10}},'📍'),
       h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#555',marginBottom:6}},
         catFilter==='all'?'No resources yet':'No '+(RESOURCE_CATS_MAP[catFilter]?.label||catFilter)+' locations yet'),
-      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,marginBottom:14}},'Know of one in Jackson County?'),
+      h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,marginBottom:14}},'Know of one in '+CNAME()+'?'),
       user&&h('button',{onClick:()=>setShowAdd(true),
         style:{background:'#c0392b',color:'#fff',border:'none',padding:'9px 20px',borderRadius:6,
           fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
@@ -16502,7 +16835,10 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         h('div',{style:{paddingLeft:12}},sel('Jurisdiction *','jurisdiction',
           jurisdictionsForCounty(form.county).includes(form.jurisdiction)||!form.jurisdiction
             ? jurisdictionsForCounty(form.county)
-            : [form.jurisdiction, ...jurisdictionsForCounty(form.county)]))
+            : [form.jurisdiction, ...jurisdictionsForCounty(form.county)]),
+          h('input',{value:jurisdictionsForCounty(form.county).includes(form.jurisdiction)?'':(form.jurisdiction||''),
+            onChange:e=>setForm(f=>({...f,jurisdiction:e.target.value})),placeholder:'Not listed? Type it, e.g. City of Holland',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 10px',fontSize:12,boxSizing:'border-box',marginTop:-6,marginBottom:12}}))
       ),
       inp('Bill / Proposal Title *','title','e.g. Main Street Sidewalk Repair Ordinance'),
       inp('Status','status','e.g. Council Vote Pending, Passed, Under Review, Ballot Measure'),
@@ -17018,9 +17354,7 @@ function App() {
       const curBadges = prof?.badges||[];
       let badges = [...curBadges];
       // ZIP badge
-      const zipBadge = ['49201','49202','49203','49204'].includes(zip)?'zip_49201':
-        zip==='49237'?'zip_49237':zip==='49230'?'zip_49230':zip==='49285'?'zip_49285':
-        (zip&&zip.startsWith('49'))?'zip_other':null;
+      const zipBadge = zipBadgeFor(zip);
       if(zipBadge&&!badges.includes(zipBadge)) badges=await awardBadge(authUser.id,zipBadge,badges);
       // New member badge = first_vote precursor — give them 'new resident' baseline
       // Rep milestones from existing rep
@@ -17083,7 +17417,7 @@ function App() {
           const firstName = (prof.display_name || '').split(' ')[0] || 'neighbor';
           const welcomeBody =
             "Hi " + firstName + " — I'm Justin, the guy who built this. Welcome to The People's Voice.\n\n" +
-            "Quick context: this platform is for Jackson County residents. No ads, no algorithms picking sides, no bots. Just a place where neighbors can vote on real legislation, see what local government is actually doing, and find each other.\n\n" +
+            "Quick context: this platform is for "+CNAME()+" residents. No ads, no algorithms picking sides, no bots. Just a place where neighbors can vote on real legislation, see what local government is actually doing, and find each other.\n\n" +
             "A few things to try:\n" +
             "• Vote on a bill in the Civic tab — your voice gets counted alongside your neighbors'\n" +
             "• Check the Community map for events and resources near your ZIP\n" +
@@ -17313,30 +17647,11 @@ function App() {
                 padding:0,display:'flex',alignItems:'center',gap:3,fontFamily:'inherit'}},
               ' · ' + currentCounty.short.toUpperCase() + ' COUNTY',
               h('span',{style:{fontSize:8}}, showCountyMenu ? '▲' : '▼')),
-            currentCounty && currentCounty.status==='beta' && h('span',{
+            currentCounty && (currentCounty.status==='beta' || currentCounty.status==='starter') && h('span',{
               style:{background:'#f0c040',color:'#1a1a2e',fontSize:8,padding:'1px 5px',
-                borderRadius:8,fontWeight:700,letterSpacing:1}},'BETA'),
+                borderRadius:8,fontWeight:700,letterSpacing:1}}, currentCounty.status==='starter' ? 'NEW' : 'BETA'),
             // County switcher dropdown
-            showCountyMenu && h('div',{style:{position:'absolute',top:'115%',left:0,zIndex:2000,
-              background:'#1a1a2e',border:'1px solid #f0c040',borderRadius:8,
-              padding:6,minWidth:190,boxShadow:'0 8px 24px rgba(0,0,0,.5)'}},
-              Object.values(COUNTIES).filter(c=>c.status==='active'||c.status==='beta').map(c=>
-                h('button',{key:c.id,
-                  onClick:()=>{ if(c.id===currentCountyId){setShowCountyMenu(false);return;}
-                    window.location.href = '/' + c.slug; },
-                  style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,
-                    width:'100%',background: c.id===currentCountyId ? 'rgba(240,192,64,.12)' : 'transparent',
-                    border:'none',color:'#fff',padding:'8px 10px',borderRadius:6,cursor:'pointer',
-                    fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:700,
-                    textTransform:'none',letterSpacing:0,textAlign:'left'}},
-                  c.name,
-                  c.id===currentCountyId
-                    ? h('span',{style:{color:'#f0c040',fontSize:11}},'✓')
-                    : c.status==='beta' && h('span',{style:{background:'#f0c040',color:'#1a1a2e',
-                        fontSize:8,padding:'1px 5px',borderRadius:8,fontWeight:700,letterSpacing:1}},'BETA')
-                )
-              )
-            )
+            showCountyMenu && h(CountySwitcherMenu,{currentCountyId, onClose:()=>setShowCountyMenu(false)})
           ),
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
         ),
@@ -17472,7 +17787,7 @@ function App() {
             + (welcomeBack.daysAway === 1 ? "yesterday's news, but you're caught up now."
               : welcomeBack.daysAway < 7 ? "you were gone " + welcomeBack.daysAway + " days. Here's what you missed:"
               : welcomeBack.daysAway < 30 ? "it's been " + welcomeBack.daysAway + " days. Quite a bit happened:"
-              : "it's been over a month. A lot has happened in Jackson County:")
+              : "it's been over a month. A lot has happened in "+CNAME()+":")
         ),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7}},
           (()=>{
@@ -17686,6 +18001,7 @@ function App() {
           h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:3}},"Representative Accountability"),
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888'}},"How your elected officials voted - compared to how you voted.")
         ),
+        countyTag() !== 'jackson' && h(FindYourOfficials),
         h(RepTracker,{bills,userZip:profile?.zip})
       ),
 
