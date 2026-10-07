@@ -13,10 +13,23 @@
     // apps living in this repo (like kilted_farmers_v5.html) aren't broken
     // by a greedy redirect.
     //
-    // To add new counties, update the list below or use a broader regex.
+    // All 83 Michigan counties, plus a few hyphenated spellings (grand-traverse, st-clair...).
     // ────────────────────────────────────────────────────────────────────────
     (function(){
-      var KNOWN_COUNTY_SLUGS = ['jackson', 'calhoun', 'washtenaw'];
+      var KNOWN_COUNTY_SLUGS = [
+        'alcona', 'alger', 'allegan', 'alpena', 'antrim', 'arenac', 'baraga', 'barry',
+        'bay', 'benzie', 'berrien', 'branch', 'calhoun', 'cass', 'charlevoix', 'cheboygan',
+        'chippewa', 'clare', 'clinton', 'crawford', 'delta', 'dickinson', 'eaton', 'emmet',
+        'genesee', 'gladwin', 'gogebic', 'grandtraverse', 'gratiot', 'hillsdale', 'houghton', 'huron',
+        'ingham', 'ionia', 'iosco', 'iron', 'isabella', 'jackson', 'kalamazoo', 'kalkaska',
+        'kent', 'keweenaw', 'lake', 'lapeer', 'leelanau', 'lenawee', 'livingston', 'luce',
+        'mackinac', 'macomb', 'manistee', 'marquette', 'mason', 'mecosta', 'menominee', 'midland',
+        'missaukee', 'monroe', 'montcalm', 'montmorency', 'muskegon', 'newaygo', 'oakland', 'oceana',
+        'ogemaw', 'ontonagon', 'osceola', 'oscoda', 'otsego', 'ottawa', 'presqueisle', 'roscommon',
+        'saginaw', 'sanilac', 'schoolcraft', 'shiawassee', 'stclair', 'stjoseph', 'tuscola', 'vanburen',
+        'washtenaw', 'wayne', 'wexford', 'grand-traverse', 'st-clair', 'saint-clair', 'stclaire', 'st-joseph',
+        'saint-joseph', 'van-buren', 'presque-isle'
+      ];
 
       var path = window.location.pathname || '/';
       // Strip leading slash, take first segment, lowercase
