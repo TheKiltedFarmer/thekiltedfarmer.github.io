@@ -31,18 +31,31 @@
         'saint-joseph', 'van-buren', 'presque-isle'
       ];
 
-      var path = window.location.pathname || '/';
+      var loc = window.location;
+      var path = loc.pathname || '/';
+      var tail = loc.search + loc.hash;
       // Strip leading slash, take first segment, lowercase
       var firstSeg = path.replace(/^\/+/, '').split('/')[0].toLowerCase();
 
-      // Only redirect if the first segment matches a known county.
+      if (KNOWN_COUNTY_SLUGS.indexOf(firstSeg) !== -1) {
+        // Hand the real address to the app in the URL itself, so it still
+        // works where browser storage is blocked (strict privacy settings,
+        // some in-app email browsers). The #token from a password-reset or
+        // confirm email rides along untouched.
+        try { sessionStorage.setItem('tpv_original_path', path + tail); } catch (e) {}
+        loc.replace('/?__route=' + encodeURIComponent(path + loc.search) + loc.hash);
+        return;
+      }
+
+      // A password-reset, confirm or sign-in link that landed on an address we
+      // don't recognize: never strand it on "page not found". Send it to the
+      // app with its token, and the app takes it from there.
+      if (/access_token|refresh_token|type=recovery|type=signup|type=invite|type=magiclink|type=email|token_hash|error_code|error_description|[?&#]code=|[?&]reset=1/.test(tail)) {
+        loc.replace('/' + loc.search + loc.hash);
+        return;
+      }
       // Anything else (kilted_farmers_v5.html, unknown.html, /assets/x.png,
       // typos, etc.) falls through to the visible "page not found" UI below.
-      if (KNOWN_COUNTY_SLUGS.indexOf(firstSeg) !== -1) {
-        var pathAndQuery = window.location.pathname + window.location.search + window.location.hash;
-        sessionStorage.setItem('tpv_original_path', pathAndQuery);
-        window.location.replace('/');
-      }
     })();
   </script>
   <style>
