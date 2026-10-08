@@ -92,13 +92,45 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 // bounces to "/". Put it back BEFORE the Supabase client reads the URL, or the
 // login token is lost and the person lands in the wrong county.
 (function restoreOriginalPath(){
+  let stored = null;
   try {
-    const stored = sessionStorage.getItem('tpv_original_path');
-    if(stored) {
-      sessionStorage.removeItem('tpv_original_path');
-      window.history.replaceState({}, '', stored);
+    stored = sessionStorage.getItem('tpv_original_path');
+    if(stored) sessionStorage.removeItem('tpv_original_path');
+  } catch(e) { /* storage blocked (strict privacy settings, some in-app browsers) */ }
+  try {
+    // 404.html now passes the address in the URL (?__route=/kent?bill=12), which
+    // works even where storage is blocked. The #token stays on the end.
+    const route = new URLSearchParams(window.location.search).get('__route');
+    if(route && route.charAt(0) === '/' && route.charAt(1) !== '/') stored = route + window.location.hash;
+    if(stored) window.history.replaceState({}, '', stored);
+  } catch(e) {}
+})();
+
+// What the person arrived with from an email link: a password reset, a
+// confirm link, or an error (expired or already-used link). Read it NOW,
+// before the Supabase client cleans the token out of the address bar.
+const TPV_ARRIVAL = (function(){
+  const out = {recovery:false, tokenHash:'', type:'', error:'', expired:false};
+  try {
+    const hash = (window.location.hash || '').replace(/^#/, '');
+    const q = new URLSearchParams(window.location.search);
+    const hq = new URLSearchParams(hash);
+    const get = k=>hq.get(k) || q.get(k) || '';
+    out.type = get('type');
+    out.tokenHash = get('token_hash');
+    out.recovery = out.type === 'recovery' || q.get('reset') === '1';
+    const code = get('error_code') || get('error');
+    if(code) {
+      out.error = get('error_description') || code;
+      out.expired = /expired|invalid|otp|access_denied/i.test(code + ' ' + out.error);
     }
-  } catch(e) { /* sessionStorage may be unavailable */ }
+    // Asked for a reset on this device in the last day? Then an expired link is almost certainly that one.
+    if(out.error && !out.recovery) {
+      const at = Number(localStorage.getItem('tpv_reset_at') || 0);
+      if(at && Date.now() - at < 86400000) out.recovery = true;
+    }
+  } catch(e) {}
+  return out;
 })();
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
@@ -314,17 +346,8 @@ function getCountyFromUrl() {
   // GitHub Pages 404.html redirect pattern: a request to /jackson lands on
   // 404.html, which stores the original path in sessionStorage and redirects
   // to /. We read that here to recover the requested county.
-  let path = window.location.pathname || '/';
-  try {
-    const stored = sessionStorage.getItem('tpv_original_path');
-    if(stored) {
-      // Replace the URL with the original requested path so the user sees
-      // /jackson in their address bar, not /
-      sessionStorage.removeItem('tpv_original_path');
-      window.history.replaceState({}, '', stored);
-      path = stored;
-    }
-  } catch(e) { /* sessionStorage may be unavailable */ }
+  // (restoreOriginalPath at the top of the script has already put it back.)
+  const path = window.location.pathname || '/';
 
   // Strip leading slash, take first segment
   const seg = path.replace(/^\/+/, '').split('/')[0].split('?')[0].toLowerCase();
@@ -11195,7 +11218,8 @@ function CountySpotsPanel({profile}) {
         showAll ? 'Show fewer' : 'Show all ' + rows.length + ' counties')));
 }
 
-function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
+function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice, onClose}) {
+  const [notice, setNotice] = useState(initialNotice || '');
   const [mode,setMode]=useState(initialMode||'login');
   const [email,setEmail]=useState('');
   const [pass,setPass]=useState('');
@@ -11212,18 +11236,28 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
   // when the user lands with a recovery token in the URL hash, OR we can check ?reset=1
   useEffect(()=>{
     if(typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const hashHasRecovery = (window.location.hash||'').includes('type=recovery') ||
-                             (window.location.hash||'').includes('access_token');
-    if(params.get('reset') === '1' || hashHasRecovery) {
-      setMode('reset');
-    }
+    // TPV_ARRIVAL was read before the Supabase client tidied the address bar
+    if(TPV_ARRIVAL.recovery && !TPV_ARRIVAL.error) setMode('reset');
     // Listen for Supabase auth events — PASSWORD_RECOVERY fires when token is processed
     const {data: subscription} = sb.auth.onAuthStateChange((event)=>{
-      if(event === 'PASSWORD_RECOVERY') setMode('reset');
+      if(event === 'PASSWORD_RECOVERY') { setNotice(''); setMode('reset'); }
     });
     return ()=>{ try { subscription?.subscription?.unsubscribe?.(); } catch(e){} };
   },[]);
+
+  // On the "choose a new password" screen without a working reset session
+  // (link expired, already used, or opened in a different browser), say so
+  // now instead of letting someone type a password that can't be saved.
+  useEffect(()=>{
+    if(mode !== 'reset') return;
+    let gone = false;
+    sb.auth.getSession().then(({data})=>{
+      if(gone || (data && data.session)) return;
+      setMode('forgot');
+      setNotice('That reset link has expired or was already used. Some email apps open links to check them, which uses them up. Enter your email and we\'ll send a fresh one.');
+    }, ()=>{});
+    return ()=>{ gone = true; };
+  },[mode]);
 
   const community=ZIP_COMMUNITY[zip.trim()]||null;
   const zipValid=VALID_ZIPS.includes(zip.trim());
@@ -11368,12 +11402,18 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
   const handleSendReset=async()=>{
     if(!email.trim()) { setError('Enter your email address.'); return; }
     setLoading(true); setError('');
-    const redirectTo = authRedirectUrl(null, '?reset=1');
+    // Same plain county address the sign-up emails use (no extra ?reset=1 on
+    // the end, which Supabase's list of allowed addresses can reject). The
+    // email link itself says it's a reset (#type=recovery).
+    const redirectTo = authRedirectUrl(null);
     const {error:err} = await sb.auth.resetPasswordForEmail(email.trim(), {redirectTo});
     if(err) {
-      setError(err.message);
+      setError(/rate limit|too many|security purposes/i.test(err.message)
+        ? 'We just sent one. Please wait a minute, then try again. Check your spam folder too.'
+        : err.message);
     } else {
-      setError('');
+      try { localStorage.setItem('tpv_reset_at', String(Date.now())); } catch(e) {}
+      setError(''); setNotice('');
       setMode('reset_sent');
     }
     setLoading(false);
@@ -11385,7 +11425,14 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
     setLoading(true); setError('');
     const {error:err} = await sb.auth.updateUser({password: pass});
     if(err) {
-      setError(err.message);
+      if(/session|jwt|expired|not authenticated/i.test(err.message)) {
+        setMode('forgot'); setPass('');
+        setNotice('That reset link has expired or was already used. Enter your email and we\'ll send a fresh one.');
+      } else if(/different from the old|same password|should be different/i.test(err.message)) {
+        setError('That\'s the same as your old password. Pick a new one.');
+      } else {
+        setError(err.message);
+      }
       setLoading(false);
       return;
     }
@@ -11393,6 +11440,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
     if(window.history && window.history.replaceState) {
       window.history.replaceState({}, '', window.location.pathname);
     }
+    try { localStorage.removeItem('tpv_reset_at'); } catch(e) {}
     setError('');
     setMode('reset_complete');
     setLoading(false);
@@ -11429,6 +11477,8 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
       reason&&(mode==='signup'||mode==='login')&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'8px 12px',
         marginBottom:14,fontSize:13,color:'#8a6000',fontFamily:"'Lora',serif",textAlign:'center'}},
         'Join free to '+reason+'. It takes about a minute.'),
+      notice&&h('div',{role:'status',style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',
+        marginBottom:14,fontSize:13,color:'#8a6000',fontFamily:"'Lora',serif",lineHeight:1.5}}, notice),
 
       // Header
       h('div',{style:{textAlign:'center',marginBottom:20}},
@@ -11461,7 +11511,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
       // Mode toggle (only for login/signup; hidden during password reset flow)
       (mode==='login'||mode==='signup') && h('div',{style:{display:'flex',marginBottom:20,border:'1px solid #eee',borderRadius:8,overflow:'hidden'}},
         [['login','Sign In'],['signup','Create Account']].map(([m,l])=>
-          h('button',{key:m,onClick:()=>{setMode(m);setError('');setStep(1);},
+          h('button',{key:m,onClick:()=>{setMode(m);setError('');setStep(1);setNotice('');},
             style:{flex:1,padding:'10px',background:mode===m?'#1a1a2e':'#fff',color:mode===m?'#f0c040':'#555',border:'none',fontFamily:"'Playfair Display',serif",fontWeight:mode===m?700:400,fontSize:14}},l)
         )
       ),
@@ -11488,7 +11538,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
           loading?h(Spinner):'Sign In ->'
         ),
         h('div',{style:{textAlign:'center',marginTop:10}},
-          h('button',{onClick:()=>{setMode('forgot');setError('');setPass('');},
+          h('button',{onClick:()=>{setMode('forgot');setError('');setPass('');setNotice('');},
             style:{background:'transparent',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',
               fontFamily:"'Lora',serif",textDecoration:'underline',padding:0}},
             'Forgot password?')
@@ -11533,7 +11583,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, onClose}) {
       mode==='reset'&&h(Fragment,null,
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',marginBottom:14,lineHeight:1.6}},
           'Choose a new password for your account.'),
-        inp(pass,setPass,'New password (min 6 characters)','password'),
+        inp(pass,setPass,'New password (min 6 characters)','password',{autoComplete:'new-password',autoFocus:true}),
         error&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:13,color:'#c0392b'}},error),
         h('button',{onClick:handleSetNewPassword,disabled:loading,
           style:{width:'100%',background:loading?'#ccc':'#1a1a2e',color:'#f0c040',border:'none',
@@ -17359,7 +17409,11 @@ function App() {
   const [authPrompt,setAuthPrompt]=useState(()=>{
     try {
       const p = new URLSearchParams(window.location.search);
-      if(p.get('reset')==='1' || (window.location.hash||'').includes('type=recovery')) return {mode:'reset'};
+      // An email link that didn't work (expired, or already opened once)
+      if(TPV_ARRIVAL.error) return TPV_ARRIVAL.recovery
+        ? {mode:'forgot', notice:'That reset link has expired or was already used. Some email apps open links to check them, which uses them up. Enter your email and we\'ll send a fresh one.'}
+        : {mode:'login', notice:'That email link has expired or was already used. Sign in below. Forgot your password? Tap "Forgot password?" for a fresh link.'};
+      if(TPV_ARRIVAL.recovery) return {mode:'reset'};
       if(p.get('join')==='1') return {mode:'signup'};
       if(p.get('signin')==='1') return {mode:'login'};
     } catch(e) {}
@@ -17412,6 +17466,16 @@ function App() {
       setLoading(false);
     },5000);
     try{
+      // Email links built from a custom Supabase email template carry
+      // ?token_hash=...&type=recovery instead of a #token. Trade it for a session.
+      if(TPV_ARRIVAL.tokenHash) {
+        const otpType = TPV_ARRIVAL.type === 'signup' ? 'email' : (TPV_ARRIVAL.type || 'recovery');
+        const {error:otpErr} = await sb.auth.verifyOtp({token_hash: TPV_ARRIVAL.tokenHash, type: otpType});
+        try { const u = new URL(window.location.href); ['token_hash','type','next'].forEach(k=>u.searchParams.delete(k)); window.history.replaceState({}, '', u.pathname + u.search); } catch(e) {}
+        if(otpErr) setAuthPrompt(TPV_ARRIVAL.recovery
+          ? {mode:'forgot', notice:'That reset link has expired or was already used. Enter your email and we\'ll send a fresh one.'}
+          : {mode:'login', notice:'That email link has expired or was already used. Sign in below, or tap "Forgot password?" for a fresh link.'});
+      }
       const {data:{session}}=await sb.auth.getSession();
       if(session?.user){
         const {data:prof}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
@@ -17683,24 +17747,34 @@ function App() {
 
   // County picker: if no county in URL and not opted-out via ?nopicker, show
   // a landing page where the user picks their county.
+  const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch'}},
+    h(AuthScreen,{onAuth:(u,p)=>{
+        handleAuth(u,p);
+        // Finished a password reset on the front page? Take them to their county.
+        if(!currentCountyId && p && COUNTIES[p.county]) goToCounty(p.county);
+      },
+      initialMode:authPrompt.mode,reason:authPrompt.reason,notice:authPrompt.notice,
+      onGuest:()=>setAuthPrompt(null),onClose:()=>setAuthPrompt(null)}));
+
   if(!currentCountyId) {
     const search = (typeof window !== 'undefined' ? window.location.search : '') || '';
     if(!search.includes('nopicker')) {
       TPV_VIEWER = {user, profile};
-      return h(CountyPickerLanding, {
-        profile,
-        onPick: (slug, billId)=>{
-          // Full load so that county's bills, chat and members load (not the
-          // default county's)
-          window.location.href = '/' + slug + (billId ? '?bill=' + encodeURIComponent(billId) : '');
-        }
-      });
+      // A reset or confirm link can land here on the front page too, so the
+      // "choose a new password" box shows on top of it.
+      return h(Fragment,null,
+        h(CountyPickerLanding, {
+          profile,
+          onPick: (slug, billId)=>{
+            // Full load so that county's bills, chat and members load (not the
+            // default county's)
+            window.location.href = '/' + slug + (billId ? '?bill=' + encodeURIComponent(billId) : '');
+          }
+        }),
+        authOverlay,
+        showPrivacy && h(PrivacyModal,{onClose:()=>setShowPrivacy(false)}));
     }
   }
-
-  const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch'}},
-    h(AuthScreen,{onAuth:handleAuth,initialMode:authPrompt.mode,reason:authPrompt.reason,
-      onGuest:()=>setAuthPrompt(null),onClose:()=>setAuthPrompt(null)}));
 
   const repInfo=repLevel(rep);
   const canPropose=rep>=REP_TO_PROPOSE;
