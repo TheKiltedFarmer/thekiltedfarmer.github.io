@@ -133,6 +133,8 @@ const TPV_ARRIVAL = (function(){
   return out;
 })();
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+// Settles once a ?token_hash= email link has been traded for a session (or failed)
+let TPV_OTP_PENDING = Promise.resolve();
 const AI_PROXY = "https://peoples-voice-ai.justindfair.workers.dev";
 const SITE_URL = "https://thepeoplesvoices.org";
 const REP_TO_PROPOSE = 50;
@@ -415,9 +417,9 @@ function adminScopeLabel(p) {
 // Account-level ban / delete runs in the admin-manage-user server function
 // (it needs the service key, which never goes in this file). Returns
 // {ok, error, notDeployed}.
-async function adminManageUser(action, userId, reason) {
+async function adminManageUser(action, userId, reason, extra) {
   try {
-    const {data, error} = await sb.functions.invoke('admin-manage-user', {body:{action, user_id:userId, reason:reason||null}});
+    const {data, error} = await sb.functions.invoke('admin-manage-user', {body:{...(extra||{}), action, user_id:userId, reason:reason||null}});
     if(error) {
       const msg = (error.message||'') + '';
       const status = error.context && error.context.status;
@@ -433,6 +435,11 @@ async function adminManageUser(action, userId, reason) {
   }
 }
 
+
+// An admin gave this person a temporary password (Admin → User Manager →
+// Sign-in help). They're asked to choose their own the first time they sign in.
+const TEMP_PASSWORD_NOTICE = 'You\'re signed in with a temporary password from an admin. Choose your own now so only you know it.';
+function usingTempPassword(authUser) { return !!(authUser && authUser.user_metadata && authUser.user_metadata.tpv_temp_password === true); }
 
 // Where auth emails (confirm, reset, resend) should send people back to.
 // Always includes the county slug so they return to the county they joined.
@@ -2089,6 +2096,7 @@ const ADMIN_ACTION_LABELS = {
   hide_post:'🛡 Hid post', unhide_post:'↩ Unhid post',
   dismiss_report:'Dismissed report', resolve_report:'✓ Handled report', reopen_report:'Reopened report',
   ban_account:'🔒 Blocked login', unban_account:'🔓 Unblocked login', delete_account:'❌ Deleted account',
+  set_password:'🔑 Gave a temporary password', reset_link:'🔗 Made a password reset link',
 };
 function ModerationLog({profile}) {
   const [open, setOpen] = useState(false);
@@ -7541,7 +7549,7 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
                   if(pwNew.length < 6) { setPwMsg('Password must be at least 6 characters.'); return; }
                   if(pwNew !== pwConfirm) { setPwMsg('Passwords don\'t match.'); return; }
                   setPwSaving(true); setPwMsg('');
-                  const {error} = await sb.auth.updateUser({password: pwNew});
+                  const {error} = await sb.auth.updateUser({password: pwNew, data:{tpv_temp_password:false}});
                   if(error) {
                     setPwMsg('Error: ' + error.message);
                   } else {
@@ -7841,6 +7849,8 @@ function WelcomeComposer({member, viewer, onSent}) {
 // Admin-only box inside a resident's profile
 function AdminProfileBox({member, viewer}) {
   const [welcome, setWelcome] = useState(undefined);   // undefined = loading, null = not yet
+  const [signInHelp, setSignInHelp] = useState(false);
+  const canResetPw = isFullAdmin(viewer && viewer.profile) && !(viewer.user && viewer.user.id === member.id);
   const [composing, setComposing] = useState(false);
   const [justSent, setJustSent] = useState(false);
   const load = async()=>{
@@ -7864,6 +7874,12 @@ function AdminProfileBox({member, viewer}) {
     row('Account', member.account_type && member.account_type !== 'resident' ? accountTypeLabel(member.account_type) : 'Resident'),
     row('Joined', joined),
     member.deleted_at && h('div',{style:{color:'#c0392b',fontSize:12.5,marginTop:4}},'🚫 This account has been removed.'),
+    // Locked out? Full admins can set a temporary password or make a reset link right here.
+    canResetPw && !member.deleted_at && h('div',{style:{marginTop:8}},
+      signInHelp
+        ? h(AdminPasswordHelp,{member, me:viewer.profile, isSelf:false})
+        : h('button',{onClick:()=>setSignInHelp(true),style:{background:'#fff',color:'#8a6000',border:'1px solid #e2cf9f',borderRadius:7,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:"'Lora',serif"}},
+            '🔑 Can\'t sign in? Reset their password')),
     !member.deleted_at && isNew && h('div',{style:{borderTop:'1px solid #f0dca0',marginTop:8,paddingTop:8}},
       welcome === undefined ? h('div',{style:{fontSize:12,color:'#999'}},'Checking...')
       : welcome ? h('div',{style:{fontSize:13,color:'#1a6b3c'}},
@@ -11251,7 +11267,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
   useEffect(()=>{
     if(mode !== 'reset') return;
     let gone = false;
-    sb.auth.getSession().then(({data})=>{
+    TPV_OTP_PENDING.then(()=>sb.auth.getSession()).then(({data})=>{
       if(gone || (data && data.session)) return;
       setMode('forgot');
       setNotice('That reset link has expired or was already used. Some email apps open links to check them, which uses them up. Enter your email and we\'ll send a fresh one.');
@@ -11423,7 +11439,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
   const handleSetNewPassword=async()=>{
     if(pass.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setLoading(true); setError('');
-    const {error:err} = await sb.auth.updateUser({password: pass});
+    const {error:err} = await sb.auth.updateUser({password: pass, data:{tpv_temp_password:false}});
     if(err) {
       if(/session|jwt|expired|not authenticated/i.test(err.message)) {
         setMode('forgot'); setPass('');
@@ -16132,6 +16148,131 @@ function NominationsInbox({onToast}) {
 }
 
 // ── User Manager (Admin) ───────────────────────────────────────────────────────
+// ── Admin: help someone get back into their account ─────────────────────────
+// Full admins can give a member a temporary password (they're asked to pick
+// their own the first time they sign in) or make a one-time reset link to
+// text them. Neither depends on the reset email. Runs in the
+// admin-manage-user server function; passwords are never logged or stored here.
+const PW_WORDS = ['maple','river','cedar','harbor','meadow','orchard','prairie','robin','heron','trout','walnut','willow',
+  'apple','cherry','sunset','lantern','garden','honey','thistle','acorn','beacon','canoe','cabin','clover','comet','ember',
+  'fern','granite','hazel','island','juniper','kettle','lilac','marsh','north','otter','pebble','quarry','ridge','sparrow',
+  'timber','tulip','valley','wheat','wren','aspen','basil','copper','dune','falcon','grove','hollow','jasper','kayak',
+  'linden','mill','nectar','oak','prism','barn','creek','pine','birch','lake'];
+function makeTempPassword() {
+  const r = new Uint32Array(4);
+  try { crypto.getRandomValues(r); } catch(e) { for(let i=0;i<4;i++) r[i] = Math.floor(Math.random()*4294967296); }
+  const w = i=>PW_WORDS[r[i] % PW_WORDS.length];
+  return w(0) + '-' + w(1) + '-' + w(2) + '-' + String(1000 + r[3] % 9000);
+}
+function AdminPasswordHelp({member, me, isSelf, onToast}) {
+  const [pw, setPw] = useState('');
+  const [mustChange, setMustChange] = useState(true);
+  const [confirmEmail, setConfirmEmail] = useState(true);
+  const [busy, setBusy] = useState('');
+  const [result, setResult] = useState(null); // {kind, text}
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+  const name = member.display_name || member.email || 'this member';
+  const first = (member.display_name || '').split(' ')[0] || 'there';
+  const sig = (me && me.display_name || '').split(' ')[0];
+  const where = SITE_URL + (COUNTIES[member.county] ? '/' + COUNTIES[member.county].slug : '');
+  const failMsg = res => res.notDeployed || /unknown action/i.test(res.error || '')
+    ? 'Deploy the updated admin-manage-user server function first (Supabase → Edge Functions), then try again.'
+    : res.error;
+
+  const setPassword = async()=>{
+    setErr(''); setResult(null); setCopied(false);
+    const p = pw.trim();
+    if(p.length < 8) { setErr('Use at least 8 characters, or tap "Make one up".'); return; }
+    if(!window.confirm('Give ' + name + ' this new password?\n\n' + p + '\n\nTheir old password stops working right away.')) return;
+    setBusy('pw');
+    const res = await adminManageUser('set_password', member.id, null, {password:p, must_change:mustChange, confirm_email:confirmEmail});
+    setBusy('');
+    if(!res.ok) { setErr(failMsg(res)); return; }
+    const d = res.data || {};
+    setResult({kind:'password', text:
+      'Hi ' + first + ', I reset your password on The People\'s Voice. Sign in at ' + where +
+      ' with your email (' + (d.email || member.email) + ') and this temporary password:\n\n' + p + '\n\n' +
+      (d.must_change ? 'It will ask you to choose your own password right after.' : 'You can change it anytime on your Profile page.') +
+      (sig ? ' — ' + sig : '')});
+    onToast && onToast('✓ New password set for ' + name + '.');
+  };
+
+  const makeLink = async()=>{
+    setErr(''); setResult(null); setCopied(false);
+    setBusy('link');
+    const res = await adminManageUser('reset_link', member.id);
+    setBusy('');
+    if(!res.ok) { setErr(failMsg(res)); return; }
+    const d = res.data || {};
+    if(!d.link) { setErr('No link came back. Try again.'); return; }
+    setResult({kind:'link', text:
+      'Hi ' + first + ', here\'s a link to choose a new password on The People\'s Voice:\n\n' + d.link +
+      '\n\nIt works once, within about an hour.' + (sig ? ' — ' + sig : '')});
+  };
+
+  const copy = ()=>{
+    if(!result) return;
+    const done = ()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2500); };
+    try { navigator.clipboard.writeText(result.text).then(done, ()=>window.prompt('Copy this:', result.text)); }
+    catch(e) { window.prompt('Copy this:', result.text); }
+  };
+
+  const btn = (bg, fg, extra)=>({background:bg,color:fg,border:'none',padding:'8px 14px',borderRadius:6,fontSize:12.5,cursor:'pointer',
+    fontFamily:"'Playfair Display',serif",fontWeight:700,whiteSpace:'nowrap',...(extra||{})});
+  const label = {display:'flex',alignItems:'flex-start',gap:7,fontSize:12.5,color:'#444',cursor:'pointer',marginTop:7,lineHeight:1.4};
+
+  return h('div',{style:{background:'#fffdf7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 14px',marginBottom:12,fontFamily:"'Lora',serif"}},
+    h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#1a1a2e'}},'🔑 Sign-in help'),
+    h('div',{style:{fontSize:12,color:'#777',margin:'2px 0 10px',lineHeight:1.5}},
+      'Can\'t get in? Give them a temporary password, or a one-time link to choose their own. Neither depends on the reset email. Only full admins see this.'),
+    isSelf ? h('div',{style:{fontSize:13,color:'#555'}},'For your own password, use Change Password on your Profile page.')
+    : member.deleted_at ? h('div',{style:{fontSize:13,color:'#555'}},'This account is removed. Restore it first, then come back here.')
+    : h('div',null,
+        // 1. A replacement password
+        h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:5}},'Give them a temporary password'),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          h('input',{value:pw,onChange:e=>{ setPw(e.target.value.slice(0,72)); setErr(''); },placeholder:'Type one, or make one up',
+            autoComplete:'off',autoCapitalize:'none',autoCorrect:'off',spellCheck:false,'aria-label':'Temporary password',
+            style:{flex:'1 1 200px',minWidth:0,border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:16,
+              fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',boxSizing:'border-box'}}),
+          h('button',{type:'button',onClick:()=>{ setPw(makeTempPassword()); setErr(''); },style:btn('#fff8e7','#8a6000',{border:'1px solid #f0c040'})},'🎲 Make one up')),
+        h('label',{style:label},
+          h('input',{type:'checkbox',checked:mustChange,onChange:e=>setMustChange(e.target.checked),style:{marginTop:2}}),
+          'Ask them to choose their own password when they sign in'),
+        h('label',{style:label},
+          h('input',{type:'checkbox',checked:confirmEmail,onChange:e=>setConfirmEmail(e.target.checked),style:{marginTop:2}}),
+          'Also confirm their email, if they never clicked the confirm link'),
+        h('button',{onClick:setPassword,disabled:!!busy,style:btn('#1a1a2e','#f0c040',{marginTop:10,opacity:busy?0.6:1})},
+          busy==='pw' ? 'Setting...' : 'Set password'),
+
+        // 2. A one-time link
+        h('div',{style:{borderTop:'1px solid #f0e6c8',marginTop:12,paddingTop:10}},
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:5}},'Or send them a link'),
+          h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+            h('button',{onClick:makeLink,disabled:!!busy,style:btn('#1a5c8a','#fff',{opacity:busy?0.6:1})},
+              busy==='link' ? 'Making...' : '🔗 Make a one-time reset link'),
+            h('span',{style:{fontSize:11.5,color:'#888'}},'Works once, for about an hour. Sends no email.'))),
+
+        err && h('div',{role:'alert',style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'8px 10px',marginTop:10,fontSize:12.5,color:'#c0392b'}}, err),
+
+        result && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:6,padding:'10px 12px',marginTop:12}},
+          h('div',{style:{fontSize:12,color:'#1a6b3c',fontWeight:700,marginBottom:6}},
+            result.kind === 'password' ? '✓ Password set. Send them this, privately:' : '✓ Link ready. Send them this, privately:'),
+          h('div',{style:{whiteSpace:'pre-wrap',wordBreak:'break-word',fontSize:13,color:'#222',background:'#fff',border:'1px solid #d8eede',borderRadius:5,padding:'8px 10px',lineHeight:1.5}},
+            result.text),
+          h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}},
+            h('button',{onClick:copy,style:btn('#1a6b3c','#fff')}, copied ? '✓ Copied' : '📋 Copy'),
+            h('a',{href:'sms:?&body=' + encodeURIComponent(result.text),style:{...btn('#fff','#1a6b3c',{border:'1px solid #a8e6c0'}),textDecoration:'none'}},'💬 Text it'),
+            member.email && h('a',{href:'mailto:' + encodeURIComponent(member.email) + '?subject=' + encodeURIComponent('Getting back into The People\'s Voice') + '&body=' + encodeURIComponent(result.text),
+              style:{...btn('#fff','#1a6b3c',{border:'1px solid #a8e6c0'}),textDecoration:'none'}},'✉️ Email it')),
+          h('div',{style:{fontSize:11,color:'#5a7a64',marginTop:6,lineHeight:1.5}},
+            result.kind === 'password'
+              ? 'Share it in a text, call or email, not in a public chat. This box clears when you pick someone else.'
+              : 'Making a new link cancels the old one.')))
+  );
+}
+
 function UserManager({onToast, user, profile}) {
   const full = isFullAdmin(profile);
   const myCounties = adminCounties(profile);
@@ -16443,6 +16584,9 @@ function UserManager({onToast, user, profile}) {
             },'📋 Copy User Info')
           )
         ),
+
+        // Help them get back in (full admins only)
+        full && h(AdminPasswordHelp,{key:selected.id, member:selected, me:profile, isSelf:selected.id===user?.id, onToast}),
 
         selected.deleted_at
           ? h('div',{style:{background:'#fdecea',border:'1px solid #e6b0aa',borderRadius:6,padding:'10px 12px',marginBottom:12}},
@@ -17470,7 +17614,8 @@ function App() {
       // ?token_hash=...&type=recovery instead of a #token. Trade it for a session.
       if(TPV_ARRIVAL.tokenHash) {
         const otpType = TPV_ARRIVAL.type === 'signup' ? 'email' : (TPV_ARRIVAL.type || 'recovery');
-        const {error:otpErr} = await sb.auth.verifyOtp({token_hash: TPV_ARRIVAL.tokenHash, type: otpType});
+        TPV_OTP_PENDING = sb.auth.verifyOtp({token_hash: TPV_ARRIVAL.tokenHash, type: otpType}).catch(e=>({error:e}));
+        const {error:otpErr} = await TPV_OTP_PENDING;
         try { const u = new URL(window.location.href); ['token_hash','type','next'].forEach(k=>u.searchParams.delete(k)); window.history.replaceState({}, '', u.pathname + u.search); } catch(e) {}
         if(otpErr) setAuthPrompt(TPV_ARRIVAL.recovery
           ? {mode:'forgot', notice:'That reset link has expired or was already used. Enter your email and we\'ll send a fresh one.'}
@@ -17484,6 +17629,7 @@ function App() {
           setToast('This account has been removed. Email chef.justinfairchild@gmail.com if you think this is a mistake.');
         } else {
         setUser({...session.user,...(prof||{})});setProfile(prof||{});setRep(prof?.reputation||0);
+        if(usingTempPassword(session.user)) setAuthPrompt(p=>p && p.mode==='reset' ? p : {mode:'reset', notice:TEMP_PASSWORD_NOTICE});
         loadUserVotes(session.user.id);
         loadFollows(session.user.id);
         loadNotifications(session.user.id);
@@ -17581,7 +17727,8 @@ function App() {
   };
 
   const handleAuth=(authUser,prof)=>{
-    setAuthPrompt(null);
+    // Signed in with a temporary password from an admin? Ask them to pick their own.
+    setAuthPrompt(usingTempPassword(authUser) ? {mode:'reset', notice:TEMP_PASSWORD_NOTICE} : null);
     setUser({...authUser,...prof});setProfile(prof);setRep(prof?.reputation||0);loadUserVotes(authUser.id);loadFollows(authUser.id);
     // Show onboarding for brand new users
     if(!prof?.reputation||prof.reputation===0) setShowOnboarding(true);
@@ -17748,7 +17895,7 @@ function App() {
   // County picker: if no county in URL and not opted-out via ?nopicker, show
   // a landing page where the user picks their county.
   const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch'}},
-    h(AuthScreen,{onAuth:(u,p)=>{
+    h(AuthScreen,{key:authPrompt.mode+'|'+(authPrompt.notice||''), onAuth:(u,p)=>{
         handleAuth(u,p);
         // Finished a password reset on the front page? Take them to their county.
         if(!currentCountyId && p && COUNTIES[p.county]) goToCounty(p.county);
