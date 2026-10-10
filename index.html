@@ -11100,13 +11100,24 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
   useEffect(()=>{
     if(navCtx && navCtx.jacketId) { setFocus(String(navCtx.jacketId)); onNavCtxConsumed && onNavCtxConsumed(); }
   },[navCtx && navCtx.jacketId]);
+  // What the last refresh told us about the server setup, in plain words
+  const [setup, setSetup] = useState(null);   // {oldFunction, demoKey, notDeployed}
   const refresh = async()=>{
     setRefreshing(true);
     const {data, error} = await sb.functions.invoke('finance-refresh',{body:{scope:'officials'}});
     setRefreshing(false);
-    if(error) { const st = error.context && error.context.status; onToast(st===404 ? '❌ The finance-refresh server function isn\'t deployed yet.' : '❌ ' + (error.message || 'Refresh failed')); return; }
-    onToast(data && data.stopped_early
-      ? '✓ Refreshed ' + (data.refreshed_officials || 0) + '. The FEC\'s hourly limit stopped it early: ' + data.remaining + ' left. ' + (data.using_demo_key ? 'A free FEC_API_KEY fixes this.' : 'Try again in an hour.')
+    if(error) {
+      const st = error.context && error.context.status;
+      if(st === 404) { setSetup({notDeployed:true}); onToast('❌ The finance-refresh server function isn\'t deployed yet.'); }
+      else onToast('❌ ' + (error.message || 'Refresh failed'));
+      return;
+    }
+    const oldFunction = !!data && !('refreshed_officials' in data);
+    const demoKey = !!(data && data.using_demo_key);
+    setSetup(oldFunction || demoKey ? {oldFunction, demoKey} : null);
+    if(oldFunction) onToast('The older finance-refresh is still on Supabase. See the steps above.');
+    else onToast(data && data.stopped_early
+      ? '✓ Refreshed ' + (data.refreshed_officials || 0) + '. The FEC\'s hourly limit stopped it early: ' + data.remaining + ' left. ' + (demoKey ? 'Add your own FEC key (steps above).' : 'Try again in an hour.')
       : '✓ Jackets refreshed from the FEC (' + ((data && data.refreshed_officials) || 0) + ').');
     load();
   };
@@ -11133,9 +11144,18 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
             h('span',{style:{flex:1,minWidth:180}}, waiting ? 'These fill in on the first refresh from the FEC.' : 'Numbers refresh from the FEC every Monday.'),
             h('button',{onClick:refresh,disabled:refreshing,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:PD,fontWeight:700}},
               refreshing ? 'Refreshing...' : 'Refresh from FEC'))),
+    admin && setup && h('div',{style:{background:'#fff',border:'1px solid #f0c040',borderRadius:8,padding:'12px 14px',marginTop:-6,marginBottom:14,fontFamily:LB,fontSize:13,color:'#333',lineHeight:1.6}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:4}},'To fill in the jackets'),
+      setup.notDeployed && h('div',null,'• Deploy the finance-refresh server function in Supabase (Edge Functions).'),
+      setup.oldFunction && h('div',null,'• Supabase is still running the older finance-refresh. In Supabase → Edge Functions → finance-refresh, replace the code with the new version and tap Deploy.'),
+      setup.demoKey && h('div',null,'• Get a free FEC key at ',
+        h('a',{href:'https://api.data.gov/signup/',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'api.data.gov/signup ↗'),
+        ' (it shows up on screen right away). Then in Supabase → Edge Functions → Secrets, add one named ', h('code',null,'FEC_API_KEY'), ' with that key as the value. ',
+        'The shared demo key runs out after a handful of lookups.'),
+      h('div',{style:{fontSize:12,color:'#777',marginTop:4}},'Then tap Refresh from FEC again.')),
     rows === null ? h('div',{style:{textAlign:'center',padding:30}}, h(Spinner))
-    : missing ? (!admin && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'20px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
-        'Sponsor jackets are on their way. Check back soon.'))
+    : missing || (waiting && !admin) ? (!admin && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'20px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
+        'The sponsor patches are being stitched on. Check back soon.'))
     : h(Fragment,null,
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
           h('span',{style:{fontSize:12,color:'#888',fontFamily:LB,marginRight:2}},'Order:'),
