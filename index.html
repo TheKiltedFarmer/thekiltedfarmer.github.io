@@ -170,6 +170,7 @@ const HUBS = [
     { id:'ask',       label:'Ask an Official' },
     { id:'proposals', label:'Civic Voice' },
     { id:'reps',      label:'Reps' },
+    { id:'jackets',   label:'Sponsor Jackets' },
     { id:'pulse',     label:'Pulse' }
   ]},
   { id:'community', icon:'\uD83E\uDD1D', label:'Community', subs:[
@@ -2248,6 +2249,8 @@ const __DEEP_LINK = (function(){
     if(u && /^[0-9a-f-]{36}$/i.test(u)) return {userId:u};
     const o = p.get('o');
     if(o && /^\d+$/.test(o)) return {effortId:Number(o)};
+    const j = p.get('j');
+    if(j && /^[A-Z0-9-]{3,30}$/.test(j)) return {jacketId:j};
     if(!billId) {
       const m = (window.location.hash||'').match(/^#bill\/(.+)$/);
       if(m) billId = decodeURIComponent(m[1]);
@@ -2262,7 +2265,7 @@ function takeDeepLink() {
   __deepLinkUsed = true;
   try {
     const p = new URLSearchParams(window.location.search);
-    ['bill','act','q','u','o'].forEach(k=>p.delete(k));
+    ['bill','act','q','u','o','j'].forEach(k=>p.delete(k));
     const rest = p.toString();
     const hash = /^#bill\//.test(window.location.hash||'') ? '' : (window.location.hash||'');
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : '') + hash);
@@ -10856,6 +10859,295 @@ function CandidateEditor({c, race, questions, onSaved, onToast}) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// SPONSOR JACKETS
+// Robin Williams joked that politicians should wear NASCAR jackets so we'd
+// know who their sponsors are. Every sitting member of Congress from Michigan
+// gets one: each patch is a PAC that gave to their campaign, biggest money on
+// the chest; the gold band is small donors. Same colors and rules for
+// everyone; numbers straight from the FEC (finance-refresh fills them in).
+// ═════════════════════════════════════════════════════════════════════════════
+const JACKET_NAVY = '#1a1a2e', JACKET_GOLD = '#f0c040';
+// Patch spots, biggest first: chest, middle, lower, then the sleeves
+const JACKET_SLOTS = [
+  {x:86,  y:114, w:98, h:50, fs:12.5, bold:true},
+  {x:196, y:114, w:98, h:50, fs:12.5, bold:true},
+  {x:92,  y:172, w:90, h:42, fs:11.5},
+  {x:198, y:172, w:90, h:42, fs:11.5},
+  {x:100, y:222, w:76, h:38, fs:10.5},
+  {x:204, y:222, w:76, h:38, fs:10.5},
+  {cx:62,  cy:190, r:20, fs:9.5},
+  {cx:318, cy:190, r:20, fs:9.5},
+];
+// A sponsor's name as it would fit on a patch: "American Bankers Association
+// PAC (BANKPAC)" becomes "BANKPAC"; the full name stays in the list below.
+function patchName(raw) {
+  // "MAJORITY COMMITTEE PAC--MC PAC": the part before the dashes is the name
+  const full = filerCase(String(raw || '').split(/\s*--\s*/)[0]).replace(/\s+/g,' ').trim();
+  const paren = full.match(/\(([^()]{2,16})\)\s*$/);
+  if(paren && !/^(the|inc|llc)$/i.test(paren[1].trim())) return paren[1].replace(/\s+PAC$/i,'').trim() || paren[1].trim();
+  const s = full.replace(/\([^)]*\)/g,' ')
+    .replace(/\bPolitical Action Committee\b/ig,' ')
+    .replace(/\bPACs?\b/g,' ')
+    .replace(/\b(Incorporated|Inc|Corporation|Corp|Company|LLC)\b\.?/ig,' ')
+    .replace(/\bAssociation\b/ig,'Assn').replace(/\bInternational\b/ig,'Intl').replace(/\bNational\b/ig,'Natl')
+    .replace(/\bEmployees?['\u2019]?(?=\s|$)/ig,' ').replace(/\bGood Government\b/ig,' ')
+    .replace(/(^|\s)['"\u2019]+(?=\s|$)/g,' ')
+    .replace(/\s+/g,' ').replace(/\s+Federal$/i,'').replace(/^The\s+/i,'')
+    .replace(/[\s,.&-]+$/,'').replace(/^[\s,.&-]+/,'').trim();
+  // Short company initials stay in capitals when the FEC listed them that way ("DTE", "UPS")
+  const r = String(raw || '');
+  if(r && r === r.toUpperCase()) {
+    const rawWords = new Set(r.split(/[^A-Z&]+/));
+    const common = /^(THE|AND|FOR|NEW|OLD|OUR|ALL|ONE|TWO|OIL|GAS|LAW|AIR|SEA|CAR|BIG|WAY|USE|ART|BAR|TAX|FUN|SUN|BAY|MAN|MEN|WAR|NOW|OWN|WHO|OUT|ANY|ITS|HIS|HER|YOU|ARE|WAS|HAS|NOT|BUT|CAN|GET|LET|SAY)$/;
+    const fixed = (s || full).replace(/\b([A-Z][a-z]{1,2})\b/g, m=>rawWords.has(m.toUpperCase()) && !common.test(m.toUpperCase()) ? m.toUpperCase() : m);
+    return fixed;
+  }
+  return s || full;
+}
+// The little round sleeve patches: "Blue Cross Blue Shield of Michigan" → BCBSM, "DTE Energy" → DTE
+function sleeveName(raw) {
+  const label = patchName(raw);
+  if(label.length <= 7) return label;
+  const words = label.split(/\s+/).filter(w=>!/^(of|and|the|for|&)$/i.test(w));
+  if(/^[A-Z&]{2,6}$/.test(words[0] || '')) return words[0];                     // NRA, DTE, AT&T
+  const plain = words.filter(w=>!/-/.test(w));
+  if(plain.length >= 3) return plain.map(w=>w.charAt(0).toUpperCase()).join('').slice(0, 5);   // BCBSM, UAW
+  return words[0].length <= 8 ? words[0] : words[0].slice(0, 6) + '…';
+}
+// Break a name into at most `maxLines` lines of about `maxChars` characters
+function wrapPatch(text, maxChars, maxLines) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for(const w0 of words) {
+    let w = w0;
+    if(w.length > maxChars) w = w.slice(0, Math.max(1, maxChars - 1)) + '…';
+    if(!cur) cur = w;
+    else if((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
+    else { lines.push(cur); cur = w; }
+  }
+  if(cur) lines.push(cur);
+  if(lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    let last = kept[maxLines - 1];
+    if(last.length > maxChars - 1) last = last.slice(0, maxChars - 1);
+    kept[maxLines - 1] = last.replace(/[\s…]+$/,'') + '…';
+    return kept;
+  }
+  return lines;
+}
+function jacketBand(o) {
+  if(!o || o.status === 'unchecked') return 'First numbers coming soon';
+  if(o.status === 'none_filed') return 'No FEC reports on file';
+  if(o.from_unitemized !== null && o.from_unitemized !== undefined) return 'Small donors · ' + fmtMoney(o.from_unitemized);
+  return 'Individual donors · ' + fmtMoney(o.from_individuals);
+}
+
+function SponsorJacket({o}) {
+  const tops = (Array.isArray(o.top_pacs) ? o.top_pacs : []).filter(p=>p && Number(p.amount) > 0)
+    .sort((a,b)=>Number(b.amount)-Number(a.amount)).slice(0, JACKET_SLOTS.length);
+  const pacs = Number(o.from_pacs) || 0;
+  const shown = tops.reduce((n,p)=>n + Number(p.amount), 0);
+  const rest = pacs - shown;
+  const reported = o.status === 'reported';
+  const nameSize = o.name.length > 19 ? 12.5 : 14;
+  const sub = o.chamber === 'senate' ? 'U.S. Senator · Michigan' : 'U.S. Rep · ' + (o.district_label || 'Michigan');
+  const T = (props, txt)=>h('text',{fontFamily:LB,textAnchor:'middle',...props}, txt);
+  return h('svg',{viewBox:'0 0 380 336',width:'100%',role:'img',style:{display:'block',maxWidth:360,margin:'0 auto'},
+      'aria-label':o.name + '\'s sponsor jacket: ' + (tops.length ? tops.map(p=>filerCase(p.name) + ' ' + fmtMoney(p.amount)).join(', ') : 'no PAC patches') + '. ' + jacketBand(o) + '.'},
+    // Jacket, collar, racing stripes
+    h('path',{d:'M150 46 L95 62 L60 80 L30 290 L72 296 L82 150 L84 330 L296 330 L298 150 L308 296 L350 290 L320 80 L285 62 L230 46 Q190 70 150 46 Z',fill:JACKET_NAVY}),
+    h('path',{d:'M150 46 L165 34 L215 34 L230 46 Q190 64 150 46 Z',fill:JACKET_GOLD}),
+    h('line',{x1:68,y1:92,x2:41,y2:284,stroke:JACKET_GOLD,strokeWidth:6}),
+    h('line',{x1:312,y1:92,x2:339,y2:284,stroke:JACKET_GOLD,strokeWidth:6}),
+    // Embroidered name
+    T({x:190,y:88,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:nameSize}, o.name),
+    T({x:190,y:104,fill:'#c8d0dc',fontSize:11}, sub),
+    h('line',{x1:190,y1:110,x2:190,y2:290,stroke:'#6b5f30',strokeWidth:1}),
+    // Patches
+    tops.map((p,i)=>{
+      const s = JACKET_SLOTS[i];
+      const label = patchName(p.name);
+      const tip = h('title',null, filerCase(p.name) + ': ' + fmtMoney(p.amount));
+      if(s.r) {
+        const word = sleeveName(p.name);
+        const fs = Math.max(7.5, Math.min(s.fs, (s.r * 2 - 4) / (word.length * 0.58)));
+        return h('g',{key:i}, tip,
+          h('circle',{cx:s.cx,cy:s.cy,r:s.r,fill:'#fffaf0',stroke:JACKET_GOLD,strokeWidth:1}),
+          T({x:s.cx,y:s.cy-2,fill:JACKET_NAVY,fontSize:fs,fontWeight:700}, word),
+          T({x:s.cx,y:s.cy+10,fill:'#6b5200',fontSize:s.fs}, fmtMoney(p.amount)));
+      }
+      const maxChars = Math.max(5, Math.floor((s.w - 8) / (s.fs * 0.56)));
+      const lines = wrapPatch(label, maxChars, 2);
+      const lh = s.fs + 1.5;
+      const top = s.y + (s.h - (lines.length * lh + s.fs)) / 2 + s.fs - 1;
+      return h('g',{key:i}, tip,
+        h('rect',{x:s.x,y:s.y,width:s.w,height:s.h,rx:6,fill:'#fffaf0',stroke:JACKET_GOLD,strokeWidth:i<2?1.5:1}),
+        lines.map((ln,j)=>T({key:j,x:s.x+s.w/2,y:top + j*lh,fill:JACKET_NAVY,fontSize:s.fs,fontWeight:s.bold?700:600}, ln)),
+        T({x:s.x+s.w/2,y:top + lines.length*lh + 1,fill:'#6b5200',fontSize:s.fs-1}, fmtMoney(p.amount)));
+    }),
+    // A bare jacket says something too
+    reported && pacs === 0 && o.from_pacs !== null && o.from_pacs !== undefined && h('g',null,
+      T({x:190,y:170,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:16}, 'No PAC sponsors'),
+      T({x:190,y:190,fill:'#c8d0dc',fontSize:11.5}, 'This campaign reported no PAC money')),
+    reported && pacs > 0 && !tops.length && h('g',null,
+      T({x:190,y:170,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:15}, 'PACs gave ' + fmtMoney(pacs)),
+      T({x:190,y:190,fill:'#c8d0dc',fontSize:11.5}, 'Patches arrive with the next refresh')),
+    rest > 1 && tops.length >= JACKET_SLOTS.length && T({x:190,y:280,fill:'#c8d0dc',fontSize:11}, '+ ' + fmtMoney(rest) + ' from other PACs'),
+    // Small donors: the hem band
+    h('rect',{x:84,y:294,width:212,height:30,fill:JACKET_GOLD}),
+    T({x:190,y:314,fill:JACKET_NAVY,fontFamily:PD,fontWeight:700,fontSize:13}, jacketBand(o)));
+}
+
+function JacketCard({o, profile, highlight, onToast, onChanged}) {
+  const [open, setOpen] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [fecId, setFecId] = useState(o.fec_candidate_id || '');
+  const [busy, setBusy] = useState(false);
+  const full = isFullAdmin(profile);
+  const ref = useRef(null);
+  useEffect(()=>{ if(highlight && ref.current) { try { ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} } },[highlight]);
+  const raised = Number(o.total_raised) || 0;
+  const pacs = Number(o.from_pacs) || 0;
+  const small = o.from_unitemized === null || o.from_unitemized === undefined ? null : Number(o.from_unitemized);
+  const tops = Array.isArray(o.top_pacs) ? o.top_pacs : [];
+  const groups = Array.isArray(o.outside_groups) ? o.outside_groups : [];
+  const asOf = o.coverage_end ? new Date(o.coverage_end + 'T12:00:00').toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : null;
+  const otherRace = o.fec_office && ((o.chamber === 'senate') !== (o.fec_office === 'S'));
+  const pill = {fontSize:11.5,padding:'2px 9px',borderRadius:10,border:'1px solid #d8d2c4',background:'#faf8f3',color:'#444',whiteSpace:'nowrap'};
+  const share = async()=>{
+    const url = countyUrl(getCurrentCounty().slug) + '?j=' + encodeURIComponent(o.id);
+    const text = o.name + '\'s sponsor jacket: who funds their campaign, straight from federal filings.';
+    if(navigator.share) { try { await navigator.share({title:'Sponsor Jackets · The People\'s Voice', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
+  };
+  const saveFec = async()=>{
+    const v = fecId.trim().toUpperCase();
+    if(v && !/^[HS][0-9A-Z]{8}$/.test(v)) { onToast && onToast('That doesn\'t look like a House or Senate FEC ID (like H4MI07103).'); return; }
+    setBusy(true);
+    const {error} = await sb.from('official_money').update({fec_candidate_id:v || null, fec_committee_id:null, refreshed_at:null, refresh_error:null}).eq('id', o.id);
+    if(error) { setBusy(false); onToast && onToast('❌ ' + error.message); return; }
+    const {error:e2} = await sb.functions.invoke('finance-refresh',{body:{official_id:o.id}});
+    setBusy(false); setFixing(false);
+    onToast && onToast(e2 ? '✓ Saved. It\'ll fill in on the next refresh.' : '✓ Updated from the FEC.');
+    onChanged && onChanged();
+  };
+  return h('div',{ref,id:'jacket-' + o.id,style:{background:'#fff',border:'1px solid ' + (highlight ? JACKET_GOLD : '#e5dece'),borderRadius:12,padding:'14px 14px 12px',
+      boxShadow:highlight ? '0 0 0 3px rgba(240,192,64,.35)' : 'none',fontFamily:LB,scrollMarginTop:80}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:8}},
+      h('div',{style:{minWidth:0}},
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:16.5,color:'#1a1a2e',lineHeight:1.2}}, o.name),
+        h('div',{style:{fontSize:12,color:'#888',marginTop:2}},
+          o.office + (o.district_label ? ' · ' + o.district_label : '') + (o.party ? ' · ' + o.party : ''))),
+      h('button',{onClick:share,'aria-label':'Share ' + o.name + '\'s jacket',
+        style:{background:'none',border:'1px solid #e5dece',borderRadius:6,padding:'4px 10px',fontSize:12,color:'#1a5c8a',cursor:'pointer',whiteSpace:'nowrap',fontFamily:LB}},'Share')),
+    h(SponsorJacket,{o}),
+    o.status === 'reported' && h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,justifyContent:'center',marginTop:10}},
+      h('span',{style:pill},'Raised ', h('strong',null, fmtMoney(raised))),
+      h('span',{style:pacs === 0 ? {...pill,borderColor:'#9ab8a6',background:'#f1f7f3',color:'#2f5d43'} : pill},
+        'PACs ', h('strong',null, fmtMoney(pacs)), raised ? ' (' + pctOf(pacs, raised) + ')' : ''),
+      small !== null && h('span',{style:pill},'Small donors ', h('strong',null, fmtMoney(small)), raised ? ' (' + pctOf(small, raised) + ')' : '')),
+    o.status === 'reported' && h('div',{style:{fontSize:11.5,color:'#888',textAlign:'center',marginTop:6,lineHeight:1.5}},
+      'Money raised ' + (o.period_label || '2025–26') + (asOf ? ', through ' + asOf : ''),
+      otherRace && h('div',{style:{color:'#8a6000'}}, 'This is money for their ' + (o.fec_office === 'S' ? 'U.S. Senate' : 'U.S. House') + ' campaign.')),
+    o.status === 'none_filed' && h('div',{style:{fontSize:12,color:'#666',textAlign:'center',marginTop:8}},'No FEC campaign finance reports on file for this period.'),
+    h('div',{style:{display:'flex',justifyContent:'center',gap:14,flexWrap:'wrap',marginTop:8}},
+      (tops.length > 0 || groups.length > 0) && h('button',{onClick:()=>setOpen(!open),
+        style:{background:'none',border:'none',color:'#1a5c8a',cursor:'pointer',fontSize:12.5,padding:0,textDecoration:'underline',fontFamily:LB}},
+        open ? 'Hide sponsor list' : 'See every sponsor'),
+      o.source_url && h('a',{href:o.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:12.5}},'FEC filing ↗')),
+    open && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:10}},
+      tops.length > 0 && h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:12.5,color:'#1a1a2e',marginBottom:4}},'Biggest PAC sponsors'),
+      tops.map((p,i)=>h('div',{key:i,style:{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5,color:'#333',padding:'3px 0',borderBottom:'1px dotted #e5dece'}},
+        h('span',{style:{minWidth:0}}, filerCase(p.name)), h('strong',{style:{whiteSpace:'nowrap'}}, fmtMoney(p.amount)))),
+      pacs - tops.reduce((n,p)=>n+Number(p.amount||0),0) > 1 && h('div',{style:{fontSize:12,color:'#777',padding:'4px 0'}},
+        'Other PACs: ' + fmtMoney(pacs - tops.reduce((n,p)=>n+Number(p.amount||0),0))),
+      groups.length > 0 && h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:12.5,color:'#1a1a2e',margin:'10px 0 4px'}},'Outside groups spending on their race'),
+      groups.map((g,i)=>h('div',{key:'g'+i,style:{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5,color:'#333',padding:'3px 0',borderBottom:'1px dotted #e5dece'}},
+        h('span',{style:{minWidth:0}}, filerCase(g.name), h('span',{style:{color:g.side==='O'?'#a33':'#2f5d43',fontSize:11.5}}, g.side==='O' ? ' · against' : ' · for')),
+        h('strong',{style:{whiteSpace:'nowrap'}}, fmtMoney(g.amount)))),
+      groups.length > 0 && h('div',{style:{fontSize:11.5,color:'#777',marginTop:6,lineHeight:1.5}},
+        'Outside groups can spend unlimited amounts on ads but can\'t give to the campaign or coordinate with it.')),
+    // Full admins: which FEC record this jacket uses
+    full && h('div',{style:{borderTop:'1px dashed #e5dece',marginTop:10,paddingTop:8,fontSize:11.5,color:'#888'}},
+      fixing
+        ? h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}},
+            h('input',{value:fecId,onChange:e=>setFecId(e.target.value),placeholder:'FEC ID, like H4MI07103','aria-label':'FEC candidate ID',
+              style:{flex:'1 1 150px',minWidth:0,border:'1px solid #ddd',borderRadius:5,padding:'6px 8px',fontSize:16,fontFamily:'ui-monospace, Menlo, monospace'}}),
+            h('button',{onClick:saveFec,disabled:busy,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:5,padding:'6px 12px',fontSize:12,cursor:'pointer'}}, busy ? 'Saving...' : 'Save and refresh'),
+            h('button',{onClick:()=>setFixing(false),style:{background:'none',border:'none',color:'#888',fontSize:12,cursor:'pointer'}},'Cancel'))
+        : h('div',null,
+            'FEC record: ', o.fec_candidate_id ? h('a',{href:'https://www.fec.gov/data/candidate/' + o.fec_candidate_id + '/',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}}, o.fec_candidate_id) : 'not found yet',
+            ' · ', h('button',{onClick:()=>{ setFecId(o.fec_candidate_id || ''); setFixing(true); },style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:11.5}},'Change'),
+            o.refresh_error && h('div',{style:{color:'#c0392b',marginTop:3}}, o.refresh_error))));
+}
+
+function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
+  const [rows, setRows] = useState(null);       // null = loading
+  const [missing, setMissing] = useState(false);
+  const [sort, setSort] = useState('seat');
+  const [why, setWhy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [focus, setFocus] = useState(null);
+  const admin = isAdminHere(profile) || isFullAdmin(profile);
+  const load = async()=>{
+    const {data, error} = await sb.from('official_money').select('*').eq('active', true).order('sort');
+    if(error) { setMissing(true); setRows([]); return; }
+    setMissing(false); setRows(data || []);
+  };
+  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    if(navCtx && navCtx.jacketId) { setFocus(String(navCtx.jacketId)); onNavCtxConsumed && onNavCtxConsumed(); }
+  },[navCtx && navCtx.jacketId]);
+  const refresh = async()=>{
+    setRefreshing(true);
+    const {data, error} = await sb.functions.invoke('finance-refresh',{body:{scope:'officials'}});
+    setRefreshing(false);
+    if(error) { const st = error.context && error.context.status; onToast(st===404 ? '❌ The finance-refresh server function isn\'t deployed yet.' : '❌ ' + (error.message || 'Refresh failed')); return; }
+    onToast(data && data.stopped_early
+      ? '✓ Refreshed ' + (data.refreshed_officials || 0) + '. The FEC\'s hourly limit stopped it early: ' + data.remaining + ' left. ' + (data.using_demo_key ? 'A free FEC_API_KEY fixes this.' : 'Try again in an hour.')
+      : '✓ Jackets refreshed from the FEC (' + ((data && data.refreshed_officials) || 0) + ').');
+    load();
+  };
+  const list = [...(rows || [])];
+  if(sort === 'pacs') list.sort((a,b)=>(Number(b.from_pacs)||0) - (Number(a.from_pacs)||0) || a.sort - b.sort);
+  const waiting = (rows || []).length > 0 && (rows || []).every(r=>r.status === 'unchecked');
+  const tab = (id, label)=>h('button',{onClick:()=>setSort(id),'aria-pressed':sort===id,
+    style:{background:sort===id?'#1a1a2e':'#fff',color:sort===id?'#f0c040':'#555',border:'1px solid ' + (sort===id?'#1a1a2e':'#ddd'),
+      borderRadius:16,padding:'5px 13px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, label);
+  return h('div',null,
+    h('div',{style:{marginBottom:14}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:6}},'Sponsor Jackets'),
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10,marginBottom:8}},
+        'Robin Williams once joked that politicians should wear NASCAR jackets so we\'d know who their sponsors are. So we made them.'),
+      h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6}},
+        'Each patch is a PAC that gave money to their campaign, and the biggest money gets the chest. The gold band is small donors: people giving $200 or less. ',
+        'Every member of Congress from Michigan gets the same jacket, with numbers straight from federal filings.'),
+      h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,marginTop:6,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
+        why ? 'Hide' : 'What counts as PAC money?'),
+      why && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:8}}, h(PacMoneyExplainer))),
+    admin && h('div',{style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'8px 12px',marginBottom:14,fontFamily:LB,fontSize:12.5,color:'#8a6000'}},
+      missing ? 'Admins: run tpv_sponsor_jackets.sql in Supabase, then deploy the updated finance-refresh server function.'
+        : h(Fragment,null,
+            h('span',{style:{flex:1,minWidth:180}}, waiting ? 'These fill in on the first refresh from the FEC.' : 'Numbers refresh from the FEC every Monday.'),
+            h('button',{onClick:refresh,disabled:refreshing,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:PD,fontWeight:700}},
+              refreshing ? 'Refreshing...' : 'Refresh from FEC'))),
+    rows === null ? h('div',{style:{textAlign:'center',padding:30}}, h(Spinner))
+    : missing ? (!admin && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'20px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
+        'Sponsor jackets are on their way. Check back soon.'))
+    : h(Fragment,null,
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
+          h('span',{style:{fontSize:12,color:'#888',fontFamily:LB,marginRight:2}},'Order:'),
+          tab('seat','By seat'), tab('pacs','Most PAC money')),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}},
+          list.map(o=>h(JacketCard,{key:o.id, o, profile, highlight:focus===o.id, onToast, onChanged:load}))),
+        h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.6,marginTop:16}},
+          'Source: Federal Election Commission. Not sure which district is yours? ',
+          h('a',{href:'https://www.house.gov/representatives/find-your-representative',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Find your U.S. Representative ↗'),
+          '. State and local officials report to Michigan instead of the FEC, so they aren\'t here yet.')));
+}
+
 function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
   const [races, setRaces] = useState(null);
   const [cands, setCands] = useState([]);
@@ -17580,6 +17872,7 @@ function App() {
     if(!dl) return;
     if(dl.userId) { setProfileModalId(dl.userId); }
     else if(dl.effortId) { setFeedNavCtx({tab:'organize',effortId:dl.effortId}); setMainTab('organize'); }
+    else if(dl.jacketId) { setFeedNavCtx({tab:'jackets',jacketId:dl.jacketId}); setMainTab('jackets'); }
     else if(dl.questionId) { setFeedNavCtx({tab:'ask',questionId:dl.questionId}); setMainTab('ask'); }
     else if(dl.billId) { setFeedNavCtx({billId:String(dl.billId),act:dl.act}); setMainTab('bills'); }
   },[loading, user?.id, guestMode, bills.length]);
@@ -18397,8 +18690,19 @@ function App() {
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888'}},"How your elected officials voted - compared to how you voted.")
         ),
         countyTag() !== 'jackson' && h(FindYourOfficials),
+        h('button',{onClick:()=>setMainTab('jackets'),
+          style:{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:'#1a1a2e',color:'#fff',border:'none',borderRadius:10,
+            padding:'12px 14px',marginBottom:14,cursor:'pointer',fontFamily:"'Lora',serif"}},
+          h('span',{style:{fontSize:22}},'🏁'),
+          h('span',{style:{flex:1,minWidth:0}},
+            h('span',{style:{display:'block',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14.5,color:'#f0c040'}},'Sponsor Jackets'),
+            h('span',{style:{display:'block',fontSize:12.5,color:'#c8d0dc',marginTop:2}},'Who funds each of Michigan\'s members of Congress, on a NASCAR jacket')),
+          h('span',{style:{color:'#f0c040',fontWeight:700}},'→')),
         h(RepTracker,{bills,userZip:profile?.zip})
       ),
+
+      // Sponsor Jackets
+      mainTab==='jackets'&&h(SponsorJacketsTab,{profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)}),
 
       // Admin tab
       mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)})
