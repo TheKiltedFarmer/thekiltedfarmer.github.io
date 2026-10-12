@@ -29,6 +29,9 @@
 body{background:#f4f1ea;font-family:'Lora',serif;-webkit-text-size-adjust:100%}
 #root{min-height:100vh}
 button{cursor:pointer;font-family:inherit}
+/* Stand-alone text links get a bigger invisible tap area, so they're easy to hit on a phone */
+.tpv-link{position:relative;-webkit-tap-highlight-color:rgba(26,92,138,.15)}
+.tpv-link::after{content:"";position:absolute;left:-4px;right:-4px;top:-10px;bottom:-10px}
 a{color:inherit}
 input,textarea,select{font-family:'Lora',serif}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -2277,6 +2280,14 @@ function takeDeepLink() {
   return __DEEP_LINK;
 }
 
+// Anything marked role="button" works with Enter and Space, like a real button
+try {
+  document.addEventListener('keydown', e=>{
+    const t = e.target;
+    if((e.key === 'Enter' || e.key === ' ') && t && t.tagName !== 'BUTTON' && t.getAttribute && t.getAttribute('role') === 'button') { e.preventDefault(); t.click(); }
+  });
+} catch(e) {}
+
 // ── Guests: ask them to join only when they try to do something ─────────────
 function askToJoin(reason, mode) {
   try { document.dispatchEvent(new CustomEvent('tpv:join', {detail:{reason:reason||null, mode:mode||'signup'}})); } catch(e) {}
@@ -2319,7 +2330,7 @@ function NextDecisionStrip({bill}) {
       '🎤 ', h('strong',null,'Public comment is open.'),
       ' Anyone can speak, usually for about three minutes. Arrive a few minutes early and sign in at the door.'),
     h('div',{style:{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',marginTop:6,fontSize:12,fontFamily:LB}},
-      h('button',{onClick:()=>addDecisionToCalendar(bill),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12,fontFamily:LB}},'📅 Add to my calendar'),
+      h('button',{className:'tpv-link',onClick:()=>addDecisionToCalendar(bill),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12,fontFamily:LB}},'📅 Add to my calendar'),
       h('a',{href:googleCalendarLink(bill),target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Google Calendar ↗'))
   );
 }
@@ -2801,21 +2812,24 @@ function ThisWeekNearYou({bills, profile, userVotes, onNavigate}) {
     }),
     meetings.length > 0 && h('div',{style:{borderTop:'1px solid #f0ece4',paddingTop:10,marginTop:upcoming.length?4:0}},
       h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:PD,fontWeight:700}},'Public meetings this week'),
-      meetings.map(e=>h('div',{key:e.id,onClick:()=>onNavigate('events',{eventId:e.id}),
-          style:{fontSize:13,color:'#333',fontFamily:LB,padding:'4px 0',cursor:'pointer'}},
-        h('strong',null, new Date(e.event_date+'T12:00:00').toLocaleDateString([], {weekday:'short'}) + (e.event_time ? ' ' + fmtTime12(e.event_time) : '')),
-        ' · ', e.title, e.location ? h('span',{style:{color:'#999'}},' · '+e.location) : null))
+      meetings.map(e=>h('div',{key:e.id,role:'button',tabIndex:0,onClick:()=>onNavigate('events',{eventId:e.id}),
+          style:{display:'flex',gap:8,alignItems:'center',fontSize:13,color:'#333',fontFamily:LB,padding:'8px 0',cursor:'pointer',borderBottom:'1px solid #f7f4ec'}},
+        h('span',{style:{flex:1,minWidth:0}},
+          h('strong',null, new Date(e.event_date+'T12:00:00').toLocaleDateString([], {weekday:'short'}) + (e.event_time ? ' ' + fmtTime12(e.event_time) : '')),
+          ' · ', e.title, e.location ? h('span',{style:{color:'#999'}},' · '+e.location) : null),
+        h('span',{'aria-hidden':'true',style:{color:'#1a5c8a',fontSize:18,lineHeight:1}},'›')))
     ),
     decided.length > 0 && h('div',{style:{borderTop:'1px solid #f0ece4',paddingTop:10,marginTop:6}},
       h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:PD,fontWeight:700}},'Just decided'),
       decided.map(b=>{
         const m = OUTCOME_META[b.outcome]; const s = memberSupport(b);
-        return h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
-            style:{display:'flex',gap:8,alignItems:'baseline',padding:'5px 0',cursor:'pointer',fontFamily:LB,fontSize:13}},
+        return h('div',{key:b.id,role:'button',tabIndex:0,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+            style:{display:'flex',gap:8,alignItems:'baseline',padding:'8px 0',cursor:'pointer',fontFamily:LB,fontSize:13}},
           h('span',{style:{background:m.bg,color:m.color,fontWeight:700,fontSize:11,padding:'1px 8px',borderRadius:10,whiteSpace:'nowrap'}},
             m.icon+' '+m.label+(b.outcome_yes!=null&&b.outcome_no!=null?' '+b.outcome_yes+'–'+b.outcome_no:'')),
           h('span',{style:{color:'#1a1a2e',flex:1,minWidth:0}}, b.title),
-          s != null && h('span',{style:{color:'#999',fontSize:11,whiteSpace:'nowrap'}}, 'members '+s+'% for')
+          s != null && h('span',{style:{color:'#999',fontSize:11,whiteSpace:'nowrap'}}, 'members '+s+'% for'),
+          h('span',{'aria-hidden':'true',style:{color:'#1a5c8a',fontSize:18,lineHeight:1}},'›')
         );
       })
     )
@@ -2872,7 +2886,7 @@ function AnsweredOfficialsLine({billId, onNavigate}) {
   return h('div',{style:{fontSize:13,color:'#1a1a2e',fontFamily:LB,background:'#eef4fa',borderRadius:6,padding:'7px 10px',marginTop:8,lineHeight:1.5}},
     '💬 ', h('strong',null, names.length === 1 ? names[0] : names.length + ' officials'),
     ' answered residents\' questions about this' + (names.length > 1 ? ': ' + names.join(', ') : '') + '. ',
-    first && onNavigate && h('button',{onClick:()=>onNavigate('ask',{questionId:first.id}),
+    first && onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('ask',{questionId:first.id}),
       style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'Read their answers →'));
 }
 
@@ -2998,7 +3012,7 @@ function DidTheyListenCard({bill, bills, userVotes, onNavigate, onToast}) {
     rec.decided >= 2 && h('div',{style:{fontSize:13,color:'#1a1a2e',fontFamily:LB,background:'#fff8e7',borderRadius:6,padding:'7px 10px',marginTop:8}},
       'This year in ' + getCurrentCounty().name + ', officials matched residents on ', h('strong',null, rec.matched + ' of ' + rec.decided), ' decisions.'),
     h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginTop:12,fontSize:12.5,fontFamily:LB}},
-      h('button',{onClick:()=>onNavigate && onNavigate('bills',{billId:String(bill.id)}),style:{background:'none',border:'none',padding:0,marginRight:4,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},
+      h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('bills',{billId:String(bill.id)}),style:{background:'none',border:'none',padding:0,marginRight:4,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},
         'See how each official voted →'),
       h('button',{onClick:sharePicture,disabled:making,style:{background:'#1a1a2e',border:'1px solid #1a1a2e',color:'#f0c040',borderRadius:6,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
         making ? 'Making it...' : '🖼 Share as a picture'),
@@ -3055,7 +3069,7 @@ function RemindMeRow({bill, following, onToggleFollow, user}) {
       style:{background:following?'#fff8e7':'#fff',border:'1px solid ' + (following?'#f0c040':'#d8d2c4'),color:following?'#8a6000':'#1a1a2e',
         borderRadius:16,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
       following ? '🔔 You\'ll hear how it turns out' : '🔔 Tell me how it turns out'),
-    upcoming && h('button',{onClick:()=>addDecisionToCalendar(bill),style:link},'📅 Add to my calendar'),
+    upcoming && h('button',{className:'tpv-link',onClick:()=>addDecisionToCalendar(bill),style:link},'📅 Add to my calendar'),
     upcoming && h('a',{href:googleCalendarLink(bill),target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:12}},'Google Calendar ↗'));
 }
 
@@ -3080,7 +3094,7 @@ function AnsweredQuestionsCard({onNavigate}) {
         h('strong',null, (String(r.asker_name||'A neighbor').split(' ')[0]) + ' asked: '), '“' + clip(r.question, 140) + '”'),
       h('div',{style:{fontSize:13.5,color:'#333',lineHeight:1.55,marginTop:4,background:'#eef4fa',borderRadius:6,padding:'6px 10px'}},
         h('strong',{style:{color:'#1a5c8a'}}, (r.official_name || 'An official') + (r.official_title ? ', ' + r.official_title : '') + ': '), clip(r.answer, 180)),
-      h('button',{onClick:()=>onNavigate && onNavigate('ask',{questionId:r.id}),
+      h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('ask',{questionId:r.id}),
         style:{background:'none',border:'none',padding:0,marginTop:4,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},'Read the whole answer →'))),
     h('button',{onClick:()=>onNavigate && onNavigate('ask'),
       style:{marginTop:12,background:'#fff',border:'1px solid #1a5c8a',color:'#1a5c8a',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
@@ -3099,7 +3113,7 @@ function CountyHelpersLine() {
   if(!n) return null;
   return h('div',{style:{textAlign:'center',fontFamily:LB,fontSize:13,color:'#555',marginTop:18,lineHeight:1.6}},
     '🙌 ' + getCurrentCounty().name + ' on The People\'s Voice is kept up by ', h('strong',{style:{color:'#1a1a2e'}}, n + ' volunteer neighbor' + (n===1?'':'s')), '. ',
-    !helping && h('button',{onClick:()=>setHelping(true),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'Want to help?'),
+    !helping && h('button',{className:'tpv-link',onClick:()=>setHelping(true),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'Want to help?'),
     helping && h('div',{style:{maxWidth:420,margin:'10px auto 0',textAlign:'left',background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:12}},
       h(VolunteerForm,{countyId:countyTag()})));
 }
@@ -3120,7 +3134,7 @@ function FollowingCard({bills, followedIds, onNavigate}) {
       const pill = m ? {t:m.icon+' '+m.label, c:m.color, bg:m.bg}
         : hasUpcomingDecision(b) ? {t:'🗓 Decision '+whenLabel(b.next_meeting_at), c:'#8a6000', bg:'#fff8e7'}
         : {t:b.status || 'Open', c:'#555', bg:'#f5f5f5'};
-      return h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+      return h('div',{role:'button',tabIndex:0,key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
           style:{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #f5f1e8',cursor:'pointer'}},
         h('span',{style:{fontFamily:LB,fontSize:13,color:'#1a1a2e',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, b.title),
         h('span',{style:{background:pill.bg,color:pill.c,fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap',flexShrink:0}}, pill.t)
@@ -3672,7 +3686,71 @@ Rules:
   }
 }
 
-function NewsStoryCard({story, user, profile}) {
+// ── Daily news helpers ────────────────────────────────────────────────────────
+// Which stories a county shows: its own, plus the shared Michigan and national
+// ones the daily news adds. Those shared ones are AI-summarized, so counties
+// that turned AI off only see their own.
+function newsScope(q){
+  return aiEnabled() ? q.or('county.eq.' + countyTag() + ',county.is.null') : q.eq('county', countyTag());
+}
+// The reader's own town, when they live in the county they're looking at
+function newsTownFor(profile){
+  if(!profile || !profile.zip || (profile.county && profile.county !== countyTag())) return null;
+  return communityForZip(profile.zip);
+}
+// Does a story name the reader's town? "Jackson" counts; "Jackson County" doesn't.
+function newsMentionsTown(story, town){
+  if(!story || !town) return false;
+  const norm = s => ' ' + String(s || '').toLowerCase().replace(/'s\b/g, '').replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ') + ' ';
+  const text = norm([story.neutral_headline, story.neutral_summary, story.original_title].join(' '));
+  const name = norm(town).trim();
+  if(!name) return false;
+  let i = text.indexOf(' ' + name + ' ');
+  while(i >= 0){
+    if(!text.startsWith(' ' + name + ' county ', i)) return true;
+    i = text.indexOf(' ' + name + ' ', i + 1);
+  }
+  return false;
+}
+// Recent stories that name your town go to the top
+function sortNewsForTown(stories, town){
+  if(!town) return stories;
+  const fresh = s => Date.now() - new Date(s.created_at).getTime() < 4*86400000;
+  const mine = stories.filter(s => fresh(s) && newsMentionsTown(s, town));
+  return mine.concat(stories.filter(s => !mine.includes(s)));
+}
+// ── What changed in this county since someone's last visit ───────────────────
+// Used by the "Welcome back" banner for members (since their last sign-in) and
+// returning guests (since their last visit on this device). Counts only.
+async function tpvWhatsNew(sinceIso, {userId, zip} = {}){
+  const county = countyTag();
+  const count = q => Promise.resolve(q).then(r=>(r && !r.error ? (r.count||0) : 0)).catch(()=>0);
+  const head = {count:'exact', head:true};
+  const byZip = !!(userId && zip);
+  const [newBills, outcomes, answers, newNews, newNeighbors, newIdeas, unreadDms] = await Promise.all([
+    count(sb.from('bills').select('id',head).eq('county',county).gte('created_at',sinceIso)),
+    count(sb.from('bills').select('id',head).eq('county',county).gte('outcome_recorded_at',sinceIso)),
+    count(sb.from('official_questions').select('id',head).eq('county',county).is('hidden_at',null).gte('answered_at',sinceIso)),
+    count(newsScope(sb.from('news_stories').select('id',head).eq('approved',true)).gte('created_at',sinceIso)),
+    count(byZip
+      ? sb.from('profiles').select('id',head).eq('county',county).eq('zip',zip).is('deleted_at',null).gte('created_at',sinceIso).neq('id',userId)
+      : sb.from('profiles').select('id',head).eq('county',county).is('deleted_at',null).gte('created_at',sinceIso)),
+    count(sb.from('community_ideas').select('id',head).eq('county',county).gte('created_at',sinceIso)),
+    userId ? count(sb.from('direct_messages').select('id',head).eq('recipient_id',userId).eq('read',false).gte('created_at',sinceIso)) : 0,
+  ]);
+  return {newBills, outcomes, answers, newNews, newNeighbors, newIdeas, unreadDms, neighborsIn: byZip ? (communityForZip(zip) || zip) : null};
+}
+
+// "by Daily news · MLive" reads better as just where it came from
+function newsByline(story){
+  const by = String(story.submitted_by_name || '');
+  if(/^Daily news/.test(by)) return '📰 ' + (story.source_name || by.replace(/^Daily news · /, ''));
+  const auto = by.match(/^Auto-fetch \((.*)\)$/);
+  if(auto) return '📰 ' + auto[1];
+  return by ? 'by ' + by : '\uD83D\uDCF0 News';
+}
+
+function NewsStoryCard({story, user, profile, mentions}) {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [showComments, setShowComments] = useState(false);
@@ -3683,7 +3761,9 @@ function NewsStoryCard({story, user, profile}) {
   const [showContext, setShowContext] = useState(false);
   const [votingPoll, setVotingPoll] = useState(false);
 
-  const bias = story.original_bias||'neutral';
+  // No bias rating when a story wasn't AI-reviewed (counties with AI off)
+  const bias = story.original_bias||null;
+  const placeName = story.county ? getCurrentCounty().name : 'Michigan';
   const biasColor = bias==='left-leaning'?'#1a5c8a':bias==='right-leaning'?'#c0392b':'#1a6b3c';
   const biasLabel = bias==='left-leaning'?'\u2B05 Left-leaning framing':bias==='right-leaning'?'\u27A1 Right-leaning framing':'\u2713 Neutral framing';
   const totalPollVotes = pollCounts.yes+pollCounts.no+pollCounts.unsure;
@@ -3730,6 +3810,7 @@ function NewsStoryCard({story, user, profile}) {
       h('div',{style:{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}},
         h('span',{style:{background:catBg,color:catColor,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,textTransform:'uppercase',letterSpacing:1,fontFamily:"'Lora',serif"}},story.category),
         h(SourceBadge,{url:story.source_url}),
+        mentions&&h('span',{style:{background:'#fff3d6',color:'#7a5200',border:'1px solid #f0c04066',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,fontFamily:"'Lora',serif",whiteSpace:'nowrap'}},"📍 Mentions "+mentions),
         h('span',{style:{fontSize:10,color:'#bbb',marginLeft:'auto'}},new Date(story.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}))
       ),
 
@@ -3739,9 +3820,9 @@ function NewsStoryCard({story, user, profile}) {
       // Summary
       h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.7,marginBottom:8}},story.neutral_summary),
 
-      // Local relevance
-      h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:12,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6}},
-        h('span',{style:{fontWeight:700,color:'#1a1a2e'}},"\uD83D\uDCCD "+getCurrentCounty().name+": "),story.local_relevance
+      // Local relevance (only when there is one; shared stories speak to Michigan)
+      story.local_relevance&&h('div',{style:{background:'#f5f3ee',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:12,color:'#555',fontFamily:"'Lora',serif",lineHeight:1.6}},
+        h('span',{style:{fontWeight:700,color:'#1a1a2e'}},"\uD83D\uDCCD "+placeName+": "),story.local_relevance
       ),
 
       // Poll
@@ -3786,7 +3867,7 @@ function NewsStoryCard({story, user, profile}) {
                 )
               : h('button',{onClick:()=>askToJoin('weigh in'),style:{display:'block',margin:'8px auto 0',background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'7px 16px',fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},"Join free to weigh in")
             : h('div',null,
-                h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:"'Lora',serif",marginBottom:8,textAlign:'center'}},"\u2713 Your vote recorded — here's how "+getCurrentCounty().name+" feels:"),
+                h('div',{style:{fontSize:11,color:'#1a6b3c',fontWeight:700,fontFamily:"'Lora',serif",marginBottom:8,textAlign:'center'}},"\u2713 Your vote recorded — here's how "+(story.county?getCurrentCounty().name+" feels":"neighbors across Michigan feel")+":"),
                 [['yes',"\u2705 Yes",pollCounts.yes,'#1a6b3c'],['no',"\u274C No",pollCounts.no,'#c0392b'],['unsure',"\uD83E\uDD14 Unsure",pollCounts.unsure,'#888']].map(([choice,label,count,color])=>
                   h('div',{key:choice,style:{marginBottom:8}},
                     h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
@@ -3805,7 +3886,7 @@ function NewsStoryCard({story, user, profile}) {
 
       // Bias + original
       h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:10}},
-        h('span',{style:{fontSize:10,fontWeight:700,color:biasColor,background:biasColor+'15',border:'1px solid '+biasColor+'33',borderRadius:20,padding:'2px 8px',fontFamily:"'Lora',serif"}},biasLabel),
+        bias&&h('span',{style:{fontSize:10,fontWeight:700,color:biasColor,background:biasColor+'15',border:'1px solid '+biasColor+'33',borderRadius:20,padding:'2px 8px',fontFamily:"'Lora',serif"}},biasLabel),
         story.original_title&&story.original_title!==story.neutral_headline&&
           h('span',{style:{fontSize:10,color:'#aaa',fontFamily:"'Lora',serif",fontStyle:'italic'}},"Original: \""+story.original_title.slice(0,60)+(story.original_title.length>60?'...':'')+"\"")
       ),
@@ -3819,7 +3900,7 @@ function NewsStoryCard({story, user, profile}) {
           style:{display:'inline-flex',alignItems:'center',gap:4,background:'#f5f5f5',color:'#555',border:'1px solid #ddd',padding:'6px 12px',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}
         },"\uD83D\uDCAC Discuss"+(comments.length>0||(story.comment_count||0)>0?' ('+(comments.length||(story.comment_count||0))+')':'')
         ),
-        h('span',{style:{fontSize:11,color:'#bbb',marginLeft:'auto',fontFamily:"'Lora',serif"}},'by '+story.submitted_by_name)
+        h('span',{style:{fontSize:11,color:'#bbb',marginLeft:'auto',fontFamily:"'Lora',serif"}},newsByline(story))
       )
     ),
 
@@ -4014,13 +4095,15 @@ function NewsTab({user, rep, profile}) {
 
   useEffect(()=>{ loadStories(); },[catFilter]);
 
+  const town = newsTownFor(profile);
   const loadStories = async()=>{
     setLoading(true);
-    let q = sb.from('news_stories').select('*').eq('approved',true).eq('county', countyTag()).order('created_at',{ascending:false}).limit(20);
+    let q = newsScope(sb.from('news_stories').select('*').eq('approved',true)).order('created_at',{ascending:false}).limit(30);
     if(catFilter!=='all') q = q.eq('category',catFilter);
     const {data} = await q;
-    setStories(data||[]); setLoading(false);
+    setStories(sortNewsForTown(data||[], town)); setLoading(false);
   };
+  const newest = stories.reduce((m,s)=>Math.max(m, new Date(s.created_at).getTime()||0), 0);
 
   const checkUrl = u=>{
     setUrl(u);
@@ -4088,8 +4171,12 @@ function NewsTab({user, rep, profile}) {
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},"\uD83D\uDCF0 Current Events"),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:2}},
           aiEnabled()
-            ? "Community-submitted news — AI-assisted summaries, original sources always linked."
-            : "Community-submitted news — source-verified, reviewed by local admins. No AI.")
+            ? "Local news for "+getCurrentCounty().name+(getCurrentCounty().name.endsWith('County')?'':' County')+", gathered every day and summarized neutrally. Original sources always linked."
+            : "Local news for "+getCurrentCounty().name+(getCurrentCounty().name.endsWith('County')?'':' County')+", gathered every day with its original headlines. No AI. Sources always linked."),
+        (newest>0||town)&&h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#1a6b3c',marginTop:4}},
+          newest>0 ? 'Newest story: '+timeAgo(new Date(newest).toISOString()) : '',
+          newest>0&&town ? ' · ' : '',
+          town ? 'Stories that mention '+town+' show first' : '')
       ),
       isTrusted
         ? h('button',{onClick:()=>setShowSubmit(!showSubmit),style:{background:showSubmit?'#f5f5f5':'#1a1a2e',color:showSubmit?'#888':'#f0c040',border:showSubmit?'1px solid #ddd':'none',padding:'10px 18px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},showSubmit?'Cancel':'+ Submit Story')
@@ -4152,12 +4239,12 @@ function NewsTab({user, rep, profile}) {
     loading&&h('div',{style:{textAlign:'center',padding:40,color:'#aaa',fontStyle:'italic'}},"Loading news..."),
     !loading&&stories.length===0&&h('div',{style:{textAlign:'center',padding:40,background:'#fff',borderRadius:10,border:'1px solid #e5dece'}},
       h('div',{style:{fontSize:40,marginBottom:12}},"\uD83D\uDCF0"),
-      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:'#1a1a2e',marginBottom:8}},"No stories yet."),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:'#1a1a2e',marginBottom:8}},catFilter!=='all'?"No "+catFilter+" stories right now.":"No stories yet."),
       h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',lineHeight:1.7}},
-        isTrusted?"Be the first to submit a story using the button above.":"Stories appear here as trusted residents submit them. Earn 50 rep to submit."
+        "New local stories arrive every day. "+(isTrusted?"You can also share one with the button above.":"Once you've earned 50 rep, you can share stories too.")
       )
     ),
-    stories.map(s=>h(NewsStoryCard,{key:s.id,story:s,user,profile,rep}))
+    stories.map(s=>h(NewsStoryCard,{key:s.id,story:s,user,profile,rep,mentions:newsMentionsTown(s,town)?town:null}))
   );
 }
 
@@ -4331,10 +4418,10 @@ function DecisionOfWeek({bill, user, userVotes, onVoteCast, onRepGain, onNavigat
           total + ' neighbor' + (total===1?'':'s') + ': ' + pctOfTotal(yes) + '% support · ' + pctOfTotal(no) + '% oppose · ' + pctOfTotal(abs) + '% not sure'
           + (zipCount >= 3 ? ' · ' + zipCount + ' from ' + zip : '')))),
 
-    h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',marginTop:12,fontSize:12.5,fontFamily:LB}},
-      h('button',{onClick:()=>onNavigate && onNavigate('bills',{billId:String(bill.id)}),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:12,fontSize:12.5,fontFamily:LB}},
+      h('button',{onClick:()=>onNavigate && onNavigate('bills',{billId:String(bill.id)}),style:{background:'#fff',border:'1px solid #c8d8f0',borderRadius:8,padding:'9px 14px',minHeight:40,color:'#1a5c8a',cursor:'pointer',fontWeight:700,fontSize:13,fontFamily:LB}},
         myVote ? 'Tell neighbors why →' : 'Read the full details →'),
-      isBallot && h('button',{onClick:()=>onNavigate && onNavigate('guide'),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},
+      isBallot && h('button',{onClick:()=>onNavigate && onNavigate('guide'),style:{background:'#fff',border:'1px solid #c8d8f0',borderRadius:8,padding:'9px 14px',minHeight:40,color:'#1a5c8a',cursor:'pointer',fontWeight:700,fontSize:13,fontFamily:LB}},
         'See everything on your ballot →')),
     // Remind me: follow it for the result, or put the meeting on your calendar
     h(RemindMeRow,{bill, following, onToggleFollow, user})
@@ -4829,7 +4916,7 @@ function OrganizeTab({user, profile, onToast, navCtx, onNavCtxConsumed}) {
       section('Open to everyone in ' + getCurrentCounty().name, openToAll,
         upcoming.length === 0 ? 'Nothing planned yet. Got an idea? Start it, and invite a few neighbors to help.' : 'Nothing else open right now.'),
       past.length > 0 && h('div',null,
-        h('button',{onClick:()=>setShowPast(!showPast),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}},
+        h('button',{className:'tpv-link',onClick:()=>setShowPast(!showPast),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}},
           (showPast ? 'Hide' : 'Show') + ' past and finished (' + past.length + ')'),
         showPast && past.slice(0,30).map(e=>h(EffortCard,{key:e.id,e,my:mine[e.id],counts,onOpen:()=>setOpenId(e.id)})))),
 
@@ -5207,8 +5294,8 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
         sb.from('participation_scores_7d').select('*')
           .gt('score', 0).order('score',{ascending:false}).limit(1),
         // Top recent news story
-        sb.from('news_stories').select('*').eq('approved',true).eq('county', countyTag())
-          .order('created_at',{ascending:false}).limit(15),
+        newsScope(sb.from('news_stories').select('*').eq('approved',true))
+          .order('created_at',{ascending:false}).limit(20),
         // Recent neighborhood activity (joins + votes + proposals) — simplified
         sb.from('profiles').select('id,display_name,zip,created_at')
           .eq('county', countyTag()).is('deleted_at', null)
@@ -5325,7 +5412,11 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
       // ── Top news story + its reactions ───────────────────────────
       // Home shows local news first, then Michigan. National stories live on the News tab.
       const newsPool = Array.isArray(topNewsRes.data) ? topNewsRes.data : (topNewsRes.data ? [topNewsRes.data] : []);
-      const localStory = newsPool.find(n=>/local|county|city/i.test(n.category||'')) || newsPool.find(n=>/michigan|state/i.test(n.category||''));
+      // A recent local story naming your own town wins, then any local story
+      const homeTown = newsTownFor(profile);
+      const isLocalNews = n=>n.county && /local|county|city/i.test(n.category||'');
+      const localStory = newsPool.find(n=>isLocalNews(n) && Date.now()-new Date(n.created_at).getTime() < 3*86400000 && newsMentionsTown(n, homeTown))
+        || newsPool.find(isLocalNews) || newsPool.find(n=>/michigan|state/i.test(n.category||''));
       if(localStory){
         const story = localStory;
         setTopNews(story);
@@ -5975,7 +6066,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
       border:'1px solid #e5dece'}},
       h('div',{style:{fontFamily:FONT_D,fontSize:11,fontWeight:700,color:'#1a5c8a',
         letterSpacing:'.15em',textTransform:'uppercase',marginBottom:8}},
-        'News · '+(topNews.category || 'Local')),
+        'News · '+(topNews.category || 'Local')+(newsMentionsTown(topNews, newsTownFor(profile)) ? ' · \uD83D\uDCCD '+newsTownFor(profile) : '')),
       h('h4',{style:{fontFamily:FONT_D,fontSize:17,fontWeight:900,color:NAVY,
         lineHeight:1.25,margin:'0 0 8px 0'}},
         topNews.neutral_headline || topNews.original_title),
@@ -6055,7 +6146,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
           'More news →')
       ),
       h('div',{style:{marginTop:10,fontSize:11,color:MUTED,fontStyle:'italic'}},
-        (topNews.submitted_by_name || 'News') + ' · ' + timeAgo(topNews.created_at))
+        newsByline(topNews).replace(/^by /,'') + ' · ' + timeAgo(topNews.created_at))
     ),
 
     // ── Neighborhood Activity ──────────────────────────────────────
@@ -6072,7 +6163,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
             borderBottom: i<activity.length-1 ? '1px solid #f0ece0' : 'none'}
         },
           // Avatar — clickable, opens profile
-          h('div',{onClick:()=>setViewingProfile(item.id),
+          h('div',{role:'button',tabIndex:0,onClick:()=>setViewingProfile(item.id),
             style:{cursor:'pointer'}
           }, renderAvatar(item.display_name, 30)),
           h('div',{style:{flex:1,fontSize:13}},
@@ -9596,7 +9687,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
             fontSize:12,boxSizing:'border-box',fontFamily:"'Lora',serif"}}),
         h('div',{style:{maxHeight:160,overflowY:'auto',marginTop:6}},
           filteredNeighbors.slice(0,10).map(n=>
-            h('div',{key:n.id,onClick:()=>openThread(n.id,n.display_name||n.email?.split('@')[0]||'Resident'),
+            h('div',{role:'button',tabIndex:0,key:n.id,onClick:()=>openThread(n.id,n.display_name||n.email?.split('@')[0]||'Resident'),
               style:{padding:'7px 8px',cursor:'pointer',borderRadius:5,fontSize:12,
                 fontFamily:"'Lora',serif",color:'#333',
                 display:'flex',alignItems:'center',gap:8}},
@@ -9617,7 +9708,7 @@ function DirectMessages({user, profile, neighbors, initThread, onClearThread}) {
           'No messages yet.',h('br'),'Click + New to start a private conversation.'
         ),
         conversations.map(c=>
-          h('div',{key:c.userId,onClick:()=>openThread(c.userId,c.displayName),
+          h('div',{role:'button',tabIndex:0,key:c.userId,onClick:()=>openThread(c.userId,c.displayName),
             style:{padding:'10px 14px',cursor:'pointer',
               background:thread?.userId===c.userId?'#e8f2fa':'transparent',
               borderBottom:'1px solid #f5f3ee',
@@ -9861,6 +9952,32 @@ const checkRoomActivity = async(rooms) => {
   return activity;
 };
 
+// ── A quiet chat room: point to a livelier one, and offer an easy first line ──
+function QuietRoomCard({room, rooms, roomWeek, empty, user, news, bill, onRoom, onStarter}) {
+  if(!room) return null;
+  const town = communityForZip(room.displayId) || (room.desc||'').replace(/ and the surrounding area$/,'') || getCurrentCounty().name;
+  const busiest = (rooms||[]).filter(r=>r.id!==room.id && (roomWeek[r.id]||0) > 0)
+    .sort((a,b)=>(roomWeek[b.id]||0)-(roomWeek[a.id]||0))[0];
+  const starters = [
+    news && 'Did anyone see this? "' + news.neutral_headline + '" What do you think?',
+    bill && 'What do you all think about ' + bill.title + '? It\'s coming up for a decision.',
+    'What\'s one thing you\'d like to see fixed in ' + town + '?',
+    'Anything happening around ' + town + ' this week that people should know about?',
+  ].filter(Boolean).slice(0, 3);
+  return h('div',{style:{textAlign:'left',padding:empty?'18px 6px':'12px 6px',marginTop:empty?0:8,borderTop:empty?'none':'1px dashed #e5dece',fontFamily:"'Lora',serif"}},
+    h('div',{style:{fontSize:13.5,color:'#555',marginBottom:8,lineHeight:1.5,textAlign:empty?'center':'left'}},
+      empty ? h(Fragment,null, h('div',{style:{fontSize:28,marginBottom:6}},'💬'), 'It\'s quiet in here so far. Your first message gets the ball rolling.')
+            : 'It\'s been quiet in here lately. Get it going again:'),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+      starters.map((t,i)=>h('button',{key:i,onClick:()=>onStarter(t),
+        style:{textAlign:'left',background:'#faf8f3',border:'1px solid #e5dece',borderRadius:10,padding:'9px 12px',fontSize:12.5,color:'#1a1a2e',cursor:'pointer',fontFamily:"'Lora',serif",lineHeight:1.45}},
+        '💡 ' + t))),
+    h('div',{style:{fontSize:11,color:'#999',marginTop:6}}, user ? 'Tap one to start your message. You can change it before sending.' : 'Join free to post. Reading is always open.'),
+    busiest && h('button',{onClick:()=>onRoom(busiest.id),
+      style:{marginTop:10,background:'none',border:'none',padding:'6px 0',color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12.5,fontFamily:"'Lora',serif"}},
+      'Or see what\'s happening in ' + busiest.label.replace(/^\S+\s/,'') + ' (' + roomWeek[busiest.id] + ' message' + (roomWeek[busiest.id]===1?'':'s') + ' this week) →'));
+}
+
 function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
   const [activeTab, setActiveTab] = useState(
     (navCtx?.dmTarget || navCtx?.openConnectDm) ? 'dm' : 'chat'
@@ -9957,6 +10074,21 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
   useEffect(()=>{
     checkRoomActivity(CHAT_ROOMS).then(setRoomActivity);
   },[]);
+  // How busy each room was this week, and a few things to talk about, so a
+  // quiet room points somewhere livelier and gives people an easy first line
+  const [roomWeek, setRoomWeek] = useState({});
+  const [starterNews, setStarterNews] = useState(null);
+  const [starterBill, setStarterBill] = useState(null);
+  useEffect(()=>{
+    sb.from('community_chat').select('room_id').in('room_id', CHAT_ROOMS.map(r=>r.id)).is('hidden_at', null)
+      .gte('created_at', new Date(Date.now()-7*86400000).toISOString()).limit(2000)
+      .then(({data})=>{ const c = {}; (data||[]).forEach(m=>{ c[m.room_id] = (c[m.room_id]||0) + 1; }); setRoomWeek(c); }).catch(()=>{});
+    sb.from('news_stories').select('id,neutral_headline,created_at').eq('approved',true).eq('county', countyTag()).eq('category','Local')
+      .gte('created_at', new Date(Date.now()-4*86400000).toISOString()).order('created_at',{ascending:false}).limit(1)
+      .then(({data})=>{ if(data && data[0] && data[0].neutral_headline) setStarterNews(data[0]); }).catch(()=>{});
+    sb.rpc('tpv_weekly_spotlight',{p_county:countyTag()})
+      .then(({data})=>{ if(data && data.title) setStarterBill(data); }).catch(()=>{});
+  },[]);
 
   // Scroll chat to bottom inside container only
   useEffect(()=>{
@@ -10052,6 +10184,7 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
             border:'1px solid '+(activeRoom===r.id?'#1a1a2e':'#ddd'),padding:'5px 11px',borderRadius:20,
             fontFamily:"'Lora',serif",fontSize:11,cursor:'pointer',whiteSpace:'nowrap',position:'relative'}},
           r.label,
+          roomWeek[r.id]>0&&h('span',{style:{marginLeft:5,opacity:.7,fontSize:10}},'· '+roomWeek[r.id]),
           roomActivity[r.id]&&activeRoom!==r.id&&h('span',{style:{
             position:'absolute',top:-3,right:-3,width:9,height:9,
             background:'#c0392b',borderRadius:'50%',border:'2px solid #f4f1ea'
@@ -10067,10 +10200,9 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
         ),
         h('div',{ref:chatScrollRef,style:{height:320,overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}},
           loadingMsgs&&h('div',{style:{textAlign:'center',padding:20,color:'#aaa',fontStyle:'italic'}},'Loading messages...'),
-          !loadingMsgs&&messages.length===0&&h('div',{style:{textAlign:'center',padding:30,color:'#aaa'}},
-            h('div',{style:{fontSize:32,marginBottom:8}},'💬'),
-            h('div',{style:{fontSize:13,fontStyle:'italic'}},'No messages yet. Start the conversation!')
-          ),
+          !loadingMsgs&&messages.length===0&&h(QuietRoomCard,{room:currentRoom, rooms:CHAT_ROOMS, roomWeek, empty:true, user,
+            news:starterNews, bill:starterBill, onRoom:id=>{setActiveRoom(id);setRoomActivity(prev=>({...prev,[id]:false}));},
+            onStarter:t=>{ if(!user){ askToJoin('start a conversation with neighbors'); return; } setMsgText(t); }}),
           // Render threaded tree
           (()=>{
             const tree = buildMessageTree(messages);
@@ -10136,6 +10268,11 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
             };
             return tree.map(node => renderNode(node, 0));
           })(),
+          // Has messages, but nobody's said anything in a while
+          !loadingMsgs&&messages.length>0&&Date.now()-new Date(messages[messages.length-1].created_at).getTime() > 10*86400000
+            &&h(QuietRoomCard,{room:currentRoom, rooms:CHAT_ROOMS, roomWeek, empty:false, user, news:starterNews, bill:starterBill,
+              onRoom:id=>{setActiveRoom(id);setRoomActivity(prev=>({...prev,[id]:false}));},
+              onStarter:t=>{ if(!user){ askToJoin('start a conversation with neighbors'); return; } setMsgText(t); }}),
           h('div',{ref:bottomRef})
         ),
         !user
@@ -10245,7 +10382,7 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
           return h('div',{key:n.id,style:{background:'#fff',
             border:'2px solid '+(isMe?'#f0c040':isConnected?'#1a6b3c':'#e5dece'),
             borderRadius:10,padding:'12px 14px',display:'flex',gap:10,alignItems:'flex-start'}},
-            h('div',{onClick:()=>setViewingProfile(n.id),
+            h('div',{role:'button',tabIndex:0,onClick:()=>setViewingProfile(n.id),
               style:{width:40,height:40,borderRadius:'50%',background:n.is_official?'#1a5c8a':'#1a1a2e',
                 color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',
                 fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,flexShrink:0,
@@ -10254,7 +10391,7 @@ function CommunityHub({user, profile, navCtx, onNavCtxConsumed}) {
             ),
             h('div',{style:{flex:1,minWidth:0}},
               h('div',{style:{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}},
-                h('div',{onClick:()=>setViewingProfile(n.id),
+                h('div',{role:'button',tabIndex:0,onClick:()=>setViewingProfile(n.id),
                   style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,
                     color:'#1a1a2e',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#e5dece'}},
                   name+(isMe?' (you)':'')),
@@ -10429,7 +10566,7 @@ function StarterCountyBanner({user, onNavigate}) {
   return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:16,fontFamily:"'Lora',serif"}},
     h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a4a2a'}},'🌱 ' + c.name + ' is just getting started here'),
     h('div',{style:{fontSize:13.5,color:'#2f4a36',lineHeight:1.6,margin:'4px 0 10px'}},
-      'Right now you\'ll find the statewide decisions, the 2026 voters guide, neighbors to meet, and tools to organize. ',
+      'Right now you\'ll find fresh ' + c.short + ' County news every day, the statewide decisions, the 2026 voters guide, neighbors to meet, and tools to organize. ',
       'Local meetings and ' + (c.seat ? c.seat + '\'s ' : 'local ') + 'decisions get added as people from ' + c.short + ' County pitch in.'),
     h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
       h('button',{onClick:invite,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
@@ -10592,7 +10729,7 @@ function CountyPickerLanding({onPick, profile}) {
             style:{background:GOLD,color:'#1a1a2e',border:'none',borderRadius:8,padding:'12px 18px',fontFamily:"'Playfair Display',serif",
               fontWeight:900,fontSize:15,cursor:'pointer',whiteSpace:'nowrap'}},
             'Go to ' + COUNTIES[startId].short + ' →')),
-        lastElsewhere && h('button',{onClick:()=>go(lastElsewhere),
+        lastElsewhere && h('button',{className:'tpv-link',onClick:()=>go(lastElsewhere),
           style:{marginTop:10,background:'none',border:'none',padding:0,color:SOFT,fontSize:12.5,textDecoration:'underline',cursor:'pointer',fontFamily:"'Lora',serif",textAlign:'left'}},
           'Or go back to ' + COUNTIES[lastElsewhere].name + ', where you were last')),
 
@@ -11383,7 +11520,7 @@ function JacketCard({o, profile, highlight, onToast, onChanged}) {
       otherRace && h('div',{style:{color:'#8a6000'}}, 'This is money for their ' + (o.fec_office === 'S' ? 'U.S. Senate' : 'U.S. House') + ' campaign.')),
     o.status === 'none_filed' && h('div',{style:{fontSize:12,color:'#666',textAlign:'center',marginTop:8}},'No FEC campaign finance reports on file for this period.'),
     h('div',{style:{display:'flex',justifyContent:'center',gap:14,flexWrap:'wrap',marginTop:8}},
-      (tops.length > 0 || groups.length > 0) && h('button',{onClick:()=>setOpen(!open),
+      (tops.length > 0 || groups.length > 0) && h('button',{className:'tpv-link',onClick:()=>setOpen(!open),
         style:{background:'none',border:'none',color:'#1a5c8a',cursor:'pointer',fontSize:12.5,padding:0,textDecoration:'underline',fontFamily:LB}},
         open ? 'Hide sponsor list' : 'See every sponsor'),
       o.source_url && h('a',{href:o.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:12.5}},'FEC filing ↗')),
@@ -11583,7 +11720,7 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
         'Each proposal links to its full page, where you can vote in our community poll, read why neighbors support or oppose it, and ask officials questions.'),
       proposals.length === 0 && h('div',{style:{color:'#aaa',fontStyle:'italic',fontSize:13}},'No proposals listed for this county yet.'),
       [...proposals].sort((a,b)=>({state:0,county:1,city:2,village:3,township:4}[a.level]??5)-({state:0,county:1,city:2,village:3,township:4}[b.level]??5))
-        .map(b=>h('div',{key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
+        .map(b=>h('div',{role:'button',tabIndex:0,key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
           style:{background:'#fff',border:'1px solid '+(billRelevantToZip(b,zip)&&billIsLocal(b)?'#f0c040':'#e5dece'),borderRadius:10,padding:'12px 16px',marginBottom:10,cursor:'pointer'}},
           h('div',{style:{fontSize:11,color:'#888',fontFamily:LB}}, b.jurisdiction),
           h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',margin:'2px 0 4px'}}, b.title),
@@ -12128,10 +12265,8 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
       style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',marginBottom:10,fontSize:14,boxSizing:'border-box',...(extra.style||{})},...extra});
 
   return h('div',{onClick:e=>{ if(onClose && e.target===e.currentTarget) onClose(); },
-      style:{minHeight:'100%',background:onClose?'rgba(26,26,46,.85)':'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',padding:16}},
+      style:{minHeight:'100%',background:onClose?'rgba(26,26,46,.85)':'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',padding:onClose?'60px 16px 24px':16,boxSizing:'border-box'}},
     h('div',{style:{background:'#fff',borderRadius:14,padding:28,width:440,maxWidth:'100%',boxShadow:'0 30px 80px rgba(0,0,0,.5)',margin:'20px auto',position:'relative'}},
-      onClose&&h('button',{onClick:onClose,'aria-label':'Close',title:'Keep browsing',
-        style:{position:'absolute',top:10,right:12,background:'none',border:'none',fontSize:22,color:'#999',cursor:'pointer',lineHeight:1}},'✕'),
       reason&&(mode==='signup'||mode==='login')&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'8px 12px',
         marginBottom:14,fontSize:13,color:'#8a6000',fontFamily:"'Lora',serif",textAlign:'center'}},
         'Join free to '+reason+'. It takes about a minute.'),
@@ -12391,76 +12526,108 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
 }
 
 
-// ── RSS Auto-Fetch Button (Admin) ─────────────────────────────────────────
+// ── Daily news (Admin) ──────────────────────────────────────────────────────
+// The news-daily server function refreshes every county once a day on its own.
+// This shows when this county last got news, lets an admin run it right now,
+// and (for full admins) how all of Michigan is doing. If the server function
+// isn't deployed yet, the old in-browser fetch is still here as a fallback.
 function RssFetchButton({ onToast, user, profile }) {
+  const [running, setRunning] = React.useState(false);
+  const [status, setStatus] = React.useState(undefined);   // this county's row, null = never ran, false = table missing
+  const [overview, setOverview] = React.useState(null);    // full admins: every county's row
+  const [showList, setShowList] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+  const [notDeployed, setNotDeployed] = React.useState(false);
+  // Old in-browser fetch (fallback)
   const [fetching, setFetching] = React.useState(false);
   const [progress, setProgress] = React.useState('');
-  const [result, setResult] = React.useState(null);
   const [log, setLog] = React.useState([]);
+  const countyName = getCurrentCounty().name + (getCurrentCounty().name.endsWith('County') ? '' : ' County');
+  const full = isFullAdmin(profile);
 
-  const run = async () => {
-    if (fetching) return;
-    setFetching(true);
-    setProgress('Starting RSS fetch...');
-    setResult(null);
-    setLog([]);
-    try {
-      const { data: existing } = await sb
-        .from('news_stories')
-        .select('source_url')
-        .order('created_at', { ascending: false })
-        .limit(500);
-      const { added, skipped, perFeed } = await fetchAndPublishRss(
-        { ...user, ...(profile || {}) },
-        existing || [],
-        msg => setProgress(msg),
-        feedLog => setLog(prev => [...prev, feedLog])
-      );
-      setResult({ added, skipped, perFeed });
-      if (added > 0) onToast('\u2705 ' + added + ' new stories added \u00b7 ' + skipped + ' skipped');
-      else onToast('\u26a0\ufe0f No new stories added. Check the per-feed log below.');
-    } catch (e) {
-      onToast('\u274c RSS fetch error: ' + e.message);
+  const loadStatus = async () => {
+    const { data, error } = await sb.from('news_refresh_state').select('*');
+    if (error) { setStatus(false); return; }
+    const rows = data || [];
+    setStatus(rows.find(r => r.county === countyTag()) || null);
+    if (full) setOverview(rows);
+  };
+  React.useEffect(() => { loadStatus(); }, []);
+
+  const runNow = async () => {
+    if (running) return;
+    setRunning(true); setResult(null);
+    const { data, error } = await sb.functions.invoke('news-daily', { body: { county: countyTag() } });
+    setRunning(false);
+    if (error) {
+      const st = error.context && error.context.status;
+      if (st === 404) { setNotDeployed(true); onToast('❌ The news-daily server function isn\'t deployed yet.'); }
+      else onToast('❌ ' + (error.message || 'The news run didn\'t finish. Try again in a minute.'));
+      return;
     }
-    setFetching(false);
-    setProgress('');
+    const mine = ((data && data.results) || []).find(r => r.county === countyTag());
+    setResult(mine || { added: 0, err: null });
+    if (mine && mine.added > 0) onToast('✅ Added ' + mine.added + ' new ' + (mine.added === 1 ? 'story' : 'stories') + ' for ' + countyName + '.');
+    else if (mine && mine.err) onToast('⚠️ The news run hit a problem: ' + mine.err);
+    else onToast('Nothing new right now. The latest stories are already on the News tab.');
+    loadStatus();
   };
 
+  const runBrowserFetch = async () => {
+    if (fetching) return;
+    setFetching(true); setProgress('Starting...'); setLog([]);
+    try {
+      const { data: existing } = await sb.from('news_stories').select('source_url').order('created_at', { ascending: false }).limit(500);
+      const { added, skipped } = await fetchAndPublishRss({ ...user, ...(profile || {}) }, existing || [],
+        msg => setProgress(msg), feedLog => setLog(prev => [...prev, feedLog]));
+      onToast(added > 0 ? '✅ ' + added + ' new stories added · ' + skipped + ' skipped' : '⚠️ No new stories added. Check the per-feed log below.');
+    } catch (e) { onToast('❌ Fetch error: ' + e.message); }
+    setFetching(false); setProgress('');
+  };
+
+  const ago = ts => ts ? timeAgo(ts) : 'never';
+  const fresh = r => r && r.last_run_at && Date.now() - new Date(r.last_run_at).getTime() < 26 * 3600000;
+  const allIds = Object.keys(COUNTIES);
+  const byId = {}; (overview || []).forEach(r => { byId[r.county] = r; });
+  const upToDate = allIds.filter(id => fresh(byId[id]) && !byId[id].last_error).length;
+  const nameOf = id => (COUNTIES[id] && COUNTIES[id].name) || id;
+  const behind = allIds.filter(id => !fresh(byId[id]) || byId[id].last_error)
+    .sort((a, b) => (byId[b] && byId[b].last_error ? 1 : 0) - (byId[a] && byId[a].last_error ? 1 : 0) || nameOf(a).localeCompare(nameOf(b)));
+  const small = { fontSize: 11.5, fontFamily: LB, lineHeight: 1.5, maxWidth: 380 };
+
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' } },
-    aiEnabled() && h('button', {
-      onClick: run, disabled: fetching,
-      style: {
-        background: fetching ? '#444' : '#1a5c8a', color: '#fff', border: 'none',
-        padding: '10px 18px', borderRadius: 7, fontFamily: "'Playfair Display',serif",
-        fontWeight: 700, fontSize: 13, cursor: fetching ? 'default' : 'pointer', whiteSpace: 'nowrap',
-      },
-    }, fetching ? '\uD83D\uDCE1 Fetching RSS...' : '\uD83D\uDCE1 Auto-Fetch News'),
-
-    fetching && progress && h('div', {
-      style: {
-        fontSize: 11, color: '#555', fontFamily: "'Lora',serif", maxWidth: 360, lineHeight: 1.4,
-        background: '#f5f3ee', borderRadius: 5, padding: '6px 10px',
-      },
-    }, progress),
-
-    log.length > 0 && h('div', {
-      style: {
-        fontSize: 11, fontFamily: "'Lora',serif", background: '#fff', border: '1px solid #e5dece',
-        borderRadius: 6, padding: '8px 10px', maxWidth: 420, lineHeight: 1.5,
-      },
-    },
-      h('div', { style: { fontWeight: 700, marginBottom: 4, color: '#1a1a2e' } }, 'Per-feed results:'),
-      log.map((f, i) => h('div', {
-        key: i,
-        style: { color: f.error ? '#c0392b' : '#1a6b3c', marginBottom: 2 },
-      },
-        (f.error ? '\u274c ' : '\u2705 ') + f.name + ': +' + f.added + ' new, ' + f.skipped + ' skipped, ' + f.items + ' items parsed' +
-        (f.error ? ' \u2014 ' + f.error : '')
-      ))
-    ),
-
-    result && h('div', { style: { fontSize: 11, color: '#1a6b3c', fontWeight: 700 } },
-      '\u2705 Total: +' + result.added + ' new \u00b7 \u23ed ' + result.skipped + ' skipped')
+    h('button', { onClick: runNow, disabled: running,
+      style: { background: running ? '#444' : '#1a5c8a', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 7,
+        fontFamily: PD, fontWeight: 700, fontSize: 13, cursor: running ? 'default' : 'pointer', whiteSpace: 'nowrap' } },
+      running ? '📰 Gathering news...' : '📰 Get today\'s news now'),
+    running && h('div', { style: { ...small, color: '#555' } }, 'Searching for ' + countyName + ' news. This takes about half a minute.'),
+    result && h('div', { style: { ...small, color: result.err ? '#c0392b' : '#1a6b3c', fontWeight: 700 } },
+      result.added > 0 ? '✅ Added ' + result.added + ' new ' + (result.added === 1 ? 'story' : 'stories') + '.'
+        : result.err ? '⚠️ ' + result.err : 'Nothing new since the last run.'),
+    status === false && !notDeployed && h('div', { style: { ...small, color: '#8a6000' } },
+      'Daily news isn\'t switched on yet: run tpv_daily_news.sql in Supabase.'),
+    status === null && h('div', { style: { ...small, color: '#888' } }, 'Daily news hasn\'t run for ' + countyName + ' yet.'),
+    status && h('div', { style: { ...small, color: status.last_error ? '#c0392b' : '#888' } },
+      'Daily news: last ran ' + ago(status.last_run_at) + ', added ' + (status.last_added || 0) + '.' +
+      (status.last_error ? ' Problem: ' + String(status.last_error).slice(0, 120) : '')),
+    full && overview && h('div', { style: { ...small, color: '#1a1a2e' } },
+      '🌎 Across Michigan: ' + upToDate + ' of ' + allIds.length + ' counties got news in the last day. ',
+      behind.length > 0 && h('button', { onClick: () => setShowList(!showList),
+        style: { background: 'none', border: 'none', color: '#1a5c8a', textDecoration: 'underline', cursor: 'pointer', fontSize: 11.5, padding: 0, fontFamily: LB } },
+        showList ? 'Hide' : 'See which are waiting')),
+    full && showList && h('div', { style: { ...small, background: '#fff', border: '1px solid #e5dece', borderRadius: 6, padding: '6px 10px', maxHeight: 180, overflowY: 'auto' } },
+      behind.map(id => h('div', { key: id, style: { color: byId[id] && byId[id].last_error ? '#c0392b' : '#888' } },
+        nameOf(id) + ': ' + (byId[id] ? 'last ran ' + ago(byId[id].last_run_at) + (byId[id].last_error ? ' — ' + String(byId[id].last_error).slice(0, 80) : '') : 'waiting for its first run')))),
+    notDeployed && h('div', { style: { ...small, background: '#fff8e7', border: '1px solid #f0c04066', borderRadius: 6, padding: '8px 10px', color: '#6b4c00' } },
+      'The news-daily server function isn\'t on Supabase yet. Once it\'s deployed, news arrives on its own every day. ',
+      aiEnabled() && 'Meanwhile you can use the old in-browser fetch: ',
+      aiEnabled() && h('button', { onClick: runBrowserFetch, disabled: fetching,
+        style: { background: 'none', border: 'none', color: '#1a5c8a', textDecoration: 'underline', cursor: 'pointer', fontSize: 11.5, padding: 0, fontFamily: LB } },
+        fetching ? 'fetching...' : 'fetch now')),
+    fetching && progress && h('div', { style: { ...small, color: '#555', background: '#f5f3ee', borderRadius: 5, padding: '6px 10px' } }, progress),
+    log.length > 0 && h('div', { style: { ...small, background: '#fff', border: '1px solid #e5dece', borderRadius: 6, padding: '8px 10px' } },
+      log.map((f, i) => h('div', { key: i, style: { color: f.error ? '#c0392b' : '#1a6b3c' } },
+        (f.error ? '❌ ' : '✅ ') + f.name + ': +' + f.added + ' new' + (f.error ? ' — ' + f.error : ''))))
   );
 }
 // ── Admin Pending Review Queue ─────────────────────────────────────────────────
@@ -13873,7 +14040,7 @@ function PulseTab({bills, user, profile, onNavigate}) {
         '🗳 Top Bills by Community Support'),
       topBills.length===0&&h('div',{style:{color:'#666',fontSize:13,fontFamily:"'Lora',serif",lineHeight:1.6}},
         'No one has voted on this county\'s bills yet. Yours could be the first, and it only takes a few seconds. ',
-        onNavigate && h('button',{onClick:()=>onNavigate('bills'),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13}},'See open decisions →')),
+        onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('bills'),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13}},'See open decisions →')),
       topBills.map((b,i)=>{
         const t = billTotal(b);
         const p = billPct(b.votes_yes,b.votes_no,b.votes_abstain);
@@ -18218,6 +18385,38 @@ function App() {
     document.addEventListener('tpv:join', handler);
     return ()=>document.removeEventListener('tpv:join', handler);
   },[]);
+  // The join / sign-in box always lets you out: the ✕, a tap outside it, the
+  // Escape key, or the phone's Back button / swipe-back all close it.
+  const joinOpen = !!authPrompt && !user;
+  useEffect(()=>{
+    if(!joinOpen) return;
+    let pushed = false;
+    try { window.history.pushState(Object.assign({}, window.history.state, {tpvJoin:true}), ''); pushed = true; } catch(e) {}
+    const onPop = ()=>{ pushed = false; setAuthPrompt(null); };
+    const onKey = e=>{ if(e.key === 'Escape') setAuthPrompt(null); };
+    window.addEventListener('popstate', onPop);
+    document.addEventListener('keydown', onKey);
+    return ()=>{
+      window.removeEventListener('popstate', onPop);
+      document.removeEventListener('keydown', onKey);
+      // Closed with the ✕ or by signing in: take back the history step we added
+      try { if(pushed && window.history.state && window.history.state.tpvJoin) window.history.back(); } catch(e) {}
+    };
+  },[joinOpen]);
+  // Returning guests get the same "here's what changed" banner as members,
+  // counted from their last visit on this device
+  useEffect(()=>{
+    if(loading || user || !currentCountyId) return;
+    const key = 'tpv_visit_' + currentCountyId;
+    let prev = null;
+    try { prev = localStorage.getItem(key); localStorage.setItem(key, new Date().toISOString()); } catch(e) {}
+    const away = prev ? Date.now() - new Date(prev).getTime() : 0;
+    if(!(away >= 20*3600000)) return;
+    tpvWhatsNew(prev, {}).then(summary=>{
+      if(['newBills','outcomes','answers','newNews','newNeighbors','newIdeas'].some(k=>summary[k] > 0))
+        setWelcomeBack({daysAway:Math.max(1, Math.floor(away/86400000)), summary, guest:true});
+    }).catch(()=>{});
+  },[loading, user && user.id, currentCountyId]);
   const [followedIds,setFollowedIds]=useState(()=>new Set());
   useEffect(()=>{ if(currentCountyId) { try { localStorage.setItem('tpv_county', currentCountyId); } catch(e) {} } },[currentCountyId]);
 
@@ -18491,32 +18690,11 @@ function App() {
     // Only show banner if user was gone > 1 day (and previously had any activity)
     if(daysAway >= 1 && previousActiveDate) {
       try {
-        const sinceIso = previousActiveDate.toISOString();
-        const userZip = prof.zip || null;
-        const [
-          newBillsRes, newNeighborsRes, newIdeasRes, newNewsRes, unreadDmsRes
-        ] = await Promise.all([
-          sb.from('bills').select('id',{count:'exact',head:true}).eq('county', countyTag()).gte('created_at', sinceIso),
-          userZip
-            ? sb.from('profiles').select('id',{count:'exact',head:true}).eq('zip', userZip).eq('county', countyTag()).gte('created_at', sinceIso).neq('id', authUser.id)
-            : Promise.resolve({count:0}),
-          sb.from('community_ideas').select('id',{count:'exact',head:true}).eq('county', countyTag()).gte('created_at', sinceIso),
-          sb.from('news_stories').select('id',{count:'exact',head:true}).eq('approved',true).eq('county', countyTag()).gte('created_at', sinceIso),
-          sb.from('direct_messages').select('id',{count:'exact',head:true}).eq('recipient_id', authUser.id).eq('read', false).gte('created_at', sinceIso),
-        ]);
-        const summary = {
-          newBills: newBillsRes.count || 0,
-          newNeighbors: newNeighborsRes.count || 0,
-          newIdeas: newIdeasRes.count || 0,
-          newNews: newNewsRes.count || 0,
-          unreadDms: unreadDmsRes.count || 0,
-        };
-        const hasAny = Object.values(summary).some(v=>v>0);
-        if(hasAny) {
-          setWelcomeBack({daysAway, summary});
-        }
+        const summary = await tpvWhatsNew(previousActiveDate.toISOString(), {userId:authUser.id, zip:prof.zip||null});
+        if(Object.keys(summary).some(k=>typeof summary[k]==='number' && summary[k] > 0)) setWelcomeBack({daysAway, summary});
       } catch(e) { console.error('welcome back summary error:', e); }
     }
+    try { localStorage.setItem('tpv_visit_' + countyTag(), now.toISOString()); } catch(e) {}
 
     // Step 3: update last_active_at to now
     try {
@@ -18545,7 +18723,12 @@ function App() {
 
   // County picker: if no county in URL and not opted-out via ?nopicker, show
   // a landing page where the user picks their county.
-  const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch'}},
+  const authOverlay = authPrompt && (!user || authPrompt.mode==='reset') && h('div',{role:'dialog','aria-modal':'true',style:{position:'fixed',inset:0,zIndex:4000,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain'}},
+    // Always on screen, however far down the form you've scrolled
+    h('button',{onClick:()=>setAuthPrompt(null),'aria-label':'Close',title:'Keep looking around',
+      style:{position:'fixed',top:'calc(10px + env(safe-area-inset-top, 0px))',right:12,zIndex:4001,minWidth:44,height:44,padding:'0 14px',borderRadius:22,
+        background:'#fff',color:'#1a1a2e',border:'1px solid #d4cdb8',boxShadow:'0 4px 14px rgba(0,0,0,.3)',
+        fontFamily:"'Lora',serif",fontSize:14,fontWeight:700,cursor:'pointer'}},'✕ Close'),
     h(AuthScreen,{key:authPrompt.mode+'|'+(authPrompt.notice||''), onAuth:(u,p)=>{
         handleAuth(u,p);
         // Finished a password reset on the front page? Take them to their county.
@@ -18820,43 +19003,37 @@ function App() {
     // Body
     h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px'}},
 
-      // Welcome-back banner — shown after a day+ away with new activity
-      welcomeBack && h('div',{style:{
-        background:'linear-gradient(135deg,#fff8e7,#faf3d8)',
-        border:'1px solid #f0c040',borderRadius:10,padding:'14px 18px',
-        marginBottom:14,position:'relative'}},
-        h('button',{onClick:()=>setWelcomeBack(null),
-          style:{position:'absolute',top:8,right:10,background:'transparent',border:'none',
-            color:'#8a6000',fontSize:18,cursor:'pointer',lineHeight:1,padding:'2px 6px'}},'×'),
-        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:14,color:'#1a1a2e',marginBottom:6}},
-          '👋 Welcome back' + (profile?.display_name ? ', '+profile.display_name.split(' ')[0] : '') + ' — '
-            + (welcomeBack.daysAway === 1 ? "yesterday's news, but you're caught up now."
-              : welcomeBack.daysAway < 7 ? "you were gone " + welcomeBack.daysAway + " days. Here's what you missed:"
-              : welcomeBack.daysAway < 30 ? "it's been " + welcomeBack.daysAway + " days. Quite a bit happened:"
-              : "it's been over a month. A lot has happened in "+CNAME()+":")
-        ),
-        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.7}},
-          (()=>{
-            const s = welcomeBack.summary;
-            const parts = [];
-            if(s.newBills > 0) parts.push(h('span',{key:'b'}, h('b',null, s.newBills + ' new bill' + (s.newBills===1?'':'s')), ' to vote on'));
-            if(s.newIdeas > 0) parts.push(h('span',{key:'i'}, h('b',null, s.newIdeas + ' new idea' + (s.newIdeas===1?'':'s')), ' in Civic Voice'));
-            if(s.newNews > 0) parts.push(h('span',{key:'n'}, h('b',null, s.newNews + ' news stor' + (s.newNews===1?'y':'ies'))));
-            if(s.newNeighbors > 0) parts.push(h('span',{key:'p'}, h('b',null, s.newNeighbors + ' new neighbor' + (s.newNeighbors===1?'':'s')), ' in your ZIP'));
-            if(s.unreadDms > 0) parts.push(h('span',{key:'d'}, h('b',null, s.unreadDms + ' unread message' + (s.unreadDms===1?'':'s'))));
-            if(parts.length === 0) return 'Nothing major — but it\'s good to have you back.';
-            // Interleave with "·" separators
-            const interleaved = [];
-            parts.forEach((p,i)=>{
-              if(i>0) interleaved.push(h('span',{key:'sep'+i,style:{color:'#bbb',margin:'0 8px'}},'·'));
-              interleaved.push(p);
-            });
-            return interleaved;
-          })()
-        ),
-        h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#8a6000',fontStyle:'italic',marginTop:8}},
-          '🪶 Take your time. Browse what interests you. Your voice matters when you have something to say.')
-      ),
+      // Welcome-back banner: what changed since your last visit, each item one tap away
+      welcomeBack && mainTab !== 'admin' && (()=>{
+        const s = welcomeBack.summary || {};
+        const d = welcomeBack.daysAway;
+        const when = d <= 1 ? 'yesterday' : d < 7 ? d + ' days ago' : d < 14 ? 'last week' : d < 60 ? Math.round(d/7) + ' weeks ago' : 'a while back';
+        const first = !welcomeBack.guest && profile?.display_name ? profile.display_name.split(' ')[0] : '';
+        const go = (tab, ctx)=>{ setFeedNavCtx(ctx||null); setMainTab(tab); setWelcomeBack(null); };
+        const items = [
+          s.outcomes > 0 && {k:'o', t:s.outcomes + ' decision' + (s.outcomes===1?' was':'s were') + ' made: did they listen?', on:()=>go('bills')},
+          s.newBills > 0 && {k:'b', t:s.newBills + ' new decision' + (s.newBills===1?'':'s') + ' to weigh in on', on:()=>go('bills')},
+          s.answers > 0 && {k:'a', t:s.answers + ' official' + (s.answers===1?'':'s') + ' answered residents', on:()=>go('ask')},
+          s.newNews > 0 && {k:'n', t:s.newNews + ' new stor' + (s.newNews===1?'y':'ies'), on:()=>go('news')},
+          s.newIdeas > 0 && {k:'i', t:s.newIdeas + ' new idea' + (s.newIdeas===1?'':'s') + ' from neighbors', on:()=>go('proposals')},
+          s.newNeighbors > 0 && {k:'p', t:s.newNeighbors + ' new neighbor' + (s.newNeighbors===1?'':'s') + (s.neighborsIn ? ' in ' + s.neighborsIn : ''), on:()=>go('connect')},
+          s.unreadDms > 0 && {k:'d', t:s.unreadDms + ' unread message' + (s.unreadDms===1?'':'s'), on:()=>go('connect',{openConnectDm:true})},
+        ].filter(Boolean);
+        if(!items.length) return null;
+        return h('div',{style:{background:'linear-gradient(135deg,#fff8e7,#faf3d8)',border:'1px solid #f0c040',borderRadius:10,padding:'14px 18px',marginBottom:14,position:'relative'}},
+          h('button',{onClick:()=>setWelcomeBack(null),'aria-label':'Dismiss',
+            style:{position:'absolute',top:4,right:4,background:'transparent',border:'none',color:'#8a6000',fontSize:20,cursor:'pointer',lineHeight:1,width:40,height:40}},'×'),
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:8,paddingRight:28}},
+            '👋 Welcome back' + (first ? ', ' + first : '') + '. Since you were here ' + when + ':'),
+          h('div',{style:{display:'flex',gap:7,flexWrap:'wrap'}},
+            items.map(it=>h('button',{key:it.k,onClick:it.on,
+              style:{background:'#fff',border:'1px solid #e8d49a',color:'#1a1a2e',borderRadius:16,padding:'7px 12px',fontSize:12.5,fontFamily:"'Lora',serif",cursor:'pointer',textAlign:'left'}},
+              it.t + ' →'))),
+          welcomeBack.guest && h('div',{style:{fontFamily:"'Lora',serif",fontSize:12,color:'#8a6000',marginTop:8}},
+            h('button',{onClick:()=>askToJoin('get a heads-up when something you care about is decided','signup'),
+              style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12,fontFamily:"'Lora',serif"}},'Join free'),
+            ' and we\'ll tell you when something you weighed in on gets decided.'));
+      })(),
 
       // Profile completion nudge banner
       user&&(!profile?.display_name||!profile?.zip)&&h('div',{style:{
