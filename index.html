@@ -193,7 +193,8 @@ const HUBS = [
     { id:'map', label:'Map' }
   ]},
   { id:'resources', icon:'\uD83D\uDCDA', label:'Resources', subs:[
-    { id:'resources', label:'Resources' }
+    { id:'resources', label:'Resources' },
+    { id:'funding',   label:'Who Funds Us' }
   ]},
 ];
 // Build subTab → hub lookup for resolveRoute
@@ -2239,6 +2240,20 @@ function shareLink(county, query) {
 function billLink(bill) {
   return shareLink(bill.county || countyTag(), 'bill=' + encodeURIComponent(bill.id));
 }
+
+// ── Supporting the site ──────────────────────────────────────────────────────
+// Ko-fi's own snippet writes into the page as it loads, which doesn't work in
+// an app like this one, so this is the same button built natively: same link,
+// same color. Gifts are counted on the "Who Funds Us" page automatically.
+const KOFI_URL = 'https://ko-fi.com/Y0W228Q8IE';
+const KOFI_BLUE = '#72a4f2';
+function KofiButton({label, small, style}) {
+  return h('a',{href:KOFI_URL,target:'_blank',rel:'noopener',
+      style:Object.assign({display:'inline-flex',alignItems:'center',gap:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',
+        borderRadius:8,padding:small?'7px 13px':'11px 18px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:small?12.5:14.5,
+        boxShadow:'0 2px 0 rgba(26,26,46,.18)',whiteSpace:'nowrap'}, style||{})},
+    '☕ ' + (label || 'Support TPV on Ko-fi'));
+}
 function questionLink(id) {
   return shareLink(countyTag(), 'q=' + id);
 }
@@ -2278,7 +2293,7 @@ const __DEEP_LINK = (function(){
     }
     if(!billId && !q) {
       const t = p.get('tab');
-      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize)$/.test(t) ? {tab:t} : null;
+      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize|funding)$/.test(t) ? {tab:t} : null;
     }
     return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
   } catch(e) { return null; }
@@ -3034,7 +3049,14 @@ function DidTheyListenCard({bill, bills, userVotes, onNavigate, onToast}) {
       h('button',{onClick:sharePicture,disabled:making,style:{background:'#1a1a2e',border:'1px solid #1a1a2e',color:'#f0c040',borderRadius:6,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
         making ? 'Making it...' : '🖼 Share as a picture'),
       h('button',{onClick:share,style:{background:'#fff',border:'1px solid #1a1a2e',color:'#1a1a2e',borderRadius:6,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
-        '↗ Share link')));
+        '↗ Share link')),
+    // One quiet line, at the moment the site proved its worth. Never a pop-up.
+    h('div',{style:{marginTop:12,paddingTop:9,borderTop:'1px dashed #ece4d2',fontSize:12.5,color:'#777',fontFamily:LB,lineHeight:1.6}},
+      'A volunteer tracked this result down. ',
+      h('a',{href:KOFI_URL,target:'_blank',rel:'noopener',style:{color:'#2f6db5',fontWeight:700}},'☕ $3 a month keeps it coming'),
+      ' · ',
+      h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
+        style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:12.5,fontFamily:LB}},'who funds us')));
 }
 
 // ── Reminders: put an upcoming decision on your own calendar ─────────────────
@@ -10837,10 +10859,11 @@ function CountyPickerLanding({onPick, profile}) {
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#fff',marginBottom:6}},'Who runs this'),
         h('p',{style:{margin:'0 0 8px'}},
           'The People\'s Voice is a volunteer project started in Concord, Michigan by Justin Fairchild. ',
-          'It isn\'t affiliated with any government, party or candidate, and it doesn\'t sell ads or data.'),
+          'It isn\'t affiliated with any government, party or candidate, and it doesn\'t sell ads or data. Neighbors pay for it, and every dollar is shown in the open.'),
         h('p',{style:{margin:'0 0 8px'}},
           'Votes here are unofficial. They show officials where residents stand. To join, we ask for an email and your ZIP code. Never your street address.'),
-        h('div',{style:{display:'flex',gap:16,flexWrap:'wrap',fontSize:13}},
+        h('div',{style:{display:'flex',gap:16,flexWrap:'wrap',fontSize:13,alignItems:'center'}},
+          h(KofiButton,{small:true}),
           h('button',{onClick:()=>document.dispatchEvent(new CustomEvent('showPrivacy')),
             style:{background:'none',border:'none',color:GOLD,cursor:'pointer',padding:0,fontSize:13,textDecoration:'underline',fontFamily:"'Lora',serif"}},'Privacy policy'),
           h('a',{href:'mailto:hello@thepeoplesvoices.org',style:{color:GOLD}},'hello@thepeoplesvoices.org'))
@@ -11438,10 +11461,10 @@ function SponsorJacket({o}) {
   const rest = pacs - shown;
   const reported = o.status === 'reported';
   const nameSize = o.name.length > 19 ? 12.5 : 14;
-  const sub = o.chamber === 'senate' ? 'U.S. Senator · Michigan' : 'U.S. Rep · ' + (o.district_label || 'Michigan');
+  const sub = o.subtitle || (o.chamber === 'senate' ? 'U.S. Senator · Michigan' : 'U.S. Rep · ' + (o.district_label || 'Michigan'));
   const T = (props, txt)=>h('text',{fontFamily:LB,textAnchor:'middle',...props}, txt);
   return h('svg',{viewBox:'0 0 380 336',width:'100%',role:'img',style:{display:'block',maxWidth:360,margin:'0 auto'},
-      'aria-label':o.name + '\'s sponsor jacket: ' + (tops.length ? tops.map(p=>filerCase(p.name) + ' ' + fmtMoney(p.amount)).join(', ') : 'no PAC patches') + '. ' + jacketBand(o) + '.'},
+      'aria-label':o.name + '\'s sponsor jacket: ' + (tops.length ? tops.map(p=>filerCase(p.name) + ' ' + fmtMoney(p.amount)).join(', ') : 'no PAC patches') + '. ' + (o.band || jacketBand(o)) + '.'},
     // Jacket, collar, racing stripes
     h('path',{d:'M150 46 L95 62 L60 80 L30 290 L72 296 L82 150 L84 330 L296 330 L298 150 L308 296 L350 290 L320 80 L285 62 L230 46 Q190 70 150 46 Z',fill:JACKET_NAVY}),
     h('path',{d:'M150 46 L165 34 L215 34 L230 46 Q190 64 150 46 Z',fill:JACKET_GOLD}),
@@ -11475,15 +11498,15 @@ function SponsorJacket({o}) {
     }),
     // A bare jacket says something too
     reported && pacs === 0 && o.from_pacs !== null && o.from_pacs !== undefined && h('g',null,
-      T({x:190,y:170,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:16}, 'No PAC sponsors'),
-      T({x:190,y:190,fill:'#c8d0dc',fontSize:11.5}, 'This campaign reported no PAC money')),
+      T({x:190,y:170,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:16}, o.emptyTitle || 'No PAC sponsors'),
+      T({x:190,y:190,fill:'#c8d0dc',fontSize:11.5}, o.emptySub || 'This campaign reported no PAC money')),
     reported && pacs > 0 && !tops.length && h('g',null,
       T({x:190,y:170,fill:JACKET_GOLD,fontFamily:PD,fontWeight:700,fontSize:15}, 'PACs gave ' + fmtMoney(pacs)),
       T({x:190,y:190,fill:'#c8d0dc',fontSize:11.5}, 'Patches arrive with the next refresh')),
     rest > 1 && tops.length >= JACKET_SLOTS.length && T({x:190,y:280,fill:'#c8d0dc',fontSize:11}, '+ ' + fmtMoney(rest) + ' from other PACs'),
     // Small donors: the hem band
     h('rect',{x:84,y:294,width:212,height:30,fill:JACKET_GOLD}),
-    T({x:190,y:314,fill:JACKET_NAVY,fontFamily:PD,fontWeight:700,fontSize:13}, jacketBand(o)));
+    T({x:190,y:314,fill:JACKET_NAVY,fontFamily:PD,fontWeight:700,fontSize:13}, o.band || jacketBand(o)));
 }
 
 function JacketCard({o, profile, highlight, onToast, onChanged}) {
@@ -11569,7 +11592,7 @@ function JacketCard({o, profile, highlight, onToast, onChanged}) {
             o.refresh_error && h('div',{style:{color:'#c0392b',marginTop:3}}, o.refresh_error))));
 }
 
-function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
+function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNavigate}) {
   const [rows, setRows] = useState(null);       // null = loading
   const [missing, setMissing] = useState(false);
   const [sort, setSort] = useState('seat');
@@ -11621,6 +11644,9 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
       h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6}},
         'Each patch is a PAC that gave money to their campaign, and the biggest money gets the chest. The gold band is small donors: people giving $200 or less. ',
         'Every member of Congress from Michigan gets the same jacket, with numbers straight from federal filings.'),
+      onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('funding'),
+        style:{background:'none',border:'none',padding:0,marginTop:6,marginRight:14,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
+        'Fair\'s fair: see who funds The People\'s Voice →'),
       h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,marginTop:6,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
         why ? 'Hide' : 'What counts as PAC money?'),
       why && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:8}}, h(PacMoneyExplainer))),
@@ -11652,6 +11678,263 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed}) {
           'Source: Federal Election Commission. Not sure which district is yours? ',
           h('a',{href:'https://www.house.gov/representatives/find-your-representative',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Find your U.S. Representative ↗'),
           '. State and local officials report to Michigan instead of the FEC, so they aren\'t here yet.')));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// WHO FUNDS US: the site's own sponsor jacket
+// We show who pays for politicians, so fair's fair: every dollar that keeps
+// The People's Voice running, every month. Ko-fi gifts count themselves (the
+// kofi-webhook server function); a full admin fills in costs, businesses and
+// in-kind gifts right here. Read by anyone; changed only by full admins.
+// ═════════════════════════════════════════════════════════════════════════════
+const FUNDING_RULES = [
+  ['Every dollar is shown here.', 'What the site costs, who paid for it, and how much: every month, for anyone to see.'],
+  ['No big backers.', 'No one person or business gives more than a quarter of a month\'s costs, so nobody can lean on the site or pull the plug.'],
+  ['Same price for everyone.', 'Businesses pay the posted price for services. No sponsorships, no special deals.'],
+  ['No money from politics.', 'Officials, candidates, campaigns, parties, PACs and lobbyists can\'t give or buy anything. They can still answer residents\' questions, free, like anyone.'],
+  ['Paying never changes what you see.', 'No featured bills, no story placement, no ranking. Businesses can buy helpful services, never attention.'],
+];
+const FUNDING_COST_IDEAS = ['Database and sign-ins (Supabase)', 'AI summaries of news and bills', 'Email (digests and alerts)', 'Domain name (yearly cost ÷ 12)'];
+function monthLabel(iso) {
+  if(!iso) return '';
+  const d = new Date(String(iso).slice(0,10) + 'T12:00:00');
+  return d.toLocaleDateString('en-US', {month:'long', year:'numeric'});
+}
+function money2(n) {
+  const v = Number(n) || 0;
+  return '$' + (Math.round(v) === v ? v.toLocaleString('en-US') : v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
+}
+const fundNum = v => { const n = Number(String(v ?? '').replace(/[^0-9.]/g,'')); return isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+
+function FundingTab({profile, onToast, onNavigate}) {
+  const [month, setMonth] = useState(null);       // null = this month
+  const [sum, setSum] = useState(undefined);      // undefined loading, null not set up
+  const [editing, setEditing] = useState(false);
+  const [helping, setHelping] = useState(false);
+  const admin = isFullAdmin(profile);
+  const load = async (m)=>{
+    const {data, error} = await sb.rpc('tpv_funding_summary', m ? {p_month:m} : {});
+    setSum(error ? null : (data || null));
+  };
+  useEffect(()=>{ load(month); }, [month]);
+
+  const card = {background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'16px 18px',marginBottom:14};
+  const head = t=>h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:16,color:'#1a1a2e',marginBottom:8}}, t);
+  const row = (label, value, sub, key)=>h('div',{key:key||label,style:{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 0',borderTop:'1px solid #f3eee3',fontFamily:LB,fontSize:13.5}},
+    h('span',{style:{color:'#333',minWidth:0}}, label, sub ? h('span',{style:{display:'block',fontSize:12,color:'#888'}}, sub) : null),
+    h('strong',{style:{color:'#1a1a2e',whiteSpace:'nowrap'}}, value));
+
+  const intro = h('div',{style:{marginBottom:14}},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Who funds The People\'s Voice'),
+    h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10}},
+      'We show who pays for politicians. Fair\'s fair: here\'s who pays for us, every dollar, every month.'));
+
+  if(sum === undefined) return h('div',null, intro, h('div',{style:{textAlign:'center',padding:30}}, h(Spinner)));
+  if(sum === null) return h('div',null, intro,
+    h('div',{style:card},
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',lineHeight:1.6,marginBottom:12}},
+        'The People\'s Voice is free, nonpartisan and run by volunteers. If it\'s useful to you, you can help keep it that way.'),
+      h(KofiButton,null),
+      admin && h('div',{style:{marginTop:12,fontSize:12.5,color:'#8a6000',fontFamily:LB}},'Admins: run tpv_funding.sql in Supabase to turn on this page\'s numbers.')));
+
+  const goal = Number(sum.goal) || 0;
+  const fromKofi = Number(sum.neighbors_kofi) || 0, fromOther = Number(sum.neighbors_other) || 0;
+  const neighbors = fromKofi + fromOther;
+  const businesses = (Array.isArray(sum.businesses) ? sum.businesses : []).filter(b=>b && b.name);
+  const bizTotal = Number(sum.businesses_total) || 0;
+  const raised = neighbors + bizTotal;
+  const pct = goal > 0 ? Math.min(100, Math.round(100 * raised / goal)) : 0;
+  const costs = (Array.isArray(sum.costs) ? sum.costs : []).filter(c=>c && c.label);
+  const inKind = (Array.isArray(sum.in_kind) ? sum.in_kind : []).filter(x=>x && x.name);
+  const wall = Array.isArray(sum.wall) ? sum.wall : [];
+  const months = Array.isArray(sum.months) ? sum.months : [];
+  const thisMonth = !month || (months[0] && String(month).slice(0,7) === String(months[0]).slice(0,7));
+  const biggest = Number(sum.biggest_single) || 0;
+  const biggestPct = goal > 0 && biggest > 0 ? Math.round(100 * biggest / goal) : null;
+
+  const jacket = {
+    name:'The People\'s Voice', subtitle:'Who funds us · ' + monthLabel(sum.month),
+    top_pacs: businesses.map(b=>({name:b.name, amount:fundNum(b.amount)})),
+    from_pacs: bizTotal, status:'reported',
+    band:'Neighbors · ' + fmtMoney(neighbors),
+    emptyTitle:'No business sponsors', emptySub: neighbors > 0 ? 'Paid for by neighbors' : 'Run by volunteers',
+  };
+
+  const share = async()=>{
+    const url = shareLink(countyTag(), 'tab=funding');
+    const text = 'Who funds The People\'s Voice? Every dollar, every month, out in the open.';
+    if(navigator.share) { try { await navigator.share({title:'Who funds The People\'s Voice', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(text + ' ' + url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
+  };
+
+  return h('div',null,
+    intro,
+    months.length > 1 && h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
+      h('span',{style:{fontSize:12,color:'#888',fontFamily:LB}},'Month:'),
+      months.slice(0, 12).map(m=>h('button',{key:m,onClick:()=>setMonth(m),'aria-pressed':String(sum.month)===String(m),
+        style:{background:String(sum.month)===String(m)?'#1a1a2e':'#fff',color:String(sum.month)===String(m)?'#f0c040':'#555',border:'1px solid ' + (String(sum.month)===String(m)?'#1a1a2e':'#ddd'),
+          borderRadius:16,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:LB}}, monthLabel(m)))),
+
+    // ── This month's meter
+    h('div',{style:{...card, borderLeft:'4px solid ' + KOFI_BLUE}},
+      h('div',{style:{fontSize:11,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',marginBottom:4}}, monthLabel(sum.month)),
+      goal > 0
+        ? h(Fragment,null,
+            h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:22,color:'#1a1a2e',lineHeight:1.2}},
+              money2(raised) + ' of ' + money2(goal) + ' covered'),
+            h('div',{role:'progressbar','aria-valuemin':0,'aria-valuemax':100,'aria-valuenow':pct,'aria-label':'Share of this month\'s costs covered',
+                style:{height:12,background:'#eef1f6',borderRadius:6,overflow:'hidden',margin:'10px 0 6px'}},
+              h('div',{style:{width:pct + '%',height:'100%',background:pct >= 100 ? '#1a6b3c' : KOFI_BLUE,borderRadius:6,transition:'width .4s'}})),
+            h('div',{style:{fontSize:13,color:'#555',fontFamily:LB}},
+              pct >= 100 ? 'This month is fully covered. Thank you, neighbors.' : money2(Math.max(0, goal - raised)) + ' to go' + (thisMonth ? ' this month.' : '.'),
+              Number(sum.monthly_supporters) > 0 ? ' · ' + sum.monthly_supporters + ' monthly supporter' + (Number(sum.monthly_supporters)===1?'':'s') : ''))
+        : h('div',{style:{fontFamily:LB,fontSize:14,color:'#555',lineHeight:1.6}},
+            raised > 0 ? money2(raised) + ' given so far this month. ' : '', 'This month\'s costs haven\'t been posted yet.'),
+      thisMonth && h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginTop:12}},
+        h(KofiButton,null),
+        h('span',{style:{fontSize:12.5,color:'#777',fontFamily:LB}},'$3 a month keeps the lights on. One-time gifts help too.'))),
+
+    // ── Our jacket
+    h('div',{style:card},
+      head('Our own sponsor jacket'),
+      h(SponsorJacket,{o:jacket}),
+      h('div',{style:{fontSize:12.5,color:'#777',fontFamily:LB,lineHeight:1.6,marginTop:8,textAlign:'center'}},
+        'Same rules as the politicians\' jackets: businesses get patches, the gold band is neighbors.')),
+
+    // ── Where the money goes
+    h('div',{style:card},
+      head('Where the money goes'),
+      costs.length
+        ? h(Fragment,null, costs.map((c,i)=>row(c.label, money2(c.amount), c.note, 'c'+i)), row('Total for the month', money2(goal), null, 'ct'))
+        : h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#888'}},'Not posted yet for this month.'),
+      h('div',{style:{fontSize:12.5,color:'#888',fontFamily:LB,marginTop:8,lineHeight:1.6}},'Nobody is paid. Every county is run by volunteers.')),
+
+    // ── Where it comes from
+    h('div',{style:card},
+      head('Where it comes from'),
+      row('Neighbors on Ko-fi', money2(fromKofi), Number(sum.payments) > 0 ? sum.payments + ' gift' + (Number(sum.payments)===1?'':'s') : null, 'nk'),
+      fromOther > 0 && row('Neighbors, other ways', money2(fromOther), 'cash, checks and the like', 'no'),
+      businesses.length
+        ? businesses.map((b,i)=>row(b.name, money2(fundNum(b.amount)), b.note || 'local business', 'b'+i))
+        : row('Businesses', '$0', 'none yet', 'b0'),
+      inKind.length > 0 && h('div',{style:{marginTop:8}},
+        h('div',{style:{fontSize:12,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',margin:'6px 0 2px'}},'Given in kind'),
+        inKind.map((x,i)=>row(x.name, '', x.gave, 'k'+i))),
+      biggestPct !== null && h('div',{style:{marginTop:10,fontSize:13,fontFamily:LB,borderRadius:6,padding:'7px 10px',
+          background:biggestPct > 25 ? '#fdf0ef' : '#eef7f1',color:biggestPct > 25 ? '#a33' : '#1a4a2a'}},
+        'Biggest single gift or payment this month: ' + money2(biggest) + ', ' + biggestPct + '% of the month\'s costs. Our limit is 25%.')),
+
+    // ── Thank-you wall
+    wall.length > 0 && h('div',{style:card},
+      head('Thank you'),
+      wall.map((w,i)=>h('div',{key:i,style:{padding:'7px 0',borderTop:i?'1px solid #f3eee3':'none',fontFamily:LB,fontSize:13.5,color:'#333',lineHeight:1.5}},
+        h('strong',{style:{color:'#1a1a2e'}}, w.name), w.monthly ? h('span',{style:{fontSize:11,color:'#2f6db5',marginLeft:6}},'monthly') : null,
+        w.message ? h('div',{style:{fontStyle:'italic',color:'#555'}}, '“' + w.message + '”') : null)),
+      h('div',{style:{fontSize:11.5,color:'#999',fontFamily:LB,marginTop:6}},'Only people who chose to be named on Ko-fi appear here.')),
+
+    // ── Our rules
+    h('div',{style:card},
+      head('Our rules'),
+      FUNDING_RULES.map(([t,d],i)=>h('div',{key:i,style:{padding:'7px 0',borderTop:i?'1px solid #f3eee3':'none',fontFamily:LB,fontSize:13.5,lineHeight:1.55}},
+        h('strong',{style:{color:'#1a1a2e'}}, t), ' ', h('span',{style:{color:'#555'}}, d)))),
+
+    // ── Other ways to help
+    h('div',{style:card},
+      head('Can\'t give money? Give time.'),
+      h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#555',lineHeight:1.6,marginBottom:10}},
+        'Every county needs neighbors to add local meetings and decisions, welcome newcomers and keep things friendly. An hour a week makes a real difference.'),
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        h('button',{onClick:()=>setHelping(!helping),style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'9px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+          '🙋 Help run ' + getCurrentCounty().name),
+        h('button',{onClick:share,style:{background:'#fff',color:'#1a1a2e',border:'1px solid #1a1a2e',borderRadius:7,padding:'9px 14px',fontFamily:LB,fontSize:13,cursor:'pointer'}},
+          '↗ Share this page')),
+      helping && h('div',{style:{marginTop:12}}, h(VolunteerForm,{countyId:countyTag()}))),
+
+    sum.note && h('div',{style:{...card, background:'#faf8f3'}}, head('A note'), h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,whiteSpace:'pre-wrap'}}, sum.note)),
+
+    h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.7,margin:'4px 2px 14px'}},
+      'Gifts go through Ko-fi to Justin Fairchild, the volunteer who started and runs the site, and pay for running it. ',
+      'They aren\'t tax-deductible: The People\'s Voice isn\'t a registered nonprofit.',
+      sum.updated_at ? ' Numbers last updated ' + new Date(sum.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '.' : ''),
+
+    admin && h('div',{style:{...card, border:'1px solid #f0c040', background:'#fffdf5'}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e'}},'✏️ Admin: ' + monthLabel(sum.month) + '\'s numbers'),
+        h('button',{onClick:()=>setEditing(!editing),style:{background:editing?'#fff':'#1a1a2e',color:editing?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
+          editing ? 'Close' : 'Update numbers')),
+      !editing && h('div',{style:{fontSize:12.5,color:'#777',fontFamily:LB,marginTop:6,lineHeight:1.6}},
+        'Ko-fi gifts count themselves once the kofi-webhook function is set up. Add costs, businesses and in-kind gifts here.'),
+      editing && h(FundingEditor,{sum, onToast, onSaved:()=>{ setEditing(false); load(month); }})));
+}
+
+function FundingEditor({sum, onToast, onSaved}) {
+  const startCosts = (Array.isArray(sum.costs) && sum.costs.length ? sum.costs : FUNDING_COST_IDEAS.map(l=>({label:l, amount:''})))
+    .map(c=>({label:c.label || '', amount: c.amount === '' || c.amount === undefined ? '' : String(c.amount), note:c.note || ''}));
+  const [costs, setCosts] = useState(startCosts);
+  const [other, setOther] = useState(String(Number(sum.neighbors_other) || ''));
+  const [biz, setBiz] = useState((Array.isArray(sum.businesses) ? sum.businesses : []).map(b=>({name:b.name||'', amount:String(b.amount ?? ''), note:b.note||''})));
+  const [kind, setKind] = useState((Array.isArray(sum.in_kind) ? sum.in_kind : []).map(x=>({name:x.name||'', gave:x.gave||''})));
+  const [note, setNote] = useState(sum.note || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const total = costs.reduce((n,c)=>n + fundNum(c.amount), 0);
+  const inp = (value, onChange, ph, extra)=>h('input',{value, onChange:e=>onChange(e.target.value), placeholder:ph,
+    style:Object.assign({border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:14,fontFamily:LB,minWidth:0,boxSizing:'border-box'}, extra||{})});
+  const label = t=>h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,margin:'14px 0 6px',fontFamily:LB}}, t);
+  const x = onClick=>h('button',{onClick,'aria-label':'Remove',style:{background:'none',border:'none',color:'#c0392b',fontSize:18,cursor:'pointer',width:32,flexShrink:0}},'×');
+  const add = (t, onClick)=>h('button',{onClick,style:{background:'#fff',border:'1px dashed #c8bfa8',borderRadius:6,padding:'6px 12px',fontSize:12.5,color:'#555',cursor:'pointer',fontFamily:LB,marginTop:4}}, t);
+  const set = (list, setList, i, k, v)=>setList(list.map((r,j)=>j===i ? {...r, [k]:v} : r));
+
+  const save = async()=>{
+    const cleanCosts = costs.filter(c=>c.label.trim() && fundNum(c.amount) > 0).map(c=>({label:c.label.trim().slice(0,80), amount:fundNum(c.amount), ...(c.note.trim() ? {note:c.note.trim().slice(0,120)} : {})}));
+    const cleanBiz = biz.filter(b=>b.name.trim()).map(b=>({name:b.name.trim().slice(0,60), amount:String(fundNum(b.amount)), ...(b.note.trim() ? {note:b.note.trim().slice(0,80)} : {})}));
+    const cleanKind = kind.filter(k=>k.name.trim()).map(k=>({name:k.name.trim().slice(0,60), gave:k.gave.trim().slice(0,120)}));
+    setSaving(true); setErr('');
+    const {error} = await sb.from('site_funding').upsert({
+      month:String(sum.month).slice(0,10), goal:cleanCosts.reduce((n,c)=>n + c.amount, 0), costs:cleanCosts,
+      other_neighbors:fundNum(other), businesses:cleanBiz, in_kind:cleanKind, note:note.trim().slice(0,600) || null,
+    }, {onConflict:'month'});
+    setSaving(false);
+    if(error) { setErr(error.message || 'Couldn\'t save.'); return; }
+    onToast && onToast('✓ ' + monthLabel(sum.month) + '\'s numbers are updated');
+    onSaved && onSaved();
+  };
+
+  return h('div',{style:{fontFamily:LB}},
+    label('What the site costs this month'),
+    costs.map((c,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center'}},
+      inp(c.label, v=>set(costs, setCosts, i, 'label', v), 'What it pays for', {flex:'1 1 auto'}),
+      inp(c.amount, v=>set(costs, setCosts, i, 'amount', v), '$', {width:84,flex:'0 0 84px'}),
+      x(()=>setCosts(costs.filter((_,j)=>j!==i))))),
+    add('+ Add a cost', ()=>setCosts([...costs, {label:'', amount:'', note:''}])),
+    h('div',{style:{fontSize:13,color:'#1a1a2e',marginTop:6}}, 'Monthly total (the goal): ', h('strong',null, money2(total)), h('span',{style:{color:'#999',fontSize:12}},' · lines left at $0 aren\'t shown')),
+
+    label('Neighbors outside Ko-fi (cash, checks)'),
+    inp(other, setOther, '$0', {width:120}),
+
+    label('Businesses this month'),
+    biz.map((b,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center',flexWrap:'wrap'}},
+      inp(b.name, v=>set(biz, setBiz, i, 'name', v), 'Business name', {flex:'1 1 140px'}),
+      inp(b.amount, v=>set(biz, setBiz, i, 'amount', v), '$', {width:84,flex:'0 0 84px'}),
+      inp(b.note, v=>set(biz, setBiz, i, 'note', v), 'What for (e.g. Watch alerts)', {flex:'1 1 160px'}),
+      x(()=>setBiz(biz.filter((_,j)=>j!==i))))),
+    add('+ Add a business', ()=>setBiz([...biz, {name:'', amount:'', note:''}])),
+    h('div',{style:{fontSize:12,color:'#999',marginTop:4}},'Remember the rules: no officials, candidates, campaigns, PACs or lobbyists; posted prices only; and nobody over a quarter of the month.'),
+
+    label('Given in kind'),
+    kind.map((k,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center',flexWrap:'wrap'}},
+      inp(k.name, v=>set(kind, setKind, i, 'name', v), 'Who', {flex:'1 1 140px'}),
+      inp(k.gave, v=>set(kind, setKind, i, 'gave', v), 'What they gave (meeting room, printing...)', {flex:'2 1 200px'}),
+      x(()=>setKind(kind.filter((_,j)=>j!==i))))),
+    add('+ Add an in-kind gift', ()=>setKind([...kind, {name:'', gave:''}])),
+
+    label('A note for the page (optional)'),
+    h('textarea',{value:note,onChange:e=>setNote(e.target.value),rows:3,placeholder:'Anything you want neighbors to know about this month',
+      style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:14,fontFamily:LB,boxSizing:'border-box',resize:'vertical'}}),
+
+    err && h('div',{style:{color:'#c0392b',fontSize:13,marginTop:8}}, '❌ ' + err),
+    h('button',{onClick:save,disabled:saving,style:{marginTop:12,background:saving?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:saving?'default':'pointer'}},
+      saving ? 'Saving...' : 'Save ' + monthLabel(sum.month)));
 }
 
 function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
@@ -18100,6 +18383,7 @@ const NOTIF_TYPES = {
   admin_chat_reply:  {icon:'🛡', label:'Admin chat reply', color:'#1a4a1a'},
   report:            {icon:'🚩', label:'New report', color:'#c0392b'},
   new_member:        {icon:'👋', label:'New neighbor', color:'#1a6b3c'},
+  support:           {icon:'☕', label:'Ko-fi support', color:'#2f6db5'},
   guestbook:         {icon:'✍️', label:'Guestbook note', color:'#9b3f86'},
   organize:          {icon:'📣', label:'Organize It', color:'#8a6000'},
   admin_queue:       {icon:'📥', label:'Waiting for an admin', color:'#8a6000'},
@@ -19237,6 +19521,7 @@ function App() {
 
       // Resources tab
       mainTab==='resources'&&h(ResourcesTab,{user:{...user,reputation:rep},profile,onToast:setToast,isAdmin}),
+      mainTab==='funding'&&h(FundingTab,{profile,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       // Reps tab
       mainTab==='reps'&&h(Fragment,null,
@@ -19257,7 +19542,7 @@ function App() {
       ),
 
       // Sponsor Jackets
-      mainTab==='jackets'&&h(SponsorJacketsTab,{profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)}),
+      mainTab==='jackets'&&h(SponsorJacketsTab,{profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       // Admin tab
       mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)})
@@ -19267,6 +19552,11 @@ function App() {
     // Footer
     h('div',{style:{background:'#1a1a2e',borderTop:'3px solid #f0c040',color:'#9aa8b8',textAlign:'center',padding:'20px 16px',fontSize:12,lineHeight:1.9}},
       h('div',{style:{fontFamily:"'Playfair Display',serif",color:'#f0c040',fontSize:14,marginBottom:6}},"The People's Voice"),
+      h('div',{style:{display:'flex',gap:10,justifyContent:'center',alignItems:'center',flexWrap:'wrap',margin:'2px 0 12px'}},
+        h(KofiButton,{small:true}),
+        h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('funding'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
+          style:{background:'none',border:'none',padding:0,color:'#c8d0dc',fontSize:12.5,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
+          'Who funds us? Every dollar, out in the open →')),
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
         h('span',{style:{marginLeft:8}},
