@@ -194,7 +194,8 @@ const HUBS = [
   ]},
   { id:'resources', icon:'\uD83D\uDCDA', label:'Resources', subs:[
     { id:'resources', label:'Resources' },
-    { id:'funding',   label:'Who Funds Us' }
+    { id:'funding',   label:'Who Funds Us' },
+    { id:'business',  label:'For Businesses' }
   ]},
 ];
 // Build subTab → hub lookup for resolveRoute
@@ -2293,7 +2294,7 @@ const __DEEP_LINK = (function(){
     }
     if(!billId && !q) {
       const t = p.get('tab');
-      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize|funding)$/.test(t) ? {tab:t} : null;
+      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize|funding|business)$/.test(t) ? {tab:t} : null;
     }
     return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
   } catch(e) { return null; }
@@ -11464,7 +11465,7 @@ function SponsorJacket({o}) {
   const sub = o.subtitle || (o.chamber === 'senate' ? 'U.S. Senator · Michigan' : 'U.S. Rep · ' + (o.district_label || 'Michigan'));
   const T = (props, txt)=>h('text',{fontFamily:LB,textAnchor:'middle',...props}, txt);
   return h('svg',{viewBox:'0 0 380 336',width:'100%',role:'img',style:{display:'block',maxWidth:360,margin:'0 auto'},
-      'aria-label':o.name + '\'s sponsor jacket: ' + (tops.length ? tops.map(p=>filerCase(p.name) + ' ' + fmtMoney(p.amount)).join(', ') : 'no PAC patches') + '. ' + (o.band || jacketBand(o)) + '.'},
+      'aria-label':o.name + '\'s sponsor jacket: ' + (tops.length ? tops.map(p=>filerCase(p.name) + ' ' + fmtMoney(p.amount)).join(', ') : (o.emptyTitle ? o.emptyTitle.toLowerCase() : 'no PAC patches')) + '. ' + (o.band || jacketBand(o)) + '.'},
     // Jacket, collar, racing stripes
     h('path',{d:'M150 46 L95 62 L60 80 L30 290 L72 296 L82 150 L84 330 L296 330 L298 150 L308 296 L350 290 L320 80 L285 62 L230 46 Q190 70 150 46 Z',fill:JACKET_NAVY}),
     h('path',{d:'M150 46 L165 34 L215 34 L230 46 Q190 64 150 46 Z',fill:JACKET_GOLD}),
@@ -11681,18 +11682,20 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNaviga
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// WHO FUNDS US: the site's own sponsor jacket
-// We show who pays for politicians, so fair's fair: every dollar that keeps
-// The People's Voice running, every month. Ko-fi gifts count themselves (the
-// kofi-webhook server function); a full admin fills in costs, businesses and
-// in-kind gifts right here. Read by anyone; changed only by full admins.
+// WHO FUNDS US: how the site pays for itself
+// We show who pays for politicians, so fair's fair. The model: local businesses
+// sign up for useful services (For Businesses), and what they pay covers the
+// site's costs. Neighbors' donations on Ko-fi cover whatever the services
+// don't, which is most of it for now. Nobody sponsors the site: our jacket has
+// no patches. Ko-fi payments count themselves (kofi-webhook); a full admin
+// enters costs and anything paid outside Ko-fi right here.
 // ═════════════════════════════════════════════════════════════════════════════
 const FUNDING_RULES = [
-  ['Every dollar is shown here.', 'What the site costs, who paid for it, and how much: every month, for anyone to see.'],
-  ['No big backers.', 'No one person or business gives more than a quarter of a month\'s costs, so nobody can lean on the site or pull the plug.'],
-  ['Same price for everyone.', 'Businesses pay the posted price for services. No sponsorships, no special deals.'],
-  ['No money from politics.', 'Officials, candidates, campaigns, parties, PACs and lobbyists can\'t give or buy anything. They can still answer residents\' questions, free, like anyone.'],
-  ['Paying never changes what you see.', 'No featured bills, no story placement, no ranking. Businesses can buy helpful services, never attention.'],
+  ['Every dollar is shown here.', 'What the site costs and where the money came from, every month, for anyone to see.'],
+  ['No sponsors, no ads.', 'Nobody can buy a patch, a spot or a say. Businesses pay for services they use, at the posted price, like any other customer.'],
+  ['Using a service never changes what you see.', 'No featured bills, no story placement, no ranking. A business that pays for alerts sees the same site you do.'],
+  ['No money from politics.', 'Officials, candidates, campaigns, parties, PACs and lobbyists can\'t donate or sign up for services. They can still answer residents\' questions, free, like anyone.'],
+  ['No big backers.', 'No one person gives more than a quarter of a month\'s costs, so nobody can lean on the site or pull the plug.'],
 ];
 const FUNDING_COST_IDEAS = ['Database and sign-ins (Supabase)', 'AI summaries of news and bills', 'Email (digests and alerts)', 'Domain name (yearly cost ÷ 12)'];
 function monthLabel(iso) {
@@ -11705,6 +11708,7 @@ function money2(n) {
   return '$' + (Math.round(v) === v ? v.toLocaleString('en-US') : v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
 }
 const fundNum = v => { const n = Number(String(v ?? '').replace(/[^0-9.]/g,'')); return isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+const SERVICE_NAVY = '#1a1a2e';
 
 function FundingTab({profile, onToast, onNavigate}) {
   const [month, setMonth] = useState(null);       // null = this month
@@ -11723,11 +11727,16 @@ function FundingTab({profile, onToast, onNavigate}) {
   const row = (label, value, sub, key)=>h('div',{key:key||label,style:{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 0',borderTop:'1px solid #f3eee3',fontFamily:LB,fontSize:13.5}},
     h('span',{style:{color:'#333',minWidth:0}}, label, sub ? h('span',{style:{display:'block',fontSize:12,color:'#888'}}, sub) : null),
     h('strong',{style:{color:'#1a1a2e',whiteSpace:'nowrap'}}, value));
+  const toBusiness = ()=>onNavigate && onNavigate('business');
+  const linkBtn = (label, onClick)=>h('button',{className:'tpv-link',onClick,
+    style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}}, label);
 
   const intro = h('div',{style:{marginBottom:14}},
     h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Who funds The People\'s Voice'),
-    h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10}},
-      'We show who pays for politicians. Fair\'s fair: here\'s who pays for us, every dollar, every month.'));
+    h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10,marginBottom:8}},
+      'We show who pays for politicians. Fair\'s fair: here\'s who pays for us, every dollar, every month.'),
+    h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#555',lineHeight:1.6}},
+      'Local businesses can sign up for services that help them, and what they pay covers the site\'s costs. Donations from neighbors cover the rest, which, for now, is most of it.'));
 
   if(sum === undefined) return h('div',null, intro, h('div',{style:{textAlign:'center',padding:30}}, h(Spinner)));
   if(sum === null) return h('div',null, intro,
@@ -11739,11 +11748,13 @@ function FundingTab({profile, onToast, onNavigate}) {
 
   const goal = Number(sum.goal) || 0;
   const fromKofi = Number(sum.neighbors_kofi) || 0, fromOther = Number(sum.neighbors_other) || 0;
-  const neighbors = fromKofi + fromOther;
-  const businesses = (Array.isArray(sum.businesses) ? sum.businesses : []).filter(b=>b && b.name);
-  const bizTotal = Number(sum.businesses_total) || 0;
-  const raised = neighbors + bizTotal;
+  const gifts = fromKofi + fromOther;
+  const services = (Array.isArray(sum.services) ? sum.services : []).filter(s=>s && s.service);
+  const svcTotal = Number(sum.services_total) || 0;
+  const raised = gifts + svcTotal;
   const pct = goal > 0 ? Math.min(100, Math.round(100 * raised / goal)) : 0;
+  const svcPct = goal > 0 ? Math.min(100, Math.round(100 * svcTotal / goal)) : 0;
+  const giftPct = Math.max(0, pct - svcPct);
   const costs = (Array.isArray(sum.costs) ? sum.costs : []).filter(c=>c && c.label);
   const inKind = (Array.isArray(sum.in_kind) ? sum.in_kind : []).filter(x=>x && x.name);
   const wall = Array.isArray(sum.wall) ? sum.wall : [];
@@ -11751,13 +11762,14 @@ function FundingTab({profile, onToast, onNavigate}) {
   const thisMonth = !month || (months[0] && String(month).slice(0,7) === String(months[0]).slice(0,7));
   const biggest = Number(sum.biggest_single) || 0;
   const biggestPct = goal > 0 && biggest > 0 ? Math.round(100 * biggest / goal) : null;
+  const customers = services.reduce((n,s)=>n + (Number(s.customers) || 0), 0);
 
+  // Our jacket has no patches: nobody can buy one
   const jacket = {
     name:'The People\'s Voice', subtitle:'Who funds us · ' + monthLabel(sum.month),
-    top_pacs: businesses.map(b=>({name:b.name, amount:fundNum(b.amount)})),
-    from_pacs: bizTotal, status:'reported',
-    band:'Neighbors · ' + fmtMoney(neighbors),
-    emptyTitle:'No business sponsors', emptySub: neighbors > 0 ? 'Paid for by neighbors' : 'Run by volunteers',
+    top_pacs:[], from_pacs:0, status:'reported',
+    band:'Neighbors · ' + fmtMoney(gifts),
+    emptyTitle:'No sponsors', emptySub:'Nobody can buy a patch here',
   };
 
   const share = async()=>{
@@ -11775,7 +11787,7 @@ function FundingTab({profile, onToast, onNavigate}) {
         style:{background:String(sum.month)===String(m)?'#1a1a2e':'#fff',color:String(sum.month)===String(m)?'#f0c040':'#555',border:'1px solid ' + (String(sum.month)===String(m)?'#1a1a2e':'#ddd'),
           borderRadius:16,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:LB}}, monthLabel(m)))),
 
-    // ── This month's meter
+    // ── This month's meter: services first, donations fill the gap
     h('div',{style:{...card, borderLeft:'4px solid ' + KOFI_BLUE}},
       h('div',{style:{fontSize:11,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',marginBottom:4}}, monthLabel(sum.month)),
       goal > 0
@@ -11783,23 +11795,29 @@ function FundingTab({profile, onToast, onNavigate}) {
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:22,color:'#1a1a2e',lineHeight:1.2}},
               money2(raised) + ' of ' + money2(goal) + ' covered'),
             h('div',{role:'progressbar','aria-valuemin':0,'aria-valuemax':100,'aria-valuenow':pct,'aria-label':'Share of this month\'s costs covered',
-                style:{height:12,background:'#eef1f6',borderRadius:6,overflow:'hidden',margin:'10px 0 6px'}},
-              h('div',{style:{width:pct + '%',height:'100%',background:pct >= 100 ? '#1a6b3c' : KOFI_BLUE,borderRadius:6,transition:'width .4s'}})),
+                style:{display:'flex',height:12,background:'#eef1f6',borderRadius:6,overflow:'hidden',margin:'10px 0 6px'}},
+              svcPct > 0 && h('div',{style:{width:svcPct + '%',height:'100%',background:SERVICE_NAVY}}),
+              giftPct > 0 && h('div',{style:{width:giftPct + '%',height:'100%',background:pct >= 100 ? '#1a6b3c' : KOFI_BLUE}})),
+            h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',fontSize:12.5,color:'#555',fontFamily:LB,marginBottom:4}},
+              h('span',null, h('span',{style:{display:'inline-block',width:10,height:10,borderRadius:2,background:SERVICE_NAVY,marginRight:5,verticalAlign:'-1px'}}), 'Business services ' + money2(svcTotal)),
+              h('span',null, h('span',{style:{display:'inline-block',width:10,height:10,borderRadius:2,background:KOFI_BLUE,marginRight:5,verticalAlign:'-1px'}}), 'Neighbors\' donations ' + money2(gifts))),
             h('div',{style:{fontSize:13,color:'#555',fontFamily:LB}},
               pct >= 100 ? 'This month is fully covered. Thank you, neighbors.' : money2(Math.max(0, goal - raised)) + ' to go' + (thisMonth ? ' this month.' : '.'),
               Number(sum.monthly_supporters) > 0 ? ' · ' + sum.monthly_supporters + ' monthly supporter' + (Number(sum.monthly_supporters)===1?'':'s') : ''))
         : h('div',{style:{fontFamily:LB,fontSize:14,color:'#555',lineHeight:1.6}},
-            raised > 0 ? money2(raised) + ' given so far this month. ' : '', 'This month\'s costs haven\'t been posted yet.'),
+            raised > 0 ? money2(raised) + ' so far this month. ' : '', 'This month\'s costs haven\'t been posted yet.'),
       thisMonth && h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginTop:12}},
         h(KofiButton,null),
-        h('span',{style:{fontSize:12.5,color:'#777',fontFamily:LB}},'$3 a month keeps the lights on. One-time gifts help too.'))),
+        h('span',{style:{fontSize:12.5,color:'#777',fontFamily:LB}},'$3 a month keeps the lights on. One-time gifts help too.')),
+      thisMonth && h('div',{style:{marginTop:8,fontSize:13,color:'#555',fontFamily:LB}},
+        'Run a local business? ', linkBtn('See the services we offer →', toBusiness))),
 
-    // ── Our jacket
+    // ── Our jacket: bare on purpose
     h('div',{style:card},
       head('Our own sponsor jacket'),
       h(SponsorJacket,{o:jacket}),
       h('div',{style:{fontSize:12.5,color:'#777',fontFamily:LB,lineHeight:1.6,marginTop:8,textAlign:'center'}},
-        'Same rules as the politicians\' jackets: businesses get patches, the gold band is neighbors.')),
+        'No patches, and there never will be: no sponsors, no ads, no PACs. The gold band is what neighbors gave.')),
 
     // ── Where the money goes
     h('div',{style:card},
@@ -11812,19 +11830,22 @@ function FundingTab({profile, onToast, onNavigate}) {
     // ── Where it comes from
     h('div',{style:card},
       head('Where it comes from'),
-      row('Neighbors on Ko-fi', money2(fromKofi), Number(sum.payments) > 0 ? sum.payments + ' gift' + (Number(sum.payments)===1?'':'s') : null, 'nk'),
-      fromOther > 0 && row('Neighbors, other ways', money2(fromOther), 'cash, checks and the like', 'no'),
-      businesses.length
-        ? businesses.map((b,i)=>row(b.name, money2(fundNum(b.amount)), b.note || 'local business', 'b'+i))
-        : row('Businesses', '$0', 'none yet', 'b0'),
+      h('div',{style:{fontSize:12,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',margin:'2px 0 2px'}},'Business services'),
+      services.length
+        ? services.map((s,i)=>row(s.service, money2(s.amount),
+            (Number(s.customers) > 0 ? s.customers + ' business' + (Number(s.customers)===1?'':'es') : (s.status === 'soon' ? 'starting soon' : 'no customers yet')) + (s.price ? ' · ' + s.price : ''), 's'+i))
+        : row('Business services', '$0', 'starting soon', 's0'),
+      h('div',{style:{fontSize:12,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',margin:'12px 0 2px'}},'Neighbors'),
+      row('Donations on Ko-fi', money2(fromKofi), Number(sum.payments) > 0 ? sum.payments + ' gift' + (Number(sum.payments)===1?'':'s') : null, 'nk'),
+      fromOther > 0 && row('Donations, other ways', money2(fromOther), 'cash, checks and the like', 'no'),
       inKind.length > 0 && h('div',{style:{marginTop:8}},
         h('div',{style:{fontSize:12,color:'#888',fontFamily:PD,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',margin:'6px 0 2px'}},'Given in kind'),
         inKind.map((x,i)=>row(x.name, '', x.gave, 'k'+i))),
       biggestPct !== null && h('div',{style:{marginTop:10,fontSize:13,fontFamily:LB,borderRadius:6,padding:'7px 10px',
           background:biggestPct > 25 ? '#fdf0ef' : '#eef7f1',color:biggestPct > 25 ? '#a33' : '#1a4a2a'}},
-        'Biggest single gift or payment this month: ' + money2(biggest) + ', ' + biggestPct + '% of the month\'s costs. Our limit is 25%.')),
+        'Biggest single gift this month: ' + money2(biggest) + ', ' + biggestPct + '% of the month\'s costs. Our limit is 25%.')),
 
-    // ── Thank-you wall
+    // ── Thank-you wall (donors who chose to be named)
     wall.length > 0 && h('div',{style:card},
       head('Thank you'),
       wall.map((w,i)=>h('div',{key:i,style:{padding:'7px 0',borderTop:i?'1px solid #f3eee3':'none',fontFamily:LB,fontSize:13.5,color:'#333',lineHeight:1.5}},
@@ -11853,8 +11874,8 @@ function FundingTab({profile, onToast, onNavigate}) {
     sum.note && h('div',{style:{...card, background:'#faf8f3'}}, head('A note'), h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,whiteSpace:'pre-wrap'}}, sum.note)),
 
     h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.7,margin:'4px 2px 14px'}},
-      'Gifts go through Ko-fi to Justin Fairchild, the volunteer who started and runs the site, and pay for running it. ',
-      'They aren\'t tax-deductible: The People\'s Voice isn\'t a registered nonprofit.',
+      'Donations and service payments go through Ko-fi to Justin Fairchild, the volunteer who started and runs the site, and pay for running it. ',
+      'Donations aren\'t tax-deductible: The People\'s Voice isn\'t a registered nonprofit.',
       sum.updated_at ? ' Numbers last updated ' + new Date(sum.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '.' : ''),
 
     admin && h('div',{style:{...card, border:'1px solid #f0c040', background:'#fffdf5'}},
@@ -11863,16 +11884,23 @@ function FundingTab({profile, onToast, onNavigate}) {
         h('button',{onClick:()=>setEditing(!editing),style:{background:editing?'#fff':'#1a1a2e',color:editing?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}},
           editing ? 'Close' : 'Update numbers')),
       !editing && h('div',{style:{fontSize:12.5,color:'#777',fontFamily:LB,marginTop:6,lineHeight:1.6}},
-        'Ko-fi gifts count themselves once the kofi-webhook function is set up. Add costs, businesses and in-kind gifts here.'),
-      editing && h(FundingEditor,{sum, onToast, onSaved:()=>{ setEditing(false); load(month); }})));
+        'Ko-fi payments count themselves once the kofi-webhook function is set up: a service\'s membership tier counts as service income, everything else as donations. ',
+        customers > 0 ? customers + ' active business sign-up' + (customers===1?'':'s') + '. ' : '',
+        linkBtn('Manage services and sign-ups →', toBusiness)),
+      editing && h(FundingEditor,{sum, services, onToast, onSaved:()=>{ setEditing(false); load(month); }})));
 }
 
-function FundingEditor({sum, onToast, onSaved}) {
+function FundingEditor({sum, services, onToast, onSaved}) {
   const startCosts = (Array.isArray(sum.costs) && sum.costs.length ? sum.costs : FUNDING_COST_IDEAS.map(l=>({label:l, amount:''})))
     .map(c=>({label:c.label || '', amount: c.amount === '' || c.amount === undefined ? '' : String(c.amount), note:c.note || ''}));
   const [costs, setCosts] = useState(startCosts);
   const [other, setOther] = useState(String(Number(sum.neighbors_other) || ''));
-  const [biz, setBiz] = useState((Array.isArray(sum.businesses) ? sum.businesses : []).map(b=>({name:b.name||'', amount:String(b.amount ?? ''), note:b.note||''})));
+  // Service income outside Ko-fi (cash, check, invoice), one line per service
+  const [svc, setSvc] = useState(()=>{
+    const saved = {};
+    (Array.isArray(sum.services_manual) ? sum.services_manual : []).forEach(e=>{ saved[e.service] = String(e.amount); });
+    return (services || []).map(s=>({id:s.id, name:s.service, amount:saved[s.id] || ''}));
+  });
   const [kind, setKind] = useState((Array.isArray(sum.in_kind) ? sum.in_kind : []).map(x=>({name:x.name||'', gave:x.gave||''})));
   const [note, setNote] = useState(sum.note || '');
   const [saving, setSaving] = useState(false);
@@ -11887,12 +11915,12 @@ function FundingEditor({sum, onToast, onSaved}) {
 
   const save = async()=>{
     const cleanCosts = costs.filter(c=>c.label.trim() && fundNum(c.amount) > 0).map(c=>({label:c.label.trim().slice(0,80), amount:fundNum(c.amount), ...(c.note.trim() ? {note:c.note.trim().slice(0,120)} : {})}));
-    const cleanBiz = biz.filter(b=>b.name.trim()).map(b=>({name:b.name.trim().slice(0,60), amount:String(fundNum(b.amount)), ...(b.note.trim() ? {note:b.note.trim().slice(0,80)} : {})}));
+    const cleanSvc = svc.filter(s=>fundNum(s.amount) > 0).map(s=>({service:s.id, amount:String(fundNum(s.amount))}));
     const cleanKind = kind.filter(k=>k.name.trim()).map(k=>({name:k.name.trim().slice(0,60), gave:k.gave.trim().slice(0,120)}));
     setSaving(true); setErr('');
     const {error} = await sb.from('site_funding').upsert({
       month:String(sum.month).slice(0,10), goal:cleanCosts.reduce((n,c)=>n + c.amount, 0), costs:cleanCosts,
-      other_neighbors:fundNum(other), businesses:cleanBiz, in_kind:cleanKind, note:note.trim().slice(0,600) || null,
+      other_neighbors:fundNum(other), services:cleanSvc, in_kind:cleanKind, note:note.trim().slice(0,600) || null,
     }, {onConflict:'month'});
     setSaving(false);
     if(error) { setErr(error.message || 'Couldn\'t save.'); return; }
@@ -11909,17 +11937,15 @@ function FundingEditor({sum, onToast, onSaved}) {
     add('+ Add a cost', ()=>setCosts([...costs, {label:'', amount:'', note:''}])),
     h('div',{style:{fontSize:13,color:'#1a1a2e',marginTop:6}}, 'Monthly total (the goal): ', h('strong',null, money2(total)), h('span',{style:{color:'#999',fontSize:12}},' · lines left at $0 aren\'t shown')),
 
-    label('Neighbors outside Ko-fi (cash, checks)'),
-    inp(other, setOther, '$0', {width:120}),
+    svc.length > 0 && h(Fragment,null,
+      label('Service income paid outside Ko-fi (cash, check, invoice)'),
+      svc.map((s,i)=>h('div',{key:s.id,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center'}},
+        h('span',{style:{flex:'1 1 auto',fontSize:14,color:'#333'}}, s.name),
+        inp(s.amount, v=>set(svc, setSvc, i, 'amount', v), '$', {width:84,flex:'0 0 84px'}))),
+      h('div',{style:{fontSize:12,color:'#999',marginTop:2}},'Payments through a service\'s Ko-fi tier count on their own; don\'t add those here.')),
 
-    label('Businesses this month'),
-    biz.map((b,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center',flexWrap:'wrap'}},
-      inp(b.name, v=>set(biz, setBiz, i, 'name', v), 'Business name', {flex:'1 1 140px'}),
-      inp(b.amount, v=>set(biz, setBiz, i, 'amount', v), '$', {width:84,flex:'0 0 84px'}),
-      inp(b.note, v=>set(biz, setBiz, i, 'note', v), 'What for (e.g. Watch alerts)', {flex:'1 1 160px'}),
-      x(()=>setBiz(biz.filter((_,j)=>j!==i))))),
-    add('+ Add a business', ()=>setBiz([...biz, {name:'', amount:'', note:''}])),
-    h('div',{style:{fontSize:12,color:'#999',marginTop:4}},'Remember the rules: no officials, candidates, campaigns, PACs or lobbyists; posted prices only; and nobody over a quarter of the month.'),
+    label('Donations outside Ko-fi (cash, checks)'),
+    inp(other, setOther, '$0', {width:120}),
 
     label('Given in kind'),
     kind.map((k,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'center',flexWrap:'wrap'}},
@@ -11935,6 +11961,225 @@ function FundingEditor({sum, onToast, onSaved}) {
     err && h('div',{style:{color:'#c0392b',fontSize:13,marginTop:8}}, '❌ ' + err),
     h('button',{onClick:save,disabled:saving,style:{marginTop:12,background:saving?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:saving?'default':'pointer'}},
       saving ? 'Saving...' : 'Save ' + monthLabel(sum.month)));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FOR BUSINESSES: services local businesses can sign up for
+// What businesses pay covers the site's costs. A service never changes what
+// anyone sees on the site. Politicians, campaigns, parties, PACs and lobbyists
+// can't sign up. Full admins edit the menu (name, price, Ko-fi link, status)
+// and see sign-ups right on this page.
+// ═════════════════════════════════════════════════════════════════════════════
+const SIGNUP_STATUS = {new:['New','#8a6000','#fff8e7'], active:['Active','#1a6b3c','#eef7f1'], paused:['Paused','#666','#f2f2f2'], canceled:['Canceled','#a33','#fdf0ef']};
+
+function BusinessServicesTab({profile, user, onToast, onNavigate}) {
+  const [list, setList] = useState(undefined);     // undefined loading, null not set up
+  const [picked, setPicked] = useState({});
+  const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', notes:'', notPolitical:false});
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(null);           // list of picked services after a sign-up
+  const [err, setErr] = useState('');
+  const formRef = useRef(null);
+  const admin = isFullAdmin(profile);
+  const load = async()=>{
+    const {data, error} = await sb.from('business_services').select('*').order('sort',{ascending:true});
+    setList(error ? null : (data || []));
+  };
+  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    if(user && !form.email) setForm(f=>({...f, email:user.email || '', contact:(profile && profile.display_name) || f.contact}));
+  },[user && user.id]);
+
+  const shown = (list || []).filter(s=>s.status !== 'hidden');
+  const set = (k, v)=>setForm(f=>({...f, [k]:v}));
+  const choose = id=>{
+    setPicked(p=>({...p, [id]:true})); setDone(null);
+    setTimeout(()=>{ try { formRef.current && formRef.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 50);
+  };
+  const submit = async()=>{
+    const services = Object.keys(picked).filter(k=>picked[k]);
+    setErr('');
+    if(!form.business.trim()) { setErr('Please enter your business name.'); return; }
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) { setErr('Please enter an email address we can reach you at.'); return; }
+    if(!services.length) { setErr('Pick at least one service.'); return; }
+    if(!form.notPolitical) { setErr('Please confirm this business isn\'t a campaign, party, PAC or lobbying firm.'); return; }
+    setSending(true);
+    const {data, error} = await sb.rpc('tpv_business_signup', {p_business:form.business, p_contact:form.contact, p_email:form.email, p_phone:form.phone,
+      p_county:form.county, p_services:services, p_watch_for:picked.watch ? form.watchFor : null, p_notes:form.notes, p_not_political:form.notPolitical});
+    setSending(false);
+    if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
+    setDone(shown.filter(s=>services.includes(s.id)));
+    setPicked({});
+    onToast && onToast(data === 'already' ? 'We already have your sign-up. Thank you!' : '✓ Thanks! We\'ll be in touch soon.');
+  };
+
+  const card = {background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'16px 18px',marginBottom:14};
+  const field = (label, k, ph, extra)=>h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
+    h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}}, label),
+    h('input',Object.assign({value:form[k], onChange:e=>set(k, e.target.value), placeholder:ph,
+      style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB}}, extra||{})));
+  const pill = s=>s.status === 'available'
+    ? h('span',{style:{background:'#eef7f1',color:'#1a6b3c',fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:12}},'Available now')
+    : s.status === 'soon' ? h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:12}},'Starting soon')
+    : h('span',{style:{background:'#f2f2f2',color:'#777',fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:12}},'Hidden (admins only)');
+  const counties = Object.values(COUNTIES).slice().sort((a,b)=>a.name.localeCompare(b.name));
+
+  return h('div',null,
+    h('div',{style:{marginBottom:14}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Services for local businesses'),
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',lineHeight:1.6}},
+        'Tools that save you time keeping up with local government. What businesses pay for them covers the cost of running The People\'s Voice, so it stays free for everyone.'),
+      h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6,marginTop:8,background:'#faf8f3',borderRadius:8,padding:'9px 12px'}},
+        h('strong',{style:{color:'#1a1a2e'}},'What you\'re buying is the service, nothing else. '),
+        'No ads, no sponsorships, no say in what the site shows. Everyone pays the same posted price. ',
+        h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
+          style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
+
+    list === undefined && h('div',{style:{textAlign:'center',padding:30}}, h(Spinner)),
+    list === null && h('div',{style:card},
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#555',lineHeight:1.6}},'Business services are coming soon. Email hello@thepeoplesvoices.org to be first in line.'),
+      admin && h('div',{style:{marginTop:10,fontSize:12.5,color:'#8a6000',fontFamily:LB}},'Admins: run tpv_funding.sql in Supabase to turn on this page.')),
+
+    // ── The menu
+    shown.map(s=>h('div',{key:s.id,style:{...card, borderLeft:'4px solid ' + (s.status === 'available' ? '#1a6b3c' : '#f0c040')}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',gap:10,alignItems:'baseline',flexWrap:'wrap',marginBottom:6}},
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e'}}, s.name),
+        h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e'}}, s.price_label)),
+      h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}}, s.blurb),
+      h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
+        pill(s),
+        h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+          s.status === 'available' ? 'Sign up' : 'Sign up early')))),
+
+    // ── Sign-up form
+    Array.isArray(list) && shown.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
+      done
+        ? h('div',{style:{fontFamily:LB}},
+            h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
+            h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},
+              'We\'ll email you within a couple of days to get you set up. You don\'t pay anything until your service starts, and you can cancel any time.'),
+            done.filter(s=>s.status === 'available' && s.pay_url).map(s=>h('a',{key:s.id,href:s.pay_url,target:'_blank',rel:'noopener',
+              style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
+              'Start ' + s.name + ' now →')),
+            h('button',{onClick:()=>setDone(null),style:{display:'block',marginTop:6,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Sign up another business'))
+        : h('div',null,
+            h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Sign up'),
+            h('div',{style:{fontFamily:LB,fontSize:13,color:'#777',marginBottom:12}},'No payment today. We\'ll reach out to set things up, and you pay only once your service starts.'),
+            h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:LB}},'Which services?'),
+            h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:12}},
+              shown.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer'}},
+                h('input',{type:'checkbox',checked:!!picked[s.id],onChange:e=>setPicked(p=>({...p, [s.id]:e.target.checked})),style:{width:18,height:18}}),
+                s.name, h('span',{style:{color:'#888',fontSize:12.5}}, ' · ' + s.price_label)))),
+            field('Business name *', 'business', 'Grass Lake Hardware'),
+            field('Your name', 'contact', 'Who should we ask for?'),
+            field('Email *', 'email', 'you@yourbusiness.com', {type:'email', autoComplete:'email'}),
+            field('Phone (optional)', 'phone', '517-555-0100', {type:'tel', autoComplete:'tel'}),
+            h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
+              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'County'),
+              h('select',{value:form.county,onChange:e=>set('county', e.target.value),
+                  style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,fontFamily:LB,background:'#fff'}},
+                counties.map(c=>h('option',{key:c.id,value:c.id}, c.name)))),
+            picked.watch && h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
+              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'What should we watch for?'),
+              h('textarea',{value:form.watchFor,onChange:e=>set('watchFor', e.target.value),rows:3,
+                placeholder:'Your street, your line of work, licenses or permits you hold, zoning near you, road work...',
+                style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB,resize:'vertical'}})),
+            h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
+              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'Anything else? (optional)'),
+              h('textarea',{value:form.notes,onChange:e=>set('notes', e.target.value),rows:2,
+                style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB,resize:'vertical'}})),
+            h('label',{style:{display:'flex',gap:8,alignItems:'flex-start',fontFamily:LB,fontSize:13.5,color:'#333',margin:'4px 0 12px',cursor:'pointer',lineHeight:1.5}},
+              h('input',{type:'checkbox',checked:form.notPolitical,onChange:e=>set('notPolitical', e.target.checked),style:{width:18,height:18,marginTop:2,flexShrink:0}}),
+              'This business isn\'t a political campaign, party, PAC or lobbying firm. (They can\'t sign up, to keep the site independent.)'),
+            err && h('div',{style:{color:'#c0392b',fontSize:13,fontFamily:LB,marginBottom:8}}, '❌ ' + err),
+            h('button',{onClick:submit,disabled:sending,style:{background:sending?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'11px 20px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:sending?'default':'pointer'}},
+              sending ? 'Sending...' : 'Sign up'))),
+
+    admin && Array.isArray(list) && h(BusinessAdmin,{list, onToast, onChanged:load}));
+}
+
+function BusinessAdmin({list, onToast, onChanged}) {
+  const [signups, setSignups] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
+  const [drafts, setDrafts] = useState(()=>list.map(s=>({...s})));
+  const [saving, setSaving] = useState(null);
+  const loadSignups = async()=>{
+    const {data, error} = await sb.from('business_signups').select('*').order('created_at',{ascending:false}).limit(200);
+    setSignups(error ? [] : (data || []));
+  };
+  useEffect(()=>{ loadSignups(); },[]);
+  useEffect(()=>{ setDrafts(list.map(s=>({...s}))); },[list]);
+  const names = Object.fromEntries(list.map(s=>[s.id, s.name]));
+  const setStatus = async(row, status)=>{
+    const {error} = await sb.from('business_signups').update({status, updated_at:new Date().toISOString()}).eq('id', row.id);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    setSignups(prev=>prev.map(r=>r.id===row.id ? {...r, status} : r));
+    onToast && onToast('✓ ' + row.business_name + ' is now ' + SIGNUP_STATUS[status][0].toLowerCase());
+  };
+  const setDraft = (i, k, v)=>setDrafts(prev=>prev.map((d,j)=>j===i ? {...d, [k]:v} : d));
+  const saveService = async(d, i)=>{
+    if(!d.name.trim()) { onToast && onToast('Give the service a name.'); return; }
+    const id = d.id || d.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30) || ('service-' + Date.now());
+    setSaving(i);
+    const {error} = await sb.from('business_services').upsert({id, name:d.name.trim().slice(0,60), blurb:(d.blurb||'').trim().slice(0,600),
+      price_label:(d.price_label||'').trim().slice(0,40), kofi_tier:(d.kofi_tier||'').trim().slice(0,60) || null, pay_url:(d.pay_url||'').trim().slice(0,300) || null,
+      status:d.status || 'soon', sort:Number(d.sort) || (i + 1), updated_at:new Date().toISOString()}, {onConflict:'id'});
+    setSaving(null);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast('✓ Saved ' + d.name);
+    onChanged && onChanged();
+  };
+  const card = {background:'#fffdf5',border:'1px solid #f0c040',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
+  const inp = (value, onChange, ph, extra)=>h('input',{value:value||'', onChange:e=>onChange(e.target.value), placeholder:ph,
+    style:Object.assign({width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginBottom:6}, extra||{})});
+  const fresh = (signups || []).filter(r=>r.status === 'new').length;
+
+  return h('div',null,
+    h('div',{style:card},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:8}},
+        '💼 Admin: sign-ups', fresh ? h('span',{style:{marginLeft:8,background:'#c0392b',color:'#fff',fontSize:11,padding:'2px 8px',borderRadius:10}}, fresh + ' new') : null),
+      signups === null ? h(Spinner)
+      : !signups.length ? h('div',{style:{fontSize:13,color:'#888'}},'No sign-ups yet. Share this page with a business or two you know.')
+      : signups.map(r=>{
+          const st = SIGNUP_STATUS[r.status] || SIGNUP_STATUS.new;
+          return h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'10px 0',fontSize:13.5,color:'#333',lineHeight:1.55}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'baseline'}},
+              h('strong',{style:{color:'#1a1a2e',fontSize:14.5}}, r.business_name),
+              h('span',{style:{background:st[2],color:st[1],fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10}}, st[0])),
+            h('div',null, (r.services || []).map(id=>names[id] || id).join(', '),
+              r.county ? ' · ' + ((COUNTIES[r.county] && COUNTIES[r.county].name) || r.county) : '',
+              ' · signed up ' + new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+            h('div',null, r.contact_name ? r.contact_name + ' · ' : '',
+              h('a',{href:'mailto:' + r.email + '?subject=' + encodeURIComponent('Your ' + ((r.services||[]).map(id=>names[id]||id).join(' & ')) + ' sign-up'),style:{color:'#1a5c8a'}}, r.email),
+              r.phone ? h(Fragment,null,' · ', h('a',{href:'tel:' + r.phone.replace(/[^0-9+]/g,''),style:{color:'#1a5c8a'}}, r.phone)) : null),
+            r.watch_for && h('div',{style:{color:'#555'}}, h('em',null,'Watch for: '), r.watch_for),
+            r.notes && h('div',{style:{color:'#555'}}, h('em',null,'Note: '), r.notes),
+            h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}},
+              Object.keys(SIGNUP_STATUS).filter(s=>s !== r.status).map(s=>h('button',{key:s,onClick:()=>setStatus(r, s),
+                style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#333'}}, 'Mark ' + SIGNUP_STATUS[s][0].toLowerCase()))));
+        }),
+      h('div',{style:{fontSize:12,color:'#888',marginTop:8,lineHeight:1.5}},'Mark a business active once it\'s paying. Active businesses are counted (as a number, never by name) on the Who Funds Us page.')),
+
+    h('div',{style:card},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e'}},'✏️ Admin: the services menu'),
+        h('button',{onClick:()=>setShowMenu(!showMenu),style:{background:showMenu?'#fff':'#1a1a2e',color:showMenu?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer'}},
+          showMenu ? 'Close' : 'Edit services')),
+      showMenu && h('div',{style:{marginTop:10}},
+        drafts.map((d,i)=>h('div',{key:d.id || ('new'+i),style:{borderTop:'1px solid #efe6cf',padding:'10px 0'}},
+          inp(d.name, v=>setDraft(i,'name',v), 'Service name'),
+          inp(d.price_label, v=>setDraft(i,'price_label',v), 'Price, as shown ("$12 a month")'),
+          h('textarea',{value:d.blurb||'',onChange:e=>setDraft(i,'blurb',e.target.value),rows:3,placeholder:'What it does, in plain words',
+            style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginBottom:6,resize:'vertical'}}),
+          inp(d.kofi_tier, v=>setDraft(i,'kofi_tier',v), 'Ko-fi membership tier name (so payments count as this service)'),
+          inp(d.pay_url, v=>setDraft(i,'pay_url',v), 'Payment link (the Ko-fi tier page)'),
+          h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+            h('select',{value:d.status||'soon',onChange:e=>setDraft(i,'status',e.target.value),style:{border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,background:'#fff'}},
+              h('option',{value:'available'},'Available now'), h('option',{value:'soon'},'Starting soon'), h('option',{value:'hidden'},'Hidden')),
+            h('button',{onClick:()=>saveService(d, i),disabled:saving===i,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',fontSize:13,cursor:'pointer',fontFamily:PD,fontWeight:700}},
+              saving===i ? 'Saving...' : 'Save')))),
+        h('button',{onClick:()=>setDrafts(prev=>[...prev, {id:'', name:'', blurb:'', price_label:'', kofi_tier:'', pay_url:'', status:'soon', sort:prev.length + 1}]),
+          style:{background:'#fff',border:'1px dashed #c8bfa8',borderRadius:6,padding:'6px 12px',fontSize:12.5,color:'#555',cursor:'pointer',marginTop:6}},'+ Add a service'))));
 }
 
 function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
@@ -18384,6 +18629,7 @@ const NOTIF_TYPES = {
   report:            {icon:'🚩', label:'New report', color:'#c0392b'},
   new_member:        {icon:'👋', label:'New neighbor', color:'#1a6b3c'},
   support:           {icon:'☕', label:'Ko-fi support', color:'#2f6db5'},
+  business:          {icon:'💼', label:'Business sign-up', color:'#1a1a2e'},
   guestbook:         {icon:'✍️', label:'Guestbook note', color:'#9b3f86'},
   organize:          {icon:'📣', label:'Organize It', color:'#8a6000'},
   admin_queue:       {icon:'📥', label:'Waiting for an admin', color:'#8a6000'},
@@ -19522,6 +19768,7 @@ function App() {
       // Resources tab
       mainTab==='resources'&&h(ResourcesTab,{user:{...user,reputation:rep},profile,onToast:setToast,isAdmin}),
       mainTab==='funding'&&h(FundingTab,{profile,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
+      mainTab==='business'&&h(BusinessServicesTab,{profile,user,onToast:setToast,onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       // Reps tab
       mainTab==='reps'&&h(Fragment,null,
@@ -19556,7 +19803,10 @@ function App() {
         h(KofiButton,{small:true}),
         h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('funding'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
           style:{background:'none',border:'none',padding:0,color:'#c8d0dc',fontSize:12.5,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
-          'Who funds us? Every dollar, out in the open →')),
+          'Who funds us? Every dollar, out in the open →'),
+        h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('business'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
+          style:{background:'none',border:'none',padding:0,color:'#c8d0dc',fontSize:12.5,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
+          'Services for local businesses →')),
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
         h('span',{style:{marginLeft:8}},
