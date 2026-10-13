@@ -4,14 +4,12 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>The People's Voice — your local government, in plain language</title>
-<meta name="description" content="See what your city council, township board and county are deciding, weigh in, and find out whether officials listened. Free, nonpartisan, run by neighbors in Jackson, Calhoun and Washtenaw counties, Michigan."/>
+<meta name="description" content="See what your city council, township board and county are deciding, weigh in, and find out whether officials listened. Free, nonpartisan, run by neighbors in all 83 Michigan counties."/>
 <meta name="theme-color" content="#1a1a2e"/>
-<link rel="canonical" href="https://thepeoplesvoices.org/"/>
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="The People's Voice"/>
 <meta property="og:title" content="The People's Voice — your local government, in plain language"/>
 <meta property="og:description" content="See what's being decided near you, weigh in, and find out whether officials listened. Free and nonpartisan."/>
-<meta property="og:url" content="https://thepeoplesvoices.org/"/>
 <meta property="og:image" content="https://thepeoplesvoices.org/og-image.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
@@ -105,6 +103,14 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
     // works even where storage is blocked. The #token stays on the end.
     const route = new URLSearchParams(window.location.search).get('__route');
     if(route && route.charAt(0) === '/' && route.charAt(1) !== '/') stored = route + window.location.hash;
+    // A shared link (/?c=jackson&bill=12) opens exactly like /jackson?bill=12
+    const sp = new URLSearchParams(window.location.search);
+    const c = (sp.get('c') || '').toLowerCase();
+    if(!stored && c && /^[a-z][a-z-]{1,24}$/.test(c) && /^\/(index\.html)?$/.test(window.location.pathname)) {
+      sp.delete('c');
+      const rest = sp.toString();
+      stored = '/' + c + (rest ? '?' + rest : '') + window.location.hash;
+    }
     if(stored) window.history.replaceState({}, '', stored);
   } catch(e) {}
 })();
@@ -469,10 +475,10 @@ const JACKSON_JURISDICTIONS = [
 ];
 
 // Build a URL for a given county slug
+// A county's link for sharing and inviting (see shareLink: it previews properly)
 function countyUrl(slug, path) {
-  const origin = (typeof window !== 'undefined' ? window.location.origin : '');
-  const p = path && path !== '/' ? path : '';
-  return origin + '/' + slug + p;
+  if(path && path !== '/') return (typeof window !== 'undefined' ? window.location.origin : SITE_URL) + '/' + slug + path;
+  return shareLink(slug);
 }
 
 const ZIP_COMMUNITY = {
@@ -2220,13 +2226,21 @@ function firstSentence(t) {
 function hasUpcomingDecision(b) {
   return !!(b && b.next_meeting_at && !b.outcome && new Date(b.next_meeting_at).getTime() > Date.now() - 3*3600000);
 }
+// ── Links people share ──────────────────────────────────────────────────────
+// GitHub Pages answers an address like /jackson with a "page not found"
+// status (our 404 page then opens the app), so Facebook refuses to preview it
+// and text messages show "Page not found". Shared links point at the front
+// page instead (/?c=jackson&bill=…), which is a real page; the app turns it
+// back into /jackson?bill=… the moment it opens.
+function shareLink(county, query) {
+  const origin = (typeof window !== 'undefined' && /^https?:/.test(window.location.origin || '') ? window.location.origin : SITE_URL);
+  return origin + '/?c=' + encodeURIComponent(county || countyTag()) + (query ? '&' + query : '');
+}
 function billLink(bill) {
-  const origin = (typeof window !== 'undefined' ? window.location.origin : SITE_URL);
-  return origin + '/' + (bill.county || countyTag()) + '?bill=' + encodeURIComponent(bill.id);
+  return shareLink(bill.county || countyTag(), 'bill=' + encodeURIComponent(bill.id));
 }
 function questionLink(id) {
-  const origin = (typeof window !== 'undefined' ? window.location.origin : SITE_URL);
-  return origin + '/' + countyTag() + '?q=' + id;
+  return shareLink(countyTag(), 'q=' + id);
 }
 function memberSupport(b) {
   const total = (b.votes_yes||0) + (b.votes_no||0);
@@ -2262,7 +2276,10 @@ const __DEEP_LINK = (function(){
       const m = (window.location.hash||'').match(/^#bill\/(.+)$/);
       if(m) billId = decodeURIComponent(m[1]);
     }
-    if(!billId && !q) return null;
+    if(!billId && !q) {
+      const t = p.get('tab');
+      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize)$/.test(t) ? {tab:t} : null;
+    }
     return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
   } catch(e) { return null; }
 })();
@@ -2272,7 +2289,7 @@ function takeDeepLink() {
   __deepLinkUsed = true;
   try {
     const p = new URLSearchParams(window.location.search);
-    ['bill','act','q','u','o','j'].forEach(k=>p.delete(k));
+    ['bill','act','q','u','o','j','tab'].forEach(k=>p.delete(k));
     const rest = p.toString();
     const hash = /^#bill\//.test(window.location.hash||'') ? '' : (window.location.hash||'');
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : '') + hash);
@@ -3485,8 +3502,10 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         h('button',{
           onClick:()=>{
             const url=billLink(bill);
-            if(navigator.share) navigator.share({title:bill.title,url}).catch(()=>{});
-            else { navigator.clipboard&&navigator.clipboard.writeText(url); setToast('Link copied.'); }
+            // The bill's name rides along in the message, since link previews only show the site's card
+            const text='"'+bill.title+'" · see what neighbors think and weigh in on The People\'s Voice:';
+            if(navigator.share) navigator.share({title:bill.title,text,url}).catch(()=>{});
+            else { navigator.clipboard&&navigator.clipboard.writeText(text+' '+url); setToast('Link copied.'); }
           },
           style:{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,color:'#8899aa',textDecoration:'none',
             background:'transparent',border:'1px solid #e5dece',borderRadius:5,padding:'4px 10px',fontFamily:"'Lora',serif",cursor:'pointer'}
@@ -4482,7 +4501,7 @@ function fmtEffortWhen(e) {
   const d = new Date(e.starts_at);
   return d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}) + ' · ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
 }
-function effortLink(id) { return SITE_URL + '/' + countyTag() + '?o=' + id; }
+function effortLink(id) { return shareLink(countyTag(), 'o=' + id); }
 function toLocalDT(iso) {
   if(!iso) return '';
   const d = new Date(iso);
@@ -8376,7 +8395,7 @@ async function uploadProfileImage(userId, file, kind, maxDim) {
   const {data:{publicUrl}} = sb.storage.from('chat-photos').getPublicUrl(path);
   return publicUrl;
 }
-function profileLink(id, county) { return SITE_URL + '/' + (county || countyTag()) + '?u=' + encodeURIComponent(id); }
+function profileLink(id, county) { return shareLink(county || countyTag(), 'u=' + encodeURIComponent(id)); }
 function songSource(u) {
   const s = String(u||'').toLowerCase();
   if(s.includes('spotify')) return 'Spotify';
@@ -11484,7 +11503,7 @@ function JacketCard({o, profile, highlight, onToast, onChanged}) {
   const otherRace = o.fec_office && ((o.chamber === 'senate') !== (o.fec_office === 'S'));
   const pill = {fontSize:11.5,padding:'2px 9px',borderRadius:10,border:'1px solid #d8d2c4',background:'#faf8f3',color:'#444',whiteSpace:'nowrap'};
   const share = async()=>{
-    const url = countyUrl(getCurrentCounty().slug) + '?j=' + encodeURIComponent(o.id);
+    const url = shareLink(getCurrentCounty().slug, 'j=' + encodeURIComponent(o.id));
     const text = o.name + '\'s sponsor jacket: who funds their campaign, straight from federal filings.';
     if(navigator.share) { try { await navigator.share({title:'Sponsor Jackets · The People\'s Voice', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
@@ -12874,7 +12893,7 @@ function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin})
 
   const shareEvent = ()=>{
     const text = `📅 ${event.title}\n${new Date(event.event_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}${event.event_time?' at '+event.event_time:''}\n📍 ${event.location}\n\nJackson County community event on The People's Voice`;
-    const url = SITE_URL+'?tab=events';
+    const url = shareLink(countyTag(), 'tab=events');
     if(navigator.share) {
       navigator.share({title:event.title,text,url}).catch(()=>{});
     } else {
@@ -18432,6 +18451,7 @@ function App() {
     else if(dl.jacketId) { setFeedNavCtx({tab:'jackets',jacketId:dl.jacketId}); setMainTab('jackets'); }
     else if(dl.questionId) { setFeedNavCtx({tab:'ask',questionId:dl.questionId}); setMainTab('ask'); }
     else if(dl.billId) { setFeedNavCtx({billId:String(dl.billId),act:dl.act}); setMainTab('bills'); }
+    else if(dl.tab) { setMainTab(dl.tab); }
   },[loading, user?.id, guestMode, bills.length]);
 
   useEffect(()=>{
