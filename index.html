@@ -11967,34 +11967,62 @@ function FundingEditor({sum, services, onToast, onSaved}) {
 // FOR BUSINESSES: services local businesses can sign up for
 // What businesses pay covers the site's costs. A service never changes what
 // anyone sees on the site. Politicians, campaigns, parties, PACs and lobbyists
-// can't sign up. Full admins edit the menu (name, price, Ko-fi link, status)
-// and see sign-ups right on this page.
+// can't sign up. The business-services server function does the work:
+// Watch alerts (daily heads-ups, Monday roundups), the Bid & grant finder
+// (Mondays) and rule explainers (AI drafts, a full admin looks it over and
+// sends). Businesses manage their own watch words under "Your services".
 // ═════════════════════════════════════════════════════════════════════════════
 const SIGNUP_STATUS = {new:['New','#8a6000','#fff8e7'], active:['Active','#1a6b3c','#eef7f1'], paused:['Paused','#666','#f2f2f2'], canceled:['Canceled','#a33','#fdf0ef']};
+const BIZ_KIND_LABEL = {watch:'Watch heads-up', roundup:'Weekly roundup', bids:'Bids & grants', explainer:'Rule explainer'};
+const bizLabel = t=>h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}}, t);
+const bizInput = {width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB};
+const shortDate = d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+async function bizFn(body) {
+  const {data, error} = await sb.functions.invoke('business-services', {body});
+  if(error) {
+    const st = error.context && error.context.status;
+    if(st === 404) return {error:'The business-services server function isn\'t deployed yet.'};
+    let msg = error.message || 'Something went wrong.';
+    try { const j = error.context && error.context.json ? await error.context.json() : null; if(j && j.error) msg = j.error; } catch(e) {}
+    return {error:msg};
+  }
+  return data || {};
+}
 
 function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [list, setList] = useState(undefined);     // undefined loading, null not set up
   const [picked, setPicked] = useState({});
-  const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', notes:'', notPolitical:false});
+  const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', trade:'', notes:'', notPolitical:false});
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);           // list of picked services after a sign-up
   const [err, setErr] = useState('');
-  const formRef = useRef(null);
+  const [mine, setMine] = useState([]);             // the signed-in business's own sign-ups
+  const [showExplain, setShowExplain] = useState(false);
+  const formRef = useRef(null), explainRef = useRef(null);
   const admin = isFullAdmin(profile);
   const load = async()=>{
     const {data, error} = await sb.from('business_services').select('*').order('sort',{ascending:true});
     setList(error ? null : (data || []));
   };
+  const loadMine = async()=>{
+    if(!user) { setMine([]); return; }
+    const {data, error} = await sb.rpc('tpv_my_business');
+    setMine(!error && Array.isArray(data) ? data : []);
+  };
   useEffect(()=>{ load(); },[]);
+  useEffect(()=>{ loadMine(); },[user && user.id]);
   useEffect(()=>{
     if(user && !form.email) setForm(f=>({...f, email:user.email || '', contact:(profile && profile.display_name) || f.contact}));
   },[user && user.id]);
 
   const shown = (list || []).filter(s=>s.status !== 'hidden');
+  const signupServices = shown.filter(s=>s.id !== 'explainer');
+  const explainer = shown.find(s=>s.id === 'explainer');
   const set = (k, v)=>setForm(f=>({...f, [k]:v}));
+  const scrollTo = ref=>setTimeout(()=>{ try { ref.current && ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 60);
   const choose = id=>{
-    setPicked(p=>({...p, [id]:true})); setDone(null);
-    setTimeout(()=>{ try { formRef.current && formRef.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 50);
+    if(id === 'explainer') { setShowExplain(true); scrollTo(explainRef); return; }
+    setPicked(p=>({...p, [id]:true})); setDone(null); scrollTo(formRef);
   };
   const submit = async()=>{
     const services = Object.keys(picked).filter(k=>picked[k]);
@@ -12005,19 +12033,21 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     if(!form.notPolitical) { setErr('Please confirm this business isn\'t a campaign, party, PAC or lobbying firm.'); return; }
     setSending(true);
     const {data, error} = await sb.rpc('tpv_business_signup', {p_business:form.business, p_contact:form.contact, p_email:form.email, p_phone:form.phone,
-      p_county:form.county, p_services:services, p_watch_for:picked.watch ? form.watchFor : null, p_notes:form.notes, p_not_political:form.notPolitical});
+      p_county:form.county, p_services:services, p_watch_for:picked.watch ? form.watchFor : null, p_notes:form.notes, p_not_political:form.notPolitical,
+      p_trade:picked.bids ? form.trade : null});
     setSending(false);
     if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
     setDone(shown.filter(s=>services.includes(s.id)));
     setPicked({});
+    loadMine();
     onToast && onToast(data === 'already' ? 'We already have your sign-up. Thank you!' : '✓ Thanks! We\'ll be in touch soon.');
   };
 
   const card = {background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'16px 18px',marginBottom:14};
   const field = (label, k, ph, extra)=>h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
-    h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}}, label),
-    h('input',Object.assign({value:form[k], onChange:e=>set(k, e.target.value), placeholder:ph,
-      style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB}}, extra||{})));
+    bizLabel(label), h('input',Object.assign({value:form[k], onChange:e=>set(k, e.target.value), placeholder:ph, style:bizInput}, extra||{})));
+  const area = (label, k, ph, rows)=>h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
+    bizLabel(label), h('textarea',{value:form[k],onChange:e=>set(k, e.target.value),rows:rows||3,placeholder:ph,style:{...bizInput,resize:'vertical'}}));
   const pill = s=>s.status === 'available'
     ? h('span',{style:{background:'#eef7f1',color:'#1a6b3c',fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:12}},'Available now')
     : s.status === 'soon' ? h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:12}},'Starting soon')
@@ -12035,10 +12065,13 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
           style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
 
+    // ── The business's own services, when signed in with the email they used
+    mine.length > 0 && h(MyBusinessPanel,{mine, onToast, onChanged:loadMine, onExplain:()=>{ setShowExplain(true); scrollTo(explainRef); }}),
+
     list === undefined && h('div',{style:{textAlign:'center',padding:30}}, h(Spinner)),
     list === null && h('div',{style:card},
       h('div',{style:{fontFamily:LB,fontSize:14,color:'#555',lineHeight:1.6}},'Business services are coming soon. Email hello@thepeoplesvoices.org to be first in line.'),
-      admin && h('div',{style:{marginTop:10,fontSize:12.5,color:'#8a6000',fontFamily:LB}},'Admins: run tpv_funding.sql in Supabase to turn on this page.')),
+      admin && h('div',{style:{marginTop:10,fontSize:12.5,color:'#8a6000',fontFamily:LB}},'Admins: run tpv_funding.sql and tpv_business_services.sql in Supabase to turn on this page.')),
 
     // ── The menu
     shown.map(s=>h('div',{key:s.id,style:{...card, borderLeft:'4px solid ' + (s.status === 'available' ? '#1a6b3c' : '#f0c040')}},
@@ -12049,15 +12082,16 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         pill(s),
         h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
-          s.status === 'available' ? 'Sign up' : 'Sign up early')))),
+          s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early')))),
 
-    // ── Sign-up form
-    Array.isArray(list) && shown.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
+    // ── Sign-up form (ongoing services)
+    Array.isArray(list) && signupServices.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
       done
         ? h('div',{style:{fontFamily:LB}},
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
             h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},
-              'We\'ll email you within a couple of days to get you set up. You don\'t pay anything until your service starts, and you can cancel any time.'),
+              'We\'ll email you within a couple of days to get you set up. You don\'t pay anything until your service starts, and you can cancel any time. ',
+              'Sign in here with the same email any time to see your alerts and change what we watch for.'),
             done.filter(s=>s.status === 'available' && s.pay_url).map(s=>h('a',{key:s.id,href:s.pay_url,target:'_blank',rel:'noopener',
               style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
               'Start ' + s.name + ' now →')),
@@ -12065,9 +12099,9 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         : h('div',null,
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Sign up'),
             h('div',{style:{fontFamily:LB,fontSize:13,color:'#777',marginBottom:12}},'No payment today. We\'ll reach out to set things up, and you pay only once your service starts.'),
-            h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:LB}},'Which services?'),
+            bizLabel('Which services?'),
             h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:12}},
-              shown.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer'}},
+              signupServices.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer'}},
                 h('input',{type:'checkbox',checked:!!picked[s.id],onChange:e=>setPicked(p=>({...p, [s.id]:e.target.checked})),style:{width:18,height:18}}),
                 s.name, h('span',{style:{color:'#888',fontSize:12.5}}, ' · ' + s.price_label)))),
             field('Business name *', 'business', 'Grass Lake Hardware'),
@@ -12075,19 +12109,12 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
             field('Email *', 'email', 'you@yourbusiness.com', {type:'email', autoComplete:'email'}),
             field('Phone (optional)', 'phone', '517-555-0100', {type:'tel', autoComplete:'tel'}),
             h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
-              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'County'),
-              h('select',{value:form.county,onChange:e=>set('county', e.target.value),
-                  style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,fontFamily:LB,background:'#fff'}},
+              bizLabel('County'),
+              h('select',{value:form.county,onChange:e=>set('county', e.target.value),style:{...bizInput,background:'#fff'}},
                 counties.map(c=>h('option',{key:c.id,value:c.id}, c.name)))),
-            picked.watch && h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
-              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'What should we watch for?'),
-              h('textarea',{value:form.watchFor,onChange:e=>set('watchFor', e.target.value),rows:3,
-                placeholder:'Your street, your line of work, licenses or permits you hold, zoning near you, road work...',
-                style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB,resize:'vertical'}})),
-            h('label',{style:{display:'block',marginBottom:10,fontFamily:LB}},
-              h('span',{style:{display:'block',fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:4}},'Anything else? (optional)'),
-              h('textarea',{value:form.notes,onChange:e=>set('notes', e.target.value),rows:2,
-                style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'9px 11px',fontSize:14,boxSizing:'border-box',fontFamily:LB,resize:'vertical'}})),
+            picked.watch && area('What should we watch for?', 'watchFor', 'Separate with commas: your street, your line of work, licenses or permits you hold, zoning near you, road work...'),
+            picked.bids && field('Your line of work (for bids and grants)', 'trade', 'Concrete and paving, catering, IT support, landscaping...'),
+            area('Anything else? (optional)', 'notes', '', 2),
             h('label',{style:{display:'flex',gap:8,alignItems:'flex-start',fontFamily:LB,fontSize:13.5,color:'#333',margin:'4px 0 12px',cursor:'pointer',lineHeight:1.5}},
               h('input',{type:'checkbox',checked:form.notPolitical,onChange:e=>set('notPolitical', e.target.checked),style:{width:18,height:18,marginTop:2,flexShrink:0}}),
               'This business isn\'t a political campaign, party, PAC or lobbying firm. (They can\'t sign up, to keep the site independent.)'),
@@ -12095,17 +12122,134 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
             h('button',{onClick:submit,disabled:sending,style:{background:sending?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'11px 20px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:sending?'default':'pointer'}},
               sending ? 'Sending...' : 'Sign up'))),
 
+    // ── Rule explainer request
+    explainer && h('div',{ref:explainRef},
+      showExplain
+        ? h(ExplainerRequestForm,{service:explainer, user, profile, mine, onToast, onDone:loadMine})
+        : h('div',{style:{...card, textAlign:'center'}},
+            h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',marginBottom:8}},'Got a new rule, ordinance or permit requirement you need explained?'),
+            h('button',{onClick:()=>setShowExplain(true),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'9px 16px',fontFamily:PD,fontWeight:700,fontSize:13.5,cursor:'pointer'}},'Send us a rule'))),
+
     admin && Array.isArray(list) && h(BusinessAdmin,{list, onToast, onChanged:load}));
 }
 
+// ── "Your services": what a business sees about its own sign-ups ──────────────
+function MyBusinessPanel({mine, onToast, onChanged, onExplain}) {
+  return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB}},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a4a2a',marginBottom:6}},'💼 Your services'),
+    mine.map(b=>h(MyBusinessRow,{key:b.id, b, onToast, onChanged, onExplain})));
+}
+function MyBusinessRow({b, onToast, onChanged, onExplain}) {
+  const [watch, setWatch] = useState(b.watch_for || '');
+  const [trade, setTrade] = useState(b.trade || '');
+  const [saving, setSaving] = useState(false);
+  const [openEx, setOpenEx] = useState(null);
+  const st = SIGNUP_STATUS[b.status] || SIGNUP_STATUS.new;
+  const has = s=>(b.services || []).includes(s);
+  const changed = watch !== (b.watch_for || '') || trade !== (b.trade || '');
+  const save = async()=>{
+    setSaving(true);
+    const {error} = await sb.rpc('tpv_business_update', {p_id:b.id, p_watch_for:watch, p_trade:trade});
+    setSaving(false);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast('✓ Saved. Your next alert will use these.');
+    onChanged && onChanged();
+  };
+  return h('div',{style:{background:'#fff',borderRadius:8,padding:'12px 14px',marginTop:8}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'baseline'}},
+      h('strong',{style:{fontSize:15,color:'#1a1a2e'}}, b.business_name),
+      h('span',{style:{background:st[2],color:st[1],fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10}}, st[0])),
+    h('div',{style:{fontSize:13,color:'#666',margin:'2px 0 8px'}},
+      b.status === 'new' ? 'We\'ll be in touch to get you started. Alerts begin once your service is active.'
+      : b.status === 'paused' ? 'Paused. Reply to any alert email, or email hello@thepeoplesvoices.org, to pick back up.'
+      : 'Alerts go to the email you signed up with.'),
+    has('watch') && h('label',{style:{display:'block',marginBottom:8}},
+      bizLabel('What we watch for'),
+      h('textarea',{value:watch,onChange:e=>setWatch(e.target.value),rows:2,placeholder:'Separate with commas: your street, your line of work, licenses...',style:{...bizInput,resize:'vertical'}})),
+    has('bids') && h('label',{style:{display:'block',marginBottom:8}},
+      bizLabel('Your line of work (for bids and grants)'),
+      h('input',{value:trade,onChange:e=>setTrade(e.target.value),placeholder:'Concrete and paving, catering...',style:bizInput})),
+    (has('watch') || has('bids')) && h('button',{onClick:save,disabled:saving || !changed,
+        style:{background:changed?'#1a6b3c':'#ccc',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',fontSize:13,cursor:changed?'pointer':'default',fontFamily:PD,fontWeight:700}},
+      saving ? 'Saving...' : 'Save'),
+    (b.recent || []).length > 0 && h('div',{style:{marginTop:10}},
+      bizLabel('Recent alerts'),
+      b.recent.map((r,i)=>h('div',{key:i,style:{fontSize:13,color:'#444',padding:'3px 0'}},
+        shortDate(r.sent_at) + ' · ' + (BIZ_KIND_LABEL[r.service] || r.service) + ': ' + (r.subject || '')))),
+    (b.explainers || []).length > 0 && h('div',{style:{marginTop:10}},
+      bizLabel('Rule explainers'),
+      b.explainers.map(e=>h('div',{key:e.id,style:{fontSize:13,color:'#444',padding:'4px 0',borderTop:'1px solid #f0ece4'}},
+        shortDate(e.created_at) + ' · ' + (e.question ? clipText(e.question, 70) : (e.rule_url ? 'Rule from a link' : 'Rule you pasted')) + ' · ',
+        e.status === 'sent'
+          ? h('button',{onClick:()=>setOpenEx(openEx === e.id ? null : e.id),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}}, openEx === e.id ? 'Hide' : 'Read it')
+          : h('span',{style:{color:'#8a6000'}}, e.status === 'declined' ? 'We couldn\'t do this one (we\'ll email you)' : 'Being written'),
+        openEx === e.id && e.final_text && h('div',{style:{whiteSpace:'pre-wrap',background:'#faf8f3',borderRadius:6,padding:'8px 10px',marginTop:6,lineHeight:1.55}}, e.final_text)))),
+    h('button',{className:'tpv-link',onClick:onExplain,style:{display:'block',marginTop:10,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},
+      'Send us a rule to explain →'));
+}
+function clipText(s, n) { const t = String(s || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+
+// ── Ask for a plain-language explainer ────────────────────────────────────────
+function ExplainerRequestForm({service, user, profile, mine, onToast, onDone}) {
+  const first = (mine && mine[0]) || null;
+  const [f, setF] = useState({business:(first && first.business_name) || '', email:(user && user.email) || '', url:'', text:'', question:''});
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState('');
+  const [sent, setSent] = useState(false);
+  const set = (k, v)=>setF(x=>({...x, [k]:v}));
+  const submit = async()=>{
+    setErr('');
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) { setErr('Please enter an email address we can send the explainer to.'); return; }
+    if(!f.url.trim() && f.text.trim().length < 40) { setErr('Paste the rule (at least a few sentences), or a link to it.'); return; }
+    setSending(true);
+    const {error} = await sb.rpc('tpv_explainer_request', {p_business:f.business, p_email:f.email, p_rule_url:f.url, p_rule_text:f.text, p_question:f.question});
+    setSending(false);
+    if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Explainers aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
+    setSent(true); onDone && onDone();
+    onToast && onToast('✓ Got it. Your explainer is on its way.');
+  };
+  const card = {background:'#fff',border:'2px solid #1a1a2e',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
+  if(sent) return h('div',{style:card},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Got it.'),
+    h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6}}, 'We\'ll email your plain-language explainer, usually within a day. ',
+      service.pay_url ? 'If you haven\'t paid for this one yet, you can do it now:' : 'If payment is needed, we\'ll include a link.'),
+    service.pay_url && h('a',{href:service.pay_url,target:'_blank',rel:'noopener',
+      style:{display:'inline-block',marginTop:10,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
+      'Pay for this explainer (' + service.price_label + ') →'),
+    h('button',{onClick:()=>{ setSent(false); setF(x=>({...x, url:'', text:'', question:''})); },
+      style:{display:'block',marginTop:10,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Send another rule'));
+  return h('div',{style:card},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Get a rule explained · ' + service.price_label),
+    h('div',{style:{fontSize:13,color:'#777',marginBottom:12,lineHeight:1.5}},
+      'Send a new ordinance, rule or permit requirement. You\'ll get a plain-language explainer by email: what it is, what changes for you, dates, costs and what to do next. A person looks over every one before it\'s sent. Not legal advice.'),
+    h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Business name'), h('input',{value:f.business,onChange:e=>set('business', e.target.value),style:bizInput})),
+    h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Email *'), h('input',{type:'email',value:f.email,onChange:e=>set('email', e.target.value),placeholder:'you@yourbusiness.com',style:bizInput})),
+    h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Link to the rule'), h('input',{type:'url',value:f.url,onChange:e=>set('url', e.target.value),placeholder:'https://...',style:bizInput})),
+    h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Or paste the rule here (best for PDFs)'),
+      h('textarea',{value:f.text,onChange:e=>set('text', e.target.value),rows:5,style:{...bizInput,resize:'vertical'}})),
+    h('label',{style:{display:'block',marginBottom:10}}, bizLabel('What do you want to know?'),
+      h('input',{value:f.question,onChange:e=>set('question', e.target.value),placeholder:'Do I need a new permit for my sign?',style:bizInput})),
+    err && h('div',{style:{color:'#c0392b',fontSize:13,marginBottom:8}}, '❌ ' + err),
+    h('button',{onClick:submit,disabled:sending,style:{background:sending?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'11px 20px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:sending?'default':'pointer'}},
+      sending ? 'Sending...' : 'Send it'));
+}
+
+// ── Admin: sign-ups, alerts, explainers, bid pages, the menu ─────────────────
 function BusinessAdmin({list, onToast, onChanged}) {
   const [signups, setSignups] = useState(null);
+  const [logs, setLogs] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
   const [drafts, setDrafts] = useState(()=>list.map(s=>({...s})));
   const [saving, setSaving] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [preview, setPreview] = useState(null);     // {title, html}
   const loadSignups = async()=>{
-    const {data, error} = await sb.from('business_signups').select('*').order('created_at',{ascending:false}).limit(200);
+    const [{data, error}, lg] = await Promise.all([
+      sb.from('business_signups').select('*').order('created_at',{ascending:false}).limit(300),
+      sb.from('business_alert_log').select('*').order('sent_at',{ascending:false}).limit(400),
+    ]);
     setSignups(error ? [] : (data || []));
+    setLogs(lg && !lg.error ? (lg.data || []) : []);
   };
   useEffect(()=>{ loadSignups(); },[]);
   useEffect(()=>{ setDrafts(list.map(s=>({...s}))); },[list]);
@@ -12114,7 +12258,25 @@ function BusinessAdmin({list, onToast, onChanged}) {
     const {error} = await sb.from('business_signups').update({status, updated_at:new Date().toISOString()}).eq('id', row.id);
     if(error) { onToast && onToast('❌ ' + error.message); return; }
     setSignups(prev=>prev.map(r=>r.id===row.id ? {...r, status} : r));
-    onToast && onToast('✓ ' + row.business_name + ' is now ' + SIGNUP_STATUS[status][0].toLowerCase());
+    onToast && onToast('✓ ' + row.business_name + ' is now ' + SIGNUP_STATUS[status][0].toLowerCase() + (status === 'active' ? '. Alerts start with the next hourly run.' : ''));
+  };
+  const doPreview = async(row, kind)=>{
+    setBusy(row.id + kind);
+    const out = await bizFn({mode:'preview', signup_id:row.id, kind});
+    setBusy(null);
+    if(out.error) { onToast && onToast('❌ ' + out.error); return; }
+    const r = (out.results || [])[0] || {};
+    if(r.html) setPreview({title:r.subject, html:r.html});
+    else onToast && onToast(r.note || 'Nothing to send right now.');
+  };
+  const doSend = async(row, kind)=>{
+    setBusy(row.id + 'send' + kind);
+    const out = await bizFn({mode:'run', signup_id:row.id, kind});
+    setBusy(null);
+    if(out.error) { onToast && onToast('❌ ' + out.error); return; }
+    const r = (out.results || [])[0] || {};
+    onToast && onToast(r.sent ? '✓ Sent: ' + r.subject : r.error ? '❌ ' + r.error : (r.note || 'Nothing new to send.'));
+    loadSignups();
   };
   const setDraft = (i, k, v)=>setDrafts(prev=>prev.map((d,j)=>j===i ? {...d, [k]:v} : d));
   const saveService = async(d, i)=>{
@@ -12132,9 +12294,19 @@ function BusinessAdmin({list, onToast, onChanged}) {
   const card = {background:'#fffdf5',border:'1px solid #f0c040',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
   const inp = (value, onChange, ph, extra)=>h('input',{value:value||'', onChange:e=>onChange(e.target.value), placeholder:ph,
     style:Object.assign({width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginBottom:6}, extra||{})});
+  const small = (label, onClick, key, primary)=>h('button',{key:label,onClick,disabled:busy===key,
+    style:{background:primary?'#1a1a2e':'#fff',color:primary?'#f0c040':'#333',border:'1px solid ' + (primary?'#1a1a2e':'#ddd'),borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer'}},
+    busy===key ? '...' : label);
   const fresh = (signups || []).filter(r=>r.status === 'new').length;
 
   return h('div',null,
+    preview && h('div',{onClick:()=>setPreview(null),style:{position:'fixed',inset:0,zIndex:5000,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'16px 10px',overflowY:'auto'}},
+      h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:10,width:640,maxWidth:'100%',overflow:'hidden'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px',background:'#1a1a2e',color:'#f0c040',fontFamily:LB,fontSize:13.5}},
+          h('span',null,'Preview: ' + (preview.title || '')),
+          h('button',{onClick:()=>setPreview(null),'aria-label':'Close',style:{background:'#fff',color:'#1a1a2e',border:'none',borderRadius:14,padding:'5px 12px',fontSize:13,cursor:'pointer'}},'✕ Close')),
+        h('iframe',{title:'Email preview',srcDoc:preview.html,sandbox:'',style:{width:'100%',height:'70vh',border:'none',display:'block'}}))),
+
     h('div',{style:card},
       h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:8}},
         '💼 Admin: sign-ups', fresh ? h('span',{style:{marginLeft:8,background:'#c0392b',color:'#fff',fontSize:11,padding:'2px 8px',borderRadius:10}}, fresh + ' new') : null),
@@ -12142,23 +12314,39 @@ function BusinessAdmin({list, onToast, onChanged}) {
       : !signups.length ? h('div',{style:{fontSize:13,color:'#888'}},'No sign-ups yet. Share this page with a business or two you know.')
       : signups.map(r=>{
           const st = SIGNUP_STATUS[r.status] || SIGNUP_STATUS.new;
+          const mineLogs = logs.filter(l=>l.signup_id === r.id).slice(0, 3);
+          const kinds = [...((r.services||[]).includes('watch') ? ['watch','roundup'] : []), ...((r.services||[]).includes('bids') ? ['bids'] : [])];
           return h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'10px 0',fontSize:13.5,color:'#333',lineHeight:1.55}},
             h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'baseline'}},
               h('strong',{style:{color:'#1a1a2e',fontSize:14.5}}, r.business_name),
               h('span',{style:{background:st[2],color:st[1],fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10}}, st[0])),
             h('div',null, (r.services || []).map(id=>names[id] || id).join(', '),
               r.county ? ' · ' + ((COUNTIES[r.county] && COUNTIES[r.county].name) || r.county) : '',
-              ' · signed up ' + new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+              ' · signed up ' + shortDate(r.created_at)),
             h('div',null, r.contact_name ? r.contact_name + ' · ' : '',
               h('a',{href:'mailto:' + r.email + '?subject=' + encodeURIComponent('Your ' + ((r.services||[]).map(id=>names[id]||id).join(' & ')) + ' sign-up'),style:{color:'#1a5c8a'}}, r.email),
               r.phone ? h(Fragment,null,' · ', h('a',{href:'tel:' + r.phone.replace(/[^0-9+]/g,''),style:{color:'#1a5c8a'}}, r.phone)) : null),
             r.watch_for && h('div',{style:{color:'#555'}}, h('em',null,'Watch for: '), r.watch_for),
+            r.trade && h('div',{style:{color:'#555'}}, h('em',null,'Line of work: '), r.trade),
             r.notes && h('div',{style:{color:'#555'}}, h('em',null,'Note: '), r.notes),
+            r.last_error && h('div',{style:{color:'#c0392b'}}, '⚠️ ' + r.last_error),
+            mineLogs.length > 0 && h('div',{style:{color:'#777',fontSize:12.5}},
+              mineLogs.map(l=>shortDate(l.sent_at) + ' ' + (BIZ_KIND_LABEL[l.service] || l.service) + (l.status === 'error' ? ' (failed)' : '')).join(' · ')),
+            kinds.length > 0 && h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6,alignItems:'center'}},
+              h('span',{style:{fontSize:12,color:'#888'}},'Preview:'),
+              kinds.map(k=>small(BIZ_KIND_LABEL[k], ()=>doPreview(r, k), r.id + k)),
+              r.status === 'active' && h('span',{style:{fontSize:12,color:'#888',marginLeft:6}},'Send now:'),
+              r.status === 'active' && kinds.map(k=>small(BIZ_KIND_LABEL[k], ()=>doSend(r, k), r.id + 'send' + k, true))),
             h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}},
               Object.keys(SIGNUP_STATUS).filter(s=>s !== r.status).map(s=>h('button',{key:s,onClick:()=>setStatus(r, s),
                 style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#333'}}, 'Mark ' + SIGNUP_STATUS[s][0].toLowerCase()))));
         }),
-      h('div',{style:{fontSize:12,color:'#888',marginTop:8,lineHeight:1.5}},'Mark a business active once it\'s paying. Active businesses are counted (as a number, never by name) on the Who Funds Us page.')),
+      h('div',{style:{fontSize:12,color:'#888',marginTop:8,lineHeight:1.5}},
+        'Mark a business active once it\'s paying; alerts start on the next hourly run (heads-ups daily, roundups and bids on Mondays). ',
+        'Active businesses are counted (as a number, never by name) on the Who Funds Us page.')),
+
+    h(ExplainerQueue,{onToast}),
+    h(BidSourcesAdmin,{onToast}),
 
     h('div',{style:card},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
@@ -12180,6 +12368,119 @@ function BusinessAdmin({list, onToast, onChanged}) {
               saving===i ? 'Saving...' : 'Save')))),
         h('button',{onClick:()=>setDrafts(prev=>[...prev, {id:'', name:'', blurb:'', price_label:'', kofi_tier:'', pay_url:'', status:'soon', sort:prev.length + 1}]),
           style:{background:'#fff',border:'1px dashed #c8bfa8',borderRadius:6,padding:'6px 12px',fontSize:12.5,color:'#555',cursor:'pointer',marginTop:6}},'+ Add a service'))));
+}
+
+// ── Admin: rule explainers waiting to be written and sent ────────────────────
+function ExplainerQueue({onToast}) {
+  const [rows, setRows] = useState(null);
+  const [text, setText] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [showDone, setShowDone] = useState(false);
+  const load = async()=>{
+    const {data, error} = await sb.from('explainer_requests').select('*').order('created_at',{ascending:false}).limit(100);
+    const list = error ? [] : (data || []);
+    setRows(list);
+    setText(t=>{ const n = {...t}; list.forEach(r=>{ if(n[r.id] === undefined && (r.final_text || r.ai_draft)) n[r.id] = r.final_text || r.ai_draft; }); return n; });
+  };
+  useEffect(()=>{ load(); },[]);
+  const draft = async(r)=>{
+    setBusy('d' + r.id);
+    const out = await bizFn({mode:'explain', request_id:r.id});
+    setBusy(null);
+    if(out.error) { onToast && onToast('❌ ' + out.error); load(); return; }
+    setText(t=>({...t, [r.id]:out.draft}));
+    onToast && onToast('✓ Drafted. Look it over, change anything, then send.');
+    load();
+  };
+  const send = async(r)=>{
+    if(!window.confirm('Send this explainer to ' + r.email + '?')) return;
+    setBusy('s' + r.id);
+    const out = await bizFn({mode:'send_explainer', request_id:r.id, text:text[r.id] || ''});
+    setBusy(null);
+    if(out.error) { onToast && onToast('❌ ' + out.error); return; }
+    onToast && onToast('✓ Sent to ' + r.email);
+    load();
+  };
+  const decline = async(r)=>{
+    const {error} = await sb.from('explainer_requests').update({status:'declined'}).eq('id', r.id);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast('Marked declined. Let them know by email.');
+    load();
+  };
+  const card = {background:'#fffdf5',border:'1px solid #f0c040',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
+  const open = (rows || []).filter(r=>r.status === 'new' || r.status === 'drafted');
+  const doneRows = (rows || []).filter(r=>r.status === 'sent' || r.status === 'declined');
+  return h('div',{style:card},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:8}},
+      '📄 Admin: rule explainers', open.length ? h('span',{style:{marginLeft:8,background:'#c0392b',color:'#fff',fontSize:11,padding:'2px 8px',borderRadius:10}}, open.length + ' waiting') : null),
+    rows === null ? h(Spinner)
+    : !open.length ? h('div',{style:{fontSize:13,color:'#888'}},'Nothing waiting.')
+    : open.map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'10px 0',fontSize:13.5,color:'#333',lineHeight:1.55}},
+        h('div',null, h('strong',{style:{color:'#1a1a2e'}}, r.business_name || 'A business'), ' · ',
+          h('a',{href:'mailto:' + r.email,style:{color:'#1a5c8a'}}, r.email), ' · ' + shortDate(r.created_at)),
+        r.question && h('div',null, h('em',null,'Asked: '), r.question),
+        r.rule_url && h('div',null, h('em',null,'Rule: '), h('a',{href:r.rule_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',wordBreak:'break-all'}}, r.rule_url)),
+        r.rule_text && h('div',{style:{color:'#666',fontSize:12.5}}, h('em',null,'Pasted: '), clipText(r.rule_text, 220)),
+        r.error && h('div',{style:{color:'#c0392b'}}, '⚠️ ' + r.error),
+        text[r.id] !== undefined && h('textarea',{value:text[r.id],onChange:e=>{ const v = e.target.value; setText(t=>({...t, [r.id]:v})); },rows:12,
+          style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginTop:8,resize:'vertical',lineHeight:1.5}}),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}},
+          h('button',{onClick:()=>draft(r),disabled:busy==='d'+r.id,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:14,padding:'5px 12px',fontSize:12.5,cursor:'pointer'}},
+            busy==='d'+r.id ? 'Drafting...' : (text[r.id] ? '↻ Draft again with AI' : '✨ Draft with AI')),
+          text[r.id] && h('button',{onClick:()=>send(r),disabled:busy==='s'+r.id,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:14,padding:'5px 12px',fontSize:12.5,cursor:'pointer'}},
+            busy==='s'+r.id ? 'Sending...' : 'Send to ' + r.email),
+          h('button',{onClick:()=>decline(r),style:{background:'#fff',color:'#a33',border:'1px solid #e5c0bb',borderRadius:14,padding:'5px 12px',fontSize:12.5,cursor:'pointer'}},'Decline')))),
+    doneRows.length > 0 && h('button',{onClick:()=>setShowDone(!showDone),style:{marginTop:8,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12.5,fontFamily:LB}},
+      (showDone ? 'Hide' : 'Show') + ' finished (' + doneRows.length + ')'),
+    showDone && doneRows.map(r=>h('div',{key:r.id,style:{fontSize:12.5,color:'#666',padding:'3px 0'}},
+      shortDate(r.created_at) + ' · ' + (r.business_name || r.email) + ' · ' + (r.status === 'sent' ? 'sent ' + (r.sent_at ? shortDate(r.sent_at) : '') : 'declined'))));
+}
+
+// ── Admin: bid pages checked for the Bid & grant finder ──────────────────────
+function BidSourcesAdmin({onToast}) {
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({county:countyTag(), name:'', url:''});
+  const load = async()=>{
+    const {data, error} = await sb.from('bid_sources').select('*').order('county',{ascending:true});
+    setRows(error ? [] : (data || []));
+  };
+  useEffect(()=>{ if(open && rows === null) load(); },[open]);
+  const add = async()=>{
+    if(!f.name.trim() || !/^https?:\/\//i.test(f.url.trim())) { onToast && onToast('Give it a name and a web address starting with https://'); return; }
+    const {error} = await sb.from('bid_sources').insert({county:f.county, name:f.name.trim().slice(0,80), url:f.url.trim().slice(0,400)});
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    setF(x=>({...x, name:'', url:''})); onToast && onToast('✓ Added. It\'s checked on the next Monday run.'); load();
+  };
+  const toggle = async(r)=>{ await sb.from('bid_sources').update({active:!r.active}).eq('id', r.id); load(); };
+  const remove = async(r)=>{ if(!window.confirm('Stop checking ' + r.name + '?')) return; await sb.from('bid_sources').delete().eq('id', r.id); load(); };
+  const card = {background:'#fffdf5',border:'1px solid #f0c040',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
+  const counties = Object.values(COUNTIES).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  return h('div',{style:card},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e'}},'📋 Admin: bid pages we check'),
+      h('button',{onClick:()=>setOpen(!open),style:{background:open?'#fff':'#1a1a2e',color:open?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer'}},
+        open ? 'Close' : 'Manage')),
+    !open && h('div',{style:{fontSize:12.5,color:'#777',marginTop:6,lineHeight:1.5}},
+      'The Bid & grant finder also searches the news every week. Adding a city or county\'s own bid postings feed makes it much better there.'),
+    open && h('div',{style:{marginTop:10}},
+      rows === null ? h(Spinner)
+      : rows.map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5,opacity:r.active?1:.55}},
+          h('strong',null, r.name), ' · ' + ((COUNTIES[r.county] && COUNTIES[r.county].name) || r.county),
+          h('div',{style:{color:'#888',fontSize:12,wordBreak:'break-all'}}, r.url),
+          h('div',{style:{color:r.last_error?'#c0392b':'#666',fontSize:12}},
+            r.last_checked_at ? 'Checked ' + shortDate(r.last_checked_at) + ': ' + (r.last_error || (r.last_items + ' posting' + (r.last_items===1?'':'s'))) : 'Not checked yet'),
+          h('div',{style:{display:'flex',gap:6,marginTop:4}},
+            h('button',{onClick:()=>toggle(r),style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'3px 10px',fontSize:12,cursor:'pointer'}}, r.active ? 'Pause' : 'Turn back on'),
+            h('button',{onClick:()=>remove(r),style:{background:'#fff',border:'1px solid #e5c0bb',color:'#a33',borderRadius:14,padding:'3px 10px',fontSize:12,cursor:'pointer'}},'Remove')))),
+      h('div',{style:{borderTop:'1px solid #efe6cf',paddingTop:10,marginTop:6}},
+        h('div',{style:{fontSize:12.5,color:'#666',marginBottom:6,lineHeight:1.5}},
+          'Many Michigan city and county websites have a "Bids" page with an RSS feed (look for the orange RSS icon, or an address ending in RSSFeed.aspx?ModID=76). Paste that address here.'),
+        h('select',{value:f.county,onChange:e=>setF(x=>({...x, county:e.target.value})),style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,background:'#fff',marginBottom:6}},
+          counties.map(c=>h('option',{key:c.id,value:c.id}, c.name))),
+        h('input',{value:f.name,onChange:e=>setF(x=>({...x, name:e.target.value})),placeholder:'Name ("Kent County bids")',style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginBottom:6}}),
+        h('input',{value:f.url,onChange:e=>setF(x=>({...x, url:e.target.value})),placeholder:'https://...',style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'7px 9px',fontSize:13.5,fontFamily:LB,boxSizing:'border-box',marginBottom:6}}),
+        h('button',{onClick:add,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',fontSize:13,cursor:'pointer',fontFamily:PD,fontWeight:700}},'Add bid page'))));
 }
 
 function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
