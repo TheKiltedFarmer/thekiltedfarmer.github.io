@@ -1420,15 +1420,47 @@ function BillChangeLog({bill}) {
 }
 
 // ── AI Breakdown ──────────────────────────────────────────────────────────────
+// ── Saved AI answers ─────────────────────────────────────────────────────────
+// The ai-answers server function keeps each AI answer about a decision, so the
+// next person gets it instantly and the AI isn't paid for it twice. Returns
+// {notDeployed:true} if the function isn't there yet (the site then asks the
+// AI directly, the way it always has).
+async function aiAnswers(body) {
+  try {
+    const {data, error} = await sb.functions.invoke('ai-answers', {body});
+    if(error) {
+      const status = error.context && error.context.status;
+      let j = null;
+      try { j = error.context && error.context.json ? await error.context.json() : null; } catch(e) {}
+      if(status === 404 && !(j && j.error)) return {notDeployed:true};
+      return {error:(j && j.error) || error.message || 'Something went wrong.', status};
+    }
+    return data || {};
+  } catch(e) { return {error:String((e && e.message) || e)}; }
+}
+// A saved answer's date, in plain words
+function savedOnLabel(iso) {
+  const d = new Date(iso || '');
+  if(isNaN(d)) return '';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
 function AIBreakdown({bill}) {
   const [data,setData]=useState(null);
   const [loading,setLoading]=useState(false);
+  const [savedAt,setSavedAt]=useState(null);   // when the saved answer was made
+  const canRefresh = isAdminFor(TPV_VIEWER.profile, bill.county || countyTag());
 
-  const show=async()=>{
+  const show=async(fresh)=>{
     const preloaded=ANALYSES[bill.id];
-    if(preloaded){setData(preloaded);return;}
-    // For admin-added bills: generate live AI analysis
-    setLoading(true);
+    if(preloaded && fresh!==true){setData(preloaded);return;}
+    setLoading(true); setSavedAt(null);
+    // The saved analysis, if someone's already asked (made and saved now if not)
+    if(fresh===true) await aiAnswers({mode:'forget', bill_id:bill.id, kind:'analysis'});
+    const r = await aiAnswers({mode:'analysis', bill_id:bill.id, county:countyTag()});
+    if(r.answer && r.answer.plain){ setData(r.answer); setSavedAt(r.saved_at||new Date().toISOString()); setLoading(false); return; }
+    if(r.error && r.status && r.status < 500){ setData({plain:r.error,benefits:[],concerns:[],fineprint:[],bottom:''}); setLoading(false); return; }
+    // Not deployed yet (or the server had trouble): ask the AI directly
     try{
       const res=await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
@@ -1452,7 +1484,7 @@ function AIBreakdown({bill}) {
     h('div',{className:'spin',style:{marginBottom:8}}),
     "Analyzing for your community..."
   );
-  if(!data) return h(Btn,{onClick:show,style:{marginTop:0}},"⚡ Get AI Analysis");
+  if(!data) return h(Btn,{onClick:()=>show(),style:{marginTop:0}},"⚡ Get AI Analysis");
   return h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:10,padding:20}},
     h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:8}},"🤖 AI Community Analysis"),
     h('div',{style:{background:'#f0f4ff',border:'1px solid #c8d8f0',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:11,color:'#1a5c8a',lineHeight:1.6}},
@@ -1504,8 +1536,13 @@ function AIBreakdown({bill}) {
       h('div',{style:{fontSize:10,fontWeight:700,color:'#1a5c8a',textTransform:'uppercase',letterSpacing:1,marginBottom:6}},"📍 Local Impact"),
       h('div',{style:{fontSize:13,color:'#333',lineHeight:1.6}},data.local)
     ),
-    h('div',{style:{borderTop:'1px solid #e5dece',paddingTop:10,fontFamily:"'Playfair Display',serif",fontStyle:'italic',color:'#1a1a2e',fontSize:14}},
+    data.bottom&&h('div',{style:{borderTop:'1px solid #e5dece',paddingTop:10,fontFamily:"'Playfair Display',serif",fontStyle:'italic',color:'#1a1a2e',fontSize:14}},
       h('strong',null,"Bottom Line: "),data.bottom
+    ),
+    // Saved once, shown to everyone
+    savedAt&&h('div',{style:{marginTop:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:11.5,color:'#888',fontFamily:"'Lora',serif",lineHeight:1.5}},
+      h('span',null,'📌 Saved answer from '+savedOnLabel(savedAt)+'. Everyone sees the same one, and it\'s redone if this decision changes.'),
+      canRefresh&&h('button',{onClick:()=>show(true),style:{background:'none',border:'1px solid #d4cdb8',borderRadius:14,padding:'3px 10px',fontSize:11.5,color:'#5a4500',cursor:'pointer',fontFamily:"'Lora',serif"}},'🔄 Get a fresh answer')
     )
   );
 }
@@ -1517,6 +1554,7 @@ function AIChat({bill}) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [popular, setPopular] = useState([]);   // questions neighbors asked more than once
   const bottomRef = useRef(null);
 
   const SUGGESTIONS = [
@@ -1530,6 +1568,18 @@ function AIChat({bill}) {
   useEffect(()=>{
     if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:'smooth'});
   },[messages]);
+  // Questions neighbors keep asking about this decision (their answers are saved)
+  useEffect(()=>{
+    if(!open) return;
+    let gone = false;
+    aiAnswers({mode:'popular', bill_id:bill.id, county:countyTag()}).then(r=>{
+      if(gone || !r || !Array.isArray(r.questions)) return;
+      const key = q=>String(q).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+      const built = new Set(SUGGESTIONS.map(key));
+      setPopular(r.questions.filter(x=>x && x.question && !built.has(key(x.question))));
+    });
+    return ()=>{ gone = true; };
+  },[open, bill.id]);
 
   const send = async(text) => {
     const q = (text||input).trim();
@@ -1539,8 +1589,13 @@ function AIChat({bill}) {
     setMessages(prev=>[...prev,userMsg]);
     setLoading(true);
 
+    const history = messages.map(m=>({role:m.role,content:m.content}));
+    // A first question someone's already asked comes back saved, instantly
+    const r = await aiAnswers({mode:'ask', bill_id:bill.id, county:countyTag(), question:q, history});
+    if(r.text){ setMessages(prev=>[...prev,{role:'assistant',content:r.text,saved:!!r.saved,savedAt:r.saved_at||null}]); setLoading(false); return; }
+    if(r.error && r.status && r.status < 500){ setMessages(prev=>[...prev,{role:'assistant',content:r.error}]); setLoading(false); return; }
+    // Not deployed yet (or the server had trouble): ask the AI directly
     try {
-      const history = messages.map(m=>({role:m.role,content:m.content}));
       const res = await fetch(AI_PROXY,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -1594,6 +1649,15 @@ Full text: ${bill.full_text||bill.summary}`,
           style:{background:'#fff',border:'1px solid #c8b8e8',borderRadius:20,padding:'5px 11px',fontSize:12,
             color:'#5b3a8c',cursor:'pointer',fontFamily:"'Lora',serif",lineHeight:1.4,textAlign:'left'}
         },s))
+      ),
+      popular.length>0&&h(Fragment,null,
+        h('div',{style:{fontSize:11,color:'#8a6aac',fontWeight:600,margin:'12px 0 8px',textTransform:'uppercase',letterSpacing:1}},'Neighbors also asked:'),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+          popular.map((p,i)=>h('button',{key:'p'+i,onClick:()=>send(p.question),
+            style:{background:'#fff',border:'1px dashed #c8b8e8',borderRadius:20,padding:'5px 11px',fontSize:12,
+              color:'#5b3a8c',cursor:'pointer',fontFamily:"'Lora',serif",lineHeight:1.4,textAlign:'left'}
+          },p.question,h('span',{style:{color:'#a99bc4',marginLeft:6,fontSize:11}},'×'+p.asked)))
+        )
       )
     ),
 
@@ -1610,8 +1674,9 @@ Full text: ${bill.full_text||bill.summary}`,
           border:'1px solid '+(m.role==='user'?'#c8d4f8':'#e0d0f8'),
           borderRadius:8,padding:'10px 13px',fontSize:13,
           fontFamily:"'Lora',serif",lineHeight:1.7,color:'#333',
-          maxWidth:'80%'
-        }},m.content)
+          maxWidth:'80%',whiteSpace:'pre-wrap'
+        }},m.content,
+          m.saved&&h('div',{style:{marginTop:6,fontSize:10.5,color:'#a99bc4',fontStyle:'italic'}},'📌 Saved answer'+(m.savedAt?' from '+savedOnLabel(m.savedAt):'')+'. A neighbor asked this too.'))
       )),
       loading&&h('div',{style:{display:'flex',gap:10,alignItems:'center'}},
         h('div',{style:{width:30,height:30,borderRadius:'50%',background:'#5b3a8c',color:'#f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700}},'AI'),
@@ -13419,6 +13484,19 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
 }
 
 
+// ── Admin: how often saved AI answers were reused instead of asking the AI again ─
+function AiSavingsLine() {
+  const [st, setSt] = useState(null);
+  useEffect(()=>{ sb.rpc('tpv_ai_answers_stats').then(({data, error})=>{ if(!error && data) setSt(data); }, ()=>{}); },[]);
+  if(!st) return null;
+  return h('div',{style:{background:'#f9f5ff',border:'1px solid #e0d0f8',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#5b3a8c',lineHeight:1.6}},
+    '🤖 ', h('strong',null,'Saved AI answers: '),
+    st.saved > 0
+      ? (st.saved.toLocaleString() + ' saved, on ' + (st.decisions||0).toLocaleString() + (st.decisions===1?' decision':' decisions') + '. Reused ' +
+         (st.reused||0).toLocaleString() + ' times instead of asking the AI again (' + (st.reused_month||0).toLocaleString() + ' this month).')
+      : 'none yet. They build up as people use the AI on decisions.');
+}
+
 // ── Daily news (Admin) ──────────────────────────────────────────────────────
 // The news-daily server function refreshes every county once a day on its own.
 // This shows when this county last got news, lets an admin run it right now,
@@ -18792,6 +18870,8 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         h(RssFetchButton,{onToast,user,profile})
       )
     ),
+
+    isFullAdmin(profile) && h(AiSavingsLine),
 
     // Cross-county admin chat — coordination channel for admins
     !isFullAdmin(profile) && h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a'}},
