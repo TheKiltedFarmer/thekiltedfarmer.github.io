@@ -5804,6 +5804,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
     // community pulse, activity, and quick actions.
 
     // ── Which county this is, a way back to yours, and a way to visit others ──
+    h(HomeCountyCheck,{profile, userId:user&&user.id}),
     h(CountyBar,{profile}),
 
     // ── Hero: what's being decided here, in plain facts ─────────────
@@ -7577,7 +7578,7 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
 
   const displayName = editForm.display_name||profile?.display_name||user.email?.split('@')[0]||'Resident';
   const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Recently';
-  const community = ZIP_COMMUNITY[profile?.zip]||'Jackson County';
+  const community = ZIP_COMMUNITY[profile?.zip] || (COUNTIES[profile?.county] && COUNTIES[profile.county].name) || 'Michigan';
 
   const voteBreakdown = votedBills.reduce((acc,b)=>{
     const v = userVotes[b.id];
@@ -10696,6 +10697,36 @@ function CountyPicker({value, homeId, onGo, dark, placeholder, compact}) {
           ]));
 }
 
+// ── Home: your ZIP is in a different county than your account ───────────────
+// ZIP codes cross county lines, and sign-up used to keep everyone in the county
+// whose page they started on. Ask once; either answer is remembered.
+function countyCheckKey(uid, county, zip) { return 'tpv_county_ok_' + uid + '_' + county + '_' + String(zip||'').trim(); }
+function HomeCountyCheck({profile, userId}) {
+  const uid = userId || (profile && profile.id);
+  const home = profile && profile.county;
+  const zipCo = profile && countyForZip(profile.zip);
+  const key = countyCheckKey(uid, home, profile && profile.zip);
+  const [done, setDone] = useState(()=>{ try { return localStorage.getItem(key) === '1'; } catch(e) { return false; } });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if(!profile || done || !uid || profile.deleted_at || !COUNTIES[home] || !zipCo || !COUNTIES[zipCo] || zipCo === home) return null;
+  const keep = ()=>{ try { localStorage.setItem(key, '1'); } catch(e) {} setDone(true); };
+  const move = async()=>{
+    setBusy(true); setErr('');
+    const {error} = await sb.from('profiles').update({county: zipCo}).eq('id', uid);
+    if(error) { setErr('That didn\'t save: ' + error.message); setBusy(false); return; }
+    goToCounty(zipCo);
+  };
+  const btn = {border:'none',borderRadius:6,padding:'8px 12px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12.5,cursor:busy?'default':'pointer'};
+  return h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:10,padding:'10px 12px',marginBottom:14,fontFamily:"'Lora',serif",fontSize:13.5,color:'#1a3a5c',lineHeight:1.55}},
+    '📍 Your ZIP (' + String(profile.zip).trim() + ') is in ', h('strong',null, COUNTIES[zipCo].name), ', but your account is set to ', h('strong',null, COUNTIES[home].name),
+    '. ZIP codes sometimes cross county lines, so either can be right. Which one is home?',
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}},
+      h('button',{onClick:move,disabled:busy,style:{...btn,background:'#1a1a2e',color:'#f0c040'}}, busy ? 'Moving you…' : 'Move me to ' + COUNTIES[zipCo].name),
+      h('button',{onClick:keep,disabled:busy,style:{...btn,background:'#fff',color:'#1a1a2e',border:'1px solid #c8d8f0'}}, COUNTIES[home].name + ' is right')),
+    err && h('div',{style:{color:'#c0392b',fontSize:12,marginTop:6}}, err));
+}
+
 // ── Home: which county you're looking at, and a way back to yours ────────────
 function CountyBar({profile}) {
   const here = countyTag();
@@ -12904,6 +12935,16 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
 
   const community=ZIP_COMMUNITY[zip.trim()]||null;
   const zipValid=VALID_ZIPS.includes(zip.trim());
+  // Which county they'll join: the one their ZIP is in. If that isn't the
+  // county whose page they started on, they can say their home is here
+  // instead (ZIP codes can cross county lines).
+  const [stayHere,setStayHere]=useState(false);
+  useEffect(()=>{ setStayHere(false); },[zip]);
+  const hereCounty = countyResolved() ? countyTag() : null;
+  const zipCounty = zipValid ? countyForZip(zip.trim()) : null;
+  const joinCounty = (stayHere && hereCounty) ? hereCounty : (zipCounty || hereCounty);
+  const joinPhrase = (joinCounty && COUNTIES[joinCounty]) ? COUNTIES[joinCounty].name + ' area' : 'local';
+  const crossCounty = !!(hereCounty && zipCounty && COUNTIES[zipCounty] && zipCounty !== hereCounty);
 
   const nextStep=()=>{
     if(step===1){
@@ -12925,30 +12966,19 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
 
   const handleSignup=async()=>{
     if(!zip.trim()){setError('ZIP code is required.');return;}
-    // Determine which county this ZIP belongs to, and which county the user
-    // is signing up under (URL).
-    const zipCounty = countyForZip(zip.trim());
-    const urlCounty = countyTag();
-    const currentCountyName = (COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY]).short;
     if(!zipValid){
       setError('That ZIP code (' + zip.trim() + ') isn\'t a Michigan ZIP. The People\'s Voice covers Michigan for now. Use the ZIP where you live.');
       return;
     }
-    // Warn if ZIP belongs to a different county than the URL
-    if(zipCounty && zipCounty !== urlCounty) {
-      const zipCountyName = COUNTIES[zipCounty]?.short || zipCounty;
-      if(!window.confirm('Your ZIP code (' + zip.trim() + ') is mostly in ' + zipCountyName + ' County, and you\'re joining ' + currentCountyName + ' County.\n\n' +
-          'ZIP codes cross county lines, so this can be right. Press OK to join ' + currentCountyName + ' County, or Cancel and switch counties at the top of the page.')) {
-        return;
-      }
-    }
     if(!attested){setError('Please confirm the attestation to continue.');return;}
+    // The county they join: their ZIP's county, or the page's if they said so
+    const joinId = (joinCounty && COUNTIES[joinCounty]) ? joinCounty : DEFAULT_COUNTY;
     setLoading(true);setError('');
 
     // ── Per-county signup cap ─────────────────────────────────────
     // Each county's share of the account budget, by population
     // (countyAccountCaps). Checked at signup time against the live count.
-    const capCounty = COUNTIES[urlCounty] || COUNTIES[DEFAULT_COUNTY];
+    const capCounty = COUNTIES[joinId];
     const countyCap = signupCapForCounty(capCounty.id);
     if(!countyCap) {
       // One budget for the whole platform (the free database tier)
@@ -12977,7 +13007,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
     const displayName=name||email.split('@')[0];
     const {data,error:err}=await sb.auth.signUp({
       email,password:pass,
-      options:{data:{display_name:displayName,zip},emailRedirectTo:authRedirectUrl(countyResolved()?urlCounty:zipCounty)}
+      options:{data:{display_name:displayName,zip},emailRedirectTo:authRedirectUrl(joinId)}
     });
     if(err){
       let msg=err.message||'Something went wrong. Please try again.';
@@ -12991,8 +13021,9 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
       // Retry profile creation up to 3 times in case of network hiccup
       let profileCreated = false;
       const accountIsOrg = ACCOUNT_TYPES[accountType]?.isOrg;
-      // County: prefer the URL county (where they're signing up), fall back to ZIP-based county
-      const profileCounty = urlCounty || zipCounty || DEFAULT_COUNTY;
+      // County: where their ZIP is (or the page's county, if they said their home is there)
+      const profileCounty = joinId;
+      if(profileCounty !== countyForZip(zip.trim())) { try { localStorage.setItem(countyCheckKey(data.user.id, profileCounty, zip), '1'); } catch(e) {} }
       const profileFields = {
         id:data.user.id,email,display_name:displayName,
         zip,verified_method:'self-attested',reputation:0,
@@ -13008,7 +13039,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
         await new Promise(r=>setTimeout(r,800));
       }
       if(!profileCreated) console.error('All profile upsert attempts failed — trigger should handle it');
-      onAuth(data.user,{display_name:displayName,zip,reputation:0,show_in_directory:true,account_type:accountType,org_name:orgName.trim()||null});
+      onAuth(data.user,{id:data.user.id,display_name:displayName,zip,county:profileCounty,reputation:0,show_in_directory:true,account_type:accountType,org_name:orgName.trim()||null},{isNew:true});
     }
     setLoading(false);
   };
@@ -13321,13 +13352,24 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
       // ── SIGNUP STEP 2 - ZIP + ATTESTATION ──
       mode==='signup'&&step===2&&h(Fragment,null,
         h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a',lineHeight:1.7}},
-          "📍 ",h('strong',null,"Just your ZIP code:")," We only need your ZIP to confirm you're a "+countyAreaPhrase()+" resident. We do not collect or store your street address."
+          "📍 ",h('strong',null,"Just your ZIP code:")," We use it to put you in the right county, so you see what's being decided near you. We do not collect or store your street address."
         ),
         h('div',{style:{marginBottom:10}},
           h('input',{value:zip,onChange:e=>setZip(e.target.value),placeholder:'ZIP code * (e.g. 49237)',maxLength:5,
             style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',fontSize:14,boxSizing:'border-box'}})
         ),
-        community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},"✓ "+community+" — welcome to The People's Voice!"),
+        community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},
+          "✓ "+community+((zipCounty&&COUNTIES[zipCounty]&&!/county/i.test(community))?', '+COUNTIES[zipCounty].name:'')+" — welcome to The People's Voice!"),
+        // Started on another county's page? Say where they'll land, and let them choose.
+        crossCounty&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',marginBottom:12,fontSize:12.5,fontFamily:"'Lora',serif",color:'#5a4500',lineHeight:1.6}},
+          stayHere
+            ? h(Fragment,null,"You'll join ",h('strong',null,COUNTIES[hereCounty].name),". ZIP codes sometimes cross county lines, so that can be right. ",
+                h('button',{type:'button',onClick:()=>setStayHere(false),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',fontSize:12.5,fontFamily:"'Lora',serif",fontWeight:700,textDecoration:'underline',cursor:'pointer'}},
+                  "Join "+COUNTIES[zipCounty].name+" instead"))
+            : h(Fragment,null,"You started on the "+COUNTIES[hereCounty].name+" page, but "+zip.trim()+" is in ",h('strong',null,COUNTIES[zipCounty].name),
+                ", so that's where you'll join: its local decisions, news and neighbors. We'll take you there when you're done. ",
+                h('button',{type:'button',onClick:()=>setStayHere(true),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',fontSize:12.5,fontFamily:"'Lora',serif",fontWeight:700,textDecoration:'underline',cursor:'pointer'}},
+                  "My home is in "+COUNTIES[hereCounty].name))),
         zip.trim().length===5&&!zipValid&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:8,fontSize:13,color:'#c0392b',lineHeight:1.6}},
           h('strong',null,"❌ ZIP code not in our service area. "),
           "The People's Voice is open in all 83 Michigan counties.",
@@ -13342,7 +13384,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
           h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#555',lineHeight:1.8,marginBottom:14}},
             "By checking the box below, I ",h('strong',null,"attest")," that:",
             h('ul',{style:{marginTop:8,marginLeft:16,display:'flex',flexDirection:'column',gap:6}},
-              h('li',null,"I am a real person and a genuine "+countyAreaPhrase()+" resident"),
+              h('li',null,"I am a real person and a genuine "+joinPhrase+" resident"),
               h('li',null,"I will cast only one vote per bill on this platform"),
               h('li',null,"I understand my votes are unofficial civic engagement, not legally binding"),
               h('li',null,"I will use this platform honestly and in good faith")
@@ -13352,7 +13394,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
             h('input',{type:'checkbox',checked:attested,onChange:e=>setAttested(e.target.checked),
               style:{width:20,height:20,flexShrink:0,marginTop:2,cursor:'pointer'}}),
             h('span',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#1a1a2e',fontWeight:600,lineHeight:1.6}},
-              "I confirm I am a real "+countyAreaPhrase()+" resident and will use this platform honestly."
+              "I confirm I am a real "+joinPhrase+" resident and will use this platform honestly."
             )
           )
         ),
@@ -19580,10 +19622,13 @@ function App() {
       style:{position:'fixed',top:'calc(10px + env(safe-area-inset-top, 0px))',right:12,zIndex:4001,minWidth:44,height:44,padding:'0 14px',borderRadius:22,
         background:'#fff',color:'#1a1a2e',border:'1px solid #d4cdb8',boxShadow:'0 4px 14px rgba(0,0,0,.3)',
         fontFamily:"'Lora',serif",fontSize:14,fontWeight:700,cursor:'pointer'}},'✕ Close'),
-    h(AuthScreen,{key:authPrompt.mode+'|'+(authPrompt.notice||''), onAuth:(u,p)=>{
+    h(AuthScreen,{key:authPrompt.mode+'|'+(authPrompt.notice||''), onAuth:(u,p,extra)=>{
         handleAuth(u,p);
-        // Finished a password reset on the front page? Take them to their county.
-        if(!currentCountyId && p && COUNTIES[p.county]) goToCounty(p.county);
+        // Finished a password reset on the front page, or just joined a county
+        // other than the page they started on? Take them to their county.
+        // (After a short wait: closing the join box steps the history back
+        // first, and that would cancel the trip.)
+        if(p && COUNTIES[p.county] && p.county !== currentCountyId && (!currentCountyId || (extra && extra.isNew))) setTimeout(()=>goToCounty(p.county), 450);
       },
       initialMode:authPrompt.mode,reason:authPrompt.reason,notice:authPrompt.notice,
       onGuest:()=>setAuthPrompt(null),onClose:()=>setAuthPrompt(null)}));
