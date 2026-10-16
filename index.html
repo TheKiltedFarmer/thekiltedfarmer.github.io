@@ -37,6 +37,9 @@ input,textarea,select{font-family:'Lora',serif}
 ::-webkit-scrollbar{width:5px}
 ::-webkit-scrollbar-track{background:#f0ece4}
 ::-webkit-scrollbar-thumb{background:#c0b89a;border-radius:3px}
+/* Swipeable tab rows: no scrollbar strip under them (Android, desktop) */
+.tpv-tabrow{scrollbar-width:none}
+.tpv-tabrow::-webkit-scrollbar{display:none}
 </style>
 </head>
 <body>
@@ -3591,7 +3594,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
     ),
 
     open&&h('div',{style:{borderTop:'1px solid #e5dece',padding:'16px 16px'}},
-      h('div',{style:{display:'flex',borderBottom:'2px solid #e5dece',marginBottom:16,overflowX:'auto'}},
+      h('div',{className:'tpv-tabrow',style:{display:'flex',borderBottom:'2px solid #e5dece',marginBottom:16,overflowX:'auto'}},
         [...(aiEnabled()?['ai']:[]),'why','forum','ask'].map(t=>h('button',{key:t,onClick:()=>setTab(t),style:{background:'transparent',border:'none',borderBottom:tab===t?'2px solid #1a1a2e':'none',marginBottom:-2,padding:'8px 12px',fontFamily:"'Playfair Display',serif",fontWeight:tab===t?700:400,fontSize:13.5,color:tab===t?'#1a1a2e':'#aaa',whiteSpace:'nowrap',cursor:'pointer'}},
           {ai:"🤖 AI",why:"🤔 Reasons",forum:"💬 Discussion",ask:"❓ Ask officials"}[t]))
       ),
@@ -19812,7 +19815,7 @@ function App() {
         )
       ),
       // Stats bar — horizontally scrollable on mobile
-      h('div',{style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
+      h('div',{className:'tpv-tabrow',style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'6px 14px',display:'flex',gap:16,flexWrap:'nowrap',minWidth:'max-content'}},
           [[bills.filter(b=>!b.outcome).length,"Open decisions"],
            [daysUntilDate(ELECTION_2026.date)>=0&&daysUntilDate(ELECTION_2026.date)<=60?daysUntilDate(ELECTION_2026.date):0,"Days to Nov 3"],
@@ -19827,7 +19830,7 @@ function App() {
         )
       ),
       // Main hub nav (5 hubs + admin) — primary, in the dark header
-      h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
+      h('div',{className:'tpv-tabrow',style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
           [...HUBS, ...(isAdmin?[{id:'admin',icon:'\u2699\uFE0F',label:'Admin',subs:[{id:'admin',label:'Admin'}]}]:[])].map(hubDef=>
             h('button',{key:hubDef.id, onClick:()=>{setHub(hubDef.id); setSubTab(hubDef.subs[0].id);},
@@ -19876,7 +19879,7 @@ function App() {
       const hubDef = HUBS.find(h=>h.id===hub) || (hub==='admin'?{subs:[{id:'admin',label:'Admin'}]}:null);
       if(!hubDef || hubDef.subs.length<=1) return null;
       return h('div',{style:{background:'#ebe6d7', borderBottom:'1px solid #d8cfb6'}},
-        h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',gap:4,
+        h('div',{className:'tpv-tabrow',style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',gap:4,
           overflowX:'auto',WebkitOverflowScrolling:'touch'}},
           hubDef.subs.map(s=>
             h('button',{key:s.id, onClick:()=>setSubTab(s.id),
