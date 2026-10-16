@@ -346,6 +346,125 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .exp-row:last-child{border-bottom:none;}
 .add-entry-form{background:var(--cream);border-radius:10px;padding:14px;margin-bottom:16px;}
 
+
+/* LAYOUT (tab bar + page width — these classes were never styled) */
+.tabs{display:flex;background:#fff;border-bottom:2px solid var(--rule);padding:0 16px;max-width:960px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.container{max-width:960px;margin:0 auto;padding:16px 14px 80px;}
+
+/* EXPENSE ROWS + RECEIPT SCANNER */
+.exp-item{border-bottom:1px solid var(--cream-dark);padding:2px 0 8px;}
+.exp-item .exp-row{border-bottom:none;padding:6px 0 4px;}
+.exp-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;}
+.exp-item.blank .exp-meta{display:none;}
+.exp-item.blank:focus-within .exp-meta{display:flex;}
+.exp-cat,.exp-date{padding:4px 8px;border:1px solid var(--rule);border-radius:6px;background:#fff;font-family:inherit;font-size:12px;color:var(--mid);max-width:170px;}
+.exp-view{color:var(--green);font-size:12px;font-weight:600;}
+.check-flag{color:#8a5d00;background:#fff4d6;border:1px solid #f0d58a;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;}
+.exp-item.needs-check input[type=number]{border-color:#e0b84a;background:#fffaf0;}
+.scan-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+.scan-bar .btn-tan{padding:10px 18px;}
+.scan-tip{font-size:12px;color:var(--mid);}
+.scan-panel{background:var(--cream);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin-bottom:14px;}
+.scan-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;flex-wrap:wrap;}
+.scan-item{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--cream-dark);}
+.scan-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;background:#fff;border:1px solid var(--rule);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;}
+.scan-info{flex:1;min-width:0;font-size:12px;}
+.scan-name{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.scan-stage{color:var(--mid);}
+.scan-item.check .scan-stage,.scan-item.manual .scan-stage{color:#8a5d00;font-weight:600;}
+.scan-item.error .scan-stage{color:var(--red);font-weight:600;}
+.scan-amt{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;color:var(--green-dark);white-space:nowrap;}
+.scan-item.check .scan-amt{color:#8a5d00;}
+
+/* BOOKS */
+.bk-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+.bk-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.bk-actions .btn-green,.bk-actions .btn-secondary{padding:9px 16px;}
+.bk-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+@media(max-width:700px){.bk-summary{grid-template-columns:1fr 1fr;gap:10px;}}
+.bk-stat{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:13px 15px;min-width:0;}
+.bk-stat.net{background:var(--green-dark);border-color:var(--green-dark);}
+.bk-stat-l{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;}
+.bk-stat.net .bk-stat-l{color:rgba(255,255,255,.6);}
+.bk-stat-v{font-family:'Playfair Display',serif;font-size:21px;font-weight:900;color:var(--green-dark);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bk-stat.net .bk-stat-v{color:#fff;}
+.bk-stat-s{font-size:11px;color:var(--mid);margin-top:2px;}
+.bk-stat.net .bk-stat-s{color:rgba(255,255,255,.55);}
+.bk-pills{display:flex;gap:4px;margin-bottom:14px;background:var(--cream-dark);padding:4px;border-radius:10px;}
+.bk-pills button{flex:1;padding:9px 6px;border:none;background:transparent;border-radius:7px;font-family:inherit;font-size:13px;font-weight:700;color:var(--mid);cursor:pointer;}
+.bk-pills button.active{background:#fff;color:var(--green-dark);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.bk-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;align-items:center;}
+.bk-filters input{flex:1;min-width:150px;width:auto;}
+.bk-date{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;padding:14px 0 2px;}
+.bk-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--cream-dark);cursor:pointer;border-radius:6px;}
+.bk-row:hover{background:var(--cream);}
+.bk-ico{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px;}
+.bk-ico.in{background:#e6f4ec;color:var(--green);}
+.bk-ico.out{background:#f8ebe3;color:var(--tan);}
+.bk-main{flex:1;min-width:0;}
+.bk-payee{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bk-sub{font-size:11px;color:var(--mid);font-weight:400;}
+.bk-cat{background:var(--cream-dark);border-radius:4px;padding:1px 6px;}
+.bk-outside{color:var(--tan);font-weight:700;}
+.bk-amt{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;white-space:nowrap;}
+.bk-amt.in{color:var(--green);}
+.bk-amt.out{color:var(--ink);}
+.bk-empty{color:var(--mid);font-size:13px;padding:18px 0;text-align:center;}
+.bk-foot{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--mid);padding-top:12px;flex-wrap:wrap;}
+.bud-row{padding:11px 0;border-bottom:1px solid var(--cream-dark);}
+.bud-row.income{background:#f6fbf8;margin:0 -10px;padding:11px 10px;border-radius:8px;}
+.bud-top{display:flex;align-items:center;gap:10px;}
+.bud-name{flex:1;font-size:14px;font-weight:700;min-width:0;}
+.bud-act{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;white-space:nowrap;}
+.bud-input{width:92px;text-align:right;padding:6px 8px;}
+.bud-bar{position:relative;height:7px;background:var(--cream-dark);border-radius:4px;overflow:hidden;margin-top:7px;}
+.bud-fill{height:100%;border-radius:4px;background:var(--green-light);}
+.bud-fill.warn{background:var(--tan-light);}
+.bud-fill.over{background:var(--red);}
+.bud-pace{position:absolute;top:0;bottom:0;width:2px;background:rgba(0,0,0,.35);z-index:1;}
+.bud-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--mid);margin-top:4px;}
+.pl-table{width:100%;border-collapse:collapse;font-size:13px;}
+.pl-table td{padding:7px 0;border-bottom:1px solid var(--cream-dark);}
+.pl-table td:last-child{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:10px;}
+.pl-table tr.pl-h td{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;padding-top:16px;border-bottom:1px solid var(--rule);}
+.pl-table tr.pl-t td{font-weight:700;}
+.pl-table tr.pl-net td{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:var(--green-dark);border-bottom:2px solid var(--green-dark);padding-top:12px;}
+.pl-table td.ind{padding-left:12px;}
+.pl-table tr.pl-h td:last-child{text-align:left;}
+.header-eyebrow{font-size:12px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;margin-bottom:5px;position:relative;}
+.header-title{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:#fff;position:relative;}
+.seg{display:flex;background:var(--cream-dark);padding:3px;border-radius:9px;margin-bottom:14px;}
+.seg.mini{margin-bottom:0;}
+.seg button{flex:1;padding:9px 12px;border:none;background:transparent;border-radius:7px;font-family:inherit;font-weight:700;font-size:13px;color:var(--mid);cursor:pointer;white-space:nowrap;}
+.seg button.active{background:#fff;color:var(--green-dark);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.seg button.active.out{color:var(--tan);}
+.seg button.active.in{color:var(--green);}
+.txn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.txn-grid label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:5px;font-weight:700;}
+.txn-grid input,.txn-grid select{width:100%;font-size:16px;}
+.txn-full{grid-column:1/-1;}
+@media(max-width:480px){.txn-grid{grid-template-columns:1fr;}}
+.txn-pool{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:600;margin:16px 0 4px;cursor:pointer;}
+.txn-pool input{width:18px;height:18px;accent-color:var(--green);margin-top:1px;flex-shrink:0;}
+.txn-hint{font-size:12px;color:var(--mid);margin:0 0 10px 28px;}
+.txn-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;}
+.txn-actions .btn-danger{margin-right:auto;padding:10px 16px;background:transparent;border:1.5px solid var(--red);color:var(--red);border-radius:8px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;}
+#txnReceiptStatus{font-size:12px;color:var(--green);margin-left:6px;}
+#txnReceiptStatus a{color:var(--green);}
+.setup-card{border-color:var(--tan-light);background:#fffaf2;}
+.setup-card pre{background:#fff;border:1px solid var(--rule);border-radius:8px;padding:10px;font-size:11px;max-height:170px;overflow:auto;white-space:pre-wrap;margin:4px 0 0;}
+.exp-row input{min-width:0;width:100%;}
+.add-entry-form input,.add-entry-form select{min-width:0;width:100%;}
+@media(max-width:620px){
+  .container{padding:12px 10px 80px;}
+  .bud-input{width:80px;}
+  .add-entry-form>div{grid-template-columns:1fr 1fr!important;}
+  .add-entry-form>div>button{grid-column:1/-1;}
+  .exp-row{grid-template-columns:minmax(0,1fr) 88px auto auto;gap:6px;}
+  .exp-row .receipt-btn{padding:5px 7px;}
+  .scan-tip{flex-basis:100%;}
+}
+
 </style>
 </head>
 <body>
@@ -380,13 +499,14 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 <div class="header">
   <div class="header-eyebrow">The Kilted Farmers</div>
   <h1 class="header-title">Operations Hub</h1>
-  <p class="header-sub">Distribution · Revenue · Ingredients · History</p>
+  <p class="header-sub">Distribution · Revenue · Books · History</p>
 </div>
 
 <!-- TABS -->
 <div class="tabs">
   <div class="tab active" onclick="switchTab('dashboard',this)">Dashboard</div>
   <div class="tab" onclick="switchTab('log',this)">Revenue & Expenses</div>
+  <div class="tab" onclick="switchTab('books',this)">Books</div>
   <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
   <div class="tab" onclick="switchTab('team',this)">Team</div>
   <div class="tab" onclick="switchTab('ingredients',this)">Ingredients</div>
@@ -512,6 +632,12 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
       <span class="save-indicator" id="expSaveIndicator"></span>
     </div>
     <div class="card-sub">List each expense — saves automatically.</div>
+    <div class="scan-bar">
+      <button class="btn-tan" onclick="triggerScan()">📷 Scan Receipts</button>
+      <span class="scan-tip">Pick as many photos or PDFs as you like — totals get read and added for you.</span>
+      <input type="file" id="scanInput" accept="image/*,.pdf" multiple style="display:none;" onchange="onScanFiles(this)">
+    </div>
+    <div id="scanPanel" class="scan-panel" style="display:none;"></div>
     <div id="expenseList"></div>
     <button class="add-btn" onclick="addExpense()" style="margin-top:10px;">+ Add Expense</button>
     <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid var(--rule);margin-top:12px;">
@@ -520,6 +646,32 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
     </div>
   </div>
 
+</div>
+
+<!-- ─── BOOKS ─── -->
+<div class="tab-content" id="tab-books">
+  <div id="booksSetup" style="margin-top:8px;"></div>
+  <div class="card" style="margin-top:8px;">
+    <div class="bk-top">
+      <div style="flex:1;min-width:200px;">
+        <div class="card-title"><div class="card-title-dot"></div>Books</div>
+        <div class="card-sub" style="margin-bottom:0;">Every dollar in and out. Revenue and expenses you log show up here on their own.</div>
+      </div>
+      <select id="booksRange" class="period-select" style="font-weight:600;color:var(--green-dark);" onchange="onBooksRange(this.value)"></select>
+    </div>
+    <div class="bk-actions">
+      <button class="btn-green" onclick="openTxnModal()">+ Transaction</button>
+      <button class="btn-secondary" onclick="booksScanReceipts()">📷 Scan Receipts</button>
+      <button class="btn-secondary" onclick="booksExportCSV()">⬇ Export CSV</button>
+    </div>
+  </div>
+  <div class="bk-summary" id="booksSummary"></div>
+  <div class="bk-pills">
+    <button data-v="txns" class="active" onclick="setBooksView('txns')">Transactions</button>
+    <button data-v="budget" onclick="setBooksView('budget')">Budget</button>
+    <button data-v="reports" onclick="setBooksView('reports')">Reports</button>
+  </div>
+  <div id="booksBody"></div>
 </div>
 
 <!-- ─── TIME CLOCK ─── -->
@@ -638,8 +790,43 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
   </div>
 </div>
 
+<!-- TRANSACTION MODAL -->
+<div class="modal-overlay" id="txnModal" onclick="if(event.target===this)closeTxnModal()">
+  <div class="modal" style="max-width:520px;">
+    <button class="modal-close" onclick="closeTxnModal()">×</button>
+    <div class="modal-title" id="txnModalTitle">New Transaction</div>
+    <div class="seg">
+      <button id="txnDirOut" class="active out" onclick="setTxnDir('out')">↑ Money Out</button>
+      <button id="txnDirIn" onclick="setTxnDir('in')">↓ Money In</button>
+    </div>
+    <div class="txn-grid">
+      <div><label>Amount</label><input type="number" inputmode="decimal" step="0.01" id="txnAmount" class="period-input" placeholder="0.00"></div>
+      <div><label>Date</label><input type="date" id="txnDate" class="period-input" onchange="onTxnDateChange()"></div>
+      <div class="txn-full"><label id="txnPayeeLabel">Paid to</label><input type="text" id="txnPayee" class="period-input" placeholder="e.g. Meijer, Lansing market"></div>
+      <div><label>Category</label><select id="txnCategory" class="period-select" onchange="onTxnCatChange()"></select></div>
+      <div><label>Paid with</label><select id="txnMethod" class="period-select"></select></div>
+      <div class="txn-full"><label>Notes</label><input type="text" id="txnNotes" class="period-input" placeholder="Optional"></div>
+    </div>
+    <label class="txn-pool"><input type="checkbox" id="txnPool" checked onchange="refreshTxnPoolUI()"> Counts toward the weekly pay pool</label>
+    <div class="txn-hint" id="txnPoolHint"></div>
+    <div id="txnWeekWrap" class="txn-grid" style="margin-left:28px;">
+      <div class="txn-full"><label>Pay week</label><select id="txnPayWeek" class="period-select" onchange="_txn.payWeek=this.value;_txn.weekTouched=true;"></select></div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="receipt-btn" onclick="document.getElementById('txnReceiptInput').click()">📷 Attach receipt</button>
+      <span id="txnReceiptStatus"></span>
+      <input type="file" id="txnReceiptInput" accept="image/*,.pdf" style="display:none;" onchange="txnReceiptChosen(this)">
+    </div>
+    <div class="txn-actions">
+      <button class="btn-danger" id="txnDeleteBtn" onclick="deleteTxn()">Delete</button>
+      <button class="btn-secondary" onclick="closeTxnModal()">Cancel</button>
+      <button class="btn-green" id="txnSaveBtn" onclick="saveTxn()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
-<div id="toastEl" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green-dark);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity 0.3s;z-index:999;pointer-events:none;max-width:320px;text-align:center;"></div>
+<div id="toastEl" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green-dark);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity 0.3s;z-index:3000;pointer-events:none;max-width:320px;text-align:center;"></div>
 
 <div class="footer">The Kilted Farmers LLC — Concord, Michigan · Contributionist Distribution Model · Common Table: 8%</div>
 </div>
@@ -648,7 +835,7 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 
 <script>
 // ═══════════════════════════════════════════════════════
-// THE KILTED FARMERS — OPERATIONS HUB v6
+// THE KILTED FARMERS — OPERATIONS HUB v8 (receipts scanner + Books)
 // Clean build — auto-save everything, no Save button
 // ═══════════════════════════════════════════════════════
 
@@ -670,10 +857,10 @@ let members=[
 ];
 
 let expenses=[
-  {id:1,name:'Ingredients',amount:'',receiptUrl:'',dbId:null},
-  {id:2,name:'Packaging',amount:'',receiptUrl:'',dbId:null},
-  {id:3,name:'Kitchen Rental',amount:'',receiptUrl:'',dbId:null},
-  {id:4,name:'Market Fees',amount:'',receiptUrl:'',dbId:null}
+  {id:1,name:'Ingredients',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''},
+  {id:2,name:'Packaging',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''},
+  {id:3,name:'Kitchen Rental',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''},
+  {id:4,name:'Market Fees',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''}
 ];
 
 let bulkIngs=[{id:1,name:'Semolina Flour',cost:'',yield:'400'},{id:2,name:'Eggs (dozen)',cost:'',yield:'6'}];
@@ -776,6 +963,7 @@ function getWeekBoundsFromLabel(label){
     if(parts.length<2)return null;
     const mon=new Date(parts[0]+' '+year);mon.setHours(0,0,0,0);
     const sun=new Date(parts[1]+' '+year);sun.setHours(23,59,59,999);
+    if(mon>sun)mon.setFullYear(year-1);
     if(isNaN(mon)||isNaN(sun))return null;
     return{mon,sun};
   }catch(e){return null;}
@@ -872,6 +1060,7 @@ function signOut(){
   window._authToken=null;currentUser=null;currentProfile=null;
   try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
   if(dashInterval)clearInterval(dashInterval);
+  BOOKS.rows=[];BOOKS.schema.checked=false;BOOKS.stale=true;
   document.getElementById('authGate').style.display='flex';
   document.getElementById('userBar').style.display='none';
 }
@@ -922,13 +1111,14 @@ async function onLogPeriodChange(){
     window._currentPeriodId=null;
     window._currentPeriodLabel=null;
   }
-  expenses=[{id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null}];
+  expenses=[{id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''}];
   renderExpenses();
   await loadRevLogEntries();
   await loadExpensesFromDB();
 }
 
 async function autoInit(){
+  booksProbe().catch(()=>{});
   buildPeriodDropdowns();
   renderExpenses();renderBulkIngs();renderSpecIngs();
   renderTeam();renderClock();
@@ -958,6 +1148,7 @@ function switchTab(id,el){
   }
   if(id==='team'||id==='timeclock'){loadCurrentPeriodHours().then(()=>{renderTeam();renderClock();calculate();});}
   if(id==='admin')adminLoadUsers();
+  if(id==='books')loadBooks(!BOOKS.stale);
 }
 
 // ─── TEAM ───
@@ -1181,15 +1372,27 @@ async function loadCurrentPeriodHours(){
 function renderExpenses(){
   const el=document.getElementById('expenseList');if(!el)return;
   el.innerHTML='';
+  const catList=typeof EXPENSE_CATS!=='undefined'?EXPENSE_CATS:[];
   expenses.forEach(exp=>{
+    const blank=!exp.dbId&&!exp.name&&!exp.amount&&!exp.receiptUrl;
+    const cat=exp.category||guessCategory((exp.name||'')+' '+(exp.vendor||''))||'';
     const row=document.createElement('div');
-    row.className='exp-row';
+    row.className='exp-item'+(exp.needsCheck?' needs-check':'')+(blank?' blank':'');
+    row.dataset.exp=exp.id;
     row.innerHTML=`
-      <input type="text" class="inp" placeholder="Description" value="${exp.name}" oninput="updateExpense(${exp.id},'name',this.value)" style="padding:8px 10px;">
-      <input type="number" class="inp" placeholder="0.00" value="${exp.amount}" oninput="updateExpense(${exp.id},'amount',this.value)" style="text-align:right;padding:8px 10px;">
-      <button class="receipt-btn" onclick="triggerReceipt(${exp.id})" style="white-space:nowrap;">${exp.receiptUrl?'✓ Receipt':'📎 Receipt'}</button>
-      <button class="remove-btn" onclick="removeExpense(${exp.id})">×</button>
-      <input type="file" id="receipt-${exp.id}" style="display:none;" accept="image/*,.pdf" onchange="uploadReceipt(${exp.id},this)">`;
+      <div class="exp-row">
+        <input type="text" class="inp" placeholder="Description" value="${esc(exp.name)}" oninput="updateExpense(${exp.id},'name',this.value)" style="padding:8px 10px;">
+        <input type="number" inputmode="decimal" class="inp" placeholder="0.00" value="${esc(exp.amount)}" oninput="updateExpense(${exp.id},'amount',this.value)" style="text-align:right;padding:8px 10px;">
+        <button class="receipt-btn${exp.receiptUrl?' has-receipt':''}" onclick="triggerReceipt(${exp.id})" style="white-space:nowrap;">${exp.receiptUrl?'✓ Receipt':'📎 Receipt'}</button>
+        <button class="remove-btn" onclick="removeExpense(${exp.id})">×</button>
+        <input type="file" id="receipt-${exp.id}" style="display:none;" accept="image/*,.pdf" onchange="uploadReceipt(${exp.id},this)">
+      </div>
+      <div class="exp-meta">
+        <select class="exp-cat" onchange="updateExpense(${exp.id},'category',this.value)"><option value="">Category…</option>${catList.map(c=>'<option'+(c===cat?' selected':'')+'>'+esc(c)+'</option>').join('')}${cat&&!catList.includes(cat)?'<option selected>'+esc(cat)+'</option>':''}</select>
+        <input type="date" class="exp-date" value="${esc(exp.date||'')}" onchange="updateExpense(${exp.id},'date',this.value)" title="Purchase date">
+        ${exp.receiptUrl?`<a class="exp-view" href="${esc(exp.receiptUrl)}" target="_blank" rel="noopener">View receipt</a>`:''}
+        ${exp.needsCheck?'<span class="check-flag">⚠ Double-check the total</span>':''}
+      </div>`;
     el.appendChild(row);
   });
   updateExpTotals();
@@ -1202,98 +1405,124 @@ function updateExpTotals(){
 }
 
 function addExpense(){
-  expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null});
+  expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''});
   renderExpenses();
 }
 
 function removeExpense(id){
   const exp=expenses.find(e=>e.id===id);
-  if(exp&&exp.dbId)sb('kf_expenses?id=eq.'+exp.dbId,{method:'DELETE',headers:{'Prefer':''}}).catch(e=>console.warn(e));
-  expenses=expenses.filter(e=>e.id!==id);renderExpenses();
+  if(exp&&exp.dbId)sb('kf_expenses?id=eq.'+exp.dbId,{method:'DELETE'}).then(()=>{refreshDashboard();BOOKS.stale=true;}).catch(e=>{console.warn(e);toast('Delete failed: '+e.message,true);});
+  expenses=expenses.filter(e=>e.id!==id);
+  ensureBlankExpenseRow();
+  renderExpenses();
 }
 
 function updateExpense(id,f,v){
-  const exp=expenses.find(e=>e.id===id);if(exp)exp[f]=v;
+  const exp=expenses.find(e=>e.id===id);if(!exp)return;
+  exp[f]=v;
+  const rowEl=document.querySelector('.exp-item[data-exp="'+id+'"]');
+  if(f==='amount'&&exp.needsCheck){
+    exp.needsCheck=false;
+    if(rowEl){rowEl.classList.remove('needs-check');const fl=rowEl.querySelector('.check-flag');if(fl)fl.remove();}
+  }
+  if(rowEl&&(f==='name'||f==='amount')&&(exp.name||exp.amount))rowEl.classList.remove('blank');
   updateExpTotals();
   showSave('expSaveIndicator','saving');
   clearTimeout(window._expTimer);
   window._expTimer=setTimeout(()=>saveExpenses(),1200);
 }
 
+function expenseBody(exp,amt){
+  const b={name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''};
+  if(BOOKS.schema.v2){
+    b.category=exp.category||guessCategory((exp.name||'')+' '+(exp.vendor||''))||null;
+    b.vendor=exp.vendor||null;
+    b.txn_date=exp.date||null;
+  }
+  return b;
+}
+
+let _expSaving=false,_expSaveAgain=false;
 async function saveExpenses(){
+  // One save at a time — overlapping saves used to insert the same row twice
+  if(_expSaving){_expSaveAgain=true;return;}
+  _expSaving=true;
   showSave('expSaveIndicator','saving');
   try{
-    // Get or create period record — expenses always belong to the LOG tab's selected period
+    await booksProbe();
+    // Expenses always belong to the LOG tab's selected period
     const label=getLogPeriodLabel();
-    // Use a separate period cache for the log tab so it doesn't clobber the timeclock period
     let pid=window._logPeriodId&&window._logPeriodLabel===label?window._logPeriodId:null;
     if(!pid){
-      // Try to find existing
-      const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-      if(existing.length){
-        pid=existing[0].id;
-        window._logPeriodId=pid;window._logPeriodLabel=label;
-      } else {
-        // Create new period record
-        const created=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:'Weekly',period_label:label,gross_revenue:0,total_expenses:0,common_table:0,distributable_pool:0,total_hours:0})});
-        pid=created[0].id;
-        window._logPeriodId=pid;window._logPeriodLabel=label;
-      }
+      pid=await getOrCreatePeriodId(label);
+      window._logPeriodId=pid;window._logPeriodLabel=label;
     }
     if(!pid){showSave('expSaveIndicator','error','No period ID');return;}
-
     for(const exp of expenses){
       const amt=parseFloat(exp.amount)||0;
-      if(!amt&&!exp.dbId)continue; // Skip blank unsaved rows
+      if(!amt&&!exp.dbId)continue; // skip blank unsaved rows
       if(exp.dbId){
-        // Update existing
-        await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify({name:exp.name||'',amount:amt,receipt_url:exp.receiptUrl||''})});
-      } else if(amt>0&&exp.name){
-        // Insert new
-        const rows=await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:exp.name,amount:amt,receipt_url:exp.receiptUrl||''})});
+        await sb('kf_expenses?id=eq.'+exp.dbId,{method:'PATCH',body:JSON.stringify(expenseBody(exp,amt))});
+      }else if(amt>0){
+        if(!exp.name)exp.name=exp.vendor||'Expense';
+        const rows=await sb('kf_expenses',{method:'POST',body:JSON.stringify(Object.assign({period_id:pid},expenseBody(exp,amt)))});
         if(rows&&rows[0])exp.dbId=rows[0].id;
       }
     }
     showSave('expSaveIndicator','saved');
+    BOOKS.stale=true;
     refreshDashboard();
   }catch(e){
     console.error('saveExpenses error:',e);
     showSave('expSaveIndicator','error',e.message);
+  }finally{
+    _expSaving=false;
+    if(_expSaveAgain){_expSaveAgain=false;saveExpenses();}
   }
 }
 
 async function loadExpensesFromDB(){
   try{
     const label=getLogPeriodLabel();
+    // Keep receipts/rows typed in but not saved yet (e.g. a scanned receipt still waiting for its total)
+    const keep=window._expLoadedLabel===label?expenses.filter(e=>!e.dbId&&(e.name||e.amount||e.receiptUrl)):[];
     const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
-    if(!periods.length)return;
-    const pid=periods[0].id;window._currentPeriodId=pid;
+    if(label!==getLogPeriodLabel())return; // period changed while loading
+    window._expLoadedLabel=label;
+    if(!periods.length){if(_expSaving||_scanBusy)return;expenses=keep;ensureBlankExpenseRow();renderExpenses();return;}
+    const pid=periods[0].id;
+    // Cache under the LOG period — never overwrite the time clock's period id
+    window._logPeriodId=pid;window._logPeriodLabel=label;
     const exps=await sb('kf_expenses?period_id=eq.'+pid+'&select=*&order=created_at.asc');
-    if(exps.length){
-      // Load saved expenses plus one blank row for new entries
-      expenses=exps.map((e,i)=>({id:i+1,name:e.name||'',amount:e.amount!=null?String(e.amount):'',receiptUrl:e.receipt_url||'',dbId:e.id}));
-      expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null});
-      expCounter+=10;
-      renderExpenses();
-    }
+    if(_expSaving||_scanBusy)return; // don't clobber rows mid-save
+    const flags={};expenses.forEach(e=>{if(e.dbId&&e.needsCheck)flags[e.dbId]=true;});
+    expenses=exps.filter(e=>e.name||parseFloat(e.amount)>0).map(e=>({id:++expCounter,name:e.name||'',amount:e.amount!=null?String(e.amount):'',
+      receiptUrl:e.receipt_url||'',dbId:e.id,category:e.category||'',vendor:e.vendor||'',date:e.txn_date||'',needsCheck:!!flags[e.id]}));
+    expenses.push(...keep);
+    ensureBlankExpenseRow();
+    renderExpenses();
   }catch(e){console.warn('Load expenses:',e.message);}
 }
 
-function triggerReceipt(id){document.getElementById('receipt-'+id).click();}
+function triggerReceipt(id){const i=document.getElementById('receipt-'+id);if(i)i.click();}
 
 async function uploadReceipt(id,input){
-  const file=input.files[0];if(!file)return;
-  const exp=expenses.find(e=>e.id===id);
-  showSave('expSaveIndicator','saving');
+  const file=input.files[0];input.value='';if(!file)return;
+  const exp=expenses.find(e=>e.id===id);if(!exp)return;
+  const ind=document.getElementById('expSaveIndicator');
+  const hasAmount=parseFloat(exp.amount)>0;
   try{
-    const fileName='receipt_'+Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const res=await fetch('https://zhnilrohxoixsgmdyqiw.supabase.co/storage/v1/object/kf-receipts/'+fileName,{
-      method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':file.type},body:file
-    });
-    if(!res.ok)throw new Error('Upload failed');
-    const url='https://zhnilrohxoixsgmdyqiw.supabase.co/storage/v1/object/public/kf-receipts/'+fileName;
-    if(exp){exp.receiptUrl=url;renderExpenses();}
-    showSave('expSaveIndicator','saved');saveExpenses();
+    const r=await readReceiptFile(file,s=>{if(ind){ind.className='save-indicator saving';ind.textContent='⟳ '+s;}},{skipOcr:hasAmount});
+    exp.receiptUrl=r.url;
+    if(!hasAmount&&r.amount!=null){exp.amount=r.amount.toFixed(2);exp.needsCheck=r.confidence!=='high';}
+    if(!exp.vendor&&r.vendor)exp.vendor=r.vendor;
+    if(!exp.name&&r.vendor)exp.name=r.vendor;
+    if(!exp.category&&r.category)exp.category=r.category;
+    if(!exp.date&&r.date)exp.date=r.date;
+    ensureBlankExpenseRow();
+    renderExpenses();
+    if(!hasAmount&&r.amount==null)toast('Receipt attached — couldn’t read the total, type it in',true);
+    await saveExpenses();
   }catch(e){showSave('expSaveIndicator','error',e.message);}
 }
 
@@ -1307,7 +1536,11 @@ async function addRevEntry(){
   if(!amount){toast('Enter an amount first',true);return;}
   showSave('revSaveIndicator','saving');
   try{
-    await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify({amount,source,reported_by:reporter,notes,period_label:periodLabel})});
+    await booksProbe();
+    const revBody={amount,source,reported_by:reporter,notes,period_label:periodLabel};
+    if(BOOKS.schema.v2)revBody.txn_date=revDateForLabel(periodLabel);
+    await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(revBody)});
+    BOOKS.stale=true;
     document.getElementById('revAmount').value='';
     document.getElementById('revNotes').value='';
     showSave('revSaveIndicator','saved');
@@ -1927,6 +2160,814 @@ async function adminUpdateRole(uid,name,role){const r=await adminCall('update_ro
 async function adminResetPassword(uid,name){const pw=prompt('New password for '+name+' (min 6 chars):');if(!pw||pw.length<6){toast('Too short',true);return;}const r=await adminCall('update_password',{userId:uid,password:pw});if(r.success)toast('Password updated');else toast('Failed',true);}
 async function adminDeactivate(uid,name){if(!confirm('Deactivate '+name+'?'))return;const r=await adminCall('deactivate_user',{userId:uid,name});if(r.success){toast(name+' deactivated');adminLoadUsers();}else toast('Failed',true);}
 async function adminReactivate(uid,name){const r=await adminCall('reactivate_user',{userId:uid,name});if(r.success){toast(name+' reactivated');adminLoadUsers();}else toast('Failed',true);}
+
+// ═══════════════════════════════════════════════════════
+// RECEIPT READER — multi-upload, reads totals automatically
+// ═══════════════════════════════════════════════════════
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function isoLocal(d){d=new Date(d);if(isNaN(d))return'';return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function todayISO(){return isoLocal(new Date());}
+function parseISO(s){if(!s)return null;const m=String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return null;return new Date(+m[1],+m[2]-1,+m[3],12);}
+function prettyDate(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
+function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
+
+const EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Other Expense'];
+const INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Other'];
+const MOVEMENT_CATS=['Member Distribution','Owner Contribution','Loan','Transfer']; // money that moves but isn't profit or loss
+const COGS_CATS=['Ingredients','Packaging'];
+const PAY_METHODS=['Card','Cash','Check','Square','Venmo / PayPal','Bank Transfer','Other'];
+
+const VENDOR_RULES=[
+  {re:/gallons?|unleaded|diesel|\bfuel\b|pump\s*#|\bshell\b|marathon|speedway|sunoco|mobil\b|citgo|circle\s*k|\bbp\b|admiral|quick\s*stop/i,cat:'Fuel & Mileage'},
+  {re:/uline|webstaurant|paper\s*mart|packag|onlinelabels|sticker\s*mule|clamshell|deli\s*container/i,cat:'Packaging'},
+  {re:/restaurant\s*depot|meijer|kroger|\baldi\b|wal\W?mart|costco|sam'?s\s*club|gordon\s*food|\bgfs\b|sysco|us\s*foods|whole\s*foods|trader\s*joe|spartan|family\s*fare|save\s*a\s*lot|food\s*4\s*less|plum\s*market|hiller|horrocks|grocer|bulk\s*food|\beggs?\b|flour|semolina|produce|dairy/i,cat:'Ingredients'},
+  {re:/home\s*depot|\blowe'?s\b|menards|ace\s*hardware|harbor\s*freight|tractor\s*supply|staples|office\s*depot|dollar\s*(general|tree)|\btarget\b|hobby\s*lobby|walgreens|\bcvs\b/i,cat:'Supplies'},
+  {re:/shopify|canva|adobe|google|microsoft|apple\.com|godaddy|squarespace|\bwix\b|subscription/i,cat:'Software & Subscriptions'},
+  {re:/facebook|meta\s*ads|vistaprint|instagram|advertis|flyers?\b|banner/i,cat:'Advertising'},
+  {re:/consumers\s*energy|\bdte\b|electric|water\s*bill|internet|comcast|xfinity|spectrum|at&t|verizon|t-mobile/i,cat:'Utilities'},
+  {re:/insurance|state\s*farm|progressive|allstate|hiscox/i,cat:'Insurance'},
+  {re:/license|permit|mdard|health\s*dep|county\s*clerk/i,cat:'Licenses & Permits'},
+  {re:/market\s*fee|booth|vendor\s*fee|stall\s*fee/i,cat:'Market Fees'},
+  {re:/kitchen\s*rent|church/i,cat:'Kitchen Rental'},
+  {re:/repair|mainten|plumb|hvac|service\s*call/i,cat:'Repairs & Maintenance'},
+  {re:/bank\s*fee|service\s*charge|processing\s*fee|stripe|square\s*fee/i,cat:'Bank & Card Fees'},
+  {re:/cafe|coffee|pizza|grill|diner|mcdonald|subway|tim\s*horton|starbucks|wendy|burger|taco|restaurant/i,cat:'Meals'}
+];
+function guessCategory(text){
+  const t=String(text||'').trim();if(!t)return'';
+  const exact=EXPENSE_CATS.find(c=>c.toLowerCase()===t.toLowerCase());if(exact)return exact;
+  for(const r of VENDOR_RULES)if(r.re.test(t))return r.cat;
+  return'';
+}
+
+const KNOWN_VENDORS=[['Restaurant Depot',/restaurant\s*depot/i],['Meijer',/meijer/i],['Walmart',/wal\W?mart/i],['Costco',/costco/i],["Sam's Club",/sam'?s\s*club/i],['Gordon Food Service',/gordon\s*food|\bgfs\b/i],['Kroger',/kroger/i],['Aldi',/\baldi\b/i],['Target',/\btarget\b/i],['Whole Foods',/whole\s*foods/i],["Trader Joe's",/trader\s*joe/i],['Uline',/\buline\b/i],['WebstaurantStore',/webstaurant/i],['Home Depot',/home\s*depot/i],["Lowe's",/\blowe'?s\b/i],['Menards',/menards/i],['Staples',/staples/i],['Dollar General',/dollar\s*general/i],['Dollar Tree',/dollar\s*tree/i],['Tractor Supply',/tractor\s*supply/i],['Speedway',/speedway/i],['Marathon',/marathon/i],['Shell',/\bshell\b/i],['Amazon',/amazon/i],['Family Fare',/family\s*fare/i],['Spartan',/spartan/i],['Save A Lot',/save\s*a\s*lot/i],['Harbor Freight',/harbor\s*freight/i],['Ace Hardware',/ace\s*hardware/i],['Hobby Lobby',/hobby\s*lobby/i],['Walgreens',/walgreens/i],['CVS',/\bcvs\b/i],['Sysco',/sysco/i],['US Foods',/us\s*foods/i]];
+
+// Pull dollar amounts out of one line of receipt text (tolerates common OCR slips)
+function receiptAmounts(line){
+  let s=String(line);
+  for(let k=0;k<2;k++)s=s.replace(/([\d.,$])[oO]/g,(m,a)=>a+'0');
+  s=s.replace(/(\d)\s*[,.]\s+(\d{2})(?!\d)/g,'$1.$2');
+  const out=[];const re=/(^|[^\d.\/:])(-?)\$?\s?(\d{1,3}(?:,\d{3})+|\d{1,6})[.,](\d{2})(?!\d|[.\/]\d|\s?%)/g;
+  let m;while((m=re.exec(s))){const v=parseFloat(m[3].replace(/,/g,'')+'.'+m[4]);if(!isNaN(v))out.push(m[2]==='-'?-v:v);}
+  return out;
+}
+function kwLine(l){return String(l).toLowerCase().replace(/0/g,'o').replace(/[1|!]/g,'l').replace(/5/g,'s').replace(/[^a-z&]+/g,'');}
+
+function parseReceiptDate(text){
+  const now=new Date();
+  const ok=d=>d&&!isNaN(d)&&d<=new Date(now.getTime()+2*864e5)&&d>=new Date(now.getFullYear()-2,0,1);
+  const t=String(text||'');let m;
+  let re=/(?:^|[^\d])(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4}|\d{2})(?!\d)/g;
+  while((m=re.exec(t))){let y=+m[3];if(y<100)y+=2000;const mo=+m[1],da=+m[2];if(mo<1||mo>12||da<1||da>31)continue;const d=new Date(y,mo-1,da,12);if(d.getDate()===da&&ok(d))return isoLocal(d);}
+  re=/(20\d{2})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?!\d)/g;
+  while((m=re.exec(t))){const d=new Date(+m[1],+m[2]-1,+m[3],12);if(d.getDate()===+m[3]&&ok(d))return isoLocal(d);}
+  re=/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})/gi;
+  while((m=re.exec(t))){const mi=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[1].toLowerCase().slice(0,3));const d=new Date(+m[3],mi,+m[2],12);if(ok(d))return isoLocal(d);}
+  return'';
+}
+
+function parseReceiptVendor(lines){
+  const head=lines.slice(0,10).join(' ');
+  for(const[n,re]of KNOWN_VENDORS)if(re.test(head))return n;
+  for(const l of lines.slice(0,6)){
+    const letters=(l.match(/[A-Za-z]/g)||[]).length;
+    if(letters<3||letters/l.length<0.55)continue;
+    if(/receipt|welcome|thank|store\s*#|www\.|http|\.com|\btel\b|phone|cashier|order\s*#|invoice|\bdate\b|\btime\b/i.test(l))continue;
+    return l.replace(/[^A-Za-z0-9&' .\-]/g,'').replace(/\s+/g,' ').trim().slice(0,40).replace(/\b([A-Z])([A-Z]+)\b/g,(m,a,b)=>a+b.toLowerCase());
+  }
+  return'';
+}
+
+// Read the total, vendor, date and a category guess out of receipt text
+function parseReceiptText(raw){
+  const text=String(raw||'').replace(/\r/g,'');
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length);
+  const cands=[];let all=[],subtotal=null,tax=0,taxSeen=false,change=null;
+  lines.forEach((line,i)=>{
+    const k=kwLine(line);
+    let amts=receiptAmounts(line);
+    const isCash=/cash|tend|change/.test(k);
+    if(!isCash)all=all.concat(amts.filter(a=>a>0));
+    if(/change/.test(k)&&!/exchange/.test(k)){if(amts.length)change=amts[amts.length-1];return;}
+    if(/subtot/.test(k)){if(amts.length)subtotal=amts[amts.length-1];return;}
+    if((/tax/.test(k)&&!/total/.test(k))||/totaltax|taxtotal/.test(k)){if(amts.length){tax+=amts[amts.length-1];taxSeen=true;}return;}
+    if(/saving|yousave|saved|discount|coupon|itemssold|totalitems|numberofitems|itemcount|cashback|points|reward|pretax|beforetax|gratuity|tipamount|suggestedtip/.test(k))return;
+    let score=0;
+    if(/grandtotal|totaldue|amountdue|balancedue|totalamount|ordertotal|totalsale|invoicetotal|amountpaid|totalpaid|totalcharged|amountcharged|purchasetotal|totalusd|netpayable/.test(k))score=6;
+    else if(/total|totl/.test(k))score=5;
+    else if(/^amount|salesamount|fuelsale|^sale\b|^sale[a-z]*$/.test(k))score=4;
+    else if(/visa|mastercard|amex|americanexpress|discover|debit|credit|card|payment|charge|ebt|applepay|googlepay/.test(k))score=3;
+    else if(/tend|cash/.test(k))score=1;
+    if(!score)return;
+    if(!amts.length&&i+1<lines.length&&!/[a-z]{4,}/.test(kwLine(lines[i+1])))amts=receiptAmounts(lines[i+1]);
+    const pos=amts.filter(a=>a>0);
+    if(pos.length)cands.push({score,amount:pos[pos.length-1]});
+  });
+  const sane=a=>a>0&&a<50000;
+  const goodAll=all.filter(sane);
+  const maxAll=goodAll.length?Math.max(...goodAll):0;
+  let best=null,conf='none';
+  const top=cands.filter(c=>sane(c.amount));
+  if(top.length){
+    const maxScore=Math.max(...top.map(c=>c.score));
+    best=top.filter(c=>c.score===maxScore).reduce((a,b)=>b.amount>a.amount?b:a);
+    const agree=top.some(c=>c.score!==best.score&&Math.abs(c.amount-best.amount)<0.01);
+    const sumOk=subtotal!=null&&Math.abs(subtotal+(taxSeen?tax:0)-best.amount)<0.02;
+    if(best.score>=5)conf=(agree||sumOk||best.amount>=maxAll-0.009)?'high':'medium';
+    else if(best.score>=3)conf=(agree||sumOk)?'high':'medium';
+    else{conf='low';if(change!=null&&change<best.amount){best={score:1,amount:r2(best.amount-change)};if(subtotal!=null&&Math.abs(subtotal+tax-best.amount)<0.02)conf='high';}}
+  }else if(subtotal!=null){best={amount:r2(subtotal+tax)};conf='medium';}
+  else if(goodAll.length){best={amount:maxAll};conf='low';}
+  const vendor=parseReceiptVendor(lines);
+  return{
+    amount:best?r2(best.amount):null,
+    confidence:best?conf:'none',
+    vendor,
+    date:parseReceiptDate(text),
+    category:guessCategory(vendor)||guessCategory(text)||''
+  };
+}
+
+// ─── file handling ───
+const _scriptLoads={};
+function loadScript(src){
+  if(!_scriptLoads[src])_scriptLoads[src]=new Promise((res,rej)=>{
+    const s=document.createElement('script');s.src=src;s.onload=res;
+    s.onerror=()=>{delete _scriptLoads[src];rej(new Error('Could not load the receipt reader — check your connection'));};
+    document.head.appendChild(s);
+  });
+  return _scriptLoads[src];
+}
+async function loadPdfJs(){
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+let _ocrWorkerP=null,_ocrProgressCb=null;
+function getOcrWorker(){
+  if(!_ocrWorkerP)_ocrWorkerP=(async()=>{
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    const w=await Tesseract.createWorker('eng',1,{logger:m=>{if(_ocrProgressCb&&m.status==='recognizing text')_ocrProgressCb(Math.round((m.progress||0)*100));}});
+    try{await w.setParameters({tessedit_pageseg_mode:'4',preserve_interword_spaces:'1'});}catch(e){}
+    return w;
+  })().catch(e=>{_ocrWorkerP=null;throw e;});
+  return _ocrWorkerP;
+}
+async function ocrCanvas(canvas,onPct){
+  const w=await getOcrWorker();
+  const g=document.createElement('canvas');g.width=canvas.width;g.height=canvas.height;
+  const ctx=g.getContext('2d');ctx.drawImage(canvas,0,0);
+  try{
+    const img=ctx.getImageData(0,0,g.width,g.height),d=img.data;
+    for(let i=0;i<d.length;i+=4){let v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];v=(v-128)*1.35+128;v=v<0?0:v>255?255:v;d[i]=d[i+1]=d[i+2]=v;}
+    ctx.putImageData(img,0,0);
+  }catch(e){}
+  _ocrProgressCb=onPct;
+  try{const r=await w.recognize(g);return(r&&r.data&&r.data.text)||'';}
+  finally{_ocrProgressCb=null;}
+}
+async function imageFileToCanvas(file,maxDim){
+  let src=null;
+  if(window.createImageBitmap){try{src=await createImageBitmap(file,{imageOrientation:'from-image'});}catch(e){src=null;}}
+  if(!src){
+    src=await new Promise((res,rej)=>{const u=URL.createObjectURL(file);const i=new Image();
+      i.onload=()=>{URL.revokeObjectURL(u);res(i);};
+      i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('Could not open that image'));};i.src=u;});
+  }
+  const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
+  const s=Math.min(1,maxDim/Math.max(w,h));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));
+  const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(src,0,0,c.width,c.height);
+  if(src.close)src.close();
+  return c;
+}
+function pdfPageText(tc){
+  const items=(tc.items||[]).filter(it=>it.str!=null&&it.transform).map(it=>({s:it.str,x:it.transform[4],y:it.transform[5]}));
+  items.sort((a,b)=>Math.abs(b.y-a.y)>3?b.y-a.y:a.x-b.x);
+  let out='',lastY=null;
+  items.forEach(it=>{if(lastY!==null)out+=Math.abs(it.y-lastY)>3?'\n':' ';out+=it.s;lastY=it.y;});
+  return out;
+}
+function canvasThumb(c,size){
+  try{const s=Math.min(1,size/Math.max(c.width,c.height));const t=document.createElement('canvas');t.width=Math.max(1,Math.round(c.width*s));t.height=Math.max(1,Math.round(c.height*s));t.getContext('2d').drawImage(c,0,0,t.width,t.height);return t.toDataURL('image/jpeg',0.7);}catch(e){return'';}
+}
+async function uploadReceiptBlob(blob,origName,type,_retried){
+  const base=(origName||'receipt').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,40)||'receipt';
+  const ext=type==='application/pdf'?'pdf':type==='image/png'?'png':'jpg';
+  const fileName='receipt_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+base+'.'+ext;
+  const res=await fetch(SUPABASE_URL+'/storage/v1/object/kf-receipts/'+fileName,{
+    method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':type},body:blob
+  });
+  if(!res.ok){
+    if(!_retried&&await silentRefresh())return uploadReceiptBlob(blob,origName,type,true);
+    throw new Error('Upload failed ('+res.status+')');
+  }
+  return SUPABASE_URL+'/storage/v1/object/public/kf-receipts/'+fileName;
+}
+
+// Upload one receipt and read it. Returns {url,thumb,amount,confidence,vendor,date,category}
+async function readReceiptFile(file,onStage,opts={}){
+  const stage=s=>{try{onStage&&onStage(s);}catch(e){}};
+  const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
+  let canvas=null,text='',blob=file,type=file.type||'image/jpeg';
+  try{
+    if(isPdf){
+      stage('Opening PDF…');
+      const lib=await loadPdfJs();
+      const pdf=await lib.getDocument({data:await file.arrayBuffer()}).promise;
+      for(let p=1;p<=Math.min(pdf.numPages,5);p++)text+=pdfPageText(await(await pdf.getPage(p)).getTextContent())+'\n';
+      const page=await pdf.getPage(1);const v1=page.getViewport({scale:1});
+      const vp=page.getViewport({scale:Math.min(3,2000/Math.max(v1.width,v1.height))});
+      canvas=document.createElement('canvas');canvas.width=Math.round(vp.width);canvas.height=Math.round(vp.height);
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+      await page.render({canvasContext:ctx,viewport:vp}).promise;
+      type='application/pdf';
+    }else{
+      stage('Opening photo…');
+      canvas=await imageFileToCanvas(file,2000);
+      const jpg=await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.85));
+      if(jpg){blob=jpg;type='image/jpeg';}
+    }
+  }catch(e){console.warn('Receipt open:',e);canvas=null;}
+  const thumb=canvas?canvasThumb(canvas,120):'';
+  stage('Uploading…');
+  const url=await uploadReceiptBlob(blob,file.name,type);
+  if(opts.skipOcr)return{url,thumb,amount:null,confidence:'none',vendor:'',date:'',category:''};
+  if(canvas&&text.replace(/\s/g,'').length<40){
+    stage(_ocrWorkerP?'Reading…':'Loading the receipt reader (first time takes a moment)…');
+    try{text=await ocrCanvas(canvas,pct=>stage('Reading… '+pct+'%'));}catch(e){console.warn('OCR:',e);text='';}
+  }
+  return Object.assign({url,thumb},parseReceiptText(text));
+}
+
+// ─── batch scanner (Revenue & Expenses tab) ───
+let _scanQueue=[],_scanBusy=false;
+function triggerScan(){const i=document.getElementById('scanInput');if(i)i.click();}
+function ensureBlankExpenseRow(){
+  const last=expenses[expenses.length-1];
+  if(!last||last.dbId||last.name||last.amount||last.receiptUrl)expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''});
+}
+async function onScanFiles(input){
+  const files=Array.from(input.files||[]);input.value='';
+  if(!files.length)return;
+  if(!window._authToken){toast('Sign in first',true);return;}
+  const label=getLogPeriodLabel();
+  files.forEach(f=>_scanQueue.push({qid:'q'+Math.random().toString(36).slice(2,9),file:f,name:f.name||'Receipt',status:'waiting',stage:'Waiting…',label}));
+  renderScanPanel();
+  if(_scanBusy)return;
+  _scanBusy=true;
+  const sel=document.getElementById('logPeriodDate');if(sel)sel.disabled=true;
+  try{
+    for(;;){const item=_scanQueue.find(q=>q.status==='waiting');if(!item)break;await processScanItem(item);}
+  }finally{_scanBusy=false;if(sel)sel.disabled=false;renderScanPanel();}
+  const read=_scanQueue.filter(q=>q.amount!=null&&q.status!=='error');
+  const total=read.reduce((s,q)=>s+q.amount,0);
+  const manual=_scanQueue.filter(q=>q.status==='manual').length;
+  toast(read.length+' receipt'+(read.length===1?'':'s')+' added · '+fmt(total)+(manual?' · '+manual+' need a total':''));
+  if(typeof BOOKS!=='undefined')BOOKS.stale=true;
+}
+async function processScanItem(item){
+  item.status='working';
+  const setStage=s=>{item.stage=s;renderScanPanel();};
+  try{
+    const r=await readReceiptFile(item.file,setStage);
+    Object.assign(item,{url:r.url,thumb:r.thumb,amount:r.amount,vendor:r.vendor,date:r.date,category:r.category,confidence:r.confidence});
+    expenses=expenses.filter(e=>e.dbId||e.name||e.amount||e.receiptUrl);
+    const exp={id:++expCounter,name:r.vendor||'Receipt',amount:r.amount!=null?r.amount.toFixed(2):'',receiptUrl:r.url,dbId:null,
+      category:r.category||'',vendor:r.vendor||'',date:r.date||'',needsCheck:r.confidence!=='high'};
+    expenses.push(exp);ensureBlankExpenseRow();
+    item.status=r.amount==null?'manual':(r.confidence==='high'?'done':'check');
+    item.stage=r.amount==null?'Couldn’t find the total — type it in below':(r.confidence==='high'?'Added':'Added — double-check the total');
+    renderExpenses();
+    await saveExpenses();
+  }catch(e){console.error('Scan:',e);item.status='error';item.stage=e.message||'Failed';}
+  renderScanPanel();
+}
+function clearScanPanel(){if(_scanBusy)return;_scanQueue=[];renderScanPanel();}
+function renderScanPanel(){
+  const el=document.getElementById('scanPanel');if(!el)return;
+  if(!_scanQueue.length){el.style.display='none';el.innerHTML='';return;}
+  el.style.display='block';
+  const doneN=_scanQueue.filter(q=>['done','check','manual','error'].includes(q.status)).length;
+  const total=_scanQueue.reduce((s,q)=>s+(q.amount!=null&&q.status!=='error'?q.amount:0),0);
+  const icon={waiting:'⏳',working:'⟳',done:'✓',check:'⚠',manual:'✎',error:'✕'};
+  el.innerHTML='<div class="scan-head"><div><strong>'+(_scanBusy?'Reading receipts':'Receipts added')+'</strong> <span style="color:var(--mid);">'+doneN+' of '+_scanQueue.length+' · '+fmt(total)+' → '+esc(_scanQueue[0].label)+'</span></div>'
+    +(_scanBusy?'':'<button class="receipt-btn" onclick="clearScanPanel()">Done</button>')+'</div>'
+    +_scanQueue.map(q=>'<div class="scan-item '+q.status+'">'
+      +(q.thumb?'<img class="scan-thumb" src="'+q.thumb+'" alt="">':'<div class="scan-thumb">'+icon[q.status]+'</div>')
+      +'<div class="scan-info"><div class="scan-name">'+esc(q.vendor||q.name)+(q.date?' · '+esc(prettyDate(q.date)):'')+'</div><div class="scan-stage">'+icon[q.status]+' '+esc(q.stage)+'</div></div>'
+      +(q.amount!=null&&q.status!=='error'?'<div class="scan-amt">'+fmt(q.amount)+'</div>':'')
+      +'</div>').join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOKS — ledger, budget, reports
+// ═══════════════════════════════════════════════════════
+const BOOKS={schema:{v2:false,budgets:false,txns:false,checked:false},rows:[],budgets:{},view:'txns',range:'',
+  filter:{dir:'all',cat:'',q:''},limit:150,editing:null,loading:false,reload:false,stale:true};
+
+const BOOKS_SQL=`-- Kilted Farmers Books setup (safe to run more than once)
+alter table kf_expenses add column if not exists category text;
+alter table kf_expenses add column if not exists vendor text;
+alter table kf_expenses add column if not exists txn_date date;
+alter table kf_expenses add column if not exists payment_method text;
+alter table kf_expenses add column if not exists notes text;
+alter table kf_revenue_entries add column if not exists txn_date date;
+alter table kf_revenue_entries add column if not exists payment_method text;
+alter table kf_revenue_entries add column if not exists payee text;
+alter table kf_revenue_entries add column if not exists receipt_url text;
+
+create table if not exists kf_budgets (
+  id uuid primary key default gen_random_uuid(),
+  category text unique not null,
+  monthly_amount numeric not null default 0,
+  kind text not null default 'expense',
+  updated_at timestamptz default now()
+);
+
+create table if not exists kf_transactions (
+  id uuid primary key default gen_random_uuid(),
+  txn_date date not null default current_date,
+  direction text not null check (direction in ('in','out')),
+  amount numeric not null default 0,
+  payee text,
+  category text,
+  payment_method text,
+  notes text,
+  receipt_url text,
+  created_by text,
+  created_at timestamptz default now()
+);
+
+alter table kf_budgets enable row level security;
+alter table kf_transactions enable row level security;
+drop policy if exists "team manages budgets" on kf_budgets;
+create policy "team manages budgets" on kf_budgets for all to authenticated using (true) with check (true);
+drop policy if exists "team manages transactions" on kf_transactions;
+create policy "team manages transactions" on kf_transactions for all to authenticated using (true) with check (true);
+
+notify pgrst, 'reload schema';`;
+
+async function booksProbe(force){
+  if(BOOKS.schema.checked&&!force)return BOOKS.schema;
+  if(BOOKS._probeP&&!force)return BOOKS._probeP;
+  BOOKS._probeP=(async()=>{
+    const ok=p=>sb(p).then(()=>true,()=>false);
+    const[a,b,c,d]=await Promise.all([
+      ok('kf_expenses?select=category,vendor,txn_date,payment_method,notes&limit=1'),
+      ok('kf_revenue_entries?select=txn_date,payment_method,payee,receipt_url&limit=1'),
+      ok('kf_budgets?select=id&limit=1'),
+      ok('kf_transactions?select=id&limit=1')
+    ]);
+    BOOKS.schema={v2:a&&b,budgets:c,txns:d,checked:true};
+    BOOKS._probeP=null;
+    return BOOKS.schema;
+  })();
+  return BOOKS._probeP;
+}
+async function sbAll(path){
+  const out=[];const sep=path.includes('?')?'&':'?';
+  for(let off=0;off<20000;off+=1000){const rows=await sb(path+sep+'limit=1000&offset='+off);out.push(...rows);if(rows.length<1000)break;}
+  return out;
+}
+async function getOrCreatePeriodId(label){
+  const existing=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&limit=1');
+  if(existing.length)return existing[0].id;
+  const created=await sb('kf_pay_periods',{method:'POST',body:JSON.stringify({period_type:'Weekly',period_label:label,gross_revenue:0,total_expenses:0,common_table:0,distributable_pool:0,total_hours:0})});
+  return created[0].id;
+}
+function revDateForLabel(label){
+  const b=getWeekBoundsFromLabel(label);const now=new Date();
+  if(!b||(now>=b.mon&&now<=b.sun))return todayISO();
+  return isoLocal(now<b.mon?b.mon:b.sun);
+}
+
+function renderBooksSetup(){
+  const el=document.getElementById('booksSetup');if(!el)return;
+  const s=BOOKS.schema;
+  if(!s.checked||(s.v2&&s.budgets&&s.txns)){el.innerHTML='';return;}
+  el.innerHTML='<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup</div>'
+    +'<div class="card-sub">The Books need a few new database fields before categories, budgets, and outside-the-pool transactions can save. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. Everything else already works.</div>'
+    +'<pre>'+esc(BOOKS_SQL)+'</pre>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="copyBooksSQL()">Copy SQL</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
+    +'<button class="btn-secondary" onclick="booksProbe(true).then(()=>loadBooks())">Recheck</button></div></div>';
+}
+function copyBooksSQL(){
+  const done=()=>toast('SQL copied — paste it into Supabase');
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(BOOKS_SQL).then(done,()=>fallbackCopy());
+  else fallbackCopy();
+  function fallbackCopy(){const t=document.createElement('textarea');t.value=BOOKS_SQL;document.body.appendChild(t);t.select();try{document.execCommand('copy');done();}catch(e){toast('Select the SQL and copy it by hand',true);}t.remove();}
+}
+
+function booksRangeOptions(){
+  const now=new Date();const opts=[];
+  for(let i=0;i<15;i++){const d=new Date(now.getFullYear(),now.getMonth()-i,1);opts.push({v:'m:'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),t:d.toLocaleDateString('en-US',{month:'long',year:'numeric'})+(i===0?' (this month)':''),g:'Month'});}
+  const q=Math.floor(now.getMonth()/3)+1;
+  for(let i=0;i<5;i++){let qq=q-i,yy=now.getFullYear();while(qq<1){qq+=4;yy--;}opts.push({v:'q:'+yy+'-'+qq,t:'Q'+qq+' '+yy,g:'Quarter'});}
+  for(let y=now.getFullYear();y>=now.getFullYear()-2;y--)opts.push({v:'y:'+y,t:y+(y===now.getFullYear()?' (year to date)':''),g:'Year'});
+  opts.push({v:'all',t:'All time',g:'Other'});
+  return opts;
+}
+function rangeBounds(v){
+  if(!v||v==='all')return{from:'0000-00-00',to:'9999-12-31',months:0,label:'All time'};
+  const[k,val]=v.split(':');const pad=n=>String(n).padStart(2,'0');
+  if(k==='m'){const[y,m]=val.split('-').map(Number);return{from:val+'-01',to:val+'-'+pad(new Date(y,m,0).getDate()),months:1,y,m,label:new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})};}
+  if(k==='q'){const[y,q]=val.split('-').map(Number);const m1=(q-1)*3+1,m3=m1+2;return{from:y+'-'+pad(m1)+'-01',to:y+'-'+pad(m3)+'-'+pad(new Date(y,m3,0).getDate()),months:3,label:'Q'+q+' '+y};}
+  const y=+val;return{from:y+'-01-01',to:y+'-12-31',months:12,label:String(y)};
+}
+function buildBooksRangeSelect(){
+  const sel=document.getElementById('booksRange');if(!sel)return;
+  if(!BOOKS.range)BOOKS.range=booksRangeOptions()[0].v;
+  if(sel.options.length)return;
+  let html='',g='';
+  booksRangeOptions().forEach(o=>{if(o.g!==g){if(g)html+='</optgroup>';html+='<optgroup label="'+o.g+'">';g=o.g;}html+='<option value="'+o.v+'">'+esc(o.t)+'</option>';});
+  sel.innerHTML=html+'</optgroup>';sel.value=BOOKS.range;
+}
+function onBooksRange(v){BOOKS.range=v;BOOKS.limit=150;renderBooks();}
+
+async function loadBooks(quiet){
+  if(BOOKS.loading){BOOKS.reload=true;return;}
+  BOOKS.loading=true;
+  const body=document.getElementById('booksBody');
+  if(body&&!quiet&&!BOOKS.rows.length)body.innerHTML='<div class="card"><div class="bk-empty">Opening the books…</div></div>';
+  try{
+    await booksProbe();renderBooksSetup();buildBooksRangeSelect();
+    const s=BOOKS.schema;
+    const[periods,revs,exps,txns,budgets]=await Promise.all([
+      sbAll('kf_pay_periods?select=id,period_label'),
+      sbAll('kf_revenue_entries?select=*&order=created_at.asc'),
+      sbAll('kf_expenses?select=*&order=created_at.asc'),
+      s.txns?sbAll('kf_transactions?select=*&order=txn_date.asc'):Promise.resolve([]),
+      s.budgets?sb('kf_budgets?select=*'):Promise.resolve([])
+    ]);
+    BOOKS.rows=booksNormalize(periods,revs,exps,txns);
+    BOOKS.budgets={};budgets.forEach(b=>{BOOKS.budgets[b.category]=parseFloat(b.monthly_amount)||0;});
+    BOOKS.stale=false;
+    renderBooks();
+  }catch(e){
+    console.error('Books:',e);
+    if(body)body.innerHTML='<div class="card"><div class="bk-empty" style="color:var(--red);">Couldn’t load the books: '+esc(e.message)+'</div></div>';
+  }finally{
+    BOOKS.loading=false;
+    if(BOOKS.reload){BOOKS.reload=false;loadBooks(true);}
+  }
+}
+
+function booksNormalize(periods,revs,exps,txns){
+  const pmap={};periods.forEach(p=>{pmap[p.id]=p.period_label;});
+  const rows=[];
+  revs.forEach(r=>{
+    const amt=parseFloat(r.amount)||0;if(!amt)return;
+    let date=r.txn_date||'';
+    if(!date){const b=getWeekBoundsFromLabel(r.period_label);const c=new Date(r.created_at);date=isoLocal(b&&!(c>=b.mon&&c<=b.sun)?b.sun:c);}
+    rows.push({key:'rev:'+r.id,src:'rev',id:r.id,date,dir:'in',amount:amt,payee:r.payee||'',category:r.source||'Other',method:r.payment_method||'',
+      notes:r.notes||'',receipt:r.receipt_url||'',pool:true,payWeek:r.period_label||'',by:r.reported_by||''});
+  });
+  exps.forEach(e=>{
+    const amt=parseFloat(e.amount)||0;if(!amt)return;
+    const nm=(e.name||'').trim();
+    const nameIsCat=EXPENSE_CATS.some(c=>c.toLowerCase()===nm.toLowerCase());
+    rows.push({key:'exp:'+e.id,src:'exp',id:e.id,date:e.txn_date||isoLocal(e.created_at),dir:'out',amount:amt,
+      payee:e.vendor||(nameIsCat?'':nm),category:e.category||guessCategory(nm+' '+(e.vendor||''))||'Other Expense',
+      method:e.payment_method||'',notes:e.notes||'',receipt:e.receipt_url||'',pool:true,payWeek:pmap[e.period_id]||''});
+  });
+  txns.forEach(t=>{
+    const amt=parseFloat(t.amount)||0;if(!amt)return;
+    rows.push({key:'txn:'+t.id,src:'txn',id:t.id,date:t.txn_date||isoLocal(t.created_at),dir:t.direction==='in'?'in':'out',amount:amt,
+      payee:t.payee||'',category:t.category||(t.direction==='in'?'Other':'Other Expense'),method:t.payment_method||'',
+      notes:t.notes||'',receipt:t.receipt_url||'',pool:false,payWeek:'',by:t.created_by||''});
+  });
+  rows.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
+  return rows;
+}
+const isPL=r=>!MOVEMENT_CATS.includes(r.category);
+function booksInRange(){const rb=rangeBounds(BOOKS.range);return BOOKS.rows.filter(r=>r.date>=rb.from&&r.date<=rb.to);}
+function sumOf(list){return list.reduce((s,r)=>s+r.amount,0);}
+
+function setBooksView(v){BOOKS.view=v;BOOKS.limit=150;renderBooks();}
+function renderBooks(){
+  const sumEl=document.getElementById('booksSummary'),body=document.getElementById('booksBody');if(!sumEl||!body)return;
+  const inR=booksInRange();const pl=inR.filter(isPL);
+  const inc=sumOf(pl.filter(r=>r.dir==='in')),out=sumOf(pl.filter(r=>r.dir==='out')),net=inc-out;
+  const rb=rangeBounds(BOOKS.range);
+  let budTotal=0;EXPENSE_CATS.forEach(c=>budTotal+=BOOKS.budgets[c]||0);
+  const budNote=budTotal&&rb.months?(out/(budTotal*rb.months)*100).toFixed(0)+'% of budget':'';
+  sumEl.innerHTML=
+    '<div class="bk-stat"><div class="bk-stat-l">Money In</div><div class="bk-stat-v" style="color:var(--green);">'+fmt(inc)+'</div><div class="bk-stat-s">'+pl.filter(r=>r.dir==='in').length+' entries</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Money Out</div><div class="bk-stat-v" style="color:var(--red);">'+fmt(out)+'</div><div class="bk-stat-s">'+(budNote||pl.filter(r=>r.dir==='out').length+' entries')+'</div></div>'
+    +'<div class="bk-stat net"><div class="bk-stat-l">Net Profit</div><div class="bk-stat-v">'+(net<0?'−':'')+fmt(Math.abs(net))+'</div><div class="bk-stat-s">'+esc(rb.label)+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Common Table</div><div class="bk-stat-v" style="color:var(--tan);">'+fmt(Math.max(0,net)*CT)+'</div><div class="bk-stat-s">8% of net profit</div></div>';
+  document.querySelectorAll('.bk-pills button').forEach(b=>b.classList.toggle('active',b.dataset.v===BOOKS.view));
+  if(BOOKS.view==='budget')body.innerHTML=renderBooksBudget(inR);
+  else if(BOOKS.view==='reports')body.innerHTML=renderBooksReports(inR);
+  else{body.innerHTML=renderBooksTxnShell(inR);renderBooksTxnList();}
+}
+
+// ─── transactions view ───
+function renderBooksTxnShell(inR){
+  const f=BOOKS.filter;
+  const cats=[...new Set(inR.map(r=>r.category))].sort();
+  if(f.cat&&!cats.includes(f.cat))cats.unshift(f.cat);
+  return '<div class="card"><div class="bk-filters">'
+    +'<div class="seg mini">'+['all','in','out'].map(d=>'<button class="'+(f.dir===d?'active '+d:'')+'" onclick="BOOKS.filter.dir=\''+d+'\';BOOKS.limit=150;renderBooks()">'+(d==='all'?'All':d==='in'?'Money In':'Money Out')+'</button>').join('')+'</div>'
+    +'<select class="period-select" onchange="BOOKS.filter.cat=this.value;BOOKS.limit=150;renderBooksTxnList()"><option value="">All categories</option>'+cats.map(c=>'<option'+(c===f.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select>'
+    +'<input class="period-input" type="search" placeholder="Search payee, notes, amount…" value="'+esc(f.q)+'" oninput="BOOKS.filter.q=this.value;BOOKS.limit=150;renderBooksTxnList()">'
+    +'</div><div id="booksTxnList"></div></div>';
+}
+function prettyDay(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:d.getFullYear()!==new Date().getFullYear()?'numeric':undefined}):'No date';}
+function renderBooksTxnList(){
+  const el=document.getElementById('booksTxnList');if(!el)return;
+  const f=BOOKS.filter;const q=f.q.trim().toLowerCase();
+  const list=booksInRange().filter(r=>(f.dir==='all'||r.dir===f.dir)&&(!f.cat||r.category===f.cat)
+    &&(!q||(r.payee+' '+r.category+' '+r.notes+' '+r.method+' '+r.amount.toFixed(2)).toLowerCase().includes(q)));
+  if(!list.length){
+    el.innerHTML='<div class="bk-empty">'+(BOOKS.rows.length?'Nothing matches for this stretch of time.':'No transactions yet. Revenue and expenses you log show up here automatically.')+'</div>';return;
+  }
+  let html='',last=null;
+  list.slice(0,BOOKS.limit).forEach(r=>{
+    if(r.date!==last){html+='<div class="bk-date">'+esc(prettyDay(r.date))+'</div>';last=r.date;}
+    html+='<div class="bk-row" onclick="openTxnModal(\''+esc(r.key)+'\')">'
+      +'<div class="bk-ico '+r.dir+'">'+(r.dir==='in'?'↓':'↑')+'</div>'
+      +'<div class="bk-main"><div class="bk-payee">'+esc(r.payee||r.category)+'</div>'
+      +'<div class="bk-sub"><span class="bk-cat">'+esc(r.category)+'</span>'+(r.method?' · '+esc(r.method):'')
+      +(r.pool?'':' · <span class="bk-outside">outside pay pool</span>')+(r.receipt?' · 📎':'')+'</div></div>'
+      +'<div class="bk-amt '+r.dir+'">'+(r.dir==='in'?'+':'−')+fmt(r.amount)+'</div></div>';
+  });
+  if(list.length>BOOKS.limit)html+='<div style="text-align:center;padding-top:12px;"><button class="add-btn" onclick="BOOKS.limit+=150;renderBooksTxnList()">Show more ('+(list.length-BOOKS.limit)+' left)</button></div>';
+  const tin=sumOf(list.filter(r=>r.dir==='in')),tout=sumOf(list.filter(r=>r.dir==='out'));
+  html+='<div class="bk-foot"><span>'+list.length+' transaction'+(list.length===1?'':'s')+'</span><span>In '+fmt(tin)+' · Out '+fmt(tout)+'</span></div>';
+  el.innerHTML=html;
+}
+
+// ─── budget view ───
+function renderBooksBudget(inR){
+  if(!BOOKS.schema.budgets)return '<div class="card"><div class="bk-empty">Budgets turn on after the one-time setup at the top of this tab.</div></div>';
+  const rb=rangeBounds(BOOKS.range);
+  const months=rb.months||1;
+  const spend={};inR.filter(r=>r.dir==='out'&&isPL(r)).forEach(r=>{spend[r.category]=(spend[r.category]||0)+r.amount;});
+  const income=sumOf(inR.filter(r=>r.dir==='in'&&isPL(r)));
+  const cats=[...EXPENSE_CATS];Object.keys(spend).forEach(c=>{if(!cats.includes(c))cats.push(c);});
+  // pace marker for the month we're in
+  let pace=null;const now=new Date();
+  if(rb.months===1&&rb.y===now.getFullYear()&&rb.m===now.getMonth()+1)pace=now.getDate()/new Date(rb.y,rb.m,0).getDate();
+  const bar=(actual,budget,isIncome)=>{
+    if(!budget)return '';
+    const pct=actual/budget*100;
+    const cls=isIncome?(pct>=100?'':'warn'):(pct>100?'over':pct>85?'warn':'');
+    return '<div class="bud-bar">'+(pace?'<div class="bud-pace" style="left:'+(pace*100).toFixed(1)+'%"></div>':'')+'<div class="bud-fill '+cls+'" style="width:'+Math.min(100,pct).toFixed(1)+'%"></div></div>';
+  };
+  const goal=(BOOKS.budgets['__income_goal']||0)*months;
+  let totalBud=0,totalSpent=0;
+  let html='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Budget — '+esc(rb.label)+'</div>'
+    +'<div class="card-sub">Set a <b>monthly</b> amount for each category. '+(months>1?'This view multiplies it by '+months+' months. ':'')+(rb.months?'':'Pick a month, quarter, or year to compare. ')+(pace?'The thin line marks how far through the month we are.':'')+'</div>';
+  html+='<div class="bud-row income"><div class="bud-top"><div class="bud-name">Sales goal <span class="bk-sub">(money in)</span></div>'
+    +'<div class="bud-act" style="color:var(--green);">'+fmt(income)+'</div>'
+    +'<input class="inp bud-input" type="number" inputmode="decimal" placeholder="$/mo" value="'+(BOOKS.budgets['__income_goal']||'')+'" onchange="saveBudget(\'__income_goal\',this.value)"></div>'
+    +bar(income,goal,true)+(goal?'<div class="bud-meta"><span>'+(income>=goal?'Goal reached 🎉':fmt(goal-income)+' to go')+'</span><span>Goal '+fmt(goal)+'</span></div>':'')+'</div>';
+  cats.forEach(c=>{
+    const b=(BOOKS.budgets[c]||0)*months,a=spend[c]||0;totalBud+=b;totalSpent+=a;
+    if(!b&&!a&&!EXPENSE_CATS.includes(c))return;
+    html+='<div class="bud-row"><div class="bud-top"><div class="bud-name">'+esc(c)+'</div><div class="bud-act">'+fmt(a)+'</div>'
+      +'<input class="inp bud-input" type="number" inputmode="decimal" placeholder="$/mo" value="'+(BOOKS.budgets[c]||'')+'" onchange="saveBudget(\''+esc(c).replace(/'/g,"\\'")+'\',this.value)"></div>'
+      +bar(a,b,false)+(b?'<div class="bud-meta"><span>'+(a>b?'<b style="color:var(--red);">'+fmt(a-b)+' over</b>':fmt(b-a)+' left')+'</span><span>Budget '+fmt(b)+'</span></div>':'')+'</div>';
+  });
+  html+='<div class="bk-foot" style="font-weight:700;color:var(--ink);"><span>Total spent '+fmt(totalSpent)+'</span><span>'+(totalBud?'Budgeted '+fmt(totalBud):'No budgets set yet')+'</span></div>';
+  if(pace&&totalBud){const proj=totalSpent/pace;html+='<div class="bk-foot"><span>At this pace the month ends around</span><span style="font-weight:700;color:'+(proj>totalBud?'var(--red)':'var(--green)')+';">'+fmt(proj)+'</span></div>';}
+  return html+'</div>';
+}
+async function saveBudget(cat,val){
+  const amt=Math.max(0,r2(val));
+  try{
+    await sb('kf_budgets?on_conflict=category',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
+      body:JSON.stringify({category:cat,monthly_amount:amt,kind:cat==='__income_goal'?'income':'expense',updated_at:new Date().toISOString()})});
+    BOOKS.budgets[cat]=amt;toast('Budget saved');renderBooks();
+  }catch(e){toast('Budget didn’t save: '+e.message,true);}
+}
+
+// ─── reports view ───
+function taxGroup(r){if(MOVEMENT_CATS.includes(r.category))return'Equity / transfer (not income or expense)';if(r.dir==='in')return'Income';return COGS_CATS.includes(r.category)?'Cost of goods sold':'Operating expense';}
+function groupSum(list){const g={};list.forEach(r=>{g[r.category]=(g[r.category]||0)+r.amount;});return Object.entries(g).sort((a,b)=>b[1]-a[1]);}
+function plData(inR){
+  const pl=inR.filter(isPL);
+  const inc=groupSum(pl.filter(r=>r.dir==='in'));
+  const cogs=groupSum(pl.filter(r=>r.dir==='out'&&COGS_CATS.includes(r.category)));
+  const opex=groupSum(pl.filter(r=>r.dir==='out'&&!COGS_CATS.includes(r.category)));
+  const tInc=inc.reduce((s,x)=>s+x[1],0),tCogs=cogs.reduce((s,x)=>s+x[1],0),tOpex=opex.reduce((s,x)=>s+x[1],0);
+  const moves=groupSum(inR.filter(r=>!isPL(r)).map(r=>Object.assign({},r,{category:r.category+(r.dir==='in'?' (in)':' (out)')})));
+  return{inc,cogs,opex,tInc,tCogs,tOpex,gross:tInc-tCogs,net:tInc-tCogs-tOpex,moves};
+}
+function plTableHTML(d){
+  const money=n=>(n<0?'−':'')+fmt(Math.abs(n));
+  const rows=(list)=>list.map(([c,v])=>'<tr><td class="ind">'+esc(c)+'</td><td>'+fmt(v)+'</td></tr>').join('')||'<tr><td class="ind" style="color:var(--mid);">None</td><td>'+fmt(0)+'</td></tr>';
+  let h='<table class="pl-table">'
+    +'<tr class="pl-h"><td colspan="2">Income</td></tr>'+rows(d.inc)+'<tr class="pl-t"><td>Total income</td><td>'+fmt(d.tInc)+'</td></tr>'
+    +'<tr class="pl-h"><td colspan="2">Cost of goods sold</td></tr>'+rows(d.cogs)+'<tr class="pl-t"><td>Total cost of goods</td><td>'+fmt(d.tCogs)+'</td></tr>'
+    +'<tr class="pl-t"><td>Gross profit</td><td>'+money(d.gross)+'</td></tr>'
+    +'<tr class="pl-h"><td colspan="2">Operating expenses</td></tr>'+rows(d.opex)+'<tr class="pl-t"><td>Total operating expenses</td><td>'+fmt(d.tOpex)+'</td></tr>'
+    +'<tr class="pl-net"><td>Net profit</td><td>'+money(d.net)+'</td></tr>'
+    +'<tr><td class="ind">Common Table (8%)</td><td>'+fmt(Math.max(0,d.net)*CT)+'</td></tr>'
+    +'<tr><td class="ind">Shared by hours worked (92%)</td><td>'+fmt(Math.max(0,d.net)*(1-CT))+'</td></tr>';
+  if(d.moves.length)h+='<tr class="pl-h"><td colspan="2">Other money movement (not profit or loss)</td></tr>'+rows(d.moves);
+  return h+'</table>';
+}
+function booksTrendSVG(){
+  const now=new Date();const months=[];
+  for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({k:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),lbl:d.toLocaleDateString('en-US',{month:'short'}),inc:0,exp:0});}
+  const idx={};months.forEach((m,i)=>{idx[m.k]=i;});
+  BOOKS.rows.forEach(r=>{if(!isPL(r))return;const i=idx[r.date.slice(0,7)];if(i==null)return;if(r.dir==='in')months[i].inc+=r.amount;else months[i].exp+=r.amount;});
+  const max=Math.max(1,...months.map(m=>Math.max(m.inc,m.exp)));
+  const W=640,H=220,L=8,T=12,B=32,plotH=H-T-B,slot=(W-L*2)/12,bw=Math.min(18,slot/2-4);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">';
+  s+='<line x1="'+L+'" y1="'+(T+plotH)+'" x2="'+(W-L)+'" y2="'+(T+plotH)+'" stroke="#D8CFC4"/>';
+  months.forEach((m,i)=>{
+    const cx=L+slot*i+slot/2,hi=m.inc/max*plotH,he=m.exp/max*plotH;
+    s+='<rect x="'+(cx-bw-1)+'" y="'+(T+plotH-hi)+'" width="'+bw+'" height="'+Math.max(hi,0)+'" rx="2" fill="#52B788"><title>'+m.lbl+' in: '+fmt(m.inc)+'</title></rect>';
+    s+='<rect x="'+(cx+1)+'" y="'+(T+plotH-he)+'" width="'+bw+'" height="'+Math.max(he,0)+'" rx="2" fill="#D4A96A"><title>'+m.lbl+' out: '+fmt(m.exp)+'</title></rect>';
+    s+='<text x="'+cx+'" y="'+(H-8)+'" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="16" fill="#5A5A5A">'+m.lbl+'</text>';
+  });
+  return s+'</svg>';
+}
+function renderBooksReports(inR){
+  const d=plData(inR);const rb=rangeBounds(BOOKS.range);
+  const vendors={};inR.filter(r=>r.dir==='out'&&isPL(r)&&r.payee).forEach(r=>{vendors[r.payee]=(vendors[r.payee]||0)+r.amount;});
+  const topV=Object.entries(vendors).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  return '<div class="card"><div class="bk-top"><div class="card-title"><div class="card-title-dot"></div>Profit &amp; Loss — '+esc(rb.label)+'</div>'
+    +'<div class="bk-actions" style="margin-top:0;"><button class="receipt-btn" onclick="printPL()">🖨 Print</button><button class="receipt-btn" onclick="booksExportCSV()">⬇ CSV</button></div></div>'
+    +plTableHTML(d)+'</div>'
+    +'<div class="card"><div class="card-title"><div class="card-title-dot"></div>Last 12 Months</div>'
+    +'<div class="card-sub"><span style="color:#2D6A4F;">■</span> Money in &nbsp; <span style="color:#A67C52;">■</span> Money out</div>'+booksTrendSVG()+'</div>'
+    +'<div class="card"><div class="card-title"><div class="card-title-dot"></div>Where the Money Goes</div>'
+    +(topV.length?'<table class="pl-table">'+topV.map(([v,a])=>'<tr><td>'+esc(v)+'</td><td>'+fmt(a)+'</td></tr>').join('')+'</table>':'<div class="bk-empty">No vendor names yet — scanned receipts fill these in.</div>')+'</div>';
+}
+function printPL(){
+  const rb=rangeBounds(BOOKS.range);const d=plData(booksInRange());
+  const w=window.open('','_blank');if(!w){toast('Allow pop-ups to print',true);return;}
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Profit & Loss — '+esc(rb.label)+'</title><style>'
+    +'body{font-family:Georgia,serif;color:#1A1A1A;max-width:640px;margin:32px auto;padding:0 16px;}h1{font-size:22px;margin:0;}p{color:#5A5A5A;margin:4px 0 18px;font-size:13px;}'
+    +'.pl-table{width:100%;border-collapse:collapse;font-size:14px;}.pl-table td{padding:6px 0;border-bottom:1px solid #eee;}.pl-table td:last-child{text-align:right;}'
+    +'.pl-h td{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#5A5A5A;font-weight:700;padding-top:16px;}.pl-t td{font-weight:700;}.pl-net td{font-size:18px;font-weight:900;}.ind{padding-left:14px!important;}'
+    +'</style></head><body><h1>The Kilted Farmers LLC — Profit &amp; Loss</h1><p>'+esc(rb.label)+' · Prepared '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</p>'
+    +plTableHTML(d)+'<script>setTimeout(function(){window.print();},300);<\/script></body></html>');
+  w.document.close();
+}
+function booksExportCSV(){
+  const rb=rangeBounds(BOOKS.range);
+  const rows=booksInRange().slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[['Date','Type','Payee / Source','Category','Tax Group','Amount','Paid With','In Pay Pool','Pay Week','Notes','Receipt'].map(q).join(',')];
+  rows.forEach(r=>lines.push([r.date,r.dir==='in'?'Money In':'Money Out',r.payee,r.category,taxGroup(r),(r.dir==='in'?'':'-')+r.amount.toFixed(2),r.method,r.pool?'Yes':'No',r.payWeek,r.notes,r.receipt].map(q).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='kilted-farmers-books-'+rb.label.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  toast(rows.length+' transactions exported');
+}
+function booksScanReceipts(){
+  const tab=[...document.querySelectorAll('.tab')].find(t=>(t.getAttribute('onclick')||'').includes("'log'"));
+  switchTab('log',tab);triggerScan();
+}
+
+// ─── add / edit transaction ───
+let _txn={};
+const $v=id=>{const el=document.getElementById(id);return el?el.value:'';};
+const $set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+function weekOptionsAround(dateISO,extra){
+  const map=new Map();const base=parseISO(dateISO)||new Date();
+  const add=d=>{const l=getWeekLabel(d);if(!map.has(l)){const b=getWeekBoundsFromLabel(l);map.set(l,b?b.mon.getTime():d.getTime());}};
+  for(let i=-1;i<=3;i++){const d=new Date(base);d.setDate(d.getDate()-7*i);add(d);}
+  for(let i=0;i<12;i++){const d=new Date();d.setHours(12);d.setDate(d.getDate()-7*i);add(d);}
+  if(extra&&!map.has(extra)){const b=getWeekBoundsFromLabel(extra);map.set(extra,b?b.mon.getTime():0);}
+  return[...map.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+}
+function openTxnModal(key,preset){
+  if(!BOOKS.schema.checked)booksProbe().then(()=>{if(document.getElementById('txnModal').classList.contains('open'))refreshTxnPoolUI();});
+  const r=key?BOOKS.rows.find(x=>x.key===key):null;
+  BOOKS.editing=r||null;
+  _txn={dir:r?r.dir:((preset&&preset.dir)||'out'),receipt:r?r.receipt:'',catTouched:!!r,dateTouched:!!r,weekTouched:!!r};
+  document.getElementById('txnModalTitle').textContent=r?'Edit Transaction':'New Transaction';
+  $set('txnDate',r?r.date:todayISO());
+  $set('txnAmount',r?r.amount.toFixed(2):'');
+  $set('txnPayee',r?r.payee:'');
+  $set('txnNotes',r?r.notes:'');
+  const msel=document.getElementById('txnMethod');
+  msel.innerHTML='<option value="">—</option>'+PAY_METHODS.concat(r&&r.method&&!PAY_METHODS.includes(r.method)?[r.method]:[]).map(m=>'<option>'+esc(m)+'</option>').join('');
+  msel.value=r?r.method:'';
+  document.getElementById('txnPool').checked=r?r.pool:true;
+  _txn.payWeek=r&&r.payWeek?r.payWeek:getWeekLabel(parseISO($v('txnDate')));
+  setTxnDir(_txn.dir,r?r.category:'');
+  refreshTxnPoolUI();
+  renderTxnReceipt();
+  document.getElementById('txnDeleteBtn').style.display=r?'inline-block':'none';
+  document.getElementById('txnModal').classList.add('open');
+}
+function closeTxnModal(){document.getElementById('txnModal').classList.remove('open');BOOKS.editing=null;}
+function setTxnDir(d,keepCat){
+  _txn.dir=d;
+  document.getElementById('txnDirOut').className=d==='out'?'active out':'';
+  document.getElementById('txnDirIn').className=d==='in'?'active in':'';
+  document.getElementById('txnPayeeLabel').textContent=d==='in'?'Received from':'Paid to';
+  fillTxnCats(keepCat||'');
+}
+function fillTxnCats(selected){
+  const sel=document.getElementById('txnCategory');
+  const base=_txn.dir==='in'?INCOME_CATS:EXPENSE_CATS;
+  const pool=document.getElementById('txnPool').checked;
+  const extra=selected&&!base.includes(selected)&&!MOVEMENT_CATS.includes(selected)?[selected]:[];
+  let html=base.concat(extra).map(c=>'<option>'+esc(c)+'</option>').join('');
+  if(!pool||MOVEMENT_CATS.includes(selected))html+='<optgroup label="Not profit or loss">'+MOVEMENT_CATS.map(c=>'<option>'+esc(c)+'</option>').join('')+'</optgroup>';
+  sel.innerHTML=html;
+  sel.value=selected||(_txn.dir==='in'?'Farmers Market':'Ingredients');
+  if(!sel.value)sel.value=base[0];
+}
+function onTxnCatChange(){
+  _txn.catTouched=true;
+  if(MOVEMENT_CATS.includes($v('txnCategory'))){document.getElementById('txnPool').checked=false;refreshTxnPoolUI();}
+}
+function onTxnDateChange(){
+  _txn.dateTouched=true;
+  if(!_txn.weekTouched){_txn.payWeek=getWeekLabel(parseISO($v('txnDate')));refreshTxnPoolUI();}
+}
+function refreshTxnPoolUI(){
+  const box=document.getElementById('txnPool');
+  const canOutside=BOOKS.schema.txns;
+  if(!canOutside){box.checked=true;box.disabled=true;}else box.disabled=false;
+  document.getElementById('txnPoolHint').textContent=canOutside
+    ?(box.checked?'Counts in that week’s revenue/expenses and the pay split.':'Recorded in the books only — doesn’t change anyone’s weekly pay. Use for Common Table purchases, member payouts, loans, and transfers.')
+    :'Recording money outside the pay pool turns on after the one-time setup.';
+  const wrap=document.getElementById('txnWeekWrap');wrap.style.display=box.checked?'block':'none';
+  const ws=document.getElementById('txnPayWeek');
+  ws.innerHTML=weekOptionsAround($v('txnDate'),_txn.payWeek).map(l=>'<option>'+esc(l)+'</option>').join('');
+  ws.value=_txn.payWeek;
+  const cur=$v('txnCategory');fillTxnCats(cur);
+}
+function renderTxnReceipt(status){
+  const el=document.getElementById('txnReceiptStatus');
+  if(status!=null){el.innerHTML=status;return;}
+  el.innerHTML=_txn.receipt?'✓ Receipt attached · <a href="'+esc(_txn.receipt)+'" target="_blank" rel="noopener">view</a> · <a href="#" onclick="_txn.receipt=\'\';renderTxnReceipt();return false;">remove</a>':'';
+}
+async function txnReceiptChosen(input){
+  const file=input.files[0];input.value='';if(!file)return;
+  const wantOcr=!(parseFloat($v('txnAmount'))>0);
+  try{
+    const r=await readReceiptFile(file,s=>renderTxnReceipt('⟳ '+esc(s)),{skipOcr:!wantOcr});
+    _txn.receipt=r.url;
+    if(wantOcr&&r.amount!=null)$set('txnAmount',r.amount.toFixed(2));
+    if(!$v('txnPayee').trim()&&r.vendor)$set('txnPayee',r.vendor);
+    if(r.date&&!_txn.dateTouched){$set('txnDate',r.date);_txn.dateTouched=false;if(!_txn.weekTouched){_txn.payWeek=getWeekLabel(parseISO(r.date));refreshTxnPoolUI();}}
+    if(r.category&&_txn.dir==='out'&&!_txn.catTouched)$set('txnCategory',r.category);
+    renderTxnReceipt();
+    if(wantOcr){const el=document.getElementById('txnReceiptStatus');
+      el.innerHTML+=r.amount==null?' · <b>couldn’t read the total</b>':r.confidence==='high'?' · total filled in':' · <b style="color:#9a6a00;">double-check the total</b>';}
+  }catch(e){renderTxnReceipt('<span style="color:var(--red);">✕ '+esc(e.message)+'</span>');}
+}
+async function deleteBooksRow(r){
+  const table=r.src==='rev'?'kf_revenue_entries':r.src==='exp'?'kf_expenses':'kf_transactions';
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+'?id=eq.'+encodeURIComponent(r.id),{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Prefer':'return=minimal'}});
+  if(!(res.ok||res.status===204))throw new Error('Delete failed ('+res.status+')');
+}
+async function saveTxn(){
+  const btn=document.getElementById('txnSaveBtn');
+  const dir=_txn.dir,amount=r2($v('txnAmount')),date=$v('txnDate')||todayISO();
+  const payee=$v('txnPayee').trim(),method=$v('txnMethod'),notes=$v('txnNotes').trim();
+  const category=$v('txnCategory')||(dir==='in'?'Other':'Other Expense');
+  let pool=document.getElementById('txnPool').checked;
+  if(MOVEMENT_CATS.includes(category))pool=false;
+  const payWeek=$v('txnPayWeek')||getWeekLabel(parseISO(date));
+  if(!(amount>0)){toast('Enter an amount',true);return;}
+  if(!pool&&!BOOKS.schema.txns){toast('Run the one-time setup at the top of Books first',true);return;}
+  const target=pool?(dir==='in'?'rev':'exp'):'txn';
+  const orig=BOOKS.editing;const v2=BOOKS.schema.v2;
+  btn.disabled=true;btn.textContent='Saving…';
+  try{
+    let table,body;
+    if(target==='rev'){
+      table='kf_revenue_entries';
+      body={amount,source:category,notes:v2?notes:[payee,notes].filter(Boolean).join(' — '),period_label:payWeek};
+      if(!orig||orig.src!=='rev')body.reported_by=currentProfile?.name||'';
+      if(v2)Object.assign(body,{txn_date:date,payment_method:method||null,payee:payee||null,receipt_url:_txn.receipt||null});
+    }else if(target==='exp'){
+      table='kf_expenses';
+      body={period_id:await getOrCreatePeriodId(payWeek),name:payee||category,amount,receipt_url:_txn.receipt||''};
+      if(v2)Object.assign(body,{category,vendor:payee||null,txn_date:date,payment_method:method||null,notes:notes||null});
+    }else{
+      table='kf_transactions';
+      body={txn_date:date,direction:dir,amount,payee:payee||null,category,payment_method:method||null,notes:notes||null,receipt_url:_txn.receipt||null};
+      if(!orig||orig.src!=='txn')body.created_by=currentProfile?.name||'';
+    }
+    if(orig&&orig.src===target)await sb(table+'?id=eq.'+encodeURIComponent(orig.id),{method:'PATCH',body:JSON.stringify(body)});
+    else{await sb(table,{method:'POST',body:JSON.stringify(body)});if(orig)await deleteBooksRow(orig);}
+    closeTxnModal();toast(orig?'Transaction updated':'Transaction added');
+    await loadBooks(true);refreshDashboard();
+  }catch(e){toast('Didn’t save: '+e.message,true);}
+  finally{btn.disabled=false;btn.textContent='Save';}
+}
+async function deleteTxn(){
+  const r=BOOKS.editing;if(!r)return;
+  if(!confirm('Delete this '+fmt(r.amount)+' transaction? '+(r.pool?'It will also come out of the '+r.payWeek+' pay week.':'')))return;
+  try{await deleteBooksRow(r);closeTxnModal();toast('Deleted');await loadBooks(true);refreshDashboard();}
+  catch(e){toast(e.message,true);}
+}
 
 // Hidden revenue input for calculate compatibility
 document.addEventListener('DOMContentLoaded',function(){
