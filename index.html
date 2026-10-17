@@ -12088,10 +12088,15 @@ async function bizFn(body) {
   return data || {};
 }
 
+// Opened from the Operations Hub (?tab=business&hub=1): its services come with the Hub.
+const TPV_FROM_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('hub') === '1'; } catch(e) { return false; } })();
+// The Operations Hub's row in business_services is shown as a link, not a sign-up box.
+const isHubService = s=>s && (s.id === 'hub' || s.id === 'operations-hub' || /operations-hub/.test(s.pay_url || ''));
+
 function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [list, setList] = useState(undefined);     // undefined loading, null not set up
-  const [picked, setPicked] = useState({});
-  const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', trade:'', notes:'', notPolitical:false});
+  const [picked, setPicked] = useState(TPV_FROM_HUB ? {watch:true, bids:true} : {});
+  const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', trade:'', notes:TPV_FROM_HUB ? 'Operations Hub business. Services included with the Hub.' : '', notPolitical:false});
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);           // list of picked services after a sign-up
   const [err, setErr] = useState('');
@@ -12115,7 +12120,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   },[user && user.id]);
 
   const shown = (list || []).filter(s=>s.status !== 'hidden');
-  const signupServices = shown.filter(s=>s.id !== 'explainer');
+  const signupServices = shown.filter(s=>s.id !== 'explainer' && !isHubService(s));
   const explainer = shown.find(s=>s.id === 'explainer');
   const set = (k, v)=>setForm(f=>({...f, [k]:v}));
   const scrollTo = ref=>setTimeout(()=>{ try { ref.current && ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 60);
@@ -12164,6 +12169,10 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
           style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
 
+    TPV_FROM_HUB && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
+      h('strong',null,'Coming from the Operations Hub? '),
+      'Watch alerts, the Bid & grant finder and rule explainers come with your Hub, so there\'s nothing extra to pay. Sign up below with the same email you use for the Hub and we\'ll switch them on.'),
+
     // ── The business's own services, when signed in with the email they used
     mine.length > 0 && h(MyBusinessPanel,{mine, onToast, onChanged:loadMine, onExplain:()=>{ setShowExplain(true); scrollTo(explainRef); }}),
 
@@ -12180,8 +12189,10 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}}, s.blurb),
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         pill(s),
-        h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
-          s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early')))),
+        isHubService(s)
+          ? h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{background:'#1a1a2e',color:'#f0c040',textDecoration:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13}},'Open the Hub →')
+          : h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+              s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early')))),
 
     // ── Sign-up form (ongoing services)
     Array.isArray(list) && signupServices.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
