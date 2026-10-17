@@ -622,6 +622,9 @@ details[open]>summary.card-title::after{content:'▴';}
 .invite-made .period-input{width:100%;}
 .start-here{border-color:var(--tan-light);}
 .card-sub a{color:var(--green);font-weight:600;}
+.svc-pill{font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;white-space:nowrap;background:var(--cream-dark);color:var(--mid);}
+.svc-pill.done{background:#e6f4ec;color:var(--green);}
+.svc-pill.req{background:#fff4d6;color:#8a5d00;}
 @media(max-width:620px){
   .job-row{grid-template-columns:minmax(0,1fr) 84px 28px;background:var(--cream);padding:8px;border-radius:8px;}
   .job-row .inp:first-child{grid-column:1/-1;}
@@ -4883,12 +4886,13 @@ async function renderStartHere(){
   let hidden=false;try{hidden=localStorage.getItem('ohb_starthere_'+BIZ.id)==='done';}catch(e){}
   if(hidden){el.innerHTML='';return;}
   const has=async p=>{try{return(await sb(p)).length>0;}catch(e){return false;}};
-  const [rev,exp,bank]=await Promise.all([has('ohb_revenue_entries?select=id&limit=1'),has('ohb_expenses?select=id&amount=gt.0&limit=1'),has('ohb_bank_lines?select=id&limit=1')]);
+  const [rev,exp,bank,svc]=await Promise.all([has('ohb_revenue_entries?select=id&limit=1'),has('ohb_expenses?select=id&amount=gt.0&limit=1'),has('ohb_bank_lines?select=id&limit=1'),pvServiceStatus()]);
   const steps=[
     [members.length>1,'Invite your team','Settings → People & logins',"goTab('settings')"],
     [rev,'Log a sale','Revenue & Expenses',"goTab('log')"],
     [exp,'Scan a receipt','Revenue & Expenses → Scan Receipts',"goTab('log')"],
     [!!(BOOKS.acct&&BOOKS.acct.pay&&BOOKS.acct.pay.workers),'Check your pay rules','Team → Pay Rules',"goTab('team')"],
+    [svc.signed,'Turn on your included services','Watch alerts and the Bid & grant finder, from The People’s Voices',"openPVServices()"],
     [bank,'Bring in a bank statement','Books → Bank',"goTab('books');setTimeout(()=>setBooksView('bank'),300)"]
   ];
   const done=steps.filter(s=>s[0]).length;
@@ -4929,12 +4933,13 @@ async function renderSettings(){
     +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member (Contributor)</option><option value="manager">Manager (Steward)</option>'+(isOwner?'<option value="owner">Co-owner (Steward)</option>':'')+'</select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
-    +'<div class="card-sub">Your Hub includes the business services from <a href="https://thepeoplesvoices.org" target="_blank" rel="noopener">The People’s Voices</a>: Watch Alerts for local government decisions that affect you, the Bid &amp; Grant Finder, and the plain-language Rule Explainer. During the pilot, The Kilted Farmers switches these on for you.</div></div>';
+    +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Sign up there with the same email you use here ('+esc((currentUser&&currentUser.email)||'')+') so we can match them up.</div>'
+    +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Businesses</div><div class="card-sub">Run more than one? Each has its own Hub, kept completely separate.</div>'
     +BIZ.list.map(m=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(m.ohb_businesses.name)+'</div><div class="bk-sub">'+esc(m.ohb_businesses.county)+' County · '+esc({owner:'Owner',manager:'Manager',member:'Team'}[m.role])+'</div></div>'+(m.business_id===BIZ.id?'<span class="ck-badge">Open</span>':'<button class="receipt-btn" onclick="switchBusiness(\''+m.business_id+'\')">Open</button>')+'</div>').join('')
     +'<div class="bk-actions"><button class="btn-secondary" onclick="showSetup()">+ Set up another business</button></div></div>';
   el.innerHTML=h;
-  renderJobRows();loadPeople();
+  renderJobRows();loadPeople();renderServicesCard();
 }
 function renderJobRows(){
   const el=document.getElementById('stJobs');if(!el)return;
@@ -5010,6 +5015,33 @@ async function setMemberRole(id,role){
 async function removeLogin(id,name){
   if(!confirm('Remove '+name+'’s login? Their hours and history stay in the books.'))return;
   try{await sb('ohb_members?id=eq.'+id,{method:'DELETE'});toast(name+' can no longer sign in to this business');loadPeople();}catch(e){toast(e.message,true);}
+}
+
+// ─── The People's Voices services that come with the Hub ───
+const PV_SERVICES_URL='https://thepeoplesvoices.org/?tab=business&hub=1';
+const PV_FALLBACK=[{id:'watch',name:'Watch alerts',blurb:'An email when a meeting agenda, local decision or news story mentions what matters to your business.'},
+  {id:'bids',name:'Bid & grant finder',blurb:'Public bids and small-business grants matched to your line of work, every week.'},
+  {id:'explainer',name:'Plain-language rule explainer',blurb:'Send a new ordinance, rule or permit requirement and get back what changes for you.'}];
+function openPVServices(){window.open(PV_SERVICES_URL,'_blank','noopener');}
+async function pvServiceStatus(){
+  let list=[],mine=[];
+  try{list=(await sb('business_services?select=id,name,blurb,price_label,status,sort,pay_url&order=sort.asc'))
+    .filter(x=>x.status==='available'&&x.id!=='hub'&&x.id!=='operations-hub'&&!/operations-hub/.test(x.pay_url||''));}catch(e){}
+  try{mine=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});}catch(e){mine=[];}
+  if(!list.length)list=PV_FALLBACK;
+  const on={};
+  (mine||[]).forEach(b=>(b.services||[]).forEach(x=>{if(on[x]!=='active')on[x]=b.status;}));
+  return{list,on,signed:(mine||[]).length>0};
+}
+async function renderServicesCard(){
+  const el=document.getElementById('stServices');if(!el)return;
+  const st=await pvServiceStatus();
+  const label={active:['On','done'],new:['Requested','req'],paused:['Paused','req'],canceled:['Canceled','off']};
+  el.innerHTML=st.list.map(x=>{
+    const per=x.id==='explainer';const s=st.on[x.id];const l=per?['Send one anytime','done']:(label[s]||['Not on yet','off']);
+    return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(x.name)+'</div><div class="bk-sub" style="white-space:normal;">'+esc(x.blurb||'')+'</div></div><span class="svc-pill '+l[1]+'">'+esc(l[0])+'</span></div>';
+  }).join('')
+    +'<div class="bk-actions"><button class="btn-green" onclick="openPVServices()">'+(st.signed?'Manage on The People’s Voices':'Turn them on')+' ↗</button></div>';
 }
 
 // Hidden revenue input for calculate compatibility
