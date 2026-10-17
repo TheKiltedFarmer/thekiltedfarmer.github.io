@@ -870,6 +870,7 @@ details[open]>summary.card-title::after{content:'▴';}
   </div>
   <div id="booksBody"></div>
   <input type="file" id="bankInput" accept=".csv,.txt,text/csv" style="display:none;" onchange="onBankFile(this)">
+  <input type="file" id="mileInput" accept=".csv,.txt,text/csv" style="display:none;" onchange="onMileFile(this)">
 </div>
 
 <!-- ─── TIME CLOCK ─── -->
@@ -1044,6 +1045,15 @@ details[open]>summary.card-title::after{content:'▴';}
     <button class="modal-close" onclick="closeBankModal()">×</button>
     <div class="modal-title">Import Bank Statement</div>
     <div id="bankModalBody"></div>
+  </div>
+</div>
+
+<!-- MILEAGE IMPORT MODAL -->
+<div class="modal-overlay" id="mileModal" onclick="if(event.target===this)closeMileModal()">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-close" onclick="closeMileModal()">×</button>
+    <div class="modal-title">Import Trips From a Mileage App</div>
+    <div id="mileModalBody"></div>
   </div>
 </div>
 
@@ -3634,7 +3644,8 @@ function renderBooksTaxes(){
       +'<div><label>Where / why</label><input id="milPurpose" type="text" class="period-input" placeholder="e.g. Lansing market"></div>'
       +'<div><label>Driver</label><select id="milDriver" class="period-select">'+drivers.map(n=>'<option'+(n===me?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select></div></div>'
       +(ACC.trips.length?'<div class="trip-chips">'+ACC.trips.map((t,i)=>'<button class="cand" onclick="fillTrip('+i+')">'+esc(t.purpose)+' · '+esc(t.miles)+' mi</button>').join('')+'</div>':'')
-      +'<div class="bk-actions"><button class="btn-green" onclick="addMileage()">+ Log trip</button>'+(trips.length?'<button class="btn-secondary" onclick="mileageCSV('+y+')">⬇ Mileage CSV</button>':'')+'</div>'
+      +'<div class="bk-actions"><button class="btn-green" onclick="addMileage()">+ Log trip</button>'+'<button class="btn-secondary" onclick="triggerMileImport()">⬆ Import from a mileage app</button>'+(trips.length?'<button class="btn-secondary" onclick="mileageCSV('+y+')">⬇ Mileage CSV</button>':'')+'</div>'
+      +'<div class="bk-sub" style="margin-top:6px;">Use MileIQ, Everlance, TripLog, Stride or Driversnote to track drives automatically? Export your trips as a CSV and bring them in here.</div>'
       +trips.slice(0,12).map(t=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(t.purpose||'Trip')+'</div><div class="bk-sub">'+esc(prettyDate(String(t.trip_date).slice(0,10)))+(t.driver?' · '+esc(t.driver):'')+'</div></div><div class="bk-amt">'+(+t.miles)+' mi</div><button class="remove-btn" onclick="deleteMileage(\''+t.id+'\')">×</button></div>').join('')
       +(trips.length>12?'<div class="bk-sub" style="text-align:center;padding-top:8px;">+ '+(trips.length-12)+' more in the CSV</div>':'');
   }else h+='<div class="bk-empty">The mileage log turns on after the one-time setup.</div>';
@@ -3721,6 +3732,119 @@ function payModelSentence(){
   if(jobsOfPay('hourly').length)parts.push(jobsOfPay('hourly').map(j=>j.name+' at $'+(+j.rate||0).toFixed(2)+'/hr').join(', '));
   parts.push('weekly revenue minus expenses'+(parts.length?' and that pay':'')+', less '+Math.round(CT*100)+'% to the Common Table, is shared by '+(jobsOfPay('pool').map(j=>j.name.toLowerCase()).join(' and ')||'pool')+' hours');
   return parts.join('; ')+'.';
+}
+
+// ─── import trips from a mileage app (MileIQ, Everlance, TripLog, Stride, Driversnote…) ───
+function triggerMileImport(){
+  if(!BOOKS.schema.acct){toast('Run the setup SQL at the top of Books first',true);return;}
+  const i=document.getElementById('mileInput');if(i)i.click();
+}
+function mileNum(s){s=String(s==null?'':s).replace(/[^0-9.\-]/g,'');const v=parseFloat(s);return isNaN(v)?null:v;}
+function detectMileCols(rows){
+  const C={header:-1,date:-1,miles:-1,purpose:-1,dest:-1,cat:-1,driver:-1,km:false};
+  for(let i=0;i<Math.min(rows.length,25);i++){
+    const low=rows[i].map(c=>String(c).trim().toLowerCase());
+    if(low.some(c=>/mile|distance|\bkm\b|kilomet/.test(c)&&!/rate|value|\$|amount|deduct|reimb/.test(c))&&low.some(c=>/date|start|time|day/.test(c))){C.header=i;break;}
+  }
+  if(C.header<0)return C;
+  const h=rows[C.header].map(c=>String(c).trim().toLowerCase().replace(/[*_]/g,' ').replace(/\s+/g,' ').trim());
+  const find=(re,not)=>h.findIndex(c=>re.test(c)&&!(not&&not.test(c)));
+  const data=rows.slice(C.header+1,C.header+41);
+  const dateish=i=>{let n=0,t=0;data.forEach(r=>{const v=String(r[i]==null?'':r[i]).trim();if(!v)return;t++;if(dateVal(v))n++;});return t&&n/t>=0.5;};
+  const tries=[[/start/,/loc|address|odometer|place|from/],[/^(trip |drive )?date$/],[/date|day/,/end|stop|created|modified|export/],[/time/,/end|stop/]];
+  for(const[re,not]of tries){const i=h.findIndex((c,k)=>re.test(c)&&!(not&&not.test(c))&&dateish(k));if(i>=0){C.date=i;break;}}
+  if(C.date<0)for(let i=0;i<h.length;i++)if(dateish(i)){C.date=i;break;}
+  C.miles=find(/^(miles|mileage|distance|business miles|trip miles|total miles)( \((mi|miles|km)\))?$/);
+  if(C.miles<0)C.miles=find(/mile|distance|\bkm\b|kilomet/,/rate|value|\$|amount|deduct|reimb|odometer|personal|start|end/);
+  if(C.miles>=0)C.km=/\bkm\b|kilomet/.test(h[C.miles]);
+  C.purpose=find(/purpose|reason/);
+  if(C.purpose<0)C.purpose=find(/^(notes?|description|memo|comment|comments)$/);
+  C.dest=find(/^(stop|end|to|destination|end location|end address|stop location|arrival|ending location|end place)$/);
+  if(C.dest<0)C.dest=find(/destination|end loc|end addr|stop loc|^to /);
+  C.cat=find(/category|classification|class|^type$|trip type|drive type|business\/personal/);
+  C.driver=find(/^(driver|employee|user|driver name|employee name)$/);
+  return C;
+}
+function mileTripsFrom(rows,C){
+  const out=[];let personal=0,unsorted=0,bad=0;
+  if(C.header<0||C.date<0||C.miles<0)return{trips:out,personal,unsorted,bad};
+  const hasCat=C.cat>=0&&rows.slice(C.header+1).some(r=>/business|work/i.test(String(r[C.cat]||'')));
+  rows.slice(C.header+1).forEach(r=>{
+    const date=dateVal(r[C.date]);let miles=mileNum(r[C.miles]);
+    if(!date||miles==null||miles<=0){if(String(r[C.date]||'').trim()&&!/total|sum/i.test(r.join(' ')))bad++;return;}
+    if(C.km)miles*=0.621371;
+    if(hasCat){
+      const cat=String(r[C.cat]||'').trim();
+      if(/personal|commut|private/i.test(cat)){personal++;return;}
+      if(!/business|work/i.test(cat)){unsorted++;return;}
+    }
+    const p=C.purpose>=0?String(r[C.purpose]||'').trim():'';
+    const d=C.dest>=0?String(r[C.dest]||'').trim():'';
+    const purpose=(p&&d&&!p.toLowerCase().includes(d.toLowerCase())?p+' — '+d:(p||d)).slice(0,200);
+    out.push({date,miles:Math.round(miles*10)/10,purpose,driver:C.driver>=0?String(r[C.driver]||'').trim():''});
+  });
+  return{trips:out,personal,unsorted,bad};
+}
+async function onMileFile(input){
+  const file=input.files[0];input.value='';if(!file)return;
+  if(/\.(xlsx?|pdf)$/i.test(file.name)){toast('Export the CSV version from your mileage app — this needs a .csv file',true);return;}
+  try{
+    const rows=parseCSV(await file.text());
+    const C=detectMileCols(rows);
+    if(C.header<0){toast('Couldn’t find a miles column in that file — it needs to be a CSV export of your trips',true);return;}
+    const me=(currentProfile&&currentProfile.name)||'';
+    ACC.mprev={name:file.name,rows,C,driver:me};
+    renderMilePreview();
+    document.getElementById('mileModal').classList.add('open');
+  }catch(e){toast('Couldn’t read that file: '+e.message,true);}
+}
+function mileSetCol(k,v){ACC.mprev.C[k]=+v;if(k==='miles')ACC.mprev.C.km=/\bkm\b|kilomet/i.test(String(ACC.mprev.rows[ACC.mprev.C.header][+v]||''));renderMilePreview();}
+function renderMilePreview(){
+  const p=ACC.mprev;if(!p)return;
+  const C=p.C,R=mileTripsFrom(p.rows,C);
+  const existing={};(BOOKS.miles||[]).forEach(m=>{const k=String(m.trip_date).slice(0,10)+'|'+(+m.miles).toFixed(1);existing[k]=(existing[k]||0)+1;});
+  const dupLeft=Object.assign({},existing);
+  R.trips.forEach(t=>{const k=t.date+'|'+t.miles.toFixed(1);if(dupLeft[k]>0){t.dup=true;dupLeft[k]--;}});
+  const fresh=R.trips.filter(t=>!t.dup);p.fresh=fresh;
+  const total=fresh.reduce((s,t)=>s+t.miles,0);
+  const dates=fresh.map(t=>t.date).sort();
+  const hdr=p.rows[C.header];
+  const sel=(k,label,opt)=>'<div><label>'+label+'</label><select class="period-select" onchange="mileSetCol(\''+k+'\',this.value)">'+(opt?'<option value="-1">(none)</option>':'')
+    +hdr.map((c,i)=>'<option value="'+i+'"'+(i===C[k]?' selected':'')+'>'+esc(String(c).trim()||'Column '+(i+1))+'</option>').join('')+'</select></div>';
+  const drivers=stewardNames().concat((typeof members!=='undefined'?members:[]).map(m=>m.name)).filter((n,i,a)=>n&&a.indexOf(n)===i);
+  let h='<div class="bk-sub" style="font-size:13px;margin-bottom:10px;">'+esc(p.name)+'</div>'
+    +'<div class="bk-summary" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px;">'
+    +'<div class="bk-stat"><div class="bk-stat-l">Business trips</div><div class="bk-stat-v">'+fresh.length+'</div><div class="bk-stat-s">'+(dates.length?esc(prettyDate(dates[0]))+' – '+esc(prettyDate(dates[dates.length-1])):'none found')+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Miles</div><div class="bk-stat-v">'+Math.round(total*10)/10+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Worth</div><div class="bk-stat-v" style="color:var(--green);">'+fmt(fresh.reduce((s,t)=>s+t.miles*mileRate(+t.date.slice(0,4))/100,0))+'</div><div class="bk-stat-s">at the IRS rate</div></div></div>';
+  const notes=[];
+  if(R.personal)notes.push(R.personal+' personal trip'+(R.personal>1?'s':'')+' left out');
+  if(R.unsorted)notes.push(R.unsorted+' trip'+(R.unsorted>1?'s':'')+' not marked business or personal left out. Sort them in the app and export again to bring them in');
+  const dups=R.trips.length-fresh.length;if(dups)notes.push(dups+' already in your log, skipped');
+  if(C.km)notes.push('distances were in kilometers and are converted to miles');
+  if(notes.length)h+='<div class="ck-item" style="margin-bottom:10px;"><span class="ck-ico">i</span><span class="ck-text">'+esc(notes.join(' · '))+'.</span></div>';
+  if(fresh.some(t=>!t.purpose))h+='<div class="ck-item warn" style="margin-bottom:10px;"><span class="ck-ico">!</span><span class="ck-text">Some trips have no purpose. The IRS wants one for each trip, so pick a column for <b>Where / why</b> below, or add purposes in the app before exporting.</span></div>';
+  h+='<div class="txn-grid" style="margin-bottom:10px;">'+sel('date','Date column')+sel('miles','Miles column')+sel('purpose','Where / why column',true)+sel('dest','Destination column',true)
+    +(C.driver>=0?sel('driver','Driver column',true):'<div><label>Driver</label><select class="period-select" onchange="ACC.mprev.driver=this.value">'+drivers.map(n=>'<option'+(n===p.driver?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select></div>')
+    +'</div>';
+  h+='<div class="bank-prev">'+fresh.slice(0,6).map(t=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(t.purpose||'(no purpose)')+'</div><div class="bk-sub">'+esc(prettyDate(t.date))+(t.driver?' · '+esc(t.driver):'')+'</div></div><div class="bk-amt">'+t.miles+' mi</div></div>').join('')
+    +(fresh.length>6?'<div class="bk-sub" style="text-align:center;padding:6px;">…and '+(fresh.length-6)+' more</div>':'')+'</div>';
+  h+='<div class="txn-actions"><button class="btn-secondary" onclick="closeMileModal()">Cancel</button><button class="btn-green" id="mileImportBtn" onclick="importMileTrips()"'+(fresh.length?'':' disabled')+'>Import '+fresh.length+' trip'+(fresh.length===1?'':'s')+'</button></div>';
+  document.getElementById('mileModalBody').innerHTML=h;
+}
+function closeMileModal(){document.getElementById('mileModal').classList.remove('open');ACC.mprev=null;}
+async function importMileTrips(){
+  const p=ACC.mprev;if(!p||!p.fresh.length)return;
+  const btn=document.getElementById('mileImportBtn');btn.disabled=true;btn.textContent='Importing…';
+  try{
+    const rows=p.fresh.map(t=>({trip_date:t.date,miles:t.miles,purpose:t.purpose||null,driver:t.driver||p.driver||null}));
+    for(let i=0;i<rows.length;i+=200)await sb('ohb_mileage',{method:'POST',body:JSON.stringify(rows.slice(i,i+200))});
+    const n=rows.length,mi=Math.round(rows.reduce((s,r)=>s+r.miles,0)*10)/10;
+    closeMileModal();
+    BOOKS.miles=await sbAll('ohb_mileage?select=*&order=trip_date.desc');
+    toast(n+' trips imported · '+mi+' miles');
+    renderBooks();
+  }catch(e){toast('Import failed: '+e.message,true);btn.disabled=false;btn.textContent='Import';}
 }
 
 // ═══════════════════════════════════════════════════════
