@@ -12171,6 +12171,8 @@ function HubSample({box, tag}) {
   const lp = r.lee, sp = r.sam;
   const why = (p, base)=>[base, p.topup > 0.004 ? 'Below minimum wage ($' + SAMPLE_MIN_WAGE + '/hr), so the Hub adds ' + money(p.topup) : '', p.ot > 0.004 ? 'Plus ' + money(p.ot) + ' overtime past 40 hours' : ''].filter(Boolean).join('. ');
   return h('div',{style:box}, tag,
+    h('a',{href:HUB_DEMO_URL,target:'_blank',rel:'noopener',style:{display:'block',background:'#1a1a2e',color:'#f0c040',textDecoration:'none',borderRadius:8,padding:'10px 14px',marginBottom:12,fontFamily:PD,fontWeight:700,fontSize:14.5}},
+      'Want the whole thing? Open the live demo: pick your kind of business and click through every tab →'),
     h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15.5,color:'#1a1a2e',marginBottom:2}},'One week at a small farm stand. Move the sliders.'),
     h('div',{style:{fontSize:12.5,color:'#666',marginBottom:10}},'Ann owns it and works the kitchen. Lee works the kitchen. Sam sells at the market for a commission.'),
     h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',columnGap:18,background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'10px 12px',marginBottom:12}},
@@ -12293,13 +12295,16 @@ function PriceCompare() {
 }
 
 // Opened from the Operations Hub (?tab=business&hub=1): its services come with the Hub.
+// From the Hub demo's "Start your 3 free months" (?tab=business&pick=hub): the Hub comes pre-picked.
+const TPV_PICK_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('pick') === 'hub'; } catch(e) { return false; } })();
+const HUB_DEMO_URL = '/operations-hub.html?demo';
 const TPV_FROM_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('hub') === '1'; } catch(e) { return false; } })();
 // The Operations Hub's row in business_services is shown as a link, not a sign-up box.
 const isHubService = s=>s && (s.id === 'hub' || s.id === 'operations-hub' || /operations-hub/.test(s.pay_url || ''));
 
 function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [list, setList] = useState(undefined);     // undefined loading, null not set up
-  const [picked, setPicked] = useState(TPV_FROM_HUB ? {watch:true, bids:true} : {});
+  const [picked, setPicked] = useState(TPV_FROM_HUB ? {watch:true, bids:true} : TPV_PICK_HUB ? {hub:true, watch:true, bids:true} : {});
   const [form, setForm] = useState({business:'', contact:'', email:'', phone:'', county:countyTag(), watchFor:'', trade:'', notes:TPV_FROM_HUB ? 'Operations Hub business. Services included with the Hub.' : '', notPolitical:false});
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);           // list of picked services after a sign-up
@@ -12320,6 +12325,8 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   };
   useEffect(()=>{ load(); },[]);
   useEffect(()=>{ loadMine(); },[user && user.id]);
+  // Arriving to start the Hub trial: go straight to the sign-up form once it's on the page
+  useEffect(()=>{ if(TPV_PICK_HUB && Array.isArray(list)) scrollTo(formRef); },[Array.isArray(list)]);
   useEffect(()=>{
     if(user && !form.email) setForm(f=>({...f, email:user.email || '', contact:(profile && profile.display_name) || f.contact}));
   },[user && user.id]);
@@ -12419,6 +12426,8 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('button',{onClick:()=>setSample(sample === s.id ? null : s.id),'aria-expanded':sample === s.id,
           style:{background:'#fff',color:'#1a1a2e',border:'1.5px solid #1a1a2e',borderRadius:7,padding:'7px 13px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
           sample === s.id ? 'Hide the sample' : 'See a sample'),
+        isHubService(s) && !TPV_FROM_HUB && h('a',{href:HUB_DEMO_URL,target:'_blank',rel:'noopener',
+          style:{background:'#f0c040',color:'#1a1a2e',textDecoration:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13}},'Try the live demo →'),
         isHubService(s) && h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontFamily:LB,fontSize:13}},
           TPV_FROM_HUB ? 'Back to your Hub →' : 'Already have it? Open the Hub →')),
       sample === s.id && h(ServiceSample,{id:s.id}))),
