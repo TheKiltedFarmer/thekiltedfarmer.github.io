@@ -5056,6 +5056,7 @@ async function renderSettings(){
     +'<div class="txn-grid" style="margin-top:12px;"><div><label>Their name</label><input id="invName" class="period-input" placeholder="As it shows on the team"></div>'
     +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member (Contributor)</option><option value="manager">Manager (Steward)</option>'+(isOwner?'<option value="owner">Co-owner (Steward)</option>':'')+'</select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
+  h+=trialCardHTML();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
     +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Sign up there with the same email you use here ('+esc((currentUser&&currentUser.email)||'')+') so we can match them up.</div>'
     +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
@@ -5166,6 +5167,368 @@ async function renderServicesCard(){
     return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(x.name)+'</div><div class="bk-sub" style="white-space:normal;">'+esc(x.blurb||'')+'</div></div><span class="svc-pill '+l[1]+'">'+esc(l[0])+'</span></div>';
   }).join('')
     +'<div class="bk-actions"><button class="btn-green" onclick="openPVServices()">'+(st.signed?'Manage on The People’s Voices':'Turn them on')+' ↗</button></div>';
+}
+
+// ─── the 3-month free trial ───
+const TRIAL_MONTHS=3;
+function trialInfo(){
+  const c=BIZ.row&&BIZ.row.created_at;if(!c)return null;
+  const start=new Date(c);if(isNaN(start))return null;
+  const end=new Date(start);end.setMonth(end.getMonth()+TRIAL_MONTHS);
+  const day=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());const left=Math.round((day(end)-day(new Date()))/86400000);
+  return{start,end,left};
+}
+function trialCardHTML(){
+  const t=trialInfo();if(!t)return'';
+  const endTxt=t.end.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Free Trial</div><div class="card-sub">'
+    +(t.left>0
+      ?'<b>'+t.left+' day'+(t.left===1?'':'s')+' left</b> of your '+TRIAL_MONTHS+' free months. It runs through '+endTxt+'. Everything is on, including the services below. After that it’s $10 a month, with everything still included. We’ll check in before it ends.'
+      :'Your '+TRIAL_MONTHS+' free months ended on '+endTxt+'. Nothing has been switched off. Keeping the Hub is $10 a month, with Watch alerts, the Bid & grant finder and rule explainers included. We’ll be in touch.')
+    +'</div></div>';
+}
+
+const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]}};
+
+// ═══════════════════════════════════════════════════════
+// DEMO MODE — operations-hub.html?demo
+// The real Hub, running on a made-up business kept in this browser tab's memory.
+// Every database call is answered here instead of by Supabase, so nothing is
+// saved, nothing reaches anyone's real data, and a reload starts fresh.
+// ═══════════════════════════════════════════════════════
+const DEMO={on:/[?&]demo\b/.test(location.search),type:null,db:{},uid:'00000000-0000-4000-8000-0000000000de',realFetch:window.fetch.bind(window)};
+const DEMO_TRIAL_URL='https://thepeoplesvoices.org/?tab=business&pick=hub';
+function demoId(){try{if(crypto.randomUUID)return crypto.randomUUID();}catch(e){}return'd'+Date.now().toString(16)+Math.random().toString(16).slice(2,10);}
+function demoHex(n){let s='';for(let i=0;i<n;i++)s+=Math.floor(Math.random()*16).toString(16);return s;}
+
+// ─── a tiny PostgREST that lives in memory ───
+function demoRow(table,obj){
+  const sch=DEMO_SCHEMA[table]||{};const now=new Date();const row={};
+  Object.entries(sch).forEach(([c,[kind,d]])=>{
+    let v=null;
+    if(d==='@uuid')v=demoId();else if(d==='@hex')v=demoHex(18);else if(d==='@now')v=now.toISOString();
+    else if(d==='@now+14d')v=new Date(now.getTime()+14*864e5).toISOString();else if(d==='@today')v=isoLocal(now);
+    else if(d==='@uid')v=DEMO.uid;else if(d&&typeof d==='object')v=JSON.parse(JSON.stringify(d));else v=d;
+    row[c]=v;
+  });
+  return demoCoerce(table,Object.assign(row,obj));
+}
+function demoCoerce(table,row){
+  const sch=DEMO_SCHEMA[table]||{};
+  Object.keys(row).forEach(c=>{const k=sch[c]&&sch[c][0];
+    if(k==='num'&&row[c]!==null&&row[c]!==''&&row[c]!==undefined){const n=Number(row[c]);row[c]=isNaN(n)?row[c]:n;}
+    if(k==='num'&&row[c]==='')row[c]=null;
+    if(k==='bool'&&typeof row[c]==='string')row[c]=row[c]==='true';});
+  return row;
+}
+function demoTable(t){return DEMO.db[t]||(DEMO.db[t]=[]);}
+function demoCmp(a,b){
+  if(a===null||a===undefined)return b===null||b===undefined?0:1;
+  if(b===null||b===undefined)return-1;
+  const na=Number(a),nb=Number(b);
+  if(typeof a==='number'||(a!==''&&b!==''&&!isNaN(na)&&!isNaN(nb)&&typeof a!=='string'))return na-nb;
+  return String(a)<String(b)?-1:String(a)>String(b)?1:0;
+}
+const DEMO_RESERVED=new Set(['select','order','limit','offset','on_conflict','columns']);
+function demoTest(row,col,expr){
+  let neg=false;if(expr.startsWith('not.')){neg=true;expr=expr.slice(4);}
+  const i=expr.indexOf('.');const op=expr.slice(0,i),val=expr.slice(i+1);const v=row[col];let ok;
+  if(op==='eq')ok=v!==null&&v!==undefined&&String(v)===val;
+  else if(op==='neq')ok=!(v!==null&&v!==undefined&&String(v)===val);
+  else if(op==='is')ok=val==='null'?(v===null||v===undefined):String(v)===val;
+  else if(op==='in'){const list=val.replace(/^\(|\)$/g,'').split(',').map(s=>s.trim().replace(/^"|"$/g,''));ok=v!==null&&v!==undefined&&list.includes(String(v));}
+  else if(['gt','gte','lt','lte'].includes(op)){
+    if(v===null||v===undefined)ok=false;
+    else{const num=typeof v==='number';const c=num?v-Number(val):(String(v)<val?-1:String(v)>val?1:0);
+      ok=op==='gt'?c>0:op==='gte'?c>=0:op==='lt'?c<0:c<=0;}
+  }
+  else if(op==='like'||op==='ilike'){const re=new RegExp('^'+val.replace(/[.+?^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*')+'$',op==='ilike'?'i':'');ok=re.test(String(v??''));}
+  else ok=true;
+  return neg?!ok:ok;
+}
+function demoFilter(rows,params){
+  const conds=[];for(const[k,v]of params.entries())if(!DEMO_RESERVED.has(k))conds.push([k,v]);
+  return rows.filter(r=>conds.every(([k,v])=>demoTest(r,k,v)));
+}
+function demoSelect(table,rows,sel){
+  if(!sel||sel==='*')return rows.map(r=>Object.assign({},r));
+  const parts=[];let depth=0,cur='';for(const ch of sel){if(ch==='(')depth++;if(ch===')')depth--;if(ch===','&&!depth){parts.push(cur);cur='';}else cur+=ch;}parts.push(cur);
+  return rows.map(r=>{
+    const o={};
+    parts.forEach(p=>{p=p.trim();
+      const m=p.match(/^(\w+)\((.*)\)$/);
+      if(m){const et=m[1];const base=et.replace(/^ohb_/,'');const fk=[base.replace(/es$/,'')+'_id',base.replace(/s$/,'')+'_id'].find(k=>k in r)||base+'_id';
+        const hit=demoTable(et).find(x=>x.id===r[fk]);o[et]=hit?demoSelect(et,[hit],m[2])[0]:null;}
+      else if(p==='*')Object.assign(o,r);else o[p]=r[p];});
+    return o;
+  });
+}
+function demoOrder(rows,order){
+  if(!order)return rows;
+  const keys=order.split(',').map(s=>{const[c,dir,nulls]=s.split('.');return{c,desc:dir==='desc',nulls};});
+  return rows.map((r,i)=>[r,i]).sort((A,B)=>{
+    for(const k of keys){const a=A[0][k.c],b=B[0][k.c];
+      const an=a===null||a===undefined,bn=b===null||b===undefined;
+      if(an||bn){if(an&&bn)continue;const nullsFirst=k.nulls?k.nulls==='nullsfirst':k.desc;return(an?-1:1)*(nullsFirst?1:-1);}
+      const c=demoCmp(a,b);if(c)return k.desc?-c:c;}
+    return A[1]-B[1];
+  }).map(x=>x[0]);
+}
+const demoJSON=(body,status=200)=>new Response(body===null?'':JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+
+function demoRest(method,table,params,body,prefer){
+  const rows=demoTable(table);
+  if(method==='GET'){
+    let out=demoOrder(demoFilter(rows,params),params.get('order'));
+    const off=+params.get('offset')||0,lim=params.get('limit');
+    out=out.slice(off,lim?off+(+lim):undefined);
+    return demoJSON(demoSelect(table,out,params.get('select')));
+  }
+  if(method==='POST'){
+    const list=Array.isArray(body)?body:[body];const conflict=params.get('on_conflict');
+    const ignore=/ignore-duplicates/.test(prefer||''),merge=/merge-duplicates/.test(prefer||'');
+    const out=[];
+    list.forEach(o=>{
+      if(conflict){const cols=conflict.split(',');
+        const hit=rows.find(r=>cols.every(c=>String(r[c])===String(o[c])));
+        if(hit){if(ignore)return;if(merge){Object.assign(hit,o);demoCoerce(table,hit);out.push(hit);return;}
+          return out.push({__error:'duplicate key value violates unique constraint'});}
+      }
+      const r=demoRow(table,o);rows.push(r);out.push(r);
+    });
+    const err=out.find(x=>x.__error);if(err)return demoJSON({message:err.__error,code:'23505'},409);
+    return demoJSON(demoSelect(table,out,params.get('select')),201);
+  }
+  if(method==='PATCH'){
+    const hit=demoFilter(rows,params);hit.forEach(r=>{Object.assign(r,body);demoCoerce(table,r);});
+    return demoJSON(demoSelect(table,hit,params.get('select')));
+  }
+  if(method==='DELETE'){
+    const hit=new Set(demoFilter(rows,params));DEMO.db[table]=rows.filter(r=>!hit.has(r));
+    return new Response(null,{status:204});
+  }
+  return demoJSON({message:'Not supported in the demo'},400);
+}
+function demoRpc(fn,args){
+  if(fn==='ohb_create_business'){
+    const b=demoRow('ohb_businesses',{name:args.p_name,business_type:args.p_type,county:args.p_county,settings:args.p_settings||{},created_by:DEMO.uid});
+    demoTable('ohb_businesses').push(b);
+    demoTable('ohb_members').push(demoRow('ohb_members',{business_id:b.id,user_id:DEMO.uid,name:args.p_owner_name,email:'you@demo.example',role:'owner'}));
+    demoTable('ohb_team_members').push(demoRow('ohb_team_members',{business_id:b.id,name:args.p_owner_name,role:'Steward',user_id:DEMO.uid,sort_order:0}));
+    return demoJSON(b.id);
+  }
+  if(fn==='ohb_invite_info')return demoJSON(null);
+  if(fn==='ohb_accept_invite')return demoJSON('ok');
+  if(fn==='tpv_my_business')return demoJSON([]);
+  return demoJSON(null);
+}
+const DEMO_SERVICES=[
+  {id:'watch',name:'Watch alerts',blurb:'A heads-up when a meeting agenda, local decision or news story in your county mentions what matters to your business.',price_label:'$5 a month',status:'available',sort:1,pay_url:null},
+  {id:'bids',name:'Bid & grant finder',blurb:'Every Monday: public bids and small-business grants that fit your line of work.',price_label:'$5 a month',status:'available',sort:2,pay_url:null},
+  {id:'explainer',name:'Plain-language rule explainer',blurb:'Send a new rule and get back what changes for you.',price_label:'Included',status:'available',sort:3,pay_url:null}];
+async function demoFetch(input,init){
+  const url=String(input&&input.url?input.url:input);init=init||{};
+  if(!url.startsWith(SUPABASE_URL))return DEMO.realFetch(input,init);
+  const method=(init.method||'GET').toUpperCase();
+  let body=null;if(init.body&&typeof init.body==='string'){try{body=JSON.parse(init.body);}catch(e){body=null;}}
+  const headers=init.headers||{};const prefer=headers.Prefer||headers.prefer||'';
+  const path=url.slice(SUPABASE_URL.length);
+  if(path.startsWith('/auth/v1/'))return demoJSON({access_token:'demo',refresh_token:'demo',token_type:'bearer',expires_in:3600,user:demoUser()});
+  if(path.startsWith('/storage/v1/'))return demoJSON({Key:'demo'});
+  if(path.startsWith('/functions/v1/'))return demoJSON({error:'Not available in the demo'},400);
+  const m=path.match(/^\/rest\/v1\/([^?]+)(?:\?(.*))?$/);if(!m)return demoJSON({message:'Not found'},404);
+  const name=decodeURIComponent(m[1]);const params=new URLSearchParams(m[2]||'');
+  if(name.startsWith('rpc/'))return demoRpc(name.slice(4),body||{});
+  if(name==='business_services')return demoJSON(DEMO_SERVICES);
+  try{return demoRest(method,name,params,body,prefer);}catch(e){console.error('[demo]',e);return demoJSON({message:String(e.message||e)},500);}
+}
+function demoUser(){return{id:DEMO.uid,email:'you@demo.example',user_metadata:{}};}
+
+// ─── a made-up business for each type ───
+const DEMO_BIZ={
+  food:{name:'Maple Lane Kitchen',owner:'Alex',crew:[['Sam','market'],['Jordan','kitchen'],['Casey','kitchen']],
+    sales:[['Farmers Market',[260,520],2,'market'],['Wholesale',[300,520],1],['Online Orders',[90,240],2],['Catering',[0,450],1]],
+    costs:[['Ingredients','Wholesale Foods Co.',[220,380],1],['Packaging','Box & Bag Supply',[40,90],1],['Market Fees','Downtown Market',[35,35],1]],
+    monthly:[['Kitchen Rental','Grace Church Kitchen',600],['Insurance','Main Street Insurance',85],['Software & Subscriptions','Card reader app',0]],
+    trips:['Farmers market','Supply run','Wholesale delivery'],budgets:{Ingredients:1400,Packaging:300,'Market Fees':160,'Kitchen Rental':600}},
+  farm:{name:'Hollow Creek Farm',owner:'Alex',crew:[['Sam','market'],['Jordan','field'],['Casey','delivery']],
+    sales:[['Farmers Market',[300,640],2,'market'],['CSA Shares',[400,400],1],['Farm Stand',[80,220],3],['Wholesale',[0,380],1]],
+    costs:[['Seed & Plants','Valley Seed Co.',[60,180],1],['Feed','County Feed & Grain',[90,140],1],['Packaging','Box & Bag Supply',[30,70],1],['Market Fees','Downtown Market',[35,35],1]],
+    monthly:[['Fuel & Mileage','Fuel',140],['Insurance','Farm Mutual',110]],
+    trips:['Farmers market','CSA drop-off','Feed store'],budgets:{'Seed & Plants':500,Feed:520,Packaging:220,'Market Fees':160}},
+  retail:{name:'Main Street Mercantile',owner:'Alex',crew:[['Sam','event'],['Jordan','floor'],['Casey','floor']],
+    sales:[['In-store Sales',[180,420],5],['Market & Event Sales',[0,700],1,'event'],['Online Sales',[60,200],2]],
+    costs:[['Inventory','Maker Wholesale',[300,650],1],['Packaging','Box & Bag Supply',[25,60],1],['Booth & Event Fees','Fall Craft Fair',[0,75],1]],
+    monthly:[['Rent','Main Street Properties',950],['Utilities','Power company',140],['Software & Subscriptions','Shop software',39]],
+    trips:['Craft fair','Supplier pickup','Bank deposit'],budgets:{Inventory:2000,Rent:950,Utilities:150}},
+  trades:{name:'Northwoods Landscaping',owner:'Alex',crew:[['Sam','lead'],['Jordan','crew'],['Casey','crew']],
+    sales:[['Jobs',[600,1600],3],['Maintenance Contracts',[450,450],2]],
+    costs:[['Materials','Builders Supply',[200,600],2],['Dump & Disposal Fees','County Transfer Station',[40,90],1],['Equipment Rental','Equipment Rental Co.',[0,240],1]],
+    monthly:[['Insurance','Contractors Insurance',190],['Fuel & Mileage','Fuel',320]],
+    trips:['Job site','Supply yard','Dump run'],budgets:{Materials:2400,'Equipment Rental':600,Insurance:190}},
+  salon:{name:'Riverside Hair Studio',owner:'Alex',crew:[['Sam','service'],['Jordan','service'],['Casey','desk']],
+    sales:[['Services',[260,480],7,'service'],['Retail Products',[40,160],2]],
+    costs:[['Products & Supplies','Salon Supply Co.',[90,200],1],['Retail Inventory','Salon Supply Co.',[0,180],1]],
+    monthly:[['Rent','Riverside Plaza',1100],['Utilities','Power company',160],['Software & Subscriptions','Booking app',35]],
+    trips:['Supply pickup','Training class','Bank deposit'],budgets:{'Products & Supplies':600,Rent:1100,'Retail Inventory':400}},
+  cleaning:{name:'Spotless Home Care',owner:'Alex',crew:[['Sam','lead'],['Jordan','cleaning'],['Casey','cleaning']],
+    sales:[['Residential',[120,220],6],['Commercial',[300,300],2]],
+    costs:[['Cleaning Supplies','Janitorial Supply',[60,140],1]],
+    monthly:[['Insurance','Bonding & Insurance',95],['Fuel & Mileage','Fuel',180]],
+    trips:['Client homes','Office clean','Supply pickup'],budgets:{'Cleaning Supplies':450,Insurance:95}},
+  other:{name:'Sample Business Co.',owner:'Alex',crew:[['Sam','work'],['Jordan','work']],
+    sales:[['Sales',[200,600],3],['Services',[150,400],2]],
+    costs:[['Supplies','Office Supply',[40,120],1]],
+    monthly:[['Rent','Landlord',700],['Utilities','Power company',110]],
+    trips:['Client visit','Supply pickup'],budgets:{Supplies:300,Rent:700}}
+};
+// a steady pseudo-random so each type always shows the same week-to-week story
+function demoRand(seed){let s=seed>>>0||1;return()=>((s=Math.imul(s^(s>>>15),2246822507)^Math.imul(s^(s>>>13),3266489909),s^=s>>>16)>>>0)/4294967296;}
+function demoSeed(type){
+  const cfg=DEMO_BIZ[type]||DEMO_BIZ.other;const rnd=demoRand([...type].reduce((a,c)=>a*31+c.charCodeAt(0),7));
+  const between=([a,b])=>Math.round((a+(b-a)*rnd())/5)*5;
+  DEMO.db={};DEMO.type=type;
+  const settings=presetSettings(type);
+  const created=new Date(Date.now()-21*864e5);
+  const biz=demoRow('ohb_businesses',{name:cfg.name,business_type:type,county:'Jackson',settings,created_by:DEMO.uid,created_at:created.toISOString()});
+  const B=biz.id;const T=(t,o)=>{const r=demoRow(t,Object.assign({business_id:B},o));demoTable(t).push(r);return r;};
+  demoTable('ohb_businesses').push(biz);
+  T('ohb_members',{user_id:DEMO.uid,name:cfg.owner,email:'you@demo.example',role:'owner',created_at:created.toISOString()});
+  const jobs=settings.jobs;const jobOf=k=>jobs.find(j=>j.key===k)||jobs[0];
+  const poolJob=(jobs.find(j=>j.pay==='pool')||jobs[0]).key;
+  T('ohb_team_members',{name:cfg.owner,role:'Steward',user_id:DEMO.uid,sort_order:0});
+  cfg.crew.forEach(([n],i)=>T('ohb_team_members',{name:n,role:'Contributor',sort_order:i+1}));
+  const comm=jobs.some(j=>j.pay==='commission')?(PRESETS[type]||{}).commission||10:null;
+  T('ohb_settings',{key:'accountant',value:{pay:{workers:'employees',commissionPct:comm}}});
+  Object.entries(cfg.budgets).forEach(([c,a])=>T('ohb_budgets',{category:c,monthly_amount:a,kind:'expense'}));
+  const today=new Date();today.setHours(12,0,0,0);
+  const mon0=new Date(today);mon0.setDate(today.getDate()+(today.getDay()===0?-6:1-today.getDay()));
+  const bank=[];
+  for(let w=4;w>=0;w--){
+    const mon=new Date(mon0);mon.setDate(mon0.getDate()-7*w);
+    const label=getWeekLabel(mon);
+    const p=T('ohb_pay_periods',{period_type:'Weekly',period_label:label,created_at:new Date(mon.getTime()+3600e3).toISOString()});
+    const days=[];for(let d=0;d<7;d++){const x=new Date(mon);x.setDate(mon.getDate()+d);if(x<=today)days.push(x);}
+    if(!days.length)continue;
+    const iso=x=>isoLocal(x);
+    // hours: owner and crew, Monday–Saturday
+    [[cfg.owner,poolJob]].concat(cfg.crew).forEach(([n,job],pi)=>{
+      days.forEach((x,di)=>{
+        if(x.getDay()===0)return;
+        const j=jobOf(job);
+        const marketDay=x.getDay()===6||x.getDay()===3;
+        // the owner works most days; crew work about half the week, a few hours at a time
+        const works=pi===0?x.getDay()!==3:((x.getDay()+pi)%2===0);
+        let hrs=j.pay==='commission'?((type==='salon'?works:marketDay)?5+Math.round(rnd()*2):0):(works?(pi===0?4:3)+Math.round(rnd()*2*2)/2:0);
+        if(!hrs)return;
+        T('ohb_time_entries',{period_id:p.id,member_name:n,entry_type:'daily',entry_date:iso(x),hours:hrs,job:j.key,created_at:new Date(x.getTime()+8*3600e3).toISOString()});
+      });
+    });
+    // sales
+    cfg.sales.forEach(([src,range,times,job])=>{
+      for(let k=0;k<times;k++){
+        const amt=between(range);if(!amt)continue;
+        const x=days[Math.min(days.length-1,Math.floor(rnd()*days.length))];
+        const who=job?cfg.crew.filter(c=>c[1]===job).map(c=>c[0]).join(', '):null;
+        const r=T('ohb_revenue_entries',{amount:amt,source:src,reported_by:cfg.owner,period_label:label,txn_date:iso(x),payment_method:rnd()<.6?'Card':'Cash',worked_by:who||null,created_at:new Date(x.getTime()+17*3600e3).toISOString()});
+        if(r.payment_method==='Card')bank.push({date:iso(x),desc:'CARD DEPOSIT '+src.toUpperCase(),amt});
+      }
+    });
+    // costs
+    cfg.costs.forEach(([cat,vendor,range,times])=>{
+      for(let k=0;k<times;k++){
+        const amt=between(range);if(!amt)continue;
+        const x=days[Math.floor(rnd()*days.length)];
+        T('ohb_expenses',{period_id:p.id,name:vendor,amount:amt,category:cat,vendor,txn_date:iso(x),payment_method:'Card',created_at:new Date(x.getTime()+12*3600e3).toISOString()});
+        bank.push({date:iso(x),desc:'POS PURCHASE '+vendor.toUpperCase(),amt:-amt});
+      }
+    });
+  }
+  // monthly bills
+  cfg.monthly.forEach(([cat,payee,amt],i)=>{if(!amt)return;
+    [1,0].forEach(back=>{const x=new Date(today.getFullYear(),today.getMonth()-back,3+i,12);if(x>today)return;
+      T('ohb_transactions',{txn_date:isoLocal(x),direction:'out',amount:amt,payee,category:cat,payment_method:'Bank transfer',created_by:cfg.owner});
+      bank.push({date:isoLocal(x),desc:'ACH '+payee.toUpperCase(),amt:-amt});});
+  });
+  // a bank statement for the last three weeks, with two lines nobody has logged yet
+  const cutoff=isoLocal(new Date(today.getTime()-20*864e5));
+  bank.push({date:isoLocal(new Date(today.getTime()-6*864e5)),desc:'POS PURCHASE HARDWARE STORE',amt:-38.47});
+  bank.push({date:isoLocal(new Date(today.getTime()-2*864e5)),desc:'MONTHLY SERVICE FEE',amt:-12});
+  let bal=4200;
+  bank.filter(b=>b.date>=cutoff).sort((a,b)=>a.date<b.date?-1:1).forEach((b,i)=>{bal+=b.amt;
+    T('ohb_bank_lines',{fingerprint:'Business checking|'+b.date+'|'+b.amt.toFixed(2)+'|'+i,account:'Business checking',txn_date:b.date,description:b.desc,amount:b.amt,balance:Math.round(bal*100)/100,status:'open'});});
+  // mileage
+  cfg.trips.forEach((t,i)=>{[0,1].forEach(k=>{const x=new Date(today.getTime()-(3+i*5+k*9)*864e5);
+    T('ohb_mileage',{trip_date:isoLocal(x),miles:Math.round((8+rnd()*40)*10)/10,purpose:t,driver:k?cfg.crew[0][0]:cfg.owner});});});
+  // new-hire paperwork: one person finished, one partway, one not started
+  const docs=['welcome',settings.food?'foodsafety':null,(settings.food&&type==='food')?'kitchen':'workplace'].filter(Boolean);
+  const signed=(n,keys)=>keys.forEach((k,i)=>T('ohb_onboarding',{member_name:n,item:k,version:typeof ONB_VERSION!=='undefined'?ONB_VERSION:'1',status:'signed',signed_name:n,signed_at:new Date(created.getTime()+(2+i)*864e5).toISOString(),data:{}}));
+  if(cfg.crew[0])signed(cfg.crew[0][0],docs);
+  if(cfg.crew[1])signed(cfg.crew[1][0],docs.slice(0,1));
+}
+
+// ─── the screens: pick a type, then a banner while you look around ───
+function demoPicker(){
+  let el=document.getElementById('demoPicker');
+  if(!el){el=document.createElement('div');el.id='demoPicker';document.body.appendChild(el);}
+  document.getElementById('authGate').style.display='none';
+  el.innerHTML='<div class="demo-pick"><div class="demo-pick-in">'
+    +'<div class="demo-kicker">Operations Hub · live demo</div>'
+    +'<h1>Try the Hub with a made-up business</h1>'
+    +'<p>Pick the kind of business closest to yours. You’ll get the real Hub, filled with a few weeks of sample sales, hours, receipts and pay. Click every tab, log a sale, clock someone in, change the pay rules. Nothing is saved, and nothing you type leaves this browser tab.</p>'
+    +'<div class="demo-types">'+Object.entries(PRESETS).map(([k,p])=>'<button type="button" class="preset-card" onclick="demoStart(\''+k+'\')"><b>'+esc(p.label)+'</b><span>'+esc((DEMO_BIZ[k]||DEMO_BIZ.other).name)+' · '+esc(p.desc)+'</span><em>'+esc(p.jobs.map(j=>j.name).join(' · '))+'</em></button>').join('')+'</div>'
+    +'<p class="demo-small">Ready for your own? <a href="'+DEMO_TRIAL_URL+'" target="_blank" rel="noopener">Start your 3 free months →</a></p>'
+    +'</div></div>';
+  el.style.display='block';
+}
+async function demoStart(type){
+  const pk=document.getElementById('demoPicker');if(pk)pk.style.display='none';
+  demoSeed(type);
+  try{history.replaceState(null,'',location.pathname+'?demo='+type);}catch(e){}
+  currentUser=demoUser();window._authToken='demo';
+  demoBanner();
+  await enterApp();
+  goTabSafe('dashboard');
+}
+function goTabSafe(id){try{const t=[...document.querySelectorAll('.tab')].find(x=>(x.getAttribute('onclick')||'').includes("'"+id+"'"));if(t)t.click();}catch(e){}}
+function demoBanner(){
+  let b=document.getElementById('demoBanner');
+  if(!b){b=document.createElement('div');b.id='demoBanner';document.body.insertBefore(b,document.body.firstChild);}
+  const p=PRESETS[DEMO.type]||PRESETS.other;
+  b.innerHTML='<div><b>Demo</b> · '+esc((DEMO_BIZ[DEMO.type]||DEMO_BIZ.other).name)+' is made up ('+esc(p.label)+'). Nothing here is saved.</div>'
+    +'<div class="demo-ban-btns"><button type="button" onclick="demoSwitch()">Try another type</button><a href="'+DEMO_TRIAL_URL+'" target="_blank" rel="noopener">Start your 3 free months →</a></div>';
+}
+function demoSwitch(){location.href=location.pathname+'?demo';}
+
+if(DEMO.on){
+  window.fetch=demoFetch;
+  // keep the demo from touching a real sign-in or business choice saved in this browser
+  const _set=Storage.prototype.setItem,_rm=Storage.prototype.removeItem;
+  Storage.prototype.setItem=function(k,v){if(/^ohb_/.test(String(k)))return;return _set.call(this,k,v);};
+  Storage.prototype.removeItem=function(k){if(/^ohb_/.test(String(k)))return;return _rm.call(this,k);};
+  restoreSession=async function(){
+    const t=(location.search.match(/[?&]demo=(\w+)/)||[])[1];
+    if(t&&PRESETS[t])await demoStart(t);else demoPicker();
+    return true;
+  };
+  signOut=function(){demoSwitch();};
+  uploadReceiptBlob=async function(blob){return URL.createObjectURL(blob);};
+  const st=document.createElement('style');
+  st.textContent=`
+#demoBanner{position:sticky;top:0;z-index:999;background:#1a1a2e;color:#f4efe4;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;font-size:14px;line-height:1.4;}
+#demoBanner b{color:#f0c040;}
+.demo-ban-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.demo-ban-btns button{background:transparent;color:#f4efe4;border:1px solid rgba(244,239,228,.5);border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer;}
+.demo-ban-btns a{background:#f0c040;color:#1a1a2e;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:700;text-decoration:none;}
+.demo-pick{position:fixed;inset:0;z-index:1000;overflow-y:auto;background:var(--cream,#faf6ee);min-height:100vh;display:flex;justify-content:center;padding:28px 16px;box-sizing:border-box;}
+.demo-pick-in{max-width:760px;width:100%;}
+.demo-kicker{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--tan,#8a6a3a);font-weight:700;margin-bottom:6px;}
+.demo-pick h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(26px,5vw,36px);margin:0 0 10px;color:var(--green-dark,#1f3d2b);}
+.demo-pick p{font-size:15.5px;line-height:1.6;color:#444;margin:0 0 16px;}
+.demo-types{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:16px;}
+.demo-small{font-size:14px!important;}
+`;
+  document.head.appendChild(st);
 }
 
 // Hidden revenue input for calculate compatibility
