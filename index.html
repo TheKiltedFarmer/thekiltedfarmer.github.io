@@ -12088,6 +12088,210 @@ async function bizFn(body) {
   return data || {};
 }
 
+// The Hub's card shows even before its row is added to business_services.
+const HUB_SERVICE_FALLBACK = {id:'hub', name:'Operations Hub', price_label:'3 months free, then $10 a month', status:'available', sort:0, pay_url:'/operations-hub.html',
+  blurb:'Books, pay and paperwork for small Michigan businesses. Scan receipts, match your bank statement, figure pay by shared hours, commission or hourly with a minimum-wage floor, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
+
+// ── "See a sample": what each service actually looks like, before anyone pays ──
+const SAMPLE_KINDS = [{id:'food', label:'Food truck'}, {id:'hardware', label:'Hardware store'}, {id:'salon', label:'Hair salon'}];
+const WATCH_SAMPLES = {
+  food:{watching:'food trucks, Main Street, liquor license', items:[
+    {head:'City Planning Commission · Tuesday 6:00 PM · Item 6', what:'A proposal to limit food trucks downtown to three marked spots on weekends.',
+      why:'You sell from a truck on Saturdays. If this passes, you\'d need one of those three spots.', todo:'Speak during public comment at the meeting, or email the clerk before Monday. We include the address.'},
+    {head:'County Road Commission · next month\'s schedule', what:'Main Street resurfacing between 2nd and 6th, planned for May and June.',
+      why:'That\'s your block. Expect lane closures out front during spring markets.'}]},
+  hardware:{watching:'Main Street, zoning, sign permits, road work', items:[
+    {head:'City Planning Commission · Tuesday 6:00 PM · Item 4', what:'A new sign rule: sandwich boards on the sidewalk would need a $50 yearly permit.',
+      why:'You put a sidewalk sign out every day. Starting in spring, you\'d need the permit.', todo:'Comment at the meeting, or apply once it passes. We\'ll send the form when it\'s posted.'},
+    {head:'City Council · Monday 7:00 PM · Item 9', what:'Rezoning the lot behind Main Street from industrial to homes.',
+      why:'Your loading door backs onto that lot. New neighbors could mean limits on early-morning deliveries.'}]},
+  salon:{watching:'Elm Street, parking, cosmetology, business taxes', items:[
+    {head:'City Council · Monday 7:00 PM · Item 5', what:'Two-hour parking limits on Elm Street, enforced 9 to 6.',
+      why:'Your clients park on Elm, and color appointments often run three hours.', todo:'Ask about permit parking for customers during public comment, or email your council member. We include who that is.'},
+    {head:'Township Board · Thursday 6:30 PM · Item 3', what:'A change to how small businesses file for the equipment tax exemption.',
+      why:'Your chairs and dryers may qualify. The new form is due earlier than last year.'}]}
+};
+const BID_SAMPLES = {
+  food:{trade:'catering', items:[
+    {head:'Catering for a senior center lunch series', line:'Bid · county purchasing office · due in 4 weeks · about $8,000–$12,000',
+      fits:'Weekly lunches for 60, local food preferred. Small vendors can bid.', next:'Download the bid packet (link in the email) and send a sealed bid by the due date.'},
+    {head:'Storefront improvement grant', line:'Grant · downtown development authority · up to $10,000, you match half · deadline in 6 weeks',
+      fits:'Your commissary kitchen is downtown. Signs, lighting and paint count.'},
+    {head:'Snacks for a school district\'s after-school program', line:'Quote request · due in 10 days · small order, good first contract'}]},
+  hardware:{trade:'hardware and building supplies', items:[
+    {head:'Salt and snow supplies for a school district', line:'Bid · district business office · due in 3 weeks · about $15,000',
+      fits:'Bagged salt, shovels and ice melt, delivered to four buildings. Local suppliers are welcome.', next:'Get the bid packet, price it, and bring a sealed bid to the district office.'},
+    {head:'Maintenance supplies for township buildings', line:'Quote request · township office · due in 2 weeks · ongoing orders',
+      fits:'Paint, fasteners, plumbing parts. They want one local account.'},
+    {head:'Storefront improvement grant', line:'Grant · downtown development authority · up to $10,000, you match half · deadline in 6 weeks'}]},
+  salon:{trade:'hair salon', items:[
+    {head:'Small business training grant', line:'Grant · regional workforce board · up to $2,500 · deadline in 5 weeks',
+      fits:'Covers classes and license renewals for your stylists.', next:'Fill out a two-page application; we link it and say what to attach.'},
+    {head:'Equipment microloan', line:'Loan · county economic development office · up to $25,000 at low interest · apply any time',
+      fits:'New chairs, dryers or a build-out. Made for shops under 10 people.'},
+    {head:'Storefront improvement grant', line:'Grant · downtown development authority · up to $10,000, you match half · deadline in 6 weeks'}]}
+};
+
+// The Hub sample runs the same pay math as the real Hub, so people can try their own numbers.
+const SAMPLE_MIN_WAGE = 13.73; // Michigan, 2026
+function sampleHubPay(v) {
+  const commission = v.market * v.commPct / 100;
+  const sales = v.market + v.other;
+  const net = sales - v.expenses - commission;
+  const ct = Math.max(0, net * v.ctPct / 100), pool = Math.max(0, net - ct);
+  const kitchenH = v.annH + v.leeH;
+  const annShare = kitchenH > 0 ? pool * v.annH / kitchenH : pool;   // no pool hours: it's the owner's profit
+  const leeShare = kitchenH > 0 ? pool * v.leeH / kitchenH : 0;
+  const worker = (earned, hrs)=>{
+    if(!hrs) return {earned, topup:0, ot:0};
+    const topup = Math.max(0, SAMPLE_MIN_WAGE * hrs - earned);
+    const ot = hrs > 40 ? 0.5 * ((earned + topup) / hrs) * (hrs - 40) : 0;
+    return {earned, topup, ot};
+  };
+  const lee = worker(leeShare, v.leeH), sam = worker(commission, v.samH);
+  const need = lee.topup + lee.ot + sam.topup + sam.ot;
+  const covered = Math.min(need, annShare), shortfall = need - covered;
+  return {sales, commission, net, ct, pool, annShare, lee, sam, need, covered, shortfall,
+    annPay: annShare - covered, leePay: lee.earned + lee.topup + lee.ot, samPay: sam.earned + sam.topup + sam.ot};
+}
+function HubSample({box, tag}) {
+  const START = {market:600, other:1540, expenses:610, commPct:12, ctPct:8, annH:20, leeH:14, samH:9};
+  const [v, setV] = useState(START);
+  const r = sampleHubPay(v);
+  const money = n=>(n < 0 ? '−$' : '$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+  const slider = (k, label, min, max, step, fmtv)=>h('label',{style:{display:'block',marginBottom:8}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12.5,color:'#555'}}, h('span',null,label), h('strong',{style:{color:'#1a1a2e'}}, fmtv(v[k]))),
+    h('input',{type:'range',min,max,step,value:v[k],onChange:e=>setV(x=>({...x, [k]:+e.target.value})),style:{width:'100%',accentColor:'#1a6b3c'}}));
+  const dollars = n=>'$' + n.toLocaleString('en-US'), pct = n=>n + '%', hrs = n=>n + ' hrs';
+  const row = (a, b, c, strong)=>h('div',{style:{display:'grid',gridTemplateColumns:'1fr auto',gap:8,padding:'6px 0',borderTop:'1px solid #efe9dc',fontWeight:strong?700:400}},
+    h('div',null, a, c && h('div',{style:{fontSize:12,color:'#777',fontWeight:400}}, c)), h('div',{style:{textAlign:'right'}}, b));
+  const stat = (l, val, col)=>h('div',{style:{background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'8px 10px'}},
+    h('div',{style:{fontSize:10.5,letterSpacing:1,textTransform:'uppercase',color:'#888'}}, l), h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:19,color:col||'#1a1a2e'}}, val));
+  const paidOut = r.annPay + r.leePay + r.samPay;
+  const lp = r.lee, sp = r.sam;
+  const why = (p, base)=>[base, p.topup > 0.004 ? 'Below minimum wage ($' + SAMPLE_MIN_WAGE + '/hr), so the Hub adds ' + money(p.topup) : '', p.ot > 0.004 ? 'Plus ' + money(p.ot) + ' overtime past 40 hours' : ''].filter(Boolean).join('. ');
+  return h('div',{style:box}, tag,
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15.5,color:'#1a1a2e',marginBottom:2}},'One week at a small farm stand. Move the sliders.'),
+    h('div',{style:{fontSize:12.5,color:'#666',marginBottom:10}},'Ann owns it and works the kitchen. Lee works the kitchen. Sam sells at the market for a commission.'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',columnGap:18,background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'10px 12px',marginBottom:12}},
+      slider('market','Market sales (Sam)',0,3000,50,dollars), slider('other','Other sales',0,6000,50,dollars),
+      slider('expenses','Expenses',0,4000,10,dollars), slider('commPct','Sam\'s commission',0,30,1,pct),
+      slider('annH','Ann\'s kitchen hours',0,60,1,hrs), slider('leeH','Lee\'s kitchen hours',0,60,1,hrs),
+      slider('samH','Sam\'s market hours',0,50,1,hrs), slider('ctPct','Common Table set-aside',0,25,1,pct)),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:12}},
+      stat('Sales',money(r.sales),'#1a6b3c'), stat('Expenses',money(v.expenses),'#a33'), stat('Set aside',money(r.ct)), stat('Paid out',money(paidOut))),
+    h('div',{style:{fontWeight:700,color:'#1a1a2e',marginBottom:2}},'Who gets what'),
+    h('div',{style:{background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'4px 12px',marginBottom:10}},
+      row('Ann · owner, ' + v.annH + ' hrs', money(r.annPay), v.leeH + v.annH > 0
+        ? 'Her share of what\'s left, split by kitchen hours' + (r.covered > 0.004 ? ', minus ' + money(r.covered) + ' she covers so everyone gets minimum wage' : '')
+        : 'No one logged kitchen hours, so what\'s left is the owner\'s profit' + (r.covered > 0.004 ? ', minus ' + money(r.covered) + ' to cover minimum wage' : '')),
+      row('Lee · ' + v.leeH + ' kitchen hrs', money(r.leePay), v.leeH ? why(lp, 'Kitchen pool: ' + money(lp.earned) + ' for ' + v.leeH + ' hrs') : 'Didn\'t work this week'),
+      row('Sam · ' + v.samH + ' market hrs', money(r.samPay), v.samH ? why(sp, v.commPct + '% of ' + money(v.market) + ' in market sales is ' + money(r.commission)) : 'Didn\'t work this week'),
+      row('Common Table fund (' + v.ctPct + '%)', money(r.ct), 'Set aside from the profit before anyone is paid'),
+      r.shortfall > 0.004 && row('From the business\'s savings', money(-r.shortfall), 'Ann\'s share couldn\'t cover the minimum-wage top-ups, so the difference comes out of the bank'),
+      row('Total', money(v.expenses + r.ct + paidOut - r.shortfall), r.net < 0 ? 'Costs were more than sales this week' : 'Sales = costs + pay + set-aside, to the penny', true)),
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}},
+      [['Slow week',{market:250,other:500,expenses:420}],['Good week',{market:1400,other:3200,expenses:900}],['Start over',START]].map(([l, p])=>
+        h('button',{key:l,onClick:()=>setV(x=>({...x, ...p})),style:{background:'#fff',color:'#1a1a2e',border:'1px solid #c8bfa8',borderRadius:16,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, l))),
+    h('div',{style:{fontWeight:700,color:'#1a1a2e',marginBottom:4}},'Also in the Hub'),
+    h('div',null,'📷 Snap receipts and the amounts fill themselves in · 🏦 Bring in a bank statement and it matches what\'s logged · 🚗 Import trips from your mileage app · 📝 New-hire paperwork signed on a phone · 🧾 A year-end package for taxes, with the 1099s flagged'),
+    h('div',{style:{fontSize:12.5,color:'#666',marginTop:8}},'Pay rules are yours to set: shared hours, commission, hourly, or a mix, with a minimum-wage floor. The Hub works out what everyone is owed and hands your payroll service a file; the payroll service files the taxes and sends the pay.'));
+}
+function ServiceSample({id}) {
+  const [kind, setKind] = useState('food');
+  const box = {background:'#faf8f3',border:'1px solid #e5dece',borderRadius:10,padding:'14px 16px',marginTop:12,fontFamily:LB,fontSize:13.5,color:'#333',lineHeight:1.6};
+  const tag = h('div',{style:{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#8a6000',marginBottom:8}},'Sample · made-up business and items, to show what you\'d get');
+  const kinds = h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}},
+    h('span',{style:{fontSize:12.5,color:'#666',marginRight:2}},'Show me for a'),
+    SAMPLE_KINDS.map(k=>h('button',{key:k.id,onClick:()=>setKind(k.id),'aria-pressed':kind === k.id,
+      style:{background:kind === k.id ? '#1a1a2e' : '#fff',color:kind === k.id ? '#f0c040' : '#1a1a2e',border:'1px solid #1a1a2e',borderRadius:16,padding:'4px 11px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, k.label)));
+  const mailTop = (subject, line)=>h('div',{style:{borderBottom:'1px solid #e5dece',paddingBottom:8,marginBottom:10}},
+    h('div',{style:{fontSize:12,color:'#888'}},'From: The People\'s Voices · ' + line),
+    h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15.5,color:'#1a1a2e'}}, subject));
+  const item = (key, head, kids)=>h('div',{key,style:{background:'#fff',borderRadius:8,padding:'10px 12px',marginBottom:8,border:'1px solid #efe9dc'}},
+    h('div',{style:{fontWeight:700,color:'#1a1a2e',marginBottom:3}}, head), kids);
+  const why = (label, t)=>h('div',{style:{marginTop:4}}, h('strong',{style:{color:'#1a6b3c'}}, label + ' '), t);
+
+  if(id === 'watch') {
+    const s = WATCH_SAMPLES[kind];
+    return h('div',{style:box}, tag, kinds,
+      mailTop('Heads-up: ' + s.items.length + ' agenda items that touch your business', 'Watch alerts'),
+      h('div',{style:{fontSize:12.5,color:'#666',marginBottom:8}},'You asked us to watch for: ' + s.watching),
+      s.items.map((it, i)=>item(i, it.head, [h('div',{key:1}, it.what), h('div',{key:2}, why('Why it matters to you:', it.why)), it.todo && h('div',{key:3}, why('What you can do:', it.todo))])),
+      h('div',{style:{fontSize:12.5,color:'#666'}},'You get a heads-up the day we spot something on your list in a posted agenda, plus a short roundup on Mondays. You can change what we watch for any time.'));
+  }
+  if(id === 'bids') {
+    const s = BID_SAMPLES[kind];
+    return h('div',{style:box}, tag, kinds,
+      mailTop('This week: ' + s.items.length + ' bids and grants for ' + s.trade, 'Bid & grant finder'),
+      s.items.map((it, i)=>item(i, it.head, [h('div',{key:1}, it.line), it.fits && h('div',{key:2}, why('Fits because:', it.fits)), it.next && h('div',{key:3}, why('Next step:', it.next))])),
+      h('div',{style:{fontSize:12.5,color:'#666'}},'Every Monday, only what fits your line of work, each with a plain answer to "can I actually get this?" Each week we check Grants.gov, Michigan\'s state grant programs, USDA and national small-business grants, local bid pages and the news.'));
+  }
+  if(id === 'explainer') return h('div',{style:box}, tag,
+    h('div',{style:{fontSize:12,color:'#888',marginBottom:4}},'The rule you sent us:'),
+    h('div',{style:{background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'10px 12px',fontStyle:'italic',color:'#555',marginBottom:10}},
+      '"Mobile food vending units shall not operate within one hundred fifty (150) feet of a food service establishment during said establishment\'s posted hours of operation, except upon written consent of the establishment\'s owner or operator…"'),
+    h('div',{style:{fontSize:12,color:'#888',marginBottom:4}},'What we send back:'),
+    item(1, 'In plain words',[h('div',{key:1},'You can\'t park your food truck within about half a block (150 feet) of a restaurant while it\'s open, unless that restaurant says yes in writing.')]),
+    item(2, 'What changes for you',[
+      h('div',{key:1},'• Your usual Saturday spot is about 90 feet from a café that opens at 8. You\'d need their written OK, or a spot farther down.'),
+      h('div',{key:2},'• Evenings after the café closes are fine.')]),
+    item(3, 'What to do',[
+      h('div',{key:1},'• Ask the café owner for a short signed note. Keep a copy in the truck.'),
+      h('div',{key:2},'• Or measure a new spot past the corner.')]),
+    h('div',{style:{fontSize:12.5,color:'#666'}},'Included with Watch alerts and the Hub. Usually back within a day, and a person checks every one before it\'s sent. It\'s a plain explanation, not legal advice, and for anything with real money or penalties on the line, we\'ll say so.'));
+
+  if(isHubService({id})) return h(HubSample,{box, tag});
+  return null;
+}
+
+// ── How our prices compare (checked October 2026; sources linked on the page) ──
+const PRICE_COMPARE = [
+  {what:'Books, receipts and pay', ours:'Operations Hub: 3 months free, then $10 a month, with everything below included',
+   theirs:['QuickBooks Online: $38 a month (Simple Start), $85 (Essentials)', 'Wave Pro: $19 a month'],
+   free:'Wave Starter is free, but receipt scanning is $8 a month extra.',
+   note:'None of these file payroll taxes for you. A payroll service does that: Gusto starts at $49 a month plus $6 a person, Wave Payroll at $40 plus $6 a person.'},
+  {what:'Public bids', ours:'Bid & grant finder: $5 a month, grants included',
+   theirs:['BidNet Direct alerts for Michigan (MITN): $108 a year for 200+ agencies, $396 a year statewide'],
+   free:'Free MITN registration, if you log in and check every day.'},
+  {what:'Grants', ours:'Included in the same $5 Bid & grant finder',
+   theirs:['GrantWatch: $249 a year, or $49 month to month', 'Instrumentl: from about $299 a month'],
+   free:'Searching Grants.gov and each state agency\'s page yourself.'},
+  {what:'Watching local meetings', ours:'Watch alerts: $5 a month',
+   theirs:['Government-monitoring firms are built for big companies and quote prices privately'],
+   free:'Some cities email every agenda they post, unsorted, one city at a time.'},
+  {what:'Explaining a new rule', ours:'Included with Watch alerts and the Hub',
+   theirs:['An hour of a lawyer\'s or consultant\'s time'],
+   free:'A free AI chat can explain a rule too. Ours is tied to your county and a person checks it before it\'s sent.'}
+];
+const PRICE_SOURCES = [
+  ['QuickBooks Online prices after the August 2026 increase','https://auditfriendly.co/answers/quickbooks-online-price-increase-2026'],
+  ['Wave prices (2026 review)','https://ifeeltech.com/blog/wave-accounting-review-small-business-freelancers'],
+  ['Gusto prices (2026 guide)','https://www.hireinsouth.com/post/gusto-pricing'],
+  ['BidNet Direct / MITN plans (City of Portage FAQ)','https://portagemi.gov/DocumentCenter/View/7696/BidNet-Direct-FAQ'],
+  ['GrantWatch and Instrumentl prices (GrantWatch comparison, Oct 2026)','https://www.grantwatch.com/grant-database-comparison.php']
+];
+function PriceCompare() {
+  const [open, setOpen] = useState(false);
+  const cell = {background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'10px 12px',marginBottom:8,fontFamily:LB,fontSize:13.5,color:'#333',lineHeight:1.55};
+  return h('div',{style:{marginBottom:14}},
+    h('button',{onClick:()=>setOpen(!open),'aria-expanded':open,
+      style:{width:'100%',textAlign:'left',background:'#fff',border:'1.5px solid #1a1a2e',borderRadius:10,padding:'11px 14px',cursor:'pointer',fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',justifyContent:'space-between',gap:10}},
+      h('span',null,'How our prices compare'), h('span',null, open ? '▲' : '▼')),
+    open && h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderTop:'none',borderRadius:'0 0 10px 10px',padding:'12px 12px 6px'}},
+      h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#1a4a2a',background:'#eef7f1',borderRadius:8,padding:'9px 12px',marginBottom:10,lineHeight:1.55}},
+        h('strong',null,'Example: '),'a food business using QuickBooks Essentials and GrantWatch pays about $106 a month. The Operations Hub, with bids, grants, Watch alerts and rule explainers included, is $10.'),
+      PRICE_COMPARE.map(r=>h('div',{key:r.what,style:cell},
+        h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14.5,color:'#1a1a2e',marginBottom:4}}, r.what),
+        h('div',null, h('strong',{style:{color:'#1a6b3c'}},'Ours: '), r.ours),
+        h('div',{style:{marginTop:3}}, h('strong',{style:{color:'#a33'}},'Others: '), r.theirs.join(' · ')),
+        h('div',{style:{marginTop:3,color:'#555'}}, h('strong',null,'Free option: '), r.free),
+        r.note && h('div',{style:{marginTop:5,fontSize:12.5,color:'#777'}}, r.note))),
+      h('div',{style:{fontFamily:LB,fontSize:12,color:'#777',lineHeight:1.55,padding:'4px 2px 8px'}},
+        'Their prices are from each company\'s posted pricing or published reviews, checked in October 2026, and can change. If you see a different price, tell us and we\'ll fix it. Sources: ',
+        PRICE_SOURCES.map(([t, u], i)=>h(Fragment,{key:u}, i ? ' · ' : '', h('a',{href:u,target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}}, t))))));
+}
+
 // Opened from the Operations Hub (?tab=business&hub=1): its services come with the Hub.
 const TPV_FROM_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('hub') === '1'; } catch(e) { return false; } })();
 // The Operations Hub's row in business_services is shown as a link, not a sign-up box.
@@ -12102,6 +12306,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [err, setErr] = useState('');
   const [mine, setMine] = useState([]);             // the signed-in business's own sign-ups
   const [showExplain, setShowExplain] = useState(false);
+  const [sample, setSample] = useState(null);       // which card's sample is open
   const formRef = useRef(null), explainRef = useRef(null);
   const admin = isFullAdmin(profile);
   const load = async()=>{
@@ -12119,14 +12324,25 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     if(user && !form.email) setForm(f=>({...f, email:user.email || '', contact:(profile && profile.display_name) || f.contact}));
   },[user && user.id]);
 
-  const shown = (list || []).filter(s=>s.status !== 'hidden');
-  const signupServices = shown.filter(s=>s.id !== 'explainer' && !isHubService(s));
+  const listed = (list || []).filter(s=>s.status !== 'hidden');
+  const shown = Array.isArray(list) && !(list || []).some(isHubService) ? [HUB_SERVICE_FALLBACK, ...listed] : listed;
+  const hubSvc = shown.find(isHubService);
+  // Coming from the Hub means they already have it, so it isn't offered again.
+  const signupServices = shown.filter(s=>s.id !== 'explainer' && !(TPV_FROM_HUB && isHubService(s)));
+  const hubPicked = !!(hubSvc && picked[hubSvc.id]);
+  const includedWithHub = s=>(hubPicked || TPV_FROM_HUB) && (s.id === 'watch' || s.id === 'bids');
   const explainer = shown.find(s=>s.id === 'explainer');
   const set = (k, v)=>setForm(f=>({...f, [k]:v}));
   const scrollTo = ref=>setTimeout(()=>{ try { ref.current && ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 60);
+  // Picking the Hub also picks Watch alerts and the Bid & grant finder, which come with it.
+  const pick = (id, on)=>setPicked(p=>{
+    const n = {...p, [id]:on};
+    if(on && isHubService({id})) { if(shown.some(s=>s.id === 'watch')) n.watch = true; if(shown.some(s=>s.id === 'bids')) n.bids = true; }
+    return n;
+  });
   const choose = id=>{
     if(id === 'explainer') { setShowExplain(true); scrollTo(explainRef); return; }
-    setPicked(p=>({...p, [id]:true})); setDone(null); scrollTo(formRef);
+    pick(id, true); setDone(null); scrollTo(formRef);
   };
   const submit = async()=>{
     const services = Object.keys(picked).filter(k=>picked[k]);
@@ -12136,9 +12352,16 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     if(!services.length) { setErr('Pick at least one service.'); return; }
     if(!form.notPolitical) { setErr('Please confirm this business isn\'t a campaign, party, PAC or lobbying firm.'); return; }
     setSending(true);
-    const {data, error} = await sb.rpc('tpv_business_signup', {p_business:form.business, p_contact:form.contact, p_email:form.email, p_phone:form.phone,
-      p_county:form.county, p_services:services, p_watch_for:picked.watch ? form.watchFor : null, p_notes:form.notes, p_not_political:form.notPolitical,
+    const send = (svcs, notes)=>sb.rpc('tpv_business_signup', {p_business:form.business, p_contact:form.contact, p_email:form.email, p_phone:form.phone,
+      p_county:form.county, p_services:svcs, p_watch_for:picked.watch ? form.watchFor : null, p_notes:notes, p_not_political:form.notPolitical,
       p_trade:picked.bids ? form.trade : null});
+    let {data, error} = await send(services, form.notes);
+    // If the database doesn't know the Hub as a service yet, keep the sign-up and note the Hub request instead.
+    const hubId = hubSvc && hubSvc.id;
+    if(error && hubId && services.includes(hubId) && !/schema cache|could not find the function/i.test(error.message)) {
+      const rest = services.filter(x=>x !== hubId);
+      if(rest.length) ({data, error} = await send(rest, ((form.notes || '').trim() + ' | Wants the Operations Hub.').replace(/^ \| /,'')));
+    }
     setSending(false);
     if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
     setDone(shown.filter(s=>services.includes(s.id)));
@@ -12165,9 +12388,11 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         'Tools that save you time keeping up with local government. What businesses pay for them covers the cost of running The People\'s Voice, so it stays free for everyone.'),
       h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6,marginTop:8,background:'#faf8f3',borderRadius:8,padding:'9px 12px'}},
         h('strong',{style:{color:'#1a1a2e'}},'What you\'re buying is the service, nothing else. '),
-        'No ads, no sponsorships, no say in what the site shows. Everyone pays the same posted price. ',
+        'No ads, no sponsorships, no say in what the site shows. Everyone pays the same posted price, and every business gets the same 3 free months of the Operations Hub. Prices are kept low on purpose: most of the work is automated, and the point is to cover costs, not to make a profit. ',
         h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
           style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
+
+    h(PriceCompare),
 
     TPV_FROM_HUB && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
       h('strong',null,'Coming from the Operations Hub? '),
@@ -12189,10 +12414,14 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}}, s.blurb),
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         pill(s),
-        isHubService(s)
-          ? h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{background:'#1a1a2e',color:'#f0c040',textDecoration:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13}},'Open the Hub →')
-          : h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
-              s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early')))),
+        !(TPV_FROM_HUB && isHubService(s)) && h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+          s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early'),
+        h('button',{onClick:()=>setSample(sample === s.id ? null : s.id),'aria-expanded':sample === s.id,
+          style:{background:'#fff',color:'#1a1a2e',border:'1.5px solid #1a1a2e',borderRadius:7,padding:'7px 13px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+          sample === s.id ? 'Hide the sample' : 'See a sample'),
+        isHubService(s) && h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontFamily:LB,fontSize:13}},
+          TPV_FROM_HUB ? 'Back to your Hub →' : 'Already have it? Open the Hub →')),
+      sample === s.id && h(ServiceSample,{id:s.id}))),
 
     // ── Sign-up form (ongoing services)
     Array.isArray(list) && signupServices.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
@@ -12202,7 +12431,9 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
             h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},
               'We\'ll email you within a couple of days to get you set up. You don\'t pay anything until your service starts, and you can cancel any time. ',
               'Sign in here with the same email any time to see your alerts and change what we watch for.'),
-            done.filter(s=>s.status === 'available' && s.pay_url).map(s=>h('a',{key:s.id,href:s.pay_url,target:'_blank',rel:'noopener',
+            done.some(isHubService) && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 12px',fontSize:14,color:'#1a4a2a',lineHeight:1.6,marginBottom:10}},
+              h('strong',null,'Operations Hub: '),'we\'ll email you a sign-up code. Open the Hub, make an account with this same email, and enter the code to set up your business. Your 3 free months start that day.'),
+            done.filter(s=>s.status === 'available' && s.pay_url && !isHubService(s)).map(s=>h('a',{key:s.id,href:s.pay_url,target:'_blank',rel:'noopener',
               style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
               'Start ' + s.name + ' now →')),
             h('button',{onClick:()=>setDone(null),style:{display:'block',marginTop:6,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Sign up another business'))
@@ -12211,9 +12442,9 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
             h('div',{style:{fontFamily:LB,fontSize:13,color:'#777',marginBottom:12}},'No payment today. We\'ll reach out to set things up, and you pay only once your service starts.'),
             bizLabel('Which services?'),
             h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:12}},
-              signupServices.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer'}},
-                h('input',{type:'checkbox',checked:!!picked[s.id],onChange:e=>setPicked(p=>({...p, [s.id]:e.target.checked})),style:{width:18,height:18}}),
-                s.name, h('span',{style:{color:'#888',fontSize:12.5}}, ' · ' + s.price_label)))),
+              signupServices.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer',flexWrap:'wrap'}},
+                h('input',{type:'checkbox',checked:!!picked[s.id],onChange:e=>pick(s.id, e.target.checked),style:{width:18,height:18}}),
+                s.name, h('span',{style:{color:includedWithHub(s)?'#1a6b3c':'#888',fontSize:12.5}}, ' · ' + (includedWithHub(s) ? 'included with the Hub' : s.price_label))))),
             field('Business name *', 'business', 'Grass Lake Hardware'),
             field('Your name', 'contact', 'Who should we ask for?'),
             field('Email *', 'email', 'you@yourbusiness.com', {type:'email', autoComplete:'email'}),
@@ -12235,7 +12466,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     // ── Rule explainer request
     explainer && h('div',{ref:explainRef},
       showExplain
-        ? h(ExplainerRequestForm,{service:explainer, user, profile, mine, onToast, onDone:loadMine})
+        ? h(ExplainerRequestForm,{service:explainer, user, profile, mine, onToast, onDone:loadMine, onSignup:()=>{ setShowExplain(false); choose('watch'); }})
         : h('div',{style:{...card, textAlign:'center'}},
             h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',marginBottom:8}},'Got a new rule, ordinance or permit requirement you need explained?'),
             h('button',{onClick:()=>setShowExplain(true),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'9px 16px',fontFamily:PD,fontWeight:700,fontSize:13.5,cursor:'pointer'}},'Send us a rule'))),
@@ -12269,6 +12500,8 @@ function MyBusinessRow({b, onToast, onChanged, onExplain}) {
     h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'baseline'}},
       h('strong',{style:{fontSize:15,color:'#1a1a2e'}}, b.business_name),
       h('span',{style:{background:st[2],color:st[1],fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10}}, st[0])),
+    has('hub') && h('div',{style:{fontSize:13,color:'#1a4a2a',margin:'2px 0 4px'}},
+      b.status === 'new' ? 'Operations Hub: watch your email for your sign-up code.' : h('span',null,'Operations Hub: ', h('a',{href:'/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'open your Hub →'))),
     h('div',{style:{fontSize:13,color:'#666',margin:'2px 0 8px'}},
       b.status === 'new' ? 'We\'ll be in touch to get you started. Alerts begin once your service is active.'
       : b.status === 'paused' ? 'Paused. Reply to any alert email, or email hello@thepeoplesvoices.org, to pick back up.'
@@ -12300,8 +12533,11 @@ function MyBusinessRow({b, onToast, onChanged, onExplain}) {
 function clipText(s, n) { const t = String(s || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 
 // ── Ask for a plain-language explainer ────────────────────────────────────────
-function ExplainerRequestForm({service, user, profile, mine, onToast, onDone}) {
-  const first = (mine && mine[0]) || null;
+// Rule explainers come with Watch alerts and the Operations Hub.
+const explainerEligible = mine=>(mine || []).some(b=>b.status !== 'canceled' && (b.services || []).some(x=>x === 'watch' || isHubService({id:x})));
+function ExplainerRequestForm({service, user, profile, mine, onToast, onDone, onSignup}) {
+  const eligible = explainerEligible(mine);
+  const first = ((mine || []).find(b=>b.status !== 'canceled')) || (mine && mine[0]) || null;
   const [f, setF] = useState({business:(first && first.business_name) || '', email:(user && user.email) || '', url:'', text:'', question:''});
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
@@ -12319,19 +12555,21 @@ function ExplainerRequestForm({service, user, profile, mine, onToast, onDone}) {
     onToast && onToast('✓ Got it. Your explainer is on its way.');
   };
   const card = {background:'#fff',border:'2px solid #1a1a2e',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB};
+  if(!eligible) return h('div',{style:card},
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:6}},'Rule explainers come with Watch alerts and the Hub'),
+    h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},
+      'Sign up for Watch alerts ($5 a month) or the Operations Hub, and send us as many rules as you need at no extra cost. ',
+      user ? 'We don\'t see a sign-up for ' + (user.email || 'this email') + ' yet.' : 'Already signed up? Sign in with the email you used, and this form opens.'),
+    h('button',{onClick:()=>onSignup && onSignup(),style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:'pointer'}},'Sign up for Watch alerts'));
   if(sent) return h('div',{style:card},
     h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Got it.'),
-    h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6}}, 'We\'ll email your plain-language explainer, usually within a day. ',
-      service.pay_url ? 'If you haven\'t paid for this one yet, you can do it now:' : 'If payment is needed, we\'ll include a link.'),
-    service.pay_url && h('a',{href:service.pay_url,target:'_blank',rel:'noopener',
-      style:{display:'inline-block',marginTop:10,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
-      'Pay for this explainer (' + service.price_label + ') →'),
+    h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6}}, 'We\'ll email your plain-language explainer, usually within a day. It\'s included with your service, so there\'s nothing to pay.'),
     h('button',{onClick:()=>{ setSent(false); setF(x=>({...x, url:'', text:'', question:''})); },
       style:{display:'block',marginTop:10,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Send another rule'));
   return h('div',{style:card},
-    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Get a rule explained · ' + service.price_label),
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Get a rule explained'),
     h('div',{style:{fontSize:13,color:'#777',marginBottom:12,lineHeight:1.5}},
-      'Send a new ordinance, rule or permit requirement. You\'ll get a plain-language explainer by email: what it is, what changes for you, dates, costs and what to do next. A person looks over every one before it\'s sent. Not legal advice.'),
+      'Send a new ordinance, rule or permit requirement. You\'ll get a plain-language explainer by email: what it is, what changes for you, dates, costs and what to do next. AI writes the first draft and a person checks every one before it\'s sent. Not legal advice.'),
     h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Business name'), h('input',{value:f.business,onChange:e=>set('business', e.target.value),style:bizInput})),
     h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Email *'), h('input',{type:'email',value:f.email,onChange:e=>set('email', e.target.value),placeholder:'you@yourbusiness.com',style:bizInput})),
     h('label',{style:{display:'block',marginBottom:10}}, bizLabel('Link to the rule'), h('input',{type:'url',value:f.url,onChange:e=>set('url', e.target.value),placeholder:'https://...',style:bizInput})),
@@ -12551,11 +12789,19 @@ function BidSourcesAdmin({onToast}) {
   const [rows, setRows] = useState(null);
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({county:countyTag(), name:'', url:''});
+  const [grants, setGrants] = useState(null);       // the weekly grant search's own status
+  const [showGrants, setShowGrants] = useState(false);
+  const isGrantFeed = r=>/\/functions\/v1\/grants-feed/.test(r.url || '');
   const load = async()=>{
     const {data, error} = await sb.from('bid_sources').select('*').order('county',{ascending:true});
     setRows(error ? [] : (data || []));
   };
-  useEffect(()=>{ if(open && rows === null) load(); },[open]);
+  const loadGrants = async()=>{
+    try { const r = await fetch(SUPA_URL + '/functions/v1/grants-feed?status=1'); setGrants(r.ok ? await r.json() : {error:'The grants-feed function isn\'t deployed yet.'}); }
+    catch(e) { setGrants({error:'Couldn\'t reach the grants-feed function.'}); }
+  };
+  useEffect(()=>{ if(open && rows === null) { load(); loadGrants(); } },[open]);
+  const grantRows = (rows || []).filter(isGrantFeed), bidRows = (rows || []).filter(r=>!isGrantFeed(r));
   const add = async()=>{
     if(!f.name.trim() || !/^https?:\/\//i.test(f.url.trim())) { onToast && onToast('Give it a name and a web address starting with https://'); return; }
     const {error} = await sb.from('bid_sources').insert({county:f.county, name:f.name.trim().slice(0,80), url:f.url.trim().slice(0,400)});
@@ -12572,10 +12818,20 @@ function BidSourcesAdmin({onToast}) {
       h('button',{onClick:()=>setOpen(!open),style:{background:open?'#fff':'#1a1a2e',color:open?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer'}},
         open ? 'Close' : 'Manage')),
     !open && h('div',{style:{fontSize:12.5,color:'#777',marginTop:6,lineHeight:1.5}},
-      'The Bid & grant finder also searches the news every week. Adding a city or county\'s own bid postings feed makes it much better there.'),
+      'Every week the Bid & grant finder checks state, federal and national grant sites, searches the news, and reads these city and county bid pages. Adding a city or county\'s own bid postings feed makes it much better there.'),
     open && h('div',{style:{marginTop:10}},
+      rows !== null && grantRows.length > 0 && h('div',{style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5}},
+        h('strong',null,'Grant sites, checked weekly'), ' · in every county\'s feed (' + grantRows.length + ' counties)',
+        grants && grants.error && h('div',{style:{color:'#c0392b',fontSize:12}}, grants.error),
+        grants && grants.sources && h('div',{style:{color:'#666',fontSize:12}},
+          grants.sources.filter(x=>x.active).length + ' sites · ' + grants.grants.length + ' open grants right now' +
+          (grants.sources.some(x=>x.last_error) ? ' · ' + grants.sources.filter(x=>x.last_error).length + ' had a problem last check' : ''),
+          ' ', h('button',{onClick:()=>setShowGrants(!showGrants),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12}}, showGrants ? 'Hide' : 'Show them')),
+        showGrants && grants && grants.sources && grants.sources.map(g=>h('div',{key:g.id,style:{fontSize:12,color:g.last_error?'#c0392b':'#555',padding:'3px 0 3px 10px',borderLeft:'2px solid #efe6cf',marginTop:3}},
+          h('a',{href:g.url,target:'_blank',rel:'noopener',style:{color:'inherit'}}, g.name), g.county ? ' (' + ((COUNTIES[g.county] && COUNTIES[g.county].name) || g.county) + ' only)' : '',
+          ' · ' + (g.last_checked_at ? 'checked ' + shortDate(g.last_checked_at) + ': ' + (g.last_error || (g.open + ' open')) : 'not checked yet')))),
       rows === null ? h(Spinner)
-      : rows.map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5,opacity:r.active?1:.55}},
+      : bidRows.map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5,opacity:r.active?1:.55}},
           h('strong',null, r.name), ' · ' + ((COUNTIES[r.county] && COUNTIES[r.county].name) || r.county),
           h('div',{style:{color:'#888',fontSize:12,wordBreak:'break-all'}}, r.url),
           h('div',{style:{color:r.last_error?'#c0392b':'#666',fontSize:12}},
@@ -19297,7 +19553,17 @@ function App() {
   // Determined from URL path (/jackson, /calhoun) on first load. Stored in
   // state so components can react to changes (county picker). Defaults to
   // null when URL has no /county prefix — in that case we show a picker.
-  const [currentCountyId, setCurrentCountyId] = useState(()=>getCountyFromUrl());
+  // A direct link to the business or funding pages (like the Operations Hub's "turn on your services")
+  // goes straight there instead of stopping at the county picker. Those pages aren't county-specific.
+  const [currentCountyId, setCurrentCountyId] = useState(()=>{
+    const fromUrl = getCountyFromUrl();
+    if(fromUrl) return fromUrl;
+    if(__DEEP_LINK && (__DEEP_LINK.tab === 'business' || __DEEP_LINK.tab === 'funding')) {
+      try { const c = localStorage.getItem('tpv_county'); if(COUNTIES[c]) return c; } catch(e) {}
+      return DEFAULT_COUNTY;
+    }
+    return null;
+  });
   const currentCounty = currentCountyId ? COUNTIES[currentCountyId] : null;
   const [showCountyMenu, setShowCountyMenu] = useState(false);
   // Sync the module-level tag so deep code can write county-scoped inserts
