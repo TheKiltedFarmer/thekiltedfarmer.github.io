@@ -388,6 +388,15 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .sched-head{display:flex;flex-direction:column;gap:10px;}
 .sched-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .sched-nav .btn-secondary{padding:7px 12px;}
+.sick-big{font-family:'Playfair Display',Georgia,serif;font-size:30px;font-weight:900;color:var(--green-dark);margin:4px 0 6px;}
+.sick-big span{font-family:'Source Sans 3',sans-serif;font-size:14px;font-weight:600;color:var(--mid);}
+.sick-table{margin-top:12px;border-top:1px solid var(--rule);}
+.sick-row{display:grid;grid-template-columns:minmax(110px,1.6fr) repeat(5,minmax(48px,.6fr)) minmax(120px,1fr);gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--cream-dark);font-size:13px;}
+.sick-row small{display:block;color:var(--tan);font-size:11px;}
+.sick-h{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);font-weight:700;}
+.sick-av{font-weight:700;color:var(--green);}
+.sick-row .period-input{padding:5px 6px;font-size:12px;}
+@media(max-width:640px){.sick-row{grid-template-columns:1.4fr repeat(5,.6fr);}.sick-row>span:last-child{grid-column:1/-1;}.sick-h>span:last-child{display:none;}}
 .sched-jump{display:inline-flex;align-items:center;gap:4px;border:1.5px solid var(--rule);border-radius:8px;padding:4px 8px;font-size:15px;cursor:pointer;background:#fff;}
 .sched-jump input{border:0;font:inherit;font-size:13px;background:transparent;max-width:130px;}
 .sched-week{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:18px;color:var(--green-dark);}
@@ -2600,6 +2609,7 @@ async function loadBooks(quiet){
     ]);
     BOOKS.rows=booksNormalize(periods,revs,exps,txns);
     BOOKS.byKey={};BOOKS.rows.forEach(r=>{BOOKS.byKey[r.key]=r;});
+    if(typeof loadSickRows==='function')await loadSickRows(true);
     BOOKS.raw={periods,revs,exps,times};BOOKS._weeks=null;
     BOOKS.acct=(settings[0]&&settings[0].value)||{};
     BOOKS.bank=bank;BOOKS.miles=miles;
@@ -4365,7 +4375,7 @@ function computeWeekPay(revs,expTotal,times,endISO){
   const rules=payRules();const rate=commissionOn()?+rules.commissionPct:0;
   const employees=rules.workers==='employees';
   const people={};
-  const P=n=>{const k=canonName(n);return people[k]||(people[k]={name:k,owner:!!ownerOf(k),kitchenH:0,marketH:0,hourlyH:0,hourly:0,byJob:{},commission:0,share:0,topup:0,ot:0,ownerCover:0});};
+  const P=n=>{const k=canonName(n);return people[k]||(people[k]={name:k,owner:!!ownerOf(k),kitchenH:0,marketH:0,hourlyH:0,hourly:0,byJob:{},commission:0,share:0,topup:0,ot:0,ownerCover:0,sickH:0,sick:0});};
   const sales=revs.reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
   let commTotal=0;
   if(rate>0)revs.forEach(r=>{
@@ -4387,8 +4397,15 @@ function computeWeekPay(revs,expTotal,times,endISO){
     else if(hourlyStyle()&&job.pay==='pool'){p.hourlyH+=h;p.noRateH=(p.noRateH||0)+h;}
     else p.kitchenH+=h;
   });
+  // Michigan paid sick time: paid at the person's normal rate (never below minimum wage), not counted toward overtime
+  let sickTotal=0;
+  if(typeof sickNamesInWeek==='function'&&employees){
+    const mwS=minWageFor(endISO);
+    sickNamesInWeek(endISO).forEach(n=>{const p=P(n);if(p.owner)return;const h=sickHoursInWeek(n,endISO);if(!h)return;
+      p.sickH=h;p.sick=h*Math.max(mwS,personRate(n)||0);sickTotal+=p.sick;});
+  }
   const hourlyTotal=Object.values(people).reduce((s,p)=>s+p.hourly,0);
-  const net=sales-expTotal-commTotal-hourlyTotal;
+  const net=sales-expTotal-commTotal-hourlyTotal-sickTotal;
   const ct=Math.max(0,net*CT),pool=Math.max(0,net-ct);
   const all=Object.values(people);
   const kTot=all.reduce((s,p)=>s+p.kitchenH,0);
@@ -4425,8 +4442,8 @@ function computeWeekPay(revs,expTotal,times,endISO){
   const covered=Math.min(need,ownerShare);
   owners.forEach(p=>{p.ownerCover=ownerShare>0?covered*p.share/ownerShare:0;});
   const everyone=Object.values(people);
-  everyone.forEach(p=>{p.hours=p.kitchenH+p.marketH+p.hourlyH;p.otHours=(employees&&!p.owner)?Math.max(0,p.hours-40):0;p.tips=p.tips||0;p.pay=p.commission+p.hourly+p.share+p.topup+p.ot-p.ownerCover+p.tips;});
-  return{sales,expTotal,commTotal,hourlyTotal,net,ct,pool,kTot,people:everyone,need,covered,shortfall:need-covered,mw,rate,employees,tips:tipsTotal,tipsHeld};
+  everyone.forEach(p=>{p.hours=p.kitchenH+p.marketH+p.hourlyH;p.otHours=(employees&&!p.owner)?Math.max(0,p.hours-40):0;p.tips=p.tips||0;p.pay=p.commission+p.hourly+p.share+p.topup+p.ot-p.ownerCover+p.tips+(p.sick||0);});
+  return{sales,expTotal,commTotal,hourlyTotal,sickTotal,net,ct,pool,kTot,people:everyone,need,covered,shortfall:need-covered,mw,rate,employees,tips:tipsTotal,tipsHeld};
 }
 function payBreakdownLine(p,res){
   const bits=[];
@@ -4436,6 +4453,7 @@ function payBreakdownLine(p,res){
   else if(p.share>0.004)bits.push('Shared hourly '+fmt(p.share));
   if(p.topup>0.004)bits.push('<b style="color:var(--tan);">Min-wage top-up '+fmt(p.topup)+'</b>');
   if(p.ot>0.004)bits.push('Overtime '+fmt(p.ot));
+  if(p.sick>0.004)bits.push('Paid sick time '+(Math.round(p.sickH*100)/100)+' hrs '+fmt(p.sick));
   if(p.tips>0.004)bits.push('Tips '+fmt(p.tips));
   if(p.ownerCover>0.004&&!(hourlyStyle()&&p.owner))bits.push('<span style="color:var(--red);">Covered top-ups −'+fmt(p.ownerCover)+'</span>');
   return bits.join(' · ');
@@ -4444,6 +4462,7 @@ function payBreakdownLine(p,res){
 // ─── dashboard ───
 async function refreshDashboard(){
   if(window._periodJustCleared)return;
+  if(typeof loadSickRows==='function')await loadSickRows();
   const label=getCurrentPeriodLabel();
   document.getElementById('dash-period-label').textContent=label;
   if(!window._authToken){document.getElementById('dash-updated-time').textContent='Waiting...';setTimeout(refreshDashboard,1000);return;}
@@ -4734,11 +4753,12 @@ function renderPayRules(){
   }
   el.innerHTML=h;
 }
-function payrollCSV(y){
-  const rows=[['Week','Week ends','Employee','Pool hrs','Commission hrs','Hourly hrs','Total hrs','Overtime hrs','Commission','Hourly pay','Shared pool','Min-wage top-up','Overtime premium','Wages','Tips','Gross pay (wages + tips)','Regular rate']];
+async function payrollCSV(y){
+  if(typeof loadSickRows==='function'){await loadSickRows(true);BOOKS._weeks=null;}
+  const rows=[['Week','Week ends','Employee','Pool hrs','Commission hrs','Hourly hrs','Total hrs','Overtime hrs','Commission','Hourly pay','Shared pool','Min-wage top-up','Overtime premium','Paid sick hrs','Sick pay','Wages','Tips','Gross pay (wages + tips)','Regular rate']];
   computeWeeks().filter(w=>w.end.slice(0,4)===String(y)).forEach(w=>{
-    (w.res?w.res.people:[]).filter(p=>!p.owner&&p.hours>0).forEach(p=>rows.push([w.label,w.end,p.name,p.kitchenH.toFixed(2),p.marketH.toFixed(2),p.hourlyH.toFixed(2),p.hours.toFixed(2),p.otHours.toFixed(2),
-      p.commission.toFixed(2),p.hourly.toFixed(2),p.share.toFixed(2),p.topup.toFixed(2),p.ot.toFixed(2),(p.pay-(p.tips||0)).toFixed(2),(p.tips||0).toFixed(2),p.pay.toFixed(2),(p.hours?((p.pay-p.ot-(p.tips||0))/p.hours):0).toFixed(2)]));
+    (w.res?w.res.people:[]).filter(p=>!p.owner&&(p.hours>0||p.sickH>0)).forEach(p=>rows.push([w.label,w.end,p.name,p.kitchenH.toFixed(2),p.marketH.toFixed(2),p.hourlyH.toFixed(2),p.hours.toFixed(2),p.otHours.toFixed(2),
+      p.commission.toFixed(2),p.hourly.toFixed(2),p.share.toFixed(2),p.topup.toFixed(2),p.ot.toFixed(2),(p.sickH||0).toFixed(2),(p.sick||0).toFixed(2),(p.pay-(p.tips||0)).toFixed(2),(p.tips||0).toFixed(2),p.pay.toFixed(2),(p.hours?((p.pay-p.ot-(p.tips||0)-(p.sick||0))/p.hours):0).toFixed(2)]));
   });
   if(rows.length===1){toast('No employee hours in '+y+' yet',true);return;}
   downloadCSV(fileSlug()+'-payroll-'+y+'.csv',rows);
@@ -5032,6 +5052,8 @@ create table if not exists kf_time_off (
   decided_by text, decided_at timestamptz,
   created_at timestamptz default now()
 );
+alter table kf_time_off add column if not exists kind text not null default 'off';
+alter table kf_time_off add column if not exists sick_hours numeric;
 create table if not exists kf_shift_swaps (
   id uuid primary key default gen_random_uuid(),
   shift_id uuid references kf_shifts(id) on delete cascade,
@@ -5386,7 +5408,7 @@ function requestsHTML(edit){
   if(edit){
     if(pend.length||takenSw.length){
       h+='<div class="req-box"><div class="req-h">Waiting on you</div>'
-        +pend.map(t=>'<div class="req-row"><div><b>'+esc(t.member_name)+'</b> wants '+esc(dayRange(t))+' off'+(t.reason?' · <i>'+esc(t.reason)+'</i>':'')+offClash(t)+'</div><div class="req-btns"><button class="btn-green" onclick="decideOff(\''+t.id+'\',\'approved\')">Approve</button><button class="btn-secondary" onclick="decideOff(\''+t.id+'\',\'denied\')">Say no</button></div></div>').join('')
+        +pend.map(t=>'<div class="req-row"><div><b>'+esc(t.member_name)+'</b> wants '+esc(dayRange(t))+(t.kind==='sick'?' as <b>paid sick time</b> ('+(+t.sick_hours||0)+' hrs)':' off')+(t.reason?' · <i>'+esc(t.reason)+'</i>':'')+offClash(t)+'</div><div class="req-btns"><button class="btn-green" onclick="decideOff(\''+t.id+'\',\'approved\')">Approve</button><button class="btn-secondary" onclick="decideOff(\''+t.id+'\',\'denied\')">Say no</button></div></div>').join('')
         +takenSw.map(w=>'<div class="req-row"><div><b>'+esc(w.to_name)+'</b> will take <b>'+esc(w.from_name)+'</b>’s shift: '+swLine(w)+'</div><div class="req-btns"><button class="btn-green" onclick="decideSwap(\''+w.id+'\',true)">Approve</button><button class="btn-secondary" onclick="decideSwap(\''+w.id+'\',false)">Say no</button></div></div>').join('')
         +'</div>';
     }
@@ -5397,7 +5419,7 @@ function requestsHTML(edit){
     const mine=SCHED.timeoff.filter(t=>t.member_name===me&&t.end_date>=isoLocal(new Date()));
     const mySw=SCHED.swaps.filter(w=>w.from_name===me||w.to_name===me);
     if(mine.length||mySw.length)h+='<div class="req-box quiet"><div class="req-h">Your requests</div>'
-      +mine.map(t=>'<div class="req-row"><div>'+esc(dayRange(t))+' off · <b>'+({pending:'waiting for an answer',approved:'approved',denied:'not approved'}[t.status]||t.status)+'</b></div>'+(t.status==='pending'?'<div class="req-btns"><button class="btn-secondary" onclick="cancelOff(\''+t.id+'\')">Take it back</button></div>':'')+'</div>').join('')
+      +mine.map(t=>'<div class="req-row"><div>'+esc(dayRange(t))+(t.kind==='sick'?' paid sick time ('+(+t.sick_hours||0)+' hrs)':' off')+' · <b>'+({pending:'waiting for an answer',approved:'approved',denied:'not approved'}[t.status]||t.status)+'</b></div>'+(t.status==='pending'?'<div class="req-btns"><button class="btn-secondary" onclick="cancelOff(\''+t.id+'\')">Take it back</button></div>':'')+'</div>').join('')
       +mySw.map(w=>'<div class="req-row"><div>'+(w.from_name===me?'Your shift '+swLine(w)+': '+(w.status==='open'?'waiting for someone to take it':esc(w.to_name)+' offered to take it, waiting for approval'):'You offered to take '+esc(w.from_name)+'’s '+swLine(w)+', waiting for approval')+'</div>'
         +(w.from_name===me&&w.status==='open'?'<div class="req-btns"><button class="btn-secondary" onclick="decideSwap(\''+w.id+'\',false)">Take it back</button></div>':'')+'</div>').join('')+'</div>';
   }
@@ -5413,10 +5435,27 @@ function openTimeOff(){
     +(edit?'<div><label>Who</label><select id="toWho" class="period-select">'+people.map(p=>'<option'+(p===me?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></div>':'')
     +'<div><label>First day off</label><input id="toFrom" type="date" class="period-input" value="'+isoLocal(new Date(Date.now()+7*864e5))+'"></div>'
     +'<div><label>Last day off</label><input id="toTo" type="date" class="period-input" value="'+isoLocal(new Date(Date.now()+7*864e5))+'"></div>'
+    +(typeof sickApplies==='function'&&sickApplies()?'<div class="txn-full"><label>Kind</label><select id="toKind" class="period-select" onchange="toKindChange()"><option value="off">Time off (unpaid)</option><option value="sick">Paid sick time</option></select></div>'
+      +'<div id="toSickWrap" style="display:none;" class="txn-full"><label>Sick hours to use</label><input id="toHours" type="number" inputmode="decimal" step="0.25" min="0.25" class="period-input"><div class="bk-sub" id="toBal"></div></div>':'')
     +'<div class="txn-full"><label>Reason (optional)</label><input id="toWhy" class="period-input" placeholder="Family trip, doctor, school…"></div></div>'
     +(list.length?'<div class="bk-date" style="margin-top:12px;">Coming up</div>'+list.map(t=>'<div class="inv-hist-row"><span>'+esc(t.member_name)+' · '+esc(dayRange(t))+'</span>'+(edit?'<button class="link-btn" onclick="cancelOff(\''+t.id+'\')">Remove</button>':'')+'</div>').join(''):'')
     +'<div class="txn-actions"><button class="btn-secondary" onclick="closeShift()">Cancel</button><button class="btn-green" onclick="saveTimeOff()">'+(edit?'Add time off':'Send request')+'</button></div>';
   m.classList.add('open');
+  if(document.getElementById('toKind')){['toWho','toFrom','toTo'].forEach(id=>{const e=document.getElementById(id);if(e)e.addEventListener('change',()=>{if(document.getElementById('toKind').value==='sick')toKindChange();});});}
+}
+// sick time: suggest the hours of their scheduled shifts in those days, and show what they have
+async function toKindChange(){
+  const sick=document.getElementById('toKind').value==='sick';
+  document.getElementById('toSickWrap').style.display=sick?'':'none';if(!sick)return;
+  const who=canEditSchedule()?document.getElementById('toWho').value:myName();
+  const a=document.getElementById('toFrom').value,b=document.getElementById('toTo').value||a;
+  const sched=SCHED.shifts.filter(x=>x.member_name===who&&x.shift_date>=a&&x.shift_date<=b).reduce((t,x)=>t+shiftHours(x),0);
+  const hrsEl=document.getElementById('toHours');if(!hrsEl.dataset.touched)hrsEl.value=sched||'';
+  hrsEl.oninput=()=>{hrsEl.dataset.touched='1';};
+  const bal=document.getElementById('toBal');bal.textContent='Checking '+who+'’s balance…';
+  try{await loadSickRows(true);await loadSickHours();const x=sickBalance(who);
+    bal.innerHTML=esc(who)+' has <b>'+fmtH(x.available)+'</b> of paid sick time available'+(x.usableFrom?', usable from '+esc(prettyDate(x.usableFrom)):'')+'.'+(sched?' Scheduled in those days: '+fmtH(sched)+'.':'');
+    bal.dataset.av=x.available;bal.dataset.from=x.usableFrom||'';}catch(e){bal.textContent='';}
 }
 async function saveTimeOff(){
   const edit=canEditSchedule();const who=edit?document.getElementById('toWho').value:myName();
@@ -5424,13 +5463,26 @@ async function saveTimeOff(){
   if(!who){toast('We couldn’t match your login to a name on the team',true);return;}
   if(!a){toast('Pick the day',true);return;}
   const body={member_name:who,start_date:a<=b?a:b,end_date:a<=b?b:a,reason:document.getElementById('toWhy').value.trim()||null,status:edit?'approved':'pending'};
+  const kindEl=document.getElementById('toKind');
+  if(kindEl&&kindEl.value==='sick'){
+    const h=parseFloat(document.getElementById('toHours').value);
+    if(!(h>0)){toast('Enter how many sick hours to use',true);return;}
+    const bal=document.getElementById('toBal');const av=parseFloat(bal.dataset.av);
+    if(!isNaN(av)&&h>av+0.001){
+      if(!edit){toast('You have '+fmtH(av)+' of paid sick time available',true);return;}
+      if(!confirm(who+' only has '+fmtH(av)+' available. Record '+fmtH(h)+' anyway?'))return;
+    }
+    if(bal.dataset.from&&body.start_date<bal.dataset.from&&!edit){toast('Paid sick time can be used starting '+prettyDate(bal.dataset.from),true);return;}
+    body.kind='sick';body.sick_hours=Math.round(h*100)/100;
+  }
   if(edit){body.decided_by=currentProfile&&currentProfile.name||null;body.decided_at=new Date().toISOString();}
-  try{await sb('kf_time_off',{method:'POST',body:JSON.stringify(body)});closeShift();toast(edit?'Time off added':'Request sent');await renderSchedule();}
+  try{await sb('kf_time_off',{method:'POST',body:JSON.stringify(body)});closeShift();toast(edit?(body.kind==='sick'?'Paid sick time recorded':'Time off added'):'Request sent');
+    if(typeof SICK!=='undefined'){SICK.loaded=false;BOOKS._weeks=null;}await renderSchedule();}
   catch(e){toast(tableMissing(e)?'Run the one-time setup first (it’s on this tab when needed)':e.message,true);}
 }
 async function decideOff(id,st){
   try{await sb('kf_time_off?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:st,decided_by:currentProfile&&currentProfile.name||null,decided_at:new Date().toISOString()})});
-    toast(st==='approved'?'Approved. Shifts in that time are marked so you can move them.':'Answered');await renderSchedule();}catch(e){toast(e.message,true);}
+    toast(st==='approved'?'Approved. Shifts in that time are marked so you can move them.':'Answered');if(typeof SICK!=='undefined'){SICK.loaded=false;BOOKS._weeks=null;}await renderSchedule();}catch(e){toast(e.message,true);}
 }
 async function cancelOff(id){if(!confirm('Remove this time off?'))return;try{await sb('kf_time_off?id=eq.'+id,{method:'DELETE'});closeShift();await renderSchedule();}catch(e){toast(e.message,true);}}
 function swapPrompt(s){
@@ -6387,6 +6439,160 @@ async function renderComingUp(){
 }
 function goTabSafe2(id){const t=[...document.querySelectorAll('.tab')].find(x=>(x.getAttribute('onclick')||'').includes("'"+id+"'"));if(t)t.click();}
 if(typeof refreshDashboard==='function'){const _rdC=refreshDashboard;refreshDashboard=async function(){const r=await _rdC.apply(this,arguments);try{await renderComingUp();}catch(e){console.warn('coming up',e);}return r;};}
+
+// ═══════════════════════════════════════════════════════
+// MICHIGAN PAID SICK TIME (Earned Sick Time Act, as amended February 2025)
+// • Earn 1 hour for every 30 hours worked, from the first day
+// • 10 or fewer employees: up to 40 paid hours a year. More than 10: up to 72 hours a year
+// • Or "frontload": give the full year's hours on January 1 (no tracking or carryover needed)
+// • With earning, new hires can be asked to wait 120 days before using it; unused hours carry over (up to the cap)
+// • Paid at the person's normal rate, never below minimum wage; not counted toward overtime
+// Recorded as approved time off marked "Paid sick time", with the hours.
+// ═══════════════════════════════════════════════════════
+const SICK={rows:[],loaded:false,missing:false,hours:{},firstDay:{},loadedFor:null};
+function sickRules(){
+  const a=(BOOKS.acct&&BOOKS.acct.sick)||{};
+  return{policy:a.policy==='frontload'?'frontload':'accrue',size:a.size||'auto',hired:a.hired||{}};
+}
+function sickEmployees(){
+  return(typeof members!=='undefined'?members:[]).map(m=>m.name).filter(n=>n&&!ownerOf(n));
+}
+function sickSize(){
+  const r=sickRules();if(r.size==='small'||r.size==='large')return r.size;
+  return sickEmployees().length<=10?'small':'large';
+}
+function sickCap(){return sickSize()==='small'?40:72;}
+function sickApplies(){return payRules().workers==='employees';}
+async function loadSickRows(force){
+  if(SICK.loaded&&!force)return;
+  try{SICK.rows=await sbAll('kf_time_off?kind=eq.sick&status=eq.approved&select=*');SICK.missing=false;}
+  catch(e){SICK.rows=[];SICK.missing=true;}
+  SICK.loaded=true;
+}
+// hours worked per person in this year and last year (from the time clock)
+async function loadSickHours(){
+  const y=new Date().getFullYear();if(SICK.loadedFor===y&&!SICK._stale)return;
+  const from=(y-1)+'-01-01';
+  let rows=[];try{rows=await sbAll('kf_time_entries?created_at=gte.'+from+'&select=member_name,entry_type,clock_in,clock_out,hours,entry_date,created_at');}catch(e){rows=[];}
+  const H={},F={};
+  rows.forEach(t=>{
+    const n=canonName(t.member_name);if(!n)return;
+    const d=String(t.entry_date||t.clock_in||t.created_at||'').slice(0,10);if(!d)return;
+    const yy=+d.slice(0,4);const h=entryHours(t);if(!h)return;
+    (H[n]=H[n]||{})[yy]=((H[n]||{})[yy]||0)+h;
+    if(!F[n]||d<F[n])F[n]=d;
+  });
+  SICK.hours=H;SICK.firstDay=F;SICK.loadedFor=y;SICK._stale=false;
+}
+function sickUsed(name,year){
+  const k=normName(name);
+  return SICK.rows.filter(r=>normName(r.member_name)===k&&String(r.start_date).slice(0,4)===String(year)).reduce((s,r)=>s+(parseFloat(r.sick_hours)||0),0);
+}
+// where someone stands this year
+function sickBalance(name){
+  const y=new Date().getFullYear();const r=sickRules();const cap=sickCap();const small=sickSize()==='small';
+  const hrs=(SICK.hours[canonName(name)]||{});
+  const earnedIn=yy=>{const e=Math.floor((hrs[yy]||0)/30);return small?Math.min(e,40):e;};
+  const usedNow=sickUsed(name,y);
+  const hired=r.hired[name]||SICK.firstDay[canonName(name)]||null;
+  if(r.policy==='frontload'){
+    return{policy:'frontload',worked:hrs[y]||0,earned:cap,carried:0,used:usedNow,available:Math.max(0,cap-usedNow),cap,hired,usableFrom:null};
+  }
+  const carried=Math.min(cap,Math.max(0,earnedIn(y-1)-sickUsed(name,y-1)));
+  const earned=earnedIn(y);
+  const available=Math.max(0,Math.min(carried+earned-usedNow,cap-usedNow));
+  let usableFrom=null;
+  if(hired){const d=parseISO(hired);d.setDate(d.getDate()+120);if(d>new Date())usableFrom=isoLocal(d);}
+  return{policy:'accrue',worked:hrs[y]||0,earned,carried,used:usedNow,available,cap,hired,usableFrom};
+}
+function sickHoursInWeek(name,endISO){
+  const end=parseISO(endISO);const start=new Date(end);start.setDate(end.getDate()-6);
+  const a=isoLocal(start),b=endISO,k=normName(name);
+  return SICK.rows.filter(r=>normName(r.member_name)===k&&r.start_date>=a&&r.start_date<=b).reduce((s,r)=>s+(parseFloat(r.sick_hours)||0),0);
+}
+function sickNamesInWeek(endISO){
+  const end=parseISO(endISO);const start=new Date(end);start.setDate(end.getDate()-6);const a=isoLocal(start);
+  return[...new Set(SICK.rows.filter(r=>r.start_date>=a&&r.start_date<=endISO).map(r=>canonName(r.member_name)))];
+}
+function fmtH(h){return(Math.round(h*100)/100)+' hr'+(Math.abs(h-1)<0.001?'':'s');}
+
+// ─── the card on the Team tab ───
+async function renderSickTime(){
+  let el=document.getElementById('sickTime');
+  const anchor=document.getElementById('payRules');if(!anchor)return;
+  if(!el){el=document.createElement('div');el.id='sickTime';anchor.parentNode.insertBefore(el,anchor.nextSibling);}
+  if(!BOOKS.schema.checked||!sickApplies()){el.innerHTML='';return;}
+  await loadSickRows(true);await loadSickHours();
+  const st=isStewardUser();const r=sickRules();const cap=sickCap();const size=sickSize();
+  const n=sickEmployees().length;
+  if(!st){
+    const me=myMemberName();if(!me||ownerOf(me)){el.innerHTML='';return;}
+    const b=sickBalance(me);
+    el.innerHTML='<div class="card"><div class="card-title"><div class="card-title-dot"></div>My Paid Sick Time</div>'
+      +'<div class="sick-big">'+fmtH(b.available)+' <span>available</span></div>'
+      +'<div class="card-sub">'+(b.policy==='frontload'?'You get '+cap+' hours each year on January 1.':'You earn 1 hour for every 30 hours you work, up to '+cap+' hours a year. You’ve earned '+fmtH(b.earned)+' this year'+(b.carried?' plus '+fmtH(b.carried)+' carried over':'')+'.')
+      +(b.used?' Used so far this year: '+fmtH(b.used)+'.':'')
+      +(b.usableFrom?' <b>You can start using it on '+esc(prettyDate(b.usableFrom))+'</b> (new hires wait 120 days).':'')
+      +' To use it, go to <b>Schedule → Ask for time off</b> and pick <b>Paid sick time</b>.</div></div>';
+    return;
+  }
+  const people=sickEmployees();
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Michigan Paid Sick Time</div>'
+    +'<div class="card-sub">Michigan’s Earned Sick Time Act covers your employees. The Hub tracks it from their hours: '
+    +(r.policy==='frontload'?'each person gets the full year’s hours on January 1.':'1 hour earned for every 30 worked.')
+    +' With '+n+' employee'+(n===1?'':'s')+', you’re a <b>'+(size==='small'?'small employer: up to 40 paid hours a year':'larger employer: up to 72 paid hours a year')+'</b>. Sick hours are paid at each person’s regular rate (never below minimum wage) and don’t count toward overtime.</div>';
+  if(SICK.missing)h+='<div class="ck-item warn"><span class="ck-ico">!</span><span class="ck-text">Run the latest update SQL in Supabase to turn on sick-time tracking.</span></div>';
+  h+='<div class="txn-grid">'
+    +'<div class="txn-full"><label>How your team gets it</label><select id="skPolicy" class="period-select">'
+    +[['accrue','Earn as they work: 1 hour per 30 worked (new hires can wait 120 days)'],['frontload','All at once: the full year’s hours on January 1 (no tracking or carryover)']].map(([v,l])=>'<option value="'+v+'"'+(r.policy===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+    +'<div class="txn-full"><label>Your size</label><select id="skSize" class="period-select">'
+    +[['auto','Count my team for me ('+n+' employee'+(n===1?'':'s')+' now)'],['small','10 or fewer employees (40 hours)'],['large','More than 10 employees (72 hours)']].map(([v,l])=>'<option value="'+v+'"'+(r.size===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div></div>';
+  if(people.length){
+    h+='<div class="sick-table"><div class="sick-row sick-h"><span>Name</span><span>Worked</span><span>Earned</span><span>Carried</span><span>Used</span><span>Available</span><span>Started</span></div>'
+      +people.map(p=>{const b=sickBalance(p);
+        return '<div class="sick-row"><span><b>'+esc(p)+'</b>'+(b.usableFrom?'<small>Can use from '+esc(prettyDate(b.usableFrom))+'</small>':'')+'</span>'
+          +'<span>'+(Math.round(b.worked*10)/10)+'</span><span>'+(b.policy==='frontload'?cap:b.earned)+'</span><span>'+(b.carried||'—')+'</span><span>'+(Math.round(b.used*100)/100)+'</span><span class="sick-av">'+(Math.round(b.available*100)/100)+'</span>'
+          +'<span><input type="date" class="period-input sk-hired" data-n="'+esc(p)+'" value="'+esc(r.hired[p]||b.hired||'')+'" title="First day of work (used for the 120-day wait)"></span></div>';}).join('')+'</div>';
+  }else h+='<div class="bk-empty">Add your employees in <b>Team Members</b> and their sick time shows up here.</div>';
+  h+='<div class="bk-actions"><button class="btn-green" onclick="saveSickRules()">Save sick time settings</button></div>'
+    +'<div class="bk-sub">To record sick time, go to <b>Schedule → Time off</b> and choose <b>Paid sick time</b> with the hours. Your team can ask for it the same way. Every new hire also gets a written explanation in their paperwork, as the law requires. Owners don’t earn sick time. Minors and people who truly set their own schedule are exempt. <a href="/hub-help.html#sick-time" target="_blank" rel="noopener">More about the law</a></div></div>';
+  el.innerHTML=h;
+}
+async function saveSickRules(){
+  const hired=Object.assign({},sickRules().hired);
+  document.querySelectorAll('.sk-hired').forEach(i=>{if(i.value)hired[i.dataset.n]=i.value;else delete hired[i.dataset.n];});
+  const sick={policy:document.getElementById('skPolicy').value,size:document.getElementById('skSize').value,hired};
+  if(await saveAcct({sick})){toast('Sick time settings saved');BOOKS._weeks=null;renderSickTime();}
+}
+// the Team tab draws pay rules; draw sick time right after
+if(typeof renderPayRules==='function'){const _rprS=renderPayRules;renderPayRules=function(){const out=_rprS.apply(this,arguments);try{renderSickTime();}catch(e){}return out;};}
+
+// ─── the written notice every employee gets, in their new-hire paperwork ───
+function sickNoticeHTML(){
+  const r=sickRules();const cap=sickCap();const accrue=r.policy!=='frontload';
+  return `<p>Michigan’s Earned Sick Time Act gives you paid sick time. Here’s how it works at ${esc(HUB.bizName)}.</p>
+<h4>How you get it</h4><ul>`
++(accrue?`<li>You earn <b>1 hour of paid sick time for every 30 hours you work</b>, starting your first day.</li><li>You can use up to <b>${cap} hours a year</b>. Unused hours carry over to next year (you still use up to ${cap} a year).</li><li>New team members can start using it after <b>120 days</b> of work.</li>`
+        :`<li>You get <b>${cap} hours of paid sick time on January 1</b> each year (part-timers get the hours they’d be expected to earn, plus more if they work more).</li><li>Unused hours don’t carry over, because the full amount comes back each January.</li>`)
++`<li>It’s paid at your <b>normal hourly rate</b>, never less than Michigan’s minimum wage.</li></ul>
+<h4>What you can use it for</h4><ul>
+<li>Your own or a family member’s illness, injury or health condition, medical care, or preventive care.</li>
+<li>If you or a family member are a victim of domestic violence or sexual assault: medical care, counseling, victim services, relocation or legal help.</li>
+<li>When public officials close your workplace, or your child’s school or child care, because of a public health emergency.</li>
+<li>When health officials say your being at work would put others at risk because you were exposed to a contagious disease.</li></ul>
+<h4>How to ask for it</h4><ul>
+<li>In the Hub: <b>Schedule → Ask for time off → Paid sick time</b>, with the hours.</li>
+<li>If you know ahead of time, ask at least 7 days before. If you don’t, let us know as soon as you can.</li>
+<li>We only ask for a doctor’s note after more than 3 days in a row, and the business pays any cost of getting it.</li></ul>
+<h4>Your rights</h4>
+<p>You can’t be punished for using sick time you’re entitled to. Questions or concerns: talk to the owner, or contact the Michigan Department of Labor and Economic Opportunity, Wage &amp; Hour Division.</p>`;
+}
+if(typeof ONB_DOCS!=='undefined'&&!ONB_DOCS.some(d=>d.key==='sicktime')){
+  const at=Math.max(0,ONB_DOCS.findIndex(d=>d.key==='info'));
+  ONB_DOCS.splice(at,0,{key:'sicktime',title:'Paid Sick Time',short:'Paid sick time notice',kind:'sign',
+    agree:'I’ve read how paid sick time works here.',body:()=>sickNoticeHTML()});
+  const _onbDocsS=onbDocs;onbDocs=function(){return _onbDocsS().filter(d=>d.key!=='sicktime'||sickApplies());};
+}
 
 // ═══════════════════════════════════════════════════════
 // DOWNLOAD EVERYTHING — your business's data, all of it, in plain spreadsheets
