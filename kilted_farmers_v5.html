@@ -388,6 +388,8 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .sched-head{display:flex;flex-direction:column;gap:10px;}
 .sched-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .sched-nav .btn-secondary{padding:7px 12px;}
+.sched-jump{display:inline-flex;align-items:center;gap:4px;border:1.5px solid var(--rule);border-radius:8px;padding:4px 8px;font-size:15px;cursor:pointer;background:#fff;}
+.sched-jump input{border:0;font:inherit;font-size:13px;background:transparent;max-width:130px;}
 .sched-week{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:18px;color:var(--green-dark);}
 .sched-tools{display:flex;gap:8px;flex-wrap:wrap;}
 .btn-secondary.active{background:var(--green-dark);color:#fff;}
@@ -4156,7 +4158,9 @@ function renderOnboarding(){
     if(team)team.innerHTML=isStewardUser()&&BOOKS.schema.checked?'<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>Onboarding</div><div class="card-sub">The new-member packet turns on after the setup SQL. Open <b>Books</b>, copy the SQL from the card at the top, run it in Supabase, and come back.</div></div>':'';
     return;
   }
-  const me=myMemberName();
+  // In a business's own Hub, the owner runs the place: no new-hire paperwork for themselves
+  const ownerSelf=typeof BIZ!=='undefined'&&BIZ.member&&BIZ.member.role==='owner';
+  const me=ownerSelf?'':myMemberName();
   const left=me?onbDocs().filter(d=>!onbRow(me,d.key)):[];
   // banner on the dashboard
   if(banner)banner.innerHTML=me&&left.length?'<div class="onb-banner"><div><b>'+(left.length===onbDocs().length?'Welcome aboard!':'Almost done!')+'</b> '+left.length+' onboarding step'+(left.length===1?'':'s')+' left. About '+Math.max(2,left.length*2)+' minutes.</div><button class="btn-tan" onclick="goOnboarding()">'+(left.length===onbDocs().length?'Start':'Finish')+'</button></div>':'';
@@ -4175,14 +4179,18 @@ function renderOnboarding(){
   if(team){
     if(!isStewardUser()){team.innerHTML='';return;}
     const list=(typeof members!=='undefined'?members:[]).map(m=>m.name);
-    ONB.rows.forEach(r=>{if(!list.some(n=>normName(n)===normName(r.member_name)))list.push(r.member_name);});
+    ONB.rows.forEach(r=>{if(r.item!=='hub_terms'&&!list.some(n=>normName(n)===normName(r.member_name)))list.push(r.member_name);});
+    if(typeof BIZ!=='undefined'&&BIZ.member){const own=new Set((typeof members!=='undefined'?members:[]).filter(m=>ownerOf(m.name)||normName(m.name)===normName(BIZ.member.role==='owner'?BIZ.member.name:'')).map(m=>normName(m.name)));
+      for(let i=list.length-1;i>=0;i--)if(own.has(normName(list[i])))list.splice(i,1);}
     team.innerHTML='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Onboarding</div>'
       +'<div class="card-sub">Each person signs on their own phone after you make their login. Tap a name to see where they are, record a paper signature, or print their packet. Stewards sign too'+(HUB.food?', since the food safety agreement covers everyone who handles food':'')+'.</div>'
       +list.map((n,i)=>{const p=onbProgress(n);const tot=p.docTotal+p.taskTotal,got=p.docs+p.tasks;const role=((typeof members!=='undefined'?members:[]).find(m=>m.name===n)||{}).role||'';
         return '<div class="onb-person" onclick="openOnbMember('+i+')"><div class="mwr-avatar" style="background:'+(role==='Steward'?'var(--green)':'var(--tan)')+';">'+esc((n||'?')[0].toUpperCase())+'</div>'
           +'<div class="bk-main"><div class="bk-payee">'+esc(n)+'</div><div class="bud-bar" style="margin-top:5px;"><div class="bud-fill" style="width:'+(got/tot*100).toFixed(0)+'%"></div></div>'
           +'<div class="bk-sub" style="margin-top:3px;">'+p.docs+'/'+p.docTotal+' signed · '+p.tasks+'/'+p.taskTotal+' Steward steps'+(got===tot?' · <b style="color:var(--green);">complete</b>':'')+'</div></div><span class="onb-go">›</span></div>';}).join('')
+      +(list.length?'':'<div class="bk-empty">Nobody to sign up yet. Add your team in <b>Team Members</b>, and each new person’s paperwork shows up here.</div>')
       +'</div>';
+    team.innerHTML=plainWords(team.innerHTML);
     ONB.list=list;
   }
 }
@@ -4483,6 +4491,7 @@ async function refreshDashboard(){
     if(sharesEl){
       const show=members.map(m=>res.people.find(p=>p.name===m.name)||{name:m.name,owner:!!ownerOf(m.name),hours:0,kitchenH:0,marketH:0,hourlyH:0,hourly:0,byJob:{},commission:0,share:0,topup:0,ot:0,ownerCover:0,pay:0});
       res.people.forEach(p=>{if(!show.find(s=>s.name===p.name))show.push(p);});
+      if(typeof teamLimited==='function'&&teamLimited()){const me=normName(myMemberName());for(let i=show.length-1;i>=0;i--)if(normName(show[i].name)!==me)show.splice(i,1);}
       sharesEl.innerHTML=show.map(p=>{
         const role=(members.find(m=>m.name===p.name)||{}).role||(p.owner?'Steward':'Contributor');
         const col=role==='Steward'?'var(--green)':'var(--tan)';
@@ -4675,7 +4684,7 @@ async function toggleEmployerStep(k,on){
 // each person's hourly rate: shown when any job pays by the hour without a fixed rate
 function payRatesHTML(r,canEdit){
   const needs=HUB.jobs.some(j=>j.pay==='hourly'&&!(+j.rate>0))||(hourlyStyle()&&HUB.jobs.some(j=>j.pay==='pool'));
-  if(!needs)return'';
+  if(!needs||!canEdit)return'';   // only owners and managers see everyone's rates
   const people=(typeof members!=='undefined'?members:[]).filter(m=>m.name&&!ownerOf(m.name));
   const mw=minWageFor(todayISO());
   return '<div class="card-sub" style="margin-top:14px;"><b>Hourly rates.</b> What each person makes an hour. Leave it blank and they’re paid Michigan’s minimum wage ('+fmt(mw)+'). Owners take profit instead of a rate.</div>'
@@ -4684,6 +4693,7 @@ function payRatesHTML(r,canEdit){
 }
 function renderPayRules(){
   const el=document.getElementById('payRules');if(!el)return;
+  if(typeof teamLimited==='function'&&teamLimited()){el.innerHTML='';return;}
   if(!BOOKS.schema.checked){el.innerHTML='';return;}
   const r=payRules();const st=isStewardUser();const ok=BOOKS.schema.acct&&BOOKS.schema.pay;
   const y=new Date().getFullYear();
@@ -4694,7 +4704,7 @@ function renderPayRules(){
   h+='<div class="txn-grid">'
     +'<div class="txn-full"><label>'+(hourlyStyle()?'The people who work here are':'Contributors are')+'</label><select id="prWorkers" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['employees','Employees — on payroll, minimum-wage floor'],['contractors','Independent contractors — 1099s'],['members','Trial LLC members — K-1s']].map(([v,l])=>'<option value="'+v+'"'+(r.workers===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
-    +(jobsOfPay('commission').length||+r.commissionPct>0?'':'<span id="prCommHide" style="display:none">')+'<div><label>Commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'+(jobsOfPay('commission').length||+r.commissionPct>0?'':'</span>')
+    +(jobsOfPay('commission').length?'':'<span id="prCommHide" style="display:none">')+'<div><label>Commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'+(jobsOfPay('commission').length?'':'</span>')
     +'<div class="txn-full"><label>Tips</label><select id="prTips" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['pool','Shared by hours among everyone except owners and managers'],['own','Each person keeps tips on the sales they made; the rest are shared by hours']].map(([v,l])=>'<option value="'+v+'"'+((r.tipMode||'pool')===v?' selected':'')+'>'+l+'</option>').join('')+'</select>'
     +'<div class="bk-sub" style="margin-top:4px;">Log tips as income under <b>Tips</b> (sales imports do this for you). Tips stay out of the sales pool, never count toward minimum wage, and by federal law owners and managers can’t share in them. Because the Hub always pays at least full minimum wage, kitchen and other behind-the-scenes workers can share too.</div></div>'
@@ -4734,7 +4744,8 @@ function jobSelect(idAttr,val,onchange){
 }
 function renderClock(){
   const el=document.getElementById('clockSection');if(!el)return;
-  el.innerHTML=members.map(m=>`
+  const who=(typeof teamLimited==='function'&&teamLimited())?members.filter(m=>normName(m.name)===normName(myMemberName())):members;
+  el.innerHTML=who.map(m=>`
     <div class="clock-member" id="clock-${m.id}">
       <div class="clock-member-header" onclick="toggleClock(${m.id})">
         <span class="clock-name">${esc(m.name||'Member')}</span>
@@ -5072,6 +5083,7 @@ function shiftHours(s){const a=tmin(s.start_time),b=tmin(s.end_time);if(a===null
 function tPretty(t){const m=tmin(t);if(m===null)return'';let h=Math.floor(m/60)%24,mi=m%60;const ap=h<12?'a':'p';h=h%12||12;return h+(mi?':'+String(mi).padStart(2,'0'):'')+ap;}
 function shiftLabel(s){return tPretty(s.start_time)+'–'+tPretty(s.end_time);}
 function schedPeople(){
+  if(schedMineOnly())return[myName()].filter(Boolean);
   const names=(typeof members!=='undefined'?members:[]).map(m=>m.name).filter(Boolean);
   SCHED.shifts.forEach(s=>{if(!names.includes(s.member_name))names.push(s.member_name);});
   return names;
@@ -5093,8 +5105,11 @@ async function renderSchedule(){
   if(!SCHED.week)SCHED.week=schedMonday();
   el.innerHTML='<div class="card"><div class="bk-empty">Loading the schedule…</div></div>';
   await loadSchedule();
+  if(schedMineOnly()){const me=myName();SCHED.shifts=SCHED.shifts.filter(x=>x.member_name===me||SCHED.swaps.some(w=>w.shift_id===x.id&&w.status==='open'));}
   drawSchedule();
 }
+// the owner can let the team see everyone's shifts, or just their own
+function schedMineOnly(){return typeof teamAccess==='function'&&!canEditSchedule()&&!teamAccess().schedule_all;}
 function schedConflicts(){
   // overlapping shifts for the same person on the same day
   const bad=new Set();
@@ -5128,9 +5143,11 @@ function drawSchedule(){
     +'<div class="sched-nav"><button class="btn-secondary" onclick="schedMove(-7)" aria-label="Previous week">‹</button><div><div class="sched-week">'+esc(weekTxt)+'</div>'
     +'<div class="bk-sub">'+SCHED.shifts.length+' shift'+(SCHED.shifts.length===1?'':'s')+' · '+(Math.round(total*10)/10)+' hours scheduled</div></div>'
     +'<button class="btn-secondary" onclick="schedMove(7)" aria-label="Next week">›</button>'
-    +(isoLocal(SCHED.week)!==isoLocal(schedMonday())?'<button class="btn-secondary" onclick="SCHED.week=schedMonday();SCHED.sel.clear();renderSchedule()">This week</button>':'')+'</div>';
+    +(isoLocal(SCHED.week)!==isoLocal(schedMonday())?'<button class="btn-secondary" onclick="SCHED.week=schedMonday();SCHED.sel.clear();renderSchedule()">This week</button>':'')
+    +'<label class="sched-jump" title="Jump to any week">📅<input type="date" aria-label="Jump to a week" value="'+isoLocal(SCHED.week)+'" onchange="if(this.value){SCHED.week=schedMonday(parseISO(this.value));SCHED.sel.clear();renderSchedule();}"></label></div>';
   if(edit)h+='<div class="sched-tools"><button class="btn-green" onclick="openShift()">+ Add shift</button>'
     +'<button class="btn-secondary" onclick="schedCopyWeek()">Copy last week</button>'
+    +'<button class="btn-secondary" onclick="schedCopyAhead()">Copy this week ahead…</button>'
     +'<button class="btn-secondary'+(SCHED.select?' active':'')+'" onclick="schedToggleSelect()">'+(SCHED.select?'Done selecting':'Select shifts')+'</button>'
     +'<button class="btn-secondary" onclick="schedPrint()">🖨 Print</button><button class="btn-secondary" onclick="openTimeOff()">Time off</button></div>';
   else h+='<div class="sched-tools"><button class="btn-green" onclick="openTimeOff()">Ask for time off</button><button class="btn-secondary" onclick="schedICS()">📅 Add my shifts to my calendar</button><button class="btn-secondary" onclick="schedPrint()">🖨 Print</button></div>'
@@ -5207,6 +5224,7 @@ function openShift(s,person,date){
     +'<div><label>Job</label><select id="shJob" class="period-select">'+HUB.jobs.map(j=>'<option value="'+esc(j.key)+'"'+(j.key===job?' selected':'')+'>'+esc(j.name)+'</option>').join('')+'</select></div>'
     +'<div><label>Note (optional)</label><input id="shNote" class="period-input" placeholder="e.g. Lansing market" value="'+esc(s&&s.note||'')+'"></div></div>'
     +(s?'':'<div style="margin-top:10px;"><label>Also add it on</label><div class="sh-days">'+SCHED_DAYS.map((dd,i)=>'<label class="sh-day"><input type="checkbox" value="'+i+'"'+(i===dayIdx?' checked disabled':'')+'> '+dd+'</label>').join('')+'</div>'
+      +'<div style="margin-top:10px;"><label>Repeat it</label><select id="shWeeks" class="period-select">'+[[1,'Just this week'],[2,'For 2 weeks'],[3,'For 3 weeks'],[4,'For 4 weeks'],[6,'For 6 weeks'],[8,'For 8 weeks'],[13,'For 3 months'],[26,'For 6 months']].map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('')+'</select></div>'
       +'<div class="bk-sub" style="margin-top:4px;">Days in the same week as the date above. <button class="link-btn" type="button" onclick="document.querySelectorAll(\'.sh-day input:not(:disabled)\').forEach((c,i)=>{c.checked=[0,1,2,3,4].includes(+c.value);})">Weekdays</button> · <button class="link-btn" type="button" onclick="document.querySelectorAll(\'.sh-day input:not(:disabled)\').forEach(c=>c.checked=false)">None</button></div></div>')
     +'<div class="txn-actions">'+(s?'<button class="btn-secondary danger" onclick="deleteShift()">Delete</button>':'')+'<button class="btn-secondary" onclick="closeShift()">Cancel</button><button class="btn-green" id="shSave" onclick="saveShift()">Save</button></div>';
   m.classList.add('open');
@@ -5226,10 +5244,12 @@ async function saveShift(){
       const baseIdx=Math.round((parseISO(isoLocal(base))-parseISO(isoLocal(mon)))/864e5);
       const extra=[...document.querySelectorAll('.sh-day input:checked:not(:disabled)')].map(c=>+c.value).filter(i=>i!==baseIdx);
       const dayOf=i=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return isoLocal(d);};
-      const rows=[body].concat(extra.map(i=>Object.assign({},body,{shift_date:dayOf(i)})));
+      const week1=[body].concat(extra.map(i=>Object.assign({},body,{shift_date:dayOf(i)})));
+      const weeks=Math.max(1,Math.min(26,parseInt((document.getElementById('shWeeks')||{}).value)||1));
+      const rows=[];for(let w=0;w<weeks;w++)week1.forEach(r=>rows.push(Object.assign({},r,{shift_date:isoLocal(new Date(parseISO(r.shift_date).getTime()+w*7*864e5+3600e3))})));
       rows.forEach(r=>{r.created_by=currentProfile&&currentProfile.name||null;});
       await sb('kf_shifts',{method:'POST',body:JSON.stringify(rows)});
-      if(rows.length>1)toast(rows.length+' shifts added');
+      if(rows.length>1)toast(rows.length+' shifts added'+(weeks>1?' over '+weeks+' weeks':''));
       // jump to the week of the shift if it's somewhere else
       if(isoLocal(mon)!==isoLocal(SCHED.week))SCHED.week=mon;
     }
@@ -5253,6 +5273,19 @@ async function schedCopyWeek(){
     .filter(r=>!have.has(r.member_name+'|'+r.shift_date+'|'+r.start_time));
   if(!rows.length){toast('This week already has all of last week’s shifts');return;}
   try{await sb('kf_shifts',{method:'POST',body:JSON.stringify(rows)});toast(rows.length+' shifts copied from last week');await renderSchedule();}catch(e){toast(e.message,true);}
+}
+async function schedCopyAhead(){
+  if(!SCHED.shifts.length){toast('This week has no shifts to copy yet',true);return;}
+  const ans=prompt('Copy this week’s '+SCHED.shifts.length+' shift'+(SCHED.shifts.length===1?'':'s')+' into how many of the following weeks? (1 to 26)','4');if(ans===null)return;
+  const n=Math.max(1,Math.min(26,parseInt(ans)||0));if(!n){toast('Enter a number from 1 to 26',true);return;}
+  const from=isoLocal(new Date(SCHED.week.getTime()+7*864e5+3600e3)),to=isoLocal(new Date(SCHED.week.getTime()+(7*n+6)*864e5+3600e3));
+  let have;try{have=new Set((await sbAll('kf_shifts?shift_date=gte.'+from+'&shift_date=lte.'+to+'&select=member_name,shift_date,start_time')).map(s=>s.member_name+'|'+s.shift_date+'|'+String(s.start_time).slice(0,5)));}catch(e){toast(e.message,true);return;}
+  const rows=[];
+  for(let w=1;w<=n;w++)SCHED.shifts.forEach(s=>{const d=isoLocal(new Date(parseISO(s.shift_date).getTime()+w*7*864e5+3600e3));
+    if(have.has(s.member_name+'|'+d+'|'+String(s.start_time).slice(0,5)))return;
+    rows.push({member_name:s.member_name,shift_date:d,start_time:s.start_time,end_time:s.end_time,job:s.job,note:s.note,created_by:currentProfile&&currentProfile.name||null});});
+  if(!rows.length){toast('Those weeks already have these shifts');return;}
+  try{await sb('kf_shifts',{method:'POST',body:JSON.stringify(rows)});toast(rows.length+' shifts added across the next '+n+' week'+(n===1?'':'s'));await renderSchedule();}catch(e){toast('Didn’t save: '+e.message,true);}
 }
 async function schedBulk(kind,val){
   const ids=[...SCHED.sel];if(!ids.length)return;
