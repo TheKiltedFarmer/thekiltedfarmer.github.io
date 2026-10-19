@@ -6822,8 +6822,8 @@ async function enterApp(){
   await booksProbe().catch(()=>{});
   await loadAcctSettings().catch(()=>{});
   applyBizConfig();
-  await autoInit();
-  renderStartHere();
+  try{await autoInit();}catch(e){console.warn('Start-up:',e.message);}
+  try{renderStartHere();}catch(e){console.warn('Start here:',e.message);}
   await loadPlan();renderPlanBanner();planGate();await termsGate();
   renderHelpButton();maybeStartTour();
 }
@@ -6933,6 +6933,7 @@ function goTab(id){const t=[...document.querySelectorAll('.tab')].find(x=>(x.get
 let SET_JOBS=[],SET_STYLE='hourly';
 async function renderSettings(){
   const el=document.getElementById('settingsBody');if(!el)return;
+  if(!PLAN.ok)setTimeout(refreshPlan,0);
   if(currentProfile?.role!=='Steward'){el.innerHTML='<div class="card"><div class="bk-empty">Only Stewards can change settings.</div></div>';return;}
   const s=bizSettings();SET_JOBS=s.jobs.map(j=>Object.assign({},j));SET_STYLE=s.payStyle;
   const isOwner=BIZ.member&&BIZ.member.role==='owner';
@@ -6963,7 +6964,7 @@ async function renderSettings(){
     +'<div class="card-sub">Send someone an invite link by text or email. When they open it and make an account, they join '+esc(BIZ.row.name)+' and nothing else.</div>'
     +'<div id="stPeople"><div class="bk-empty">Loading…</div></div>'
     +'<div class="txn-grid" style="margin-top:12px;"><div><label>Their name</label><input id="invName" class="period-input" placeholder="As it shows on the team"></div>'
-    +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member (Contributor)</option><option value="manager">Manager (Steward)</option>'+(isOwner?'<option value="owner">Co-owner (Steward)</option>':'')+'</select></div></div>'
+    +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member'+(HUB.payStyle==='shared'?' (Contributor)':'')+'</option><option value="manager">Manager'+(HUB.payStyle==='shared'?' (Steward)':'')+'</option>'+(isOwner?'<option value="owner">Co-owner'+(HUB.payStyle==='shared'?' (Steward)':'')+'</option>':'')+'</select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
   h+=planCardHTML();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
@@ -7137,13 +7138,19 @@ async function acceptTerms(){
 // To use the Hub, a business subscribes through Stripe with a card. The first 90 days are free;
 // after that Stripe charges $10 a month automatically until they cancel. Pilot businesses are "comped".
 // If the subscription ends, the Hub pauses: nothing is deleted, and the data can always be downloaded.
-const PLAN={billing:null,cfg:null};
+const PLAN={billing:null,cfg:null,ok:false};
 const TRIAL_DAYS=90;
 async function loadPlan(){
   if(typeof DEMO!=='undefined'&&DEMO.on){PLAN.billing={status:'comped'};PLAN.cfg={open_signup:true,pay_link:'',portal_link:'',price_label:'$10 a month'};return;}
-  try{const r=await sb('rpc/ohb_public_config',{method:'POST',body:'{}'});PLAN.cfg=(Array.isArray(r)?r[0]:r)||{};}catch(e){PLAN.cfg={};}
+  PLAN.ok=false;
+  for(let tries=0;tries<2&&!PLAN.ok;tries++){
+    try{const r=await sb('rpc/ohb_public_config',{method:'POST',body:'{}'});PLAN.cfg=(Array.isArray(r)?r[0]:r)||{};PLAN.ok=true;}
+    catch(e){PLAN.cfg=PLAN.cfg||{};if(!tries)await new Promise(ok=>setTimeout(ok,1200));}
+  }
   try{PLAN.billing=BIZ.id?((await sb('ohb_billing?business_id=eq.'+BIZ.id+'&select=*'))[0]||null):null;}catch(e){PLAN.billing=null;}
+  const card=document.getElementById('planCard');if(card)card.outerHTML=planCardHTML();   // a card drawn before this finished gets the real answer
 }
+async function refreshPlan(){await loadPlan();renderPlanBanner();planGate();}
 function planState(){
   const b=PLAN.billing;const st=b&&b.status;const cfg=PLAN.cfg||{};
   const end=b&&b.current_period_end?new Date(b.current_period_end):null;
@@ -7153,6 +7160,7 @@ function planState(){
   if(st==='active')return{kind:'active',renews:end};
   if(st==='past_due')return{kind:'past_due'};
   if(st==='canceled'){if(end&&end>new Date())return{kind:'ending',end,left:daysTo(end)};return{kind:'paused'};}
+  if(!PLAN.ok)return{kind:'checking'};             // couldn't reach the server yet: don't guess
   if(!cfg.pay_link)return{kind:'open'};           // billing isn't switched on yet: nothing to pay
   return{kind:'needs_sub'};
 }
@@ -7178,6 +7186,7 @@ function planCardHTML(){
   else if(p.kind==='past_due')body='<b>Your last payment didn’t go through.</b> Your Hub keeps working while Stripe retries the card.'+manage('Update your card');
   else if(p.kind==='ending')body='<b>Canceled.</b> Your Hub keeps working until '+esc(fmtD(p.end))+', then pauses. Nothing gets deleted.';
   else if(p.kind==='open')body='<b>Free for now.</b> Billing isn’t switched on yet.';
+  else if(p.kind==='checking')body='Checking your plan… <a href="#" onclick="refreshPlan();return false;">Check again</a>';
   else body='<b>Not subscribed.</b> Start your 3 free months to use the Hub. Nothing gets deleted.';
   // owners and managers can always change the card or cancel, in a couple of clicks
   const mail='mailto:hello@thepeoplesvoices.org?subject='+encodeURIComponent('Cancel my Operations Hub: '+((BIZ.row&&BIZ.row.name)||''));
@@ -7189,7 +7198,7 @@ function planCardHTML(){
       +'</div><div class="bk-sub">'+(portal?'Opens Stripe’s secure billing page. Enter the email you subscribed with and Stripe sends you a link. ':'Sends us an email and we’ll cancel it for you, usually the same day. ')
       +(p.kind==='trialing'?'Cancel before your free months end and you’re never charged.':'You keep everything until the end of the month you’ve paid for, and your data is never deleted.')+'</div>'
     :'';
-  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'+billBtns
+  return '<div class="card" id="planCard"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'+billBtns
     +(st&&['needs_sub','ending','paused'].includes(p.kind)?'<div class="bk-actions">'+payButtonHTML(p.kind==='needs_sub'?'Start my 3 free months':'Keep my Hub · '+price)+'</div>':'')
     +'<div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button>'
     +'<a class="btn-secondary" style="text-decoration:none;" href="/hub-help.html" target="_blank" rel="noopener">Help</a>'
