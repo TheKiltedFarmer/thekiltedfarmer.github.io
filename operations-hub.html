@@ -388,6 +388,8 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .sched-head{display:flex;flex-direction:column;gap:10px;}
 .sched-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .sched-nav .btn-secondary{padding:7px 12px;}
+.sched-jump{display:inline-flex;align-items:center;gap:4px;border:1.5px solid var(--rule);border-radius:8px;padding:4px 8px;font-size:15px;cursor:pointer;background:#fff;}
+.sched-jump input{border:0;font:inherit;font-size:13px;background:transparent;max-width:130px;}
 .sched-week{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:18px;color:var(--green-dark);}
 .sched-tools{display:flex;gap:8px;flex-wrap:wrap;}
 .btn-secondary.active{background:var(--green-dark);color:#fff;}
@@ -705,6 +707,21 @@ details[open]>summary.card-title::after{content:'▴';}
 .auth-switch{color:rgba(255,255,255,.7);font-size:14px;text-align:center;margin-top:16px;}
 .auth-switch a{color:var(--tan-light);font-weight:700;}
 .auth-note{color:rgba(255,255,255,.4);font-size:12px;text-align:center;margin-top:10px;}
+.help-fab{position:fixed;right:16px;bottom:16px;z-index:900;display:flex;align-items:center;gap:6px;background:var(--green-dark);color:#fff;border:0;border-radius:24px;padding:10px 16px 10px 10px;font:600 14px 'Source Sans 3',sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;}
+.help-fab span{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--tan-light);color:var(--green-dark);font-weight:800;}
+.tour-modal{max-width:560px;}
+.tour-step{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--tan);font-weight:700;}
+.tour-dots{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 6px;}
+.tour-dot{width:10px;height:10px;border-radius:50%;border:0;background:var(--rule);padding:0;cursor:pointer;}
+.tour-dot.on{background:var(--green);transform:scale(1.25);}
+.tour-title{font-family:'Playfair Display',Georgia,serif;color:var(--green-dark);font-size:24px;margin:6px 0 10px;}
+.tour-text{font-size:15px;line-height:1.6;color:var(--ink);}
+.tour-text ul{padding-left:20px;margin:6px 0;}.tour-text li{margin:6px 0;}.tour-text p{margin:0 0 10px;}
+.tour-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px;}
+.tour-back{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:901;background:var(--tan);color:#fff;border:0;border-radius:24px;padding:10px 18px;font:600 14px 'Source Sans 3',sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;max-width:calc(100% - 140px);}
+@keyframes tourPulse{0%,100%{box-shadow:0 0 0 0 rgba(212,169,106,0);}50%{box-shadow:0 0 0 6px rgba(212,169,106,.8);}}
+.tab.tour-pulse{animation:tourPulse 1s ease-in-out 3;border-radius:6px;background:rgba(212,169,106,.18);}
+body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .dash-grid,body.team-limited #teamCard{display:none!important;}
 .plan-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-left:4px solid var(--tan,#c8a96a);}
 .plan-banner>div{flex:1 1 220px;min-width:0;}
 .plan-btn{display:inline-block;text-decoration:none;text-align:center;padding:10px 16px;border-radius:8px;}
@@ -1021,11 +1038,11 @@ details[open]>summary.card-title::after{content:'▴';}
 <!-- ─── TEAM ─── -->
 <div class="tab-content" id="tab-team">
   <div id="onbMine" style="margin-top:8px;"></div>
-  <div style="margin-top:8px;" class="card">
+  <div style="margin-top:8px;" class="card" id="teamCard">
     <div class="card-title"><div class="card-title-dot"></div>Team Members</div>
-    <div class="card-sub">Stewards own the business and make the final calls. Contributors are the rest of the team. All hours count equally.</div>
+    <div class="card-sub" id="teamCardSub">Stewards own the business and make the final calls. Contributors are the rest of the team. All hours count equally.</div>
     <table class="team-table">
-      <thead><tr><th>Name</th><th>Role</th><th style="width:80px;text-align:center;">Hours</th><th style="width:115px;text-align:right;">Share</th><th style="width:32px;"></th></tr></thead>
+      <thead><tr><th>Name</th><th>Role</th><th style="width:80px;text-align:center;">Hours</th><th style="width:115px;text-align:right;" id="teamShareTh">Share</th><th style="width:32px;"></th></tr></thead>
       <tbody id="teamBody"></tbody>
       <tfoot><tr><td colspan="5" style="padding-top:11px;"><button class="add-btn" onclick="addMember()">+ Add Member</button></td></tr></tfoot>
     </table>
@@ -4227,7 +4244,9 @@ function renderOnboarding(){
     if(team)team.innerHTML=isStewardUser()&&BOOKS.schema.checked?'<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>Onboarding</div><div class="card-sub">The new-member packet turns on after the setup SQL. Open <b>Books</b>, copy the SQL from the card at the top, run it in Supabase, and come back.</div></div>':'';
     return;
   }
-  const me=myMemberName();
+  // In a business's own Hub, the owner runs the place: no new-hire paperwork for themselves
+  const ownerSelf=typeof BIZ!=='undefined'&&BIZ.member&&BIZ.member.role==='owner';
+  const me=ownerSelf?'':myMemberName();
   const left=me?onbDocs().filter(d=>!onbRow(me,d.key)):[];
   // banner on the dashboard
   if(banner)banner.innerHTML=me&&left.length?'<div class="onb-banner"><div><b>'+(left.length===onbDocs().length?'Welcome aboard!':'Almost done!')+'</b> '+left.length+' onboarding step'+(left.length===1?'':'s')+' left. About '+Math.max(2,left.length*2)+' minutes.</div><button class="btn-tan" onclick="goOnboarding()">'+(left.length===onbDocs().length?'Start':'Finish')+'</button></div>':'';
@@ -4246,14 +4265,18 @@ function renderOnboarding(){
   if(team){
     if(!isStewardUser()){team.innerHTML='';return;}
     const list=(typeof members!=='undefined'?members:[]).map(m=>m.name);
-    ONB.rows.forEach(r=>{if(!list.some(n=>normName(n)===normName(r.member_name)))list.push(r.member_name);});
+    ONB.rows.forEach(r=>{if(r.item!=='hub_terms'&&!list.some(n=>normName(n)===normName(r.member_name)))list.push(r.member_name);});
+    if(typeof BIZ!=='undefined'&&BIZ.member){const own=new Set((typeof members!=='undefined'?members:[]).filter(m=>ownerOf(m.name)||normName(m.name)===normName(BIZ.member.role==='owner'?BIZ.member.name:'')).map(m=>normName(m.name)));
+      for(let i=list.length-1;i>=0;i--)if(own.has(normName(list[i])))list.splice(i,1);}
     team.innerHTML='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Onboarding</div>'
       +'<div class="card-sub">Each person signs on their own phone after you make their login. Tap a name to see where they are, record a paper signature, or print their packet. Stewards sign too'+(HUB.food?', since the food safety agreement covers everyone who handles food':'')+'.</div>'
       +list.map((n,i)=>{const p=onbProgress(n);const tot=p.docTotal+p.taskTotal,got=p.docs+p.tasks;const role=((typeof members!=='undefined'?members:[]).find(m=>m.name===n)||{}).role||'';
         return '<div class="onb-person" onclick="openOnbMember('+i+')"><div class="mwr-avatar" style="background:'+(role==='Steward'?'var(--green)':'var(--tan)')+';">'+esc((n||'?')[0].toUpperCase())+'</div>'
           +'<div class="bk-main"><div class="bk-payee">'+esc(n)+'</div><div class="bud-bar" style="margin-top:5px;"><div class="bud-fill" style="width:'+(got/tot*100).toFixed(0)+'%"></div></div>'
           +'<div class="bk-sub" style="margin-top:3px;">'+p.docs+'/'+p.docTotal+' signed · '+p.tasks+'/'+p.taskTotal+' Steward steps'+(got===tot?' · <b style="color:var(--green);">complete</b>':'')+'</div></div><span class="onb-go">›</span></div>';}).join('')
+      +(list.length?'':'<div class="bk-empty">Nobody to sign up yet. Add your team in <b>Team Members</b>, and each new person’s paperwork shows up here.</div>')
       +'</div>';
+    team.innerHTML=plainWords(team.innerHTML);
     ONB.list=list;
   }
 }
@@ -4554,6 +4577,7 @@ async function refreshDashboard(){
     if(sharesEl){
       const show=members.map(m=>res.people.find(p=>p.name===m.name)||{name:m.name,owner:!!ownerOf(m.name),hours:0,kitchenH:0,marketH:0,hourlyH:0,hourly:0,byJob:{},commission:0,share:0,topup:0,ot:0,ownerCover:0,pay:0});
       res.people.forEach(p=>{if(!show.find(s=>s.name===p.name))show.push(p);});
+      if(typeof teamLimited==='function'&&teamLimited()){const me=normName(myMemberName());for(let i=show.length-1;i>=0;i--)if(normName(show[i].name)!==me)show.splice(i,1);}
       sharesEl.innerHTML=show.map(p=>{
         const role=(members.find(m=>m.name===p.name)||{}).role||(p.owner?'Steward':'Contributor');
         const col=role==='Steward'?'var(--green)':'var(--tan)';
@@ -4746,7 +4770,7 @@ async function toggleEmployerStep(k,on){
 // each person's hourly rate: shown when any job pays by the hour without a fixed rate
 function payRatesHTML(r,canEdit){
   const needs=HUB.jobs.some(j=>j.pay==='hourly'&&!(+j.rate>0))||(hourlyStyle()&&HUB.jobs.some(j=>j.pay==='pool'));
-  if(!needs)return'';
+  if(!needs||!canEdit)return'';   // only owners and managers see everyone's rates
   const people=(typeof members!=='undefined'?members:[]).filter(m=>m.name&&!ownerOf(m.name));
   const mw=minWageFor(todayISO());
   return '<div class="card-sub" style="margin-top:14px;"><b>Hourly rates.</b> What each person makes an hour. Leave it blank and they’re paid Michigan’s minimum wage ('+fmt(mw)+'). Owners take profit instead of a rate.</div>'
@@ -4755,6 +4779,7 @@ function payRatesHTML(r,canEdit){
 }
 function renderPayRules(){
   const el=document.getElementById('payRules');if(!el)return;
+  if(typeof teamLimited==='function'&&teamLimited()){el.innerHTML='';return;}
   if(!BOOKS.schema.checked){el.innerHTML='';return;}
   const r=payRules();const st=isStewardUser();const ok=BOOKS.schema.acct&&BOOKS.schema.pay;
   const y=new Date().getFullYear();
@@ -4765,7 +4790,7 @@ function renderPayRules(){
   h+='<div class="txn-grid">'
     +'<div class="txn-full"><label>'+(hourlyStyle()?'The people who work here are':'Contributors are')+'</label><select id="prWorkers" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['employees','Employees — on payroll, minimum-wage floor'],['contractors','Independent contractors — 1099s'],['members','Trial LLC members — K-1s']].map(([v,l])=>'<option value="'+v+'"'+(r.workers===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
-    +(jobsOfPay('commission').length||+r.commissionPct>0?'':'<span id="prCommHide" style="display:none">')+'<div><label>Commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'+(jobsOfPay('commission').length||+r.commissionPct>0?'':'</span>')
+    +(jobsOfPay('commission').length?'':'<span id="prCommHide" style="display:none">')+'<div><label>Commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'+(jobsOfPay('commission').length?'':'</span>')
     +'<div class="txn-full"><label>Tips</label><select id="prTips" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['pool','Shared by hours among everyone except owners and managers'],['own','Each person keeps tips on the sales they made; the rest are shared by hours']].map(([v,l])=>'<option value="'+v+'"'+((r.tipMode||'pool')===v?' selected':'')+'>'+l+'</option>').join('')+'</select>'
     +'<div class="bk-sub" style="margin-top:4px;">Log tips as income under <b>Tips</b> (sales imports do this for you). Tips stay out of the sales pool, never count toward minimum wage, and by federal law owners and managers can’t share in them. Because the Hub always pays at least full minimum wage, kitchen and other behind-the-scenes workers can share too.</div></div>'
@@ -4805,7 +4830,8 @@ function jobSelect(idAttr,val,onchange){
 }
 function renderClock(){
   const el=document.getElementById('clockSection');if(!el)return;
-  el.innerHTML=members.map(m=>`
+  const who=(typeof teamLimited==='function'&&teamLimited())?members.filter(m=>normName(m.name)===normName(myMemberName())):members;
+  el.innerHTML=who.map(m=>`
     <div class="clock-member" id="clock-${m.id}">
       <div class="clock-member-header" onclick="toggleClock(${m.id})">
         <span class="clock-name">${esc(m.name||'Member')}</span>
@@ -5143,6 +5169,7 @@ function shiftHours(s){const a=tmin(s.start_time),b=tmin(s.end_time);if(a===null
 function tPretty(t){const m=tmin(t);if(m===null)return'';let h=Math.floor(m/60)%24,mi=m%60;const ap=h<12?'a':'p';h=h%12||12;return h+(mi?':'+String(mi).padStart(2,'0'):'')+ap;}
 function shiftLabel(s){return tPretty(s.start_time)+'–'+tPretty(s.end_time);}
 function schedPeople(){
+  if(schedMineOnly())return[myName()].filter(Boolean);
   const names=(typeof members!=='undefined'?members:[]).map(m=>m.name).filter(Boolean);
   SCHED.shifts.forEach(s=>{if(!names.includes(s.member_name))names.push(s.member_name);});
   return names;
@@ -5164,8 +5191,11 @@ async function renderSchedule(){
   if(!SCHED.week)SCHED.week=schedMonday();
   el.innerHTML='<div class="card"><div class="bk-empty">Loading the schedule…</div></div>';
   await loadSchedule();
+  if(schedMineOnly()){const me=myName();SCHED.shifts=SCHED.shifts.filter(x=>x.member_name===me||SCHED.swaps.some(w=>w.shift_id===x.id&&w.status==='open'));}
   drawSchedule();
 }
+// the owner can let the team see everyone's shifts, or just their own
+function schedMineOnly(){return typeof teamAccess==='function'&&!canEditSchedule()&&!teamAccess().schedule_all;}
 function schedConflicts(){
   // overlapping shifts for the same person on the same day
   const bad=new Set();
@@ -5199,9 +5229,11 @@ function drawSchedule(){
     +'<div class="sched-nav"><button class="btn-secondary" onclick="schedMove(-7)" aria-label="Previous week">‹</button><div><div class="sched-week">'+esc(weekTxt)+'</div>'
     +'<div class="bk-sub">'+SCHED.shifts.length+' shift'+(SCHED.shifts.length===1?'':'s')+' · '+(Math.round(total*10)/10)+' hours scheduled</div></div>'
     +'<button class="btn-secondary" onclick="schedMove(7)" aria-label="Next week">›</button>'
-    +(isoLocal(SCHED.week)!==isoLocal(schedMonday())?'<button class="btn-secondary" onclick="SCHED.week=schedMonday();SCHED.sel.clear();renderSchedule()">This week</button>':'')+'</div>';
+    +(isoLocal(SCHED.week)!==isoLocal(schedMonday())?'<button class="btn-secondary" onclick="SCHED.week=schedMonday();SCHED.sel.clear();renderSchedule()">This week</button>':'')
+    +'<label class="sched-jump" title="Jump to any week">📅<input type="date" aria-label="Jump to a week" value="'+isoLocal(SCHED.week)+'" onchange="if(this.value){SCHED.week=schedMonday(parseISO(this.value));SCHED.sel.clear();renderSchedule();}"></label></div>';
   if(edit)h+='<div class="sched-tools"><button class="btn-green" onclick="openShift()">+ Add shift</button>'
     +'<button class="btn-secondary" onclick="schedCopyWeek()">Copy last week</button>'
+    +'<button class="btn-secondary" onclick="schedCopyAhead()">Copy this week ahead…</button>'
     +'<button class="btn-secondary'+(SCHED.select?' active':'')+'" onclick="schedToggleSelect()">'+(SCHED.select?'Done selecting':'Select shifts')+'</button>'
     +'<button class="btn-secondary" onclick="schedPrint()">🖨 Print</button><button class="btn-secondary" onclick="openTimeOff()">Time off</button></div>';
   else h+='<div class="sched-tools"><button class="btn-green" onclick="openTimeOff()">Ask for time off</button><button class="btn-secondary" onclick="schedICS()">📅 Add my shifts to my calendar</button><button class="btn-secondary" onclick="schedPrint()">🖨 Print</button></div>'
@@ -5278,6 +5310,7 @@ function openShift(s,person,date){
     +'<div><label>Job</label><select id="shJob" class="period-select">'+HUB.jobs.map(j=>'<option value="'+esc(j.key)+'"'+(j.key===job?' selected':'')+'>'+esc(j.name)+'</option>').join('')+'</select></div>'
     +'<div><label>Note (optional)</label><input id="shNote" class="period-input" placeholder="e.g. Lansing market" value="'+esc(s&&s.note||'')+'"></div></div>'
     +(s?'':'<div style="margin-top:10px;"><label>Also add it on</label><div class="sh-days">'+SCHED_DAYS.map((dd,i)=>'<label class="sh-day"><input type="checkbox" value="'+i+'"'+(i===dayIdx?' checked disabled':'')+'> '+dd+'</label>').join('')+'</div>'
+      +'<div style="margin-top:10px;"><label>Repeat it</label><select id="shWeeks" class="period-select">'+[[1,'Just this week'],[2,'For 2 weeks'],[3,'For 3 weeks'],[4,'For 4 weeks'],[6,'For 6 weeks'],[8,'For 8 weeks'],[13,'For 3 months'],[26,'For 6 months']].map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('')+'</select></div>'
       +'<div class="bk-sub" style="margin-top:4px;">Days in the same week as the date above. <button class="link-btn" type="button" onclick="document.querySelectorAll(\'.sh-day input:not(:disabled)\').forEach((c,i)=>{c.checked=[0,1,2,3,4].includes(+c.value);})">Weekdays</button> · <button class="link-btn" type="button" onclick="document.querySelectorAll(\'.sh-day input:not(:disabled)\').forEach(c=>c.checked=false)">None</button></div></div>')
     +'<div class="txn-actions">'+(s?'<button class="btn-secondary danger" onclick="deleteShift()">Delete</button>':'')+'<button class="btn-secondary" onclick="closeShift()">Cancel</button><button class="btn-green" id="shSave" onclick="saveShift()">Save</button></div>';
   m.classList.add('open');
@@ -5297,10 +5330,12 @@ async function saveShift(){
       const baseIdx=Math.round((parseISO(isoLocal(base))-parseISO(isoLocal(mon)))/864e5);
       const extra=[...document.querySelectorAll('.sh-day input:checked:not(:disabled)')].map(c=>+c.value).filter(i=>i!==baseIdx);
       const dayOf=i=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return isoLocal(d);};
-      const rows=[body].concat(extra.map(i=>Object.assign({},body,{shift_date:dayOf(i)})));
+      const week1=[body].concat(extra.map(i=>Object.assign({},body,{shift_date:dayOf(i)})));
+      const weeks=Math.max(1,Math.min(26,parseInt((document.getElementById('shWeeks')||{}).value)||1));
+      const rows=[];for(let w=0;w<weeks;w++)week1.forEach(r=>rows.push(Object.assign({},r,{shift_date:isoLocal(new Date(parseISO(r.shift_date).getTime()+w*7*864e5+3600e3))})));
       rows.forEach(r=>{r.created_by=currentProfile&&currentProfile.name||null;});
       await sb('ohb_shifts',{method:'POST',body:JSON.stringify(rows)});
-      if(rows.length>1)toast(rows.length+' shifts added');
+      if(rows.length>1)toast(rows.length+' shifts added'+(weeks>1?' over '+weeks+' weeks':''));
       // jump to the week of the shift if it's somewhere else
       if(isoLocal(mon)!==isoLocal(SCHED.week))SCHED.week=mon;
     }
@@ -5324,6 +5359,19 @@ async function schedCopyWeek(){
     .filter(r=>!have.has(r.member_name+'|'+r.shift_date+'|'+r.start_time));
   if(!rows.length){toast('This week already has all of last week’s shifts');return;}
   try{await sb('ohb_shifts',{method:'POST',body:JSON.stringify(rows)});toast(rows.length+' shifts copied from last week');await renderSchedule();}catch(e){toast(e.message,true);}
+}
+async function schedCopyAhead(){
+  if(!SCHED.shifts.length){toast('This week has no shifts to copy yet',true);return;}
+  const ans=prompt('Copy this week’s '+SCHED.shifts.length+' shift'+(SCHED.shifts.length===1?'':'s')+' into how many of the following weeks? (1 to 26)','4');if(ans===null)return;
+  const n=Math.max(1,Math.min(26,parseInt(ans)||0));if(!n){toast('Enter a number from 1 to 26',true);return;}
+  const from=isoLocal(new Date(SCHED.week.getTime()+7*864e5+3600e3)),to=isoLocal(new Date(SCHED.week.getTime()+(7*n+6)*864e5+3600e3));
+  let have;try{have=new Set((await sbAll('ohb_shifts?shift_date=gte.'+from+'&shift_date=lte.'+to+'&select=member_name,shift_date,start_time')).map(s=>s.member_name+'|'+s.shift_date+'|'+String(s.start_time).slice(0,5)));}catch(e){toast(e.message,true);return;}
+  const rows=[];
+  for(let w=1;w<=n;w++)SCHED.shifts.forEach(s=>{const d=isoLocal(new Date(parseISO(s.shift_date).getTime()+w*7*864e5+3600e3));
+    if(have.has(s.member_name+'|'+d+'|'+String(s.start_time).slice(0,5)))return;
+    rows.push({member_name:s.member_name,shift_date:d,start_time:s.start_time,end_time:s.end_time,job:s.job,note:s.note,created_by:currentProfile&&currentProfile.name||null});});
+  if(!rows.length){toast('Those weeks already have these shifts');return;}
+  try{await sb('ohb_shifts',{method:'POST',body:JSON.stringify(rows)});toast(rows.length+' shifts added across the next '+n+' week'+(n===1?'':'s'));await renderSchedule();}catch(e){toast('Didn’t save: '+e.message,true);}
 }
 async function schedBulk(kind,val){
   const ids=[...SCHED.sel];if(!ids.length)return;
@@ -6586,6 +6634,35 @@ function applyBizConfig(){
   const src=document.getElementById('revSource');
   if(src)src.innerHTML=INCOME_CATS.map(c=>'<option>'+esc(c)+'</option>').join('');
   const ing=document.getElementById('ingTab');if(ing)ing.style.display=s.recipes?'':'none';
+  applyTeamAccess();
+}
+
+// ─── what the team can see (owners and managers always see everything) ───
+const TEAM_ACCESS_ITEMS=[
+  ['schedule_all','See everyone’s schedule','Off: each person only sees their own shifts (and shifts offered up for trade).'],
+  ['log','Log sales and scan receipts','The Revenue & Expenses tab.'],
+  ['inventory','Count and update inventory','The Inventory tab.'],
+  ['recipes','See recipes and make batches','The Ingredients tab, if recipes are turned on.'],
+  ['see_pay','See everyone’s pay and the week’s numbers','Sales, profit and the whole team’s pay. Off: each person sees only their own hours and pay.']
+];
+function teamAccess(){
+  const s=bizSettings();
+  return Object.assign({schedule_all:true,log:false,inventory:true,recipes:false,see_pay:s.payStyle==='shared'},s.teamAccess||{});
+}
+function teamLimited(){return !isStewardUser()&&!teamAccess().see_pay;}
+function applyTeamAccess(){
+  if(!BIZ.row)return;
+  const st=isStewardUser(),a=teamAccess(),s=bizSettings();
+  const tab=k=>document.querySelector('.tab[onclick*="\''+k+'\'"]');
+  const show=(k,on)=>{const t=tab(k);if(t)t.style.display=on?'':'none';};
+  show('books',st);show('invoices',st);show('history',st||a.see_pay);show('log',st||a.log);show('inventory',st||a.inventory);
+  show('ingredients',!!s.recipes&&(st||a.recipes));
+  document.body.classList.toggle('team-limited',teamLimited());
+  // if the open tab just got hidden, go back to the dashboard
+  const act=document.querySelector('.tab.active');if(act&&act.style.display==='none')goTab('dashboard');
+  const sub=document.getElementById('teamCardSub');
+  if(sub)sub.textContent=HUB.payStyle==='shared'?'Stewards own the business and make the final calls. Contributors are the rest of the team. All hours count equally.':'Everyone who works here. Owners and managers can change pay, the schedule and settings; the team sees what you allow in Settings.';
+  const th=document.getElementById('teamShareTh');if(th)th.textContent=HUB.payStyle==='shared'?'Share':'This week';
 }
 
 // ─── who you are in this business ───
@@ -6609,6 +6686,7 @@ function applyRoleAccess(){
   const s=document.getElementById('settingsTab');if(s)s.style.display=st?'':'none';
   document.getElementById('userNameDisplay').textContent=currentProfile?.name||'';
   document.getElementById('userRoleDisplay').textContent=BIZ.member?{owner:'Owner',manager:'Manager',member:'Team'}[BIZ.member.role]:'';
+  applyTeamAccess();
 }
 function renderBizSwitcher(){
   const w=document.getElementById('bizSwitchWrap');if(!w)return;
@@ -6719,6 +6797,7 @@ async function enterApp(){
   await autoInit();
   renderStartHere();
   await loadPlan();renderPlanBanner();planGate();await termsGate();
+  renderHelpButton();maybeStartTour();
 }
 async function restoreSession(){
   await loadInviteFromUrl();
@@ -6847,6 +6926,10 @@ async function renderSettings(){
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Features</div>'
     +'<label class="onb-task"><input type="checkbox" id="stFood"'+(s.food?' checked':'')+'><div><div class="bk-payee">We handle food</div><div class="bk-sub">Adds the food safety &amp; illness agreement and kitchen rules to onboarding</div></div></label>'
     +'<label class="onb-task"><input type="checkbox" id="stRecipes"'+(s.recipes?' checked':'')+'><div><div class="bk-payee">Recipe &amp; product costing</div><div class="bk-sub">The Ingredients tab: cost per item and a suggested price</div></div></label></div>';
+  const ta=teamAccess();
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>What Your Team Can See</div>'
+    +'<div class="card-sub">Owners and managers always see everything. Everyone else always gets the Time Clock, their schedule, their own pay and their paperwork. Turn on anything else you want them to have.</div>'
+    +TEAM_ACCESS_ITEMS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox" class="st-access" data-k="'+k+'"'+(ta[k]?' checked':'')+'><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+'</div></div></label>').join('')+'</div>';
   h+='<div class="bk-actions" style="margin:-4px 0 18px;"><button class="btn-green" id="stSaveBtn" onclick="saveSettings()">Save settings</button></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>People &amp; Logins</div>'
     +'<div class="card-sub">Send someone an invite link by text or email. When they open it and make an account, they join '+esc(BIZ.row.name)+' and nothing else.</div>'
@@ -6880,7 +6963,8 @@ async function saveSettings(){
   const expense=stLines('stExpense'),income=stLines('stIncome');
   if(!expense.length||!income.length){toast('Keep at least one sales source and one expense category',true);return;}
   const cogs=stLines('stCogs').filter(c=>expense.includes(c));
-  const settings=Object.assign({},BIZ.row.settings||{},{payStyle:style,jobs,income,expense,cogs,ct:Math.max(0,Math.min(50,parseFloat(document.getElementById('stCT').value)||0)),
+  const teamAccessSet={};document.querySelectorAll('.st-access').forEach(c=>{teamAccessSet[c.dataset.k]=c.checked;});
+  const settings=Object.assign({},BIZ.row.settings||{},{payStyle:style,teamAccess:teamAccessSet,jobs,income,expense,cogs,ct:Math.max(0,Math.min(50,parseFloat(document.getElementById('stCT').value)||0)),
     food:document.getElementById('stFood').checked,recipes:document.getElementById('stRecipes').checked});
   const name=document.getElementById('stName').value.trim(),county=document.getElementById('stCounty').value;
   if(name.length<2){toast('Enter the business name',true);return;}
@@ -7017,7 +7101,7 @@ async function termsGate(){
 async function acceptTerms(){
   if(!document.getElementById('tgAgree').checked){document.getElementById('tgErr').textContent='Check the box to agree first.';return;}
   const b=document.getElementById('tgBtn');b.disabled=true;b.textContent='Saving…';
-  try{await recordTerms(BIZ.member.name);const g=document.getElementById('termsGate');if(g)g.remove();toast('Thanks! Welcome to the Hub.');}
+  try{await recordTerms(BIZ.member.name);const g=document.getElementById('termsGate');if(g)g.remove();toast('Thanks! Welcome to the Hub.');maybeStartTour();}
   catch(e){document.getElementById('tgErr').textContent='Didn’t save: '+e.message;b.disabled=false;b.textContent='Agree and continue';}
 }
 
@@ -7090,7 +7174,7 @@ function renderPlanBanner(){
 }
 function planGate(){
   const p=planState();let g=document.getElementById('planGate');
-  if(!['needs_sub','paused'].includes(p.kind)){if(g)g.remove();return;}
+  if(!['needs_sub','paused'].includes(p.kind)){if(g){g.remove();if(typeof maybeStartTour==='function')maybeStartTour();}return;}
   if(!g){g=document.createElement('div');g.id='planGate';document.body.appendChild(g);}
   const st=isStewardUser();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';
   const again='<p class="bk-sub">Already done? It can take a minute to show up. <a href="#" onclick="loadPlan().then(()=>{planGate();renderPlanBanner();});return false;">Check again</a></p>';
@@ -7112,6 +7196,94 @@ function planGate(){
   await loadPlan();renderPlanBanner();planGate();const p=planState();
   if(['trialing','active'].includes(p.kind)){clearInterval(iv);toast(p.kind==='trialing'?'You’re all set! Your 3 free months have started.':'Thank you! Your Hub is all set.');try{history.replaceState(null,'',location.pathname);}catch(e){}}
   else if(n>12)clearInterval(iv);},5000);})();
+
+// ═══════════════════════════════════════════════════════
+// GUIDED TOUR — what the Hub can do, and how, one tab at a time.
+// Opens by itself the first time someone gets into a business; the Help button reopens it any time.
+// Owners and managers get the full tour; the team gets a short one about the parts they use.
+// ═══════════════════════════════════════════════════════
+const TOUR={i:0,steps:[]};
+function tourSteps(){
+  const st=isStewardUser();const s=bizSettings();const a=teamAccess();const hs=HUB.payStyle!=='shared';
+  const name=esc((BIZ.row&&BIZ.row.name)||'your business');
+  if(!st){
+    const me=esc((currentProfile&&currentProfile.name||'').split(' ')[0]||'there');
+    return [
+      {t:'Welcome, '+me+'!',b:'<p>This is '+name+'’s Hub. Here you clock in and out, see your schedule and your pay, and ask for time off. It takes a minute to learn.</p><p>Tap <b>Next</b> to see each part, or <b>Show me</b> to jump right to it.</p>'},
+      {tab:'team',t:'Your paperwork',b:'<p>A few short pages to read and sign: how pay works, safety rules, and your contact info. You’ll find them at the top of the <b>Team</b> tab.</p><ul><li>Read each one and type your full name to sign.</li><li>You can come back to them any time.</li></ul>'},
+      {tab:'timeclock',t:'Clocking in and out',b:'<ul><li>Open <b>Time Clock</b>, tap your name, and tap <b>Clock in</b> when you start and <b>Clock out</b> when you’re done.</li><li>Forgot? Enter your hours for the day instead.</li>'+(HUB.jobs.length>1?'<li>Pick the job you’re doing ('+HUB.jobs.map(j=>esc(j.name)).join(', ')+') so you’re paid the right way.</li>':'')+'</ul><p>Your pay comes from the hours you log, so log them the same day.</p>'},
+      {tab:'schedule',t:'Your schedule',b:'<ul><li>See your shifts for this week, and use the arrows or the 📅 to look ahead.</li><li><b>Ask for time off</b>: pick the days, add a note, and your manager approves it.</li><li>Can’t make a shift? Tap it to offer it to the team. Someone can take it, and your manager signs off.</li><li><b>Add my shifts to my calendar</b> puts them on your phone.</li></ul>'},
+      {tab:'dashboard',t:'Your pay',b:'<p>The <b>Dashboard</b> shows your hours and pay for the week as you go'+(a.see_pay?', along with the whole team’s':'')+'. '+(hs?'You’re paid your hourly rate, with overtime past 40 hours, and never less than Michigan’s minimum wage.':'Pay comes from the week’s shared pool, split by hours.')+'</p>'},
+      ...(a.log?[{tab:'log',t:'Logging sales and receipts',b:'<ul><li>Record a sale with the amount and where it came from.</li><li><b>Scan a receipt</b>: snap a photo and the Hub reads it for you.</li></ul>'}]:[]),
+      ...(a.inventory?[{tab:'inventory',t:'Inventory',b:'<ul><li>Tap <b>+</b> or <b>−</b> to update what’s on the shelf.</li><li><b>Count everything</b> walks you through a full count.</li></ul>'}]:[]),
+      {t:'That’s it!',b:'<p>Questions about your schedule or pay? Ask your manager. You can open this tour again any time with the <b>Help</b> button in the corner.</p>'}
+    ];
+  }
+  return [
+    {t:'Welcome to your Operations Hub',b:'<p>'+name+'’s books, pay, schedule, inventory, invoices and paperwork, all in one place, on any phone or computer.</p><p>This quick tour shows what each tab does and how to use it. Tap <b>Show me</b> on any step to jump there, and reopen the tour any time with the <b>Help</b> button in the corner.</p>'},
+    {tab:'dashboard',t:'Dashboard: your week at a glance',b:'<ul><li>This week’s sales, what you spent, '+(hs?'everyone’s pay, and what’s left as profit':'the pool and everyone’s share')+'. It updates as your team logs hours and you log sales.</li><li><b>Coming up</b> lists what needs you: bills due, unpaid invoices, the next sales tax return, and time-off or shift-trade requests.</li><li><b>Start here</b> is a short checklist for your first week.</li></ul>'},
+    {tab:'log',t:'Revenue & Expenses: money in and out',b:'<ul><li><b>Log a sale</b>: amount, where it came from, who worked it.</li><li><b>Scan a receipt</b>: take a photo and the Hub reads the store, date and total for you.</li><li>Use Square or another card reader? <b>Import</b> its sales file. The Hub adds each day’s sales, tips, sales tax and card fees, and skips anything it already has.</li></ul>'},
+    {tab:'books',t:'Books: your bookkeeping, done as you go',b:'<ul><li>Every sale and expense lands here, sorted into categories. Select several to fix a category or delete them at once.</li><li><b>Bank</b>: upload your bank statement once a month and the Hub matches each line to what’s already logged, so nothing gets missed.</li><li><b>Bills</b>: rent, insurance, licenses and renewals, with reminders before they’re due.</li><li><b>Taxes</b>: estimated quarterly taxes, Michigan sales tax with due dates, and a year-end package for your tax preparer.</li></ul>'},
+    {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
+    {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared, and download the payroll file for your payroll service.':'set the commission rate, how tips are shared, and download the payroll file.')+'</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
+    {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
+    {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
+    {tab:'inventory',t:'Inventory',b:'<ul><li>Track what’s on hand with quick <b>+ / −</b> buttons, or <b>Count everything</b> at once.</li><li>Set a reorder point and the Hub builds your <b>shopping list</b>.</li><li>Edit as a table to change many items at once, or import a spreadsheet.</li>'+(s.recipes?'<li>Add a <b>recipe</b> to anything you make. <b>Make a batch</b> uses up the ingredients, adds the finished goods, and shows your cost per item.</li>':'')+'</ul>'},
+    {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time.</li></ul>'},
+    {t:'What the Hub does, and what it doesn’t',b:'<ul><li>✅ It keeps your records, does the math (pay, overtime, minimum wage, tips, sales tax, quarterly estimates), and reminds you what’s due.</li><li>➡️ It doesn’t file taxes or send paychecks. Hand the <b>payroll file</b> to your payroll service and the <b>year-end package</b> to your tax preparer.</li><li>📬 Included with your Hub: Watch alerts on local government and the Bid & grant finder, from The People’s Voices. Turn them on from <b>Start here</b> on the Dashboard.</li></ul>'},
+    {t:'You’re all set',b:'<p>Start with the <b>Start here</b> checklist on your Dashboard: add your team, log a sale, and scan a receipt.</p><p>The <b>Help</b> button in the corner reopens this tour. For more detail, see the <a href="/hub-help.html" target="_blank" rel="noopener">Help page</a>.</p>'}
+  ].filter(x=>!x.tab||(()=>{const t=document.querySelector('.tab[onclick*="\''+x.tab+'\'"]');return !t||t.style.display!=='none';})());
+}
+function tourModal(){
+  let m=document.getElementById('tourModal');if(m)return m;
+  m=document.createElement('div');m.id='tourModal';m.className='modal-overlay';
+  m.onclick=e=>{if(e.target===m)closeTour();};
+  m.innerHTML='<div class="modal tour-modal"><button class="modal-close" onclick="closeTour()" aria-label="Close">×</button><div id="tourBody"></div></div>';
+  document.body.appendChild(m);return m;
+}
+function openTour(i){
+  TOUR.steps=tourSteps();TOUR.i=Math.max(0,Math.min(TOUR.steps.length-1,i||0));
+  tourModal().classList.add('open');drawTour();
+  try{localStorage.setItem(tourKey(),'seen');}catch(e){}
+}
+function drawTour(){
+  const n=TOUR.steps.length,i=TOUR.i,x=TOUR.steps[i];
+  document.getElementById('tourBody').innerHTML='<div class="tour-step">Step '+(i+1)+' of '+n+'</div>'
+    +'<div class="tour-dots">'+TOUR.steps.map((s,k)=>'<button type="button" class="tour-dot'+(k===i?' on':'')+'" title="'+esc(s.t)+'" onclick="TOUR.i='+k+';drawTour()"></button>').join('')+'</div>'
+    +'<h2 class="tour-title">'+esc(x.t)+'</h2><div class="tour-text">'+x.b+'</div>'
+    +'<div class="tour-actions">'
+    +(i>0?'<button class="btn-secondary" onclick="TOUR.i--;drawTour()">‹ Back</button>':'<button class="btn-secondary" onclick="closeTour()">Skip the tour</button>')
+    +(x.tab?'<button class="btn-secondary" onclick="tourShow(\''+x.tab+'\')">Show me</button>':'')
+    +(i<n-1?'<button class="btn-green" onclick="TOUR.i++;drawTour()">Next ›</button>':'<button class="btn-green" onclick="closeTour()">Done</button>')
+    +'</div>';
+}
+function closeTour(){const m=document.getElementById('tourModal');if(m)m.classList.remove('open');}
+// jump to the tab, light it up, and leave a little "back to the tour" note
+function tourShow(tab){
+  closeTour();goTab(tab);
+  const t=document.querySelector('.tab[onclick*="\''+tab+'\'"]');
+  if(t){t.classList.remove('tour-pulse');void t.offsetWidth;t.classList.add('tour-pulse');t.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});setTimeout(()=>t.classList.remove('tour-pulse'),3200);}
+  let b=document.getElementById('tourBack');
+  if(!b){b=document.createElement('button');b.id='tourBack';b.className='tour-back';document.body.appendChild(b);}
+  b.textContent='‹ Back to the tour ('+(TOUR.i+1)+' of '+TOUR.steps.length+')';
+  b.onclick=()=>{b.remove();tourModal().classList.add('open');drawTour();};
+  clearTimeout(tourShow._t);tourShow._t=setTimeout(()=>{const x=document.getElementById('tourBack');if(x)x.remove();},45000);
+}
+function tourKey(){return 'ohb_tour_'+(BIZ.id||'')+'_'+((typeof currentUser!=='undefined'&&currentUser&&currentUser.id)||'')+'_'+(isStewardUser()?'o':'t');}
+// first visit: open the tour once nothing else (terms, plan) is in the way
+function maybeStartTour(){
+  if(!BIZ.id||(typeof DEMO!=='undefined'&&DEMO.on))return;
+  if(document.querySelector('#termsGate .plan-gate,#planGate .plan-gate'))return;
+  let seen=false;try{seen=localStorage.getItem(tourKey())==='seen';}catch(e){seen=true;}
+  if(!seen)setTimeout(()=>{if(!document.querySelector('#termsGate .plan-gate,#planGate .plan-gate'))openTour(0);},700);
+}
+// the Help button, always in the corner
+function renderHelpButton(){
+  if(document.getElementById('helpFab'))return;
+  const b=document.createElement('button');b.id='helpFab';b.className='help-fab';b.type='button';
+  b.innerHTML='<span>?</span> Help';b.setAttribute('aria-label','Help and tour');b.onclick=()=>openTour(0);
+  document.body.appendChild(b);
+}
 
 const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]},"ohb_shifts":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"shift_date":["text",null],"start_time":["text",null],"end_time":["text",null],"job":["text",null],"note":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_inv_items":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"category":["text",null],"unit":["text","each"],"sku":["text",null],"supplier":["text",null],"location":["text",null],"notes":["text",null],"on_hand":["num",0],"par":["num",0],"order_qty":["num",null],"cost":["num",0],"price":["num",null],"active":["bool",true],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_inv_moves":{"id":["text","@uuid"],"business_id":["text",null],"item_id":["text",null],"change":["num",null],"reason":["text","adjust"],"note":["text",null],"by_name":["text",null],"move_date":["text","@today"],"created_at":["text","@now"]},"ohb_invoices":{"id":["text","@uuid"],"business_id":["text",null],"kind":["text","invoice"],"number":["text",null],"customer_name":["text",null],"customer_email":["text",null],"customer_phone":["text",null],"customer_address":["text",null],"issue_date":["text","@today"],"due_date":["text",null],"status":["text","draft"],"items":["json","[]"],"tax_rate":["num",0],"subtotal":["num",0],"tax":["num",0],"total":["num",0],"paid_amount":["num",0],"paid_date":["text",null],"income_category":["text",null],"notes":["text",null],"terms":["text",null],"revenue_id":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_time_off":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"start_date":["text",null],"end_date":["text",null],"reason":["text",null],"status":["text","pending"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_shift_swaps":{"id":["text","@uuid"],"business_id":["text",null],"shift_id":["text",null],"from_name":["text",null],"to_name":["text",null],"note":["text",null],"status":["text","open"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_bills":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"amount":["num",null],"category":["text",null],"next_due":["text",null],"repeat":["text","monthly"],"autopay":["bool",false],"notes":["text",null],"last_paid":["text",null],"active":["bool",true],"created_at":["text","@now"]}};
 
