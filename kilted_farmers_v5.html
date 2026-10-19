@@ -796,7 +796,7 @@ details[open]>summary.card-title::after{content:'▴';}
 
   <div class="dash-card full" style="margin-bottom:20px;">
     <div class="dash-label" style="margin-bottom:6px;">This Week’s Pay</div>
-    <div class="dash-sub" style="margin-bottom:10px;">Commission for market work and a share of the kitchen pool for kitchen hours.</div>
+    <div class="dash-sub" id="dashPaySub" style="margin-bottom:10px;">Commission for market work and a share of the kitchen pool for kitchen hours.</div>
     <div id="dash-member-shares"><div style="color:var(--mid);font-size:13px;">Loading...</div></div>
   </div>
 
@@ -2041,7 +2041,8 @@ const HUB={
   sharedSpace:'We share this kitchen with the church that hosts us.',
   unit:'pasta',units:'pastas',
   allergens:'Our pasta contains <b>wheat and eggs</b>, and some flavors bring in other allergens.',
-  rhythm:'We sell mostly on weekends and buy the next week’s ingredients with that money, so a week’s pay is figured after the week closes.'
+  rhythm:'We sell mostly on weekends and buy the next week’s ingredients with that money, so a week’s pay is figured after the week closes.',
+  payStyle:'shared'                            // 'shared' = contribution pool (Kilted Farmers); 'hourly' = regular wages, each person at their own rate
 };
 function jobCfg(k){return HUB.jobs.find(j=>j.key===k)||HUB.jobs[0]||{key:'work',name:'Work',pay:'pool'};}
 function defaultJobKey(){return(HUB.jobs[0]||{key:'work'}).key;}
@@ -2056,6 +2057,15 @@ function stewardList(){
   const st=(typeof members!=='undefined'?members:[]).filter(m=>m.role==='Steward').map(m=>m.name);
   const n=st.length?st:HUB.stewardNames;
   return n.length>1?n.slice(0,-1).join(', ')+' and '+n.at(-1):(n[0]||'the owners');
+}
+
+// Regular-wage businesses use everyday words: Manager and Team instead of Steward and Contributor
+function hourlyStyle(){return HUB.payStyle==='hourly';}
+function roleLabel(r){if(!hourlyStyle())return r;return r==='Steward'?'Manager':r==='Contributor'?'Team':r;}
+function plainWords(html){
+  if(!hourlyStyle()||typeof html!=='string')return html;
+  return html.replace(/\bStewards’/g,'Managers’').replace(/\bSteward’s/g,'Manager’s').replace(/\bStewards\b/g,'Managers').replace(/\bSteward\b/g,'Manager')
+    .replace(/\bContributors\b/g,'team members').replace(/\bContributor\b/g,'team member');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3839,7 +3849,11 @@ function fileSlug(){return HUB.bizName.toLowerCase().replace(/[^a-z0-9]+/g,'-').
 function payModelSentence(){
   const parts=[];
   if(jobsOfPay('commission').length)parts.push(jobsOfPay('commission').map(j=>j.name).join('/')+' work earns a commission on the sales it brings in');
-  if(jobsOfPay('hourly').length)parts.push(jobsOfPay('hourly').map(j=>j.name+' at $'+(+j.rate||0).toFixed(2)+'/hr').join(', '));
+  if(jobsOfPay('hourly').length)parts.push(jobsOfPay('hourly').map(j=>j.name+(+j.rate>0?' at $'+(+j.rate).toFixed(2)+'/hr':' at each person’s own hourly rate')).join(', '));
+  if(typeof hourlyStyle==='function'&&hourlyStyle()){
+    parts.push('what’s left after pay and expenses is the owners’ profit');
+    return parts.join('; ')+'.';
+  }
   parts.push('weekly revenue minus expenses'+(parts.length?' and that pay':'')+', less '+Math.round(CT*100)+'% to the Common Table, is shared by '+(jobsOfPay('pool').map(j=>j.name.toLowerCase()).join(' and ')||'pool')+' hours');
   return parts.join('; ')+'.';
 }
@@ -3962,9 +3976,16 @@ async function importMileTrips(){
 // ═══════════════════════════════════════════════════════
 const ONB_VERSION='2026-10b';
 const ONB_DOCS=[
-{key:'welcome',title:'How We Work & How Pay Works',short:'How the pay pool works',kind:'sign',
- agree:'I understand how the pay pool works and that my share depends on what the week brings in and the hours I put in.',
- body:()=>`<p>Welcome to ${esc(HUB.bizName)}. ${HUB.intro}: <b>everyone who puts in the work shares in what the work brings in.</b></p>
+{key:'welcome',kind:'sign',
+ get title(){return hourlyStyle()?'Welcome & How Pay Works':'How We Work & How Pay Works';},
+ get short(){return hourlyStyle()?'How pay works':'How the pay pool works';},
+ get agree(){return hourlyStyle()?'I understand how I’m paid and how to log my hours.':'I understand how the pay pool works and that my share depends on what the week brings in and the hours I put in.';},
+ body:()=>hourlyStyle()
+  ?`<p>Welcome to ${esc(HUB.bizName)}! Here’s how pay works and who to go to with questions.</p>
+`+welcomePayHTML()+`
+<h4>Who’s who</h4>
+<p>The owners and managers (${esc(stewardList())}) make the final calls. Bring anything to them: your schedule, your pay, ideas, worries.</p>`
+  :`<p>Welcome to ${esc(HUB.bizName)}. ${HUB.intro}: <b>everyone who puts in the work shares in what the work brings in.</b></p>
 `+welcomePayHTML()+`
 <h4>Who’s who</h4>
 <p><b>Stewards</b> (${esc(stewardList())}) own the business and make the final calls. <b>Contributors</b> are the rest of the team. Bring anything to a Steward: schedule, pay, ideas, worries. Ideas especially.</p>`},
@@ -4050,16 +4071,33 @@ const ONB_DOCS=[
 ];
 function welcomePayHTML(){
   const r=payRules();const pct=+r.commissionPct>0?(+r.commissionPct)+'%':null;const mw=fmt(minWageFor(todayISO()));
+  if(hourlyStyle())return welcomeHourlyHTML(r,pct,mw);
   let h='<h4>How pay works</h4><ul>'
     +jobsOfPay('commission').map(j=>'<li><b>'+esc(j.name)+' work</b> earns a commission'+(pct?' of '+pct:'')+' on the sales you bring in, split evenly with whoever works them with you.'+(pct?'':' A Steward will tell you the rate.')+'</li>').join('')
     +jobsOfPay('hourly').map(j=>'<li><b>'+esc(j.name)+'</b> is paid by the hour'+(+j.rate>0?', $'+(+j.rate).toFixed(2)+' an hour':'')+'.</li>').join('')
     +(jobsOfPay('pool').length?'<li><b>'+esc(jobsOfPay('pool').map(j=>j.name).join(' and '))+' hours</b> share the pool. Every week (Monday through Sunday) we take what we sold, subtract what it cost and any commissions and hourly pay, and set <b>'+Math.round(CT*100)+'% aside for the Common Table</b>, a shared fund for things that make the whole operation better. What’s left is split by those hours. Every hour counts the same, no matter who works it.</li>':'');
-  if(r.workers==='employees')h+='<li><b>Never less than minimum wage.</b> If what you earn than Michigan’s minimum wage ('+mw+' an hour right now) for the hours you worked that week, the business makes up the difference. Hours past 40 in a week are paid at time-and-a-half.</li>';
+  if(r.workers==='employees')h+='<li><b>Never less than minimum wage.</b> If what you earn comes out below Michigan’s minimum wage ('+mw+' an hour right now) for the hours you worked that week, the business makes up the difference. Hours past 40 in a week are paid at time-and-a-half.</li>';
   h+='<li>Your pay moves with sales. A great week means more; a slow week means less'+(r.workers==='employees'?', but never below the minimum':'')+'. The Dashboard shows it live, so nothing is hidden.</li></ul>'
     +'<h4>Timing</h4><p>'+HUB.rhythm+' A Steward will tell you which day pay goes out.</p>'
     +'<h4>Logging your hours</h4><p>Clock in and out in the Hub’s <b>Time Clock</b> tab, or enter your hours for the day'+(BOOKS.schema.pay&&HUB.jobs.length>1?', and pick the job you’re doing ('+HUB.jobs.map(j=>'<b>'+esc(j.name)+'</b>').join(' or ')+') so you’re paid the right way':'')+'. Log them the same day you work them.</p><h4>Taxes</h4>';
   if(r.workers==='employees')h+='<p>You’re on payroll. Income taxes and Social Security/Medicare are taken out of each paycheck, and you’ll get a W-2 each January. In your first week you’ll fill out a W-4, an MI-W4 and an I-9. Bring ID for the I-9.</p>';
   else if(r.workers==='members')h+='<p>As a trial member of the LLC, nothing is taken out of your pay. You’ll get a K-1 each year, so set part of each payment aside for taxes.</p>';
+  else h+='<p>No taxes are taken out of your pay, so set part of each payment aside. You’ll fill out a W-9, and if you’re paid $2,000 or more in a year you’ll get a 1099-NEC.</p>';
+  return h;
+}
+// regular wages: hourly rate, overtime, minimum wage. No pool, no Common Table.
+function welcomeHourlyHTML(r,pct,mw){
+  const me=(typeof myMemberName==='function'&&myMemberName())||'';const myRate=me?personRate(me):0;
+  let h='<h4>How pay works</h4><ul>'
+    +'<li>You’re paid <b>by the hour</b>'+(myRate>0?', at <b>'+fmt(myRate)+' an hour</b>':'. Your manager will tell you your rate')+'.</li>'
+    +jobsOfPay('commission').map(j=>'<li><b>'+esc(j.name)+'</b> also earns a commission'+(pct?' of '+pct:'')+' on the sales you make.</li>').join('')
+    +jobsOfPay('hourly').filter(j=>+j.rate>0).map(j=>'<li><b>'+esc(j.name)+'</b> work pays $'+(+j.rate).toFixed(2)+' an hour.</li>').join('');
+  if(r.workers==='employees')h+='<li><b>Never less than minimum wage</b> ('+mw+' an hour in Michigan right now).</li><li><b>Overtime:</b> hours past 40 in a week (Monday through Sunday) are paid at time-and-a-half.</li>';
+  if(INCOME_CATS.includes('Tips'))h+='<li><b>Tips</b> are yours and are shared fairly by hours. Owners and managers never take a cut.</li>';
+  h+='</ul><h4>Logging your hours</h4><p>Clock in and out in the Hub’s <b>Time Clock</b> tab, or enter your hours for the day'+(HUB.jobs.length>1?' and pick the job you’re doing ('+HUB.jobs.map(j=>'<b>'+esc(j.name)+'</b>').join(' or ')+')':'')+'. Log them the same day you work them. Your pay comes from the hours you log, so this matters.</p>'
+    +'<h4>Timing</h4><p>Pay is figured each week from the hours logged. Your manager will tell you which day pay goes out.</p><h4>Taxes</h4>';
+  if(r.workers==='employees')h+='<p>You’re on payroll. Income taxes and Social Security/Medicare are taken out of each paycheck, and you’ll get a W-2 each January. In your first week you’ll fill out a W-4, an MI-W4 and an I-9. Bring ID for the I-9.</p>';
+  else if(r.workers==='members')h+='<p>As a member of the LLC, nothing is taken out of your pay. You’ll get a K-1 each year, so set part of each payment aside for taxes.</p>';
   else h+='<p>No taxes are taken out of your pay, so set part of each payment aside. You’ll fill out a W-9, and if you’re paid $2,000 or more in a year you’ll get a 1099-NEC.</p>';
   return h;
 }
@@ -4092,7 +4130,7 @@ function myMemberName(){
   const byFirst=list.filter(n=>normName(n).split(/\s+/)[0]===first);
   return byFirst.length===1?byFirst[0]:p;
 }
-function docBody(d){return typeof d.body==='function'?d.body():d.body;}
+function docBody(d){return plainWords(typeof d.body==='function'?d.body():d.body);}
 function onbRow(member,item){return ONB.rows.find(r=>normName(r.member_name)===normName(member)&&r.item===item);}
 function onbProgress(member){
   const docs=onbDocs().filter(d=>onbRow(member,d.key)).length;
@@ -4169,7 +4207,7 @@ function openOnbDoc(key,forMember){
     h+='<div class="onb-signed">✓ '+(r.status==='paper'?'Signed on paper — recorded by '+esc(data.recorded_by||'a Steward'):'Signed electronically by <b>'+esc(r.signed_name)+'</b>')+' on '+esc(new Date(r.signed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</div>';
   }
   if(self&&(!r||d.kind==='form'||d.kind==='choice')){
-    h+='<div class="onb-sign"><label class="txn-pool" style="margin-top:0;"><input type="checkbox" id="onbAgree"> '+esc(d.agree)+'</label>'
+    h+='<div class="onb-sign"><label class="txn-pool" style="margin-top:0;"><input type="checkbox" id="onbAgree"> '+esc(plainWords(d.agree))+'</label>'
       +'<label class="onb-sign-label">Type your full name to sign</label><input id="onbSignName" class="period-input onb-sig" placeholder="Your full name" value="'+(r?esc(r.signed_name||''):'')+'">'
       +'<div class="txn-actions"><button class="btn-secondary" onclick="closeOnbModal()">Later</button><button class="btn-green" id="onbSignBtn" onclick="signOnbDoc()">'+(r?'Update &amp; re-sign':'Sign')+'</button></div></div>';
   }else if(!self&&!r&&isStewardUser()){
@@ -4189,7 +4227,7 @@ async function signOnbDoc(){
   const name=document.getElementById('onbSignName').value.trim();
   if(!document.getElementById('onbAgree').checked){toast('Check the box to agree first',true);return;}
   if(name.length<3||!/\s/.test(name)){toast('Type your full name (first and last) to sign',true);return;}
-  const data={text:document.querySelector('#onbModalBody .onb-doc').innerText.trim(),agreed:d.agree};
+  const data={text:document.querySelector('#onbModalBody .onb-doc').innerText.trim(),agreed:plainWords(d.agree)};
   if(d.kind==='form'){
     for(const[k]of d.fields)data[k]=(document.getElementById('onbf_'+k).value||'').trim();
     const miss=d.required.filter(k=>!data[k]);
@@ -4283,6 +4321,11 @@ function minWageFor(dateISO){
   const ks=Object.keys(mw).map(Number).filter(k=>k<=y).sort((a,b)=>b-a);
   return ks.length?+mw[ks[0]]:13.73;
 }
+// each person's own hourly rate (Team → Pay Rules), used when a job has no fixed rate
+function personRate(name){
+  const r=payRules().rates||{};const k=normName(name);
+  const hit=Object.keys(r).find(n=>normName(n)===k);return hit?(+r[hit]||0):0;
+}
 function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0);}
 async function loadAcctSettings(){
   if(!BOOKS.schema.acct)return;
@@ -4322,7 +4365,13 @@ function computeWeekPay(revs,expTotal,times,endISO){
     const h=entryHours(t);if(!h)return;
     const p=P(n);const job=jobCfg(t.job||defaultJobKey());p.byJob[job.key]=(p.byJob[job.key]||0)+h;
     if(job.pay==='commission'&&rate>0)p.marketH+=h;
-    else if(job.pay==='hourly'&&+job.rate>0){p.hourlyH+=h;p.hourly+=h*(+job.rate);}
+    else if(job.pay==='hourly'){
+      const r=+job.rate>0?+job.rate:personRate(p.name);
+      if(r>0){p.hourlyH+=h;p.hourly+=h*r;}
+      else if(hourlyStyle()){p.hourlyH+=h;p.noRateH=(p.noRateH||0)+h;}   // no rate yet: the minimum-wage floor covers it
+      else p.kitchenH+=h;
+    }
+    else if(hourlyStyle()&&job.pay==='pool'){p.hourlyH+=h;p.noRateH=(p.noRateH||0)+h;}
     else p.kitchenH+=h;
   });
   const hourlyTotal=Object.values(people).reduce((s,p)=>s+p.hourly,0);
@@ -4370,11 +4419,12 @@ function payBreakdownLine(p,res){
   const bits=[];
   if(p.commission>0.004)bits.push('Commission '+fmt(p.commission));
   if(p.hourly>0.004)bits.push('Hourly '+fmt(p.hourly));
-  if(p.share>0.004)bits.push('Shared hourly '+fmt(p.share));
+  if(hourlyStyle()&&p.owner){const prof=p.share-p.ownerCover;if(Math.abs(prof)>0.004)bits.push('Owner’s profit '+fmt(prof));}
+  else if(p.share>0.004)bits.push('Shared hourly '+fmt(p.share));
   if(p.topup>0.004)bits.push('<b style="color:var(--tan);">Min-wage top-up '+fmt(p.topup)+'</b>');
   if(p.ot>0.004)bits.push('Overtime '+fmt(p.ot));
   if(p.tips>0.004)bits.push('Tips '+fmt(p.tips));
-  if(p.ownerCover>0.004)bits.push('<span style="color:var(--red);">Covered top-ups −'+fmt(p.ownerCover)+'</span>');
+  if(p.ownerCover>0.004&&!(hourlyStyle()&&p.owner))bits.push('<span style="color:var(--red);">Covered top-ups −'+fmt(p.ownerCover)+'</span>');
   return bits.join(' · ');
 }
 
@@ -4417,16 +4467,18 @@ async function refreshDashboard(){
     const totalHours=res.people.reduce((s,p)=>s+p.hours,0);
     const paidOut=res.people.reduce((s,p)=>s+p.pay,0);
     const avgRate=totalHours>0?paidOut/totalHours:0;
-    document.getElementById('dash-week-pool').textContent=fmt(res.pool);
+    document.getElementById('dash-week-pool').textContent=fmt(hourlyStyle()?res.pool-res.need:res.pool);
     document.getElementById('dash-week-sub').textContent='Revenue: '+fmt(weekRevTotal)+' · Expenses: '+fmt(expTotal)+(res.commTotal?' · Commission: '+fmt(res.commTotal):'');
     document.getElementById('dash-accum-total').textContent=fmt(paidOut);
     document.getElementById('dash-avg-rate').textContent='Avg earned: '+fmt(avgRate)+'/hr'+(res.employees?' · min wage '+fmt(res.mw):'');
-    document.getElementById('dash-pool').textContent=fmt(res.pool);
-    document.getElementById('dash-pool-sub').textContent='Shared by '+res.kTot.toFixed(1)+' pool hours';
+    document.getElementById('dash-pool').textContent=fmt(hourlyStyle()?res.pool-res.need:res.pool);
+    document.getElementById('dash-pool-sub').textContent=hourlyStyle()?'Sales minus expenses and pay, before taxes':'Shared by '+res.kTot.toFixed(1)+' pool hours';
     document.getElementById('dash-ct').textContent=fmt(res.ct);
     const revEl=document.getElementById('revenue');if(revEl)revEl.value=weekRevTotal.toFixed(2);
     calculate();
     drawRiver(weekRev,allExp,res.pool,res.ct);
+    if(hourlyStyle()){const svg=document.getElementById('riverSvg');if(svg)svg.querySelectorAll('text').forEach(t=>{if(t.textContent==='POOL')t.textContent='PROFIT';else if(/^CT \$/.test(t.textContent))t.textContent='';});}
+    applyPayStyleLabels();
     const sharesEl=document.getElementById('dash-member-shares');
     if(sharesEl){
       const show=members.map(m=>res.people.find(p=>p.name===m.name)||{name:m.name,owner:!!ownerOf(m.name),hours:0,kitchenH:0,marketH:0,hourlyH:0,hourly:0,byJob:{},commission:0,share:0,topup:0,ot:0,ownerCover:0,pay:0});
@@ -4438,13 +4490,16 @@ async function refreshDashboard(){
         const line=payBreakdownLine(p,res);
         return '<div class="member-week-row" style="flex-wrap:wrap;">'
           +'<div class="mwr-avatar" style="background:'+col+';">'+esc((p.name||'?')[0].toUpperCase())+'</div>'
-          +'<div class="mwr-info"><div class="mwr-name">'+esc(p.name)+' <span class="role-badge '+(role==='Steward'?'role-steward':'role-contributor')+'">'+esc(role)+'</span></div>'
-          +'<div class="mwr-detail">'+hrsTxt+(p.hours>0?' · '+fmt(p.pay/p.hours)+'/hr':'')+(p.otHours>0?' · <b>'+p.otHours.toFixed(1)+' OT hrs</b>':'')+'</div>'
+          +'<div class="mwr-info"><div class="mwr-name">'+esc(p.name)+' <span class="role-badge '+(role==='Steward'?'role-steward':'role-contributor')+'">'+esc(hourlyStyle()&&p.owner?'Owner':roleLabel(role))+'</span></div>'
+          +'<div class="mwr-detail">'+hrsTxt+(p.hours>0&&!(hourlyStyle()&&p.owner)?' · '+fmt(p.pay/p.hours)+'/hr':'')+(p.otHours>0?' · <b>'+p.otHours.toFixed(1)+' OT hrs</b>':'')+'</div>'
           +(line?'<div class="mwr-detail">'+line+'</div>':'')+'</div>'
           +'<div class="mwr-amount">'+fmt(p.pay)+'</div></div>';
       }).join('')
-      +(res.need>0.004?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
-      +(BOOKS.schema.pay&&!commissionOn()&&res.employees?'<div class="pay-note">Market commission isn’t set yet, so every hour shares the pool. Set it in <b>Team → Pay Rules</b>.</div>':'');
+      +(res.need>0.004&&hourlyStyle()?'<div class="pay-note">Overtime and minimum-wage top-ups this week: <b>'+fmt(res.need)+'</b>, included in pay above'+(res.pool-res.need<0?'. That’s more than this week’s sales covered, so <b style="color:var(--red);">'+fmt(res.need-res.pool)+' comes from business cash</b>':'')+'.</div>':'')
+      +(res.need>0.004&&!hourlyStyle()?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
+      +(!hourlyStyle()&&BOOKS.schema.pay&&!commissionOn()&&res.employees&&jobsOfPay('commission').length?'<div class="pay-note">Market commission isn’t set yet, so every hour shares the pool. Set it in <b>Team → Pay Rules</b>.</div>':'')
+      +(()=>{const miss=res.people.filter(p=>!p.owner&&p.noRateH>0).map(p=>p.name);
+        return miss.length&&isStewardUser()?'<div class="pay-note"><b>'+esc(miss.join(', '))+'</b> '+(miss.length>1?'don’t':'doesn’t')+' have an hourly rate yet, so '+(miss.length>1?'they’re':'they’re')+' shown at minimum wage. Set rates in <b>Team → Pay Rules</b>.</div>':'';})();
     }
     document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     if(isCurrentWeek){
@@ -4455,6 +4510,23 @@ async function refreshDashboard(){
       }
     }
   }catch(e){console.warn('Dashboard:',e.message);document.getElementById('dash-updated-time').textContent='Error — tap refresh';}
+}
+// labels on the dashboard cards: pool wording for shared-pool businesses, plain profit wording for regular wages
+function applyPayStyleLabels(){
+  const hs=hourlyStyle();
+  const wl=document.querySelector('.week-card.current .week-card-label');if(wl)wl.textContent=hs?'Left After Pay This Week':'This Week\'s Pool';
+  const pl=document.querySelector('.dash-card.lake .dash-label');if(pl)pl.textContent=hs?'Profit After Pay':'This Week\'s Pool';
+  const ctCard=document.getElementById('dash-ct');if(ctCard&&ctCard.closest('.dash-card'))ctCard.closest('.dash-card').style.display=(hs&&!(CT>0))?'none':'';
+  const sub=document.getElementById('dashPaySub');
+  if(sub){
+    const lc=a=>a.map(j=>j.name.toLowerCase()).join(' and ');
+    const bits=[];
+    if(jobsOfPay('hourly').length||(hs&&jobsOfPay('pool').length))bits.push(hs?'Hours worked × each person’s hourly rate':'Hourly pay for '+lc(jobsOfPay('hourly'))+' work');
+    if(jobsOfPay('commission').length)bits.push('commission for '+lc(jobsOfPay('commission'))+' work');
+    if(!hs&&jobsOfPay('pool').length)bits.push('a share of the pool for '+lc(jobsOfPay('pool'))+' hours');
+    let t=bits.join(', ').replace(/, ([^,]*)$/,' and $1');t=t.charAt(0).toUpperCase()+t.slice(1);
+    sub.textContent=t+(hs?'. Overtime past 40 hours, and never less than minimum wage.':'.');
+  }
 }
 // team table: show this week's pay from the engine
 function calculate(){
@@ -4473,7 +4545,7 @@ function renderTeam(){
   members.forEach(m=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input class="member-name-input" type="text" value="${esc(m.name)}" placeholder="Name" oninput="updateMember(${m.id},'name',this.value)"></td>
-      <td><select class="role-select" onchange="updateMember(${m.id},'role',this.value)"><option ${m.role==='Steward'?'selected':''}>Steward</option><option ${m.role==='Contributor'?'selected':''}>Contributor</option></select></td>
+      <td><select class="role-select" onchange="updateMember(${m.id},'role',this.value)"><option value="Steward" ${m.role==='Steward'?'selected':''}>${roleLabel('Steward')}</option><option value="Contributor" ${m.role==='Contributor'?'selected':''}>${roleLabel('Contributor')}</option></select></td>
       <td style="text-align:center;"><input class="member-hours-input" type="number" value="${esc(m.manualHours)}" placeholder="0" min="0" step="0.5" oninput="updateMember(${m.id},'manualHours',this.value)" title="Manual override"></td>
       <td style="text-align:right;"><div id="share-${m.id}">$0.00</div><div id="pct-${m.id}" style="font-size:11px;color:var(--mid);"></div></td>
       <td>${members.length>1?`<button class="remove-btn" onclick="removeMember(${m.id})">×</button>`:''}</td>`;
@@ -4590,13 +4662,25 @@ async function savePayRules(){
   const mw=Object.assign({},payRules().minWage);
   document.querySelectorAll('.pr-mw').forEach(i=>{const v=parseFloat(i.value);if(v>0)mw[i.dataset.y]=v;});
   const tm=document.getElementById('prTips');
-  const pay={workers:document.getElementById('prWorkers').value,commissionPct:pct>0?pct:null,minWage:mw,tipMode:tm?tm.value:'pool'};
+  const rates=Object.assign({},payRules().rates||{});
+  document.querySelectorAll('.pr-rate').forEach(i=>{const v=parseFloat(i.value);if(v>0)rates[i.dataset.n]=Math.round(v*100)/100;else delete rates[i.dataset.n];});
+  const pay={workers:document.getElementById('prWorkers').value,commissionPct:pct>0?pct:null,minWage:mw,tipMode:tm?tm.value:'pool',rates};
   if(await saveAcct({pay})){BOOKS._weeks=null;renderPayRules();renderRevWorkers();refreshDashboard();loadRevLogEntries();}
 }
 async function toggleEmployerStep(k,on){
   const steps=Object.assign({},(BOOKS.acct&&BOOKS.acct.employer)||{});
   if(on)steps[k]=isoLocal(new Date());else delete steps[k];
   if(await saveAcct({employer:steps},true))renderPayRules();
+}
+// each person's hourly rate: shown when any job pays by the hour without a fixed rate
+function payRatesHTML(r,canEdit){
+  const needs=HUB.jobs.some(j=>j.pay==='hourly'&&!(+j.rate>0))||(hourlyStyle()&&HUB.jobs.some(j=>j.pay==='pool'));
+  if(!needs)return'';
+  const people=(typeof members!=='undefined'?members:[]).filter(m=>m.name&&!ownerOf(m.name));
+  const mw=minWageFor(todayISO());
+  return '<div class="card-sub" style="margin-top:14px;"><b>Hourly rates.</b> What each person makes an hour. Leave it blank and they’re paid Michigan’s minimum wage ('+fmt(mw)+'). Owners take profit instead of a rate.</div>'
+    +(people.length?'<div class="txn-grid">'+people.map(m=>'<div><label>'+esc(m.name)+'</label><input class="period-input pr-rate" data-n="'+esc(m.name)+'" type="number" inputmode="decimal" step="0.25" min="0" placeholder="'+mw.toFixed(2)+'" value="'+(personRate(m.name)||'')+'"'+(canEdit?'':' disabled')+'></div>').join('')+'</div>'
+      :'<div class="bk-empty">Add your team in the table above, then set their rates here.</div>');
 }
 function renderPayRules(){
   const el=document.getElementById('payRules');if(!el)return;
@@ -4605,17 +4689,17 @@ function renderPayRules(){
   const y=new Date().getFullYear();
   let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Pay Rules</div>'
     +'<div class="card-sub">How each week’s money becomes pay. '+esc(payModelSentence())+' '
-    +(r.workers==='employees'?'If anyone’s week comes out below Michigan’s minimum wage for their hours, it gets topped up, with overtime at 1.5× their actual rate past 40 hours. Top-ups come out of the Stewards’ shares first.':'')+'</div>';
+    +(r.workers==='employees'?(hourlyStyle()?'Anyone paid by the hour gets at least Michigan’s minimum wage, with overtime at 1.5× their regular rate past 40 hours in a week.':'If anyone’s week comes out below Michigan’s minimum wage for their hours, it gets topped up, with overtime at 1.5× their actual rate past 40 hours. Top-ups come out of the Stewards’ shares first.'):'')+'</div>';
   if(!ok)h+='<div class="ck-item warn"><span class="ck-ico">!</span><span class="ck-text">Run the setup SQL at the top of <b>Books</b> to turn on job tags, market commission and pay rules.</span></div>';
   h+='<div class="txn-grid">'
-    +'<div class="txn-full"><label>Contributors are</label><select id="prWorkers" class="period-select"'+(st&&ok?'':' disabled')+'>'
+    +'<div class="txn-full"><label>'+(hourlyStyle()?'The people who work here are':'Contributors are')+'</label><select id="prWorkers" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['employees','Employees — on payroll, minimum-wage floor'],['contractors','Independent contractors — 1099s'],['members','Trial LLC members — K-1s']].map(([v,l])=>'<option value="'+v+'"'+(r.workers===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
-    +'<div><label>Market commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'
+    +(jobsOfPay('commission').length||+r.commissionPct>0?'':'<span id="prCommHide" style="display:none">')+'<div><label>Commission %</label><input id="prComm" type="number" inputmode="decimal" class="period-input" placeholder="Not set" value="'+(r.commissionPct||'')+'"'+(st&&ok?'':' disabled')+'></div>'+(jobsOfPay('commission').length||+r.commissionPct>0?'':'</span>')
     +'<div class="txn-full"><label>Tips</label><select id="prTips" class="period-select"'+(st&&ok?'':' disabled')+'>'
     +[['pool','Shared by hours among everyone except owners and managers'],['own','Each person keeps tips on the sales they made; the rest are shared by hours']].map(([v,l])=>'<option value="'+v+'"'+((r.tipMode||'pool')===v?' selected':'')+'>'+l+'</option>').join('')+'</select>'
     +'<div class="bk-sub" style="margin-top:4px;">Log tips as income under <b>Tips</b> (sales imports do this for you). Tips stay out of the sales pool, never count toward minimum wage, and by federal law owners and managers can’t share in them. Because the Hub always pays at least full minimum wage, kitchen and other behind-the-scenes workers can share too.</div></div>'
     +[y,y+1].map(yy=>'<div><label>Michigan minimum wage '+yy+'</label><input class="period-input pr-mw" data-y="'+yy+'" type="number" inputmode="decimal" step="0.01" value="'+(r.minWage[yy]||'')+'"'+(st&&ok?'':' disabled')+'></div>').join('')
-    +'</div>'+(st&&ok?'<div class="bk-actions"><button class="btn-green" onclick="savePayRules()">Save pay rules</button></div>':'')+'</div>';
+    +'</div>'+payRatesHTML(r,st&&ok)+(st&&ok?'<div class="bk-actions"><button class="btn-green" onclick="savePayRules()">Save pay rules</button></div>':'')+'</div>';
   if(st&&r.workers==='employees'){
     const steps=(BOOKS.acct&&BOOKS.acct.employer)||{};
     const done=EMPLOYER_STEPS.filter(s=>steps[s[0]]).length;
@@ -4654,7 +4738,7 @@ function renderClock(){
     <div class="clock-member" id="clock-${m.id}">
       <div class="clock-member-header" onclick="toggleClock(${m.id})">
         <span class="clock-name">${esc(m.name||'Member')}</span>
-        <span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${esc(m.role)}</span>
+        <span class="role-badge ${m.role==='Steward'?'role-steward':'role-contributor'}">${esc(roleLabel(m.role))}</span>
         <span class="clock-hrs">${getMemberHours(m).toFixed(2)} hrs</span>
       </div>
       <div class="clock-body" id="clockBody-${m.id}" style="display:none;">
