@@ -7033,10 +7033,17 @@ async function enterApp(){
   await loadPlan();renderPlanBanner();planGate();await termsGate();
   renderHelpButton();maybeStartTour();
 }
+// came from The People's Voices sign-up form: open on "Create an account" with their email filled in
+function prefillFromSignup(){
+  let em='';try{em=localStorage.getItem('ohb_prefill_email')||'';localStorage.removeItem('ohb_prefill_email');}catch(e){}
+  if(!em||typeof PENDING_INVITE!=='undefined'&&PENDING_INVITE)return;
+  setAuthMode('signup');const f=document.getElementById('loginEmail');if(f&&!f.value)f.value=em;
+  const p=document.getElementById('loginPassword');if(p)p.focus();
+}
 async function restoreSession(){
   await loadInviteFromUrl();
   let refreshToken;try{refreshToken=localStorage.getItem(REMEMBER_KEY);}catch(e){return false;}
-  if(!refreshToken)return false;
+  if(!refreshToken){prefillFromSignup();return false;}
   const r=document.getElementById('restoringSession');if(r)r.style.display='block';
   try{
     const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refreshToken})});
