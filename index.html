@@ -12374,7 +12374,9 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     setDone(shown.filter(s=>services.includes(s.id)));
     setPicked({});
     loadMine();
-    onToast && onToast(data === 'already' ? 'We already have your sign-up. Thank you!' : '✓ Thanks! We\'ll be in touch soon.');
+    // hand the email to the Hub so its sign-up is already filled in (same site, nothing in the address bar)
+    try { localStorage.setItem('ohb_prefill_email', (form.email || '').trim()); } catch(e) {}
+    onToast && onToast(data === 'already' ? 'We already have your sign-up. Thank you!' : '✓ You\'re signed up! Here\'s your next step.');
   };
 
   const card = {background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'16px 18px',marginBottom:14};
@@ -12437,18 +12439,22 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       done
         ? h('div',{style:{fontFamily:LB}},
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
-            h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},
-              'We\'ll email you within a couple of days to get you set up. You don\'t pay anything until your service starts, and you can cancel any time. ',
-              'Sign in here with the same email any time to see your alerts and change what we watch for.'),
-            done.some(isHubService) && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 12px',fontSize:14,color:'#1a4a2a',lineHeight:1.6,marginBottom:10}},
-              h('strong',null,'Operations Hub: '),'we\'ll email you a sign-up code. Open the Hub, make an account with this same email, and enter the code to set up your business. Your 3 free months start that day.'),
-            done.filter(s=>s.status === 'available' && s.pay_url && !isHubService(s)).map(s=>h('a',{key:s.id,href:s.pay_url,target:'_blank',rel:'noopener',
-              style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
-              'Start ' + s.name + ' now →')),
+            done.some(isHubService) && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'12px 14px',fontSize:14,color:'#1a4a2a',lineHeight:1.6,marginBottom:10}},
+              h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,marginBottom:4}},'Next: set up your Operations Hub'),
+              'Make your account with this same email, tell the Hub about your business, and add a card to start your 3 free months. You won\'t be charged until they\'re up, and the Hub walks you through everything from there. About 5 minutes.',
+              done.some(x=>!isHubService(x)) && h('div',{style:{marginTop:6}},'Watch alerts and the Bid & grant finder come with your Hub, so there\'s nothing extra to pay for them.'),
+              h('a',{href:'/operations-hub.html',style:{display:'inline-block',marginTop:10,background:'#1a6b3c',color:'#fff',textDecoration:'none',borderRadius:8,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14}},'Set up my Hub →')),
+            !done.some(isHubService) && h('div',null,
+              done.filter(x=>x.status === 'available' && x.pay_url && !isHubService(x)).length
+                ? h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'Last step: start your subscription below. Your service begins as soon as it goes through, and you can cancel any time.')
+                : h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'You\'re all set. Sign in here with the same email any time to see your alerts and change what we watch for.'),
+              done.filter(x=>x.status === 'available' && x.pay_url && !isHubService(x)).map(x=>h('a',{key:x.id,href:x.pay_url,target:'_blank',rel:'noopener',
+                style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
+                'Start ' + x.name + ' →'))),
             h('button',{onClick:()=>setDone(null),style:{display:'block',marginTop:6,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Sign up another business'))
         : h('div',null,
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Sign up'),
-            h('div',{style:{fontFamily:LB,fontSize:13,color:'#777',marginBottom:12}},'No payment today. We\'ll reach out to set things up, and you pay only once your service starts.'),
+            h('div',{style:{fontFamily:LB,fontSize:13,color:'#777',marginBottom:12}},'Takes a minute, and there\'s nobody to call. Sign up, then follow the next step on screen. The Operations Hub is free for 3 months, and you can cancel anything any time.'),
             bizLabel('Which services?'),
             h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:12}},
               signupServices.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer',flexWrap:'wrap'}},
