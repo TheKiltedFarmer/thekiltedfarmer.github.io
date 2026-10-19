@@ -4326,7 +4326,7 @@ function personRate(name){
   const r=payRules().rates||{};const k=normName(name);
   const hit=Object.keys(r).find(n=>normName(n)===k);return hit?(+r[hit]||0):0;
 }
-function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0);}
+function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0)&&jobsOfPay('commission').length>0;}
 async function loadAcctSettings(){
   if(!BOOKS.schema.acct)return;
   const rows=await sb('kf_settings?key=eq.accountant&select=value');
