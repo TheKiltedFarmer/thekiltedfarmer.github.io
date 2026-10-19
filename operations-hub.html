@@ -705,6 +705,14 @@ details[open]>summary.card-title::after{content:'▴';}
 .auth-switch{color:rgba(255,255,255,.7);font-size:14px;text-align:center;margin-top:16px;}
 .auth-switch a{color:var(--tan-light);font-weight:700;}
 .auth-note{color:rgba(255,255,255,.4);font-size:12px;text-align:center;margin-top:10px;}
+.plan-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-left:4px solid var(--tan,#c8a96a);}
+.plan-banner>div{flex:1 1 220px;min-width:0;}
+.plan-btn{display:inline-block;text-decoration:none;text-align:center;padding:10px 16px;border-radius:8px;}
+.plan-gate{position:fixed;inset:0;z-index:9999;background:rgba(20,28,20,.92);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;}
+.plan-gate-in{background:#fff;color:#222;max-width:520px;width:100%;border-radius:14px;padding:24px;text-align:center;}
+.plan-gate-in h2{margin:0 0 10px;}
+.plan-gate-in p{line-height:1.5;}
+.su-terms{font-size:12px;color:#666;margin-top:10px;}
 .invite-box{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:14px;line-height:1.4;}
 .invite-box.bad{border-color:#ff8a80;color:#ffcdd2;}
 .setup-gate{position:fixed;inset:0;z-index:1100;background:var(--cream);overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -767,7 +775,7 @@ details[open]>summary.card-title::after{content:'▴';}
     <div id="loginError" style="color:#ff8a80;font-size:13px;margin-top:12px;text-align:center;"></div>
     <div id="restoringSession" style="display:none;color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;text-align:center;">Signing you back in...</div>
     <div id="authSwitch" class="auth-switch">New here? <a href="#" onclick="setAuthMode('signup');return false;">Create an account</a></div>
-    <div class="auth-note">For Michigan small businesses in the Jackson County pilot.</div>
+    <div class="auth-note">Built in Michigan for Michigan small businesses. 3 months free.</div>
   </div>
 </div>
 
@@ -789,7 +797,8 @@ details[open]>summary.card-title::after{content:'▴';}
       <div class="txn-full"><label>The people who work with you are</label><select id="suWorkers" class="period-select"><option value="employees">Employees, on payroll (minimum wage applies)</option><option value="contractors">Independent contractors (1099)</option><option value="members">Members of the LLC (K-1)</option></select></div>
       <div><label>Common Table %</label><input id="suCT" type="number" inputmode="decimal" class="period-input"></div>
       <div id="suCommWrap"><label>Commission %</label><input id="suComm" type="number" inputmode="decimal" class="period-input"></div>
-      <div class="txn-full"><label>Pilot code</label><input id="suPilot" class="period-input" autocapitalize="characters" placeholder="From The Kilted Farmers"></div>
+      <div class="txn-full" id="suPilotWrap"><label>Sign-up code</label><input id="suPilot" class="period-input" autocapitalize="characters" placeholder="The code you were given"></div>
+      <div class="txn-full bk-sub" id="suTerms">Setting up starts your 3 free months. By setting up, you agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> notes. <a href="/hub-help.html" target="_blank" rel="noopener">Help</a></div>
     </div>
     <div class="bk-sub" style="margin-top:8px;">The Common Table is a share of each week’s profit set aside for things that make the whole business better. Set it to 0 if you don’t want one.</div>
     <div id="suErr" class="su-err"></div>
@@ -4325,6 +4334,7 @@ function printOnbPacket(member){
   w.document.close();
 }
 
+const MI_CITY_TAX=['Albion','Battle Creek','Benton Harbor','Big Rapids','Detroit','East Lansing','Flint','Grand Rapids','Grayling','Hamtramck','Highland Park','Hudson','Ionia','Jackson','Lansing','Lapeer','Muskegon','Muskegon Heights','Pontiac','Port Huron','Portland','Saginaw','Springfield','Walker'];
 // ═══════════════════════════════════════════════════════
 // PAY ENGINE — commission + hourly + shared pool by hours + minimum-wage floor (jobs set per business)
 // One calculation used by the Dashboard, Team, History, Books and payroll export
@@ -4681,6 +4691,7 @@ function renderPayRules(){
     const done=EMPLOYER_STEPS.filter(s=>steps[s[0]]).length;
     h+='<div class="card"><div class="ck-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Becoming an Employer</div><span class="ck-badge">'+done+' of '+EMPLOYER_STEPS.length+'</span></div>'
       +'<div class="card-sub">One-time setup before the first paycheck. Each new person also needs a W-4, MI-W4, I-9 and a new-hire report. Those are on each person’s onboarding checklist above.</div>'
+      +'<div class="ck-item"><span class="ck-ico">i</span><span class="ck-text"><b>City income tax.</b> '+esc(MI_CITY_TAX.length+' Michigan cities')+' have their own income tax: '+esc(MI_CITY_TAX.join(', '))+'. If your business is in one of them, or your people live in one, you may need to withhold city tax too. Tell your payroll service the city; it handles the withholding and filing. <a href="/hub-help.html#city-tax" target="_blank" rel="noopener">More</a></span></div>'
       +EMPLOYER_STEPS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox"'+(steps[k]?' checked':'')+(ok?'':' disabled')+' onchange="toggleEmployerStep(\''+k+'\',this.checked)"><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+(steps[k]?' · done '+esc(prettyDate(steps[k])):'')+'</div></div></label>').join('')
       +'<div class="bk-actions"><button class="btn-secondary" onclick="payrollCSV('+y+')">⬇ Payroll CSV ('+y+')</button></div></div>';
   }
@@ -6318,6 +6329,61 @@ function goTabSafe2(id){const t=[...document.querySelectorAll('.tab')].find(x=>(
 if(typeof refreshDashboard==='function'){const _rdC=refreshDashboard;refreshDashboard=async function(){const r=await _rdC.apply(this,arguments);try{await renderComingUp();}catch(e){console.warn('coming up',e);}return r;};}
 
 // ═══════════════════════════════════════════════════════
+// DOWNLOAD EVERYTHING — your business's data, all of it, in plain spreadsheets
+// It's your data. You can always take it with you.
+// ═══════════════════════════════════════════════════════
+const EXPORT_TABLES=[
+  ['ohb_revenue_entries','sales-and-income'],['ohb_expenses','expenses'],['ohb_transactions','other-transactions'],['ohb_bank_lines','bank-statement-lines'],
+  ['ohb_pay_periods','pay-weeks'],['ohb_time_entries','hours'],['ohb_team_members','team'],['ohb_shifts','schedule'],['ohb_time_off','time-off'],['ohb_shift_swaps','shift-trades'],
+  ['ohb_invoices','invoices-and-estimates'],['ohb_bills','bills-and-renewals'],['ohb_inv_items','inventory'],['ohb_inv_moves','inventory-changes'],
+  ['ohb_mileage','mileage'],['ohb_budgets','budgets'],['ohb_onboarding','new-hire-paperwork'],['ohb_recipes','recipes'],['ohb_recipe_ingredients','recipe-ingredients'],['ohb_settings','settings']
+];
+function exportCell(v){
+  if(v===null||v===undefined)return'';
+  if(typeof v==='object')v=JSON.stringify(v);
+  v=String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+function exportCSV(rows){
+  if(!rows.length)return'';
+  const cols=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(c=>c!=='business_id');
+  return [cols.join(',')].concat(rows.map(r=>cols.map(c=>exportCell(r[c])).join(','))).join('\r\n');
+}
+function loadJSZip(){
+  if(window.JSZip)return Promise.resolve(window.JSZip);
+  return new Promise((ok,bad)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=()=>ok(window.JSZip);s.onerror=()=>bad(new Error('Couldn’t load the zip tool'));document.head.appendChild(s);});
+}
+async function exportAll(){
+  toast('Gathering everything…');
+  const files=[];const counts=[];
+  for(const[t,name]of EXPORT_TABLES){
+    try{const rows=await sbAll(t+'?select=*');if(rows.length){files.push([name+'.csv',exportCSV(rows)]);counts.push(name+': '+rows.length);}}
+    catch(e){/* a tool that isn't set up yet has nothing to export */}
+  }
+  const receipts=[];
+  files.forEach(([,csv])=>{(csv.match(/https?:\/\/[^,"\s]+\/storage\/v1\/object\/public\/[^,"\s]+/g)||[]).forEach(u=>receipts.push(u));});
+  const biz=(typeof HUB!=='undefined'&&HUB.bizName)||'Operations Hub';
+  const readme='Everything from '+biz+'\'s Operations Hub, downloaded '+new Date().toLocaleString('en-US')+'.\r\n\r\n'
+    +'Each file opens in Excel, Google Sheets or Numbers.\r\n\r\n'+counts.join('\r\n')
+    +(receipts.length?'\r\n\r\nReceipt photos stay online at the addresses in receipt-photos.txt. Open any of them to save a copy.':'');
+  if(receipts.length)files.push(['receipt-photos.txt',[...new Set(receipts)].join('\r\n')]);
+  files.unshift(['READ-ME.txt',readme]);
+  const slug=(typeof fileSlug==='function'?fileSlug():'hub')+'-all-data-'+isoLocal(new Date());
+  try{
+    const JSZip=await loadJSZip();const zip=new JSZip();const dir=zip.folder(slug);
+    files.forEach(([n,c])=>dir.file(n,'﻿'+c));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=slug+'.zip';document.body.appendChild(a);a.click();a.remove();
+    toast('Downloaded: '+(files.length-1)+' files');
+  }catch(e){
+    // no zip tool (offline, blocked): hand over the files one at a time
+    files.forEach(([n,c],i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+c],{type:n.endsWith('.csv')?'text/csv':'text/plain'}));a.download=slug+'-'+n;document.body.appendChild(a);a.click();a.remove();},i*400));
+    toast('Downloading '+files.length+' files one at a time');
+  }
+}
+// a way out from the Books → Taxes page too, in both Hubs
+if(typeof renderBooksTaxes==='function'){const _rbtE=renderBooksTaxes;renderBooksTaxes=function(){return _rbtE.apply(this,arguments)+'<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Data</div><div class="card-sub">Everything in the Hub, in plain spreadsheets you can open anywhere: sales, expenses, pay, hours, schedule, invoices, inventory and paperwork. It’s yours, and you can take it with you any time.</div><div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button></div></div>';};}
+
+// ═══════════════════════════════════════════════════════
 // OPERATIONS HUB for Michigan small businesses — one Hub, many businesses
 // Every record belongs to a business; the database only shows people their own.
 // ═══════════════════════════════════════════════════════
@@ -6549,6 +6615,7 @@ async function enterApp(){
   applyBizConfig();
   await autoInit();
   renderStartHere();
+  await loadPlan();renderPlanBanner();planGate();
 }
 async function restoreSession(){
   await loadInviteFromUrl();
@@ -6575,6 +6642,8 @@ function signOut(){
 let SU_TYPE='food';
 function showSetup(){
   const g=document.getElementById('setupGate');g.style.display='block';
+  // open sign-up: no code needed
+  (PLAN.cfg?Promise.resolve():loadPlan()).then(()=>{const w=document.getElementById('suPilotWrap');if(w)w.style.display=PLAN.cfg&&PLAN.cfg.open_signup?'none':'';});
   document.getElementById('suCounty').innerHTML='<option value="">Pick your county…</option>'+MI_COUNTIES.map(c=>'<option>'+esc(c)+'</option>').join('');
   document.getElementById('suTypes').innerHTML=Object.entries(PRESETS).map(([k,p])=>'<button type="button" class="preset-card'+(k===SU_TYPE?' on':'')+'" data-k="'+k+'" onclick="pickPreset(\''+k+'\')"><b>'+esc(p.label)+'</b><span>'+esc(p.desc)+'</span><em>'+esc(p.jobs.map(j=>j.name).join(' · '))+'</em></button>').join('');
   document.getElementById('suBack').style.display=BIZ.list.length?'inline':'none';
@@ -6596,7 +6665,7 @@ async function createBusiness(){
   if(owner.length<2){err.textContent='Enter your name';return;}
   if(!county){err.textContent='Pick the county your business is in';return;}
   if(!document.getElementById('suMI').checked){err.textContent='The Hub is for Michigan businesses. Check the box to confirm yours is one.';return;}
-  if(!pilot){err.textContent='Enter the pilot code you were given';return;}
+  if(!pilot&&!(PLAN.cfg&&PLAN.cfg.open_signup)){err.textContent='Enter the sign-up code you were given';return;}
   const settings=presetSettings(SU_TYPE);settings.ct=Math.max(0,Math.min(50,parseFloat(v('suCT'))||0));
   const btn=document.getElementById('suBtn');btn.disabled=true;btn.textContent='Setting up…';
   try{
@@ -6671,7 +6740,7 @@ async function renderSettings(){
     +'<div class="txn-grid" style="margin-top:12px;"><div><label>Their name</label><input id="invName" class="period-input" placeholder="As it shows on the team"></div>'
     +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member (Contributor)</option><option value="manager">Manager (Steward)</option>'+(isOwner?'<option value="owner">Co-owner (Steward)</option>':'')+'</select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
-  h+=trialCardHTML();
+  h+=planCardHTML();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
     +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Sign up there with the same email you use here ('+esc((currentUser&&currentUser.email)||'')+') so we can match them up.</div>'
     +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
@@ -6802,6 +6871,88 @@ function trialCardHTML(){
       :'Your '+TRIAL_MONTHS+' free months ended on '+endTxt+'. Nothing has been switched off. Keeping the Hub is $10 a month, with Watch alerts, the Bid & grant finder and rule explainers included. We’ll be in touch.')
     +'</div></div>';
 }
+
+// ═══ PLAN & BILLING ═══
+// Trial: 3 free months from setup. Then $10 a month through Stripe. If nothing's paid
+// 14 days after the trial ends, the Hub pauses (data is kept, and can always be downloaded).
+const PLAN={billing:null,cfg:null};
+const GRACE_DAYS=14;
+async function loadPlan(){
+  if(typeof DEMO!=='undefined'&&DEMO.on){PLAN.billing=null;PLAN.cfg={open_signup:true,pay_link:'',portal_link:'',price_label:'$10 a month'};return;}
+  try{const r=await sb('rpc/ohb_public_config',{method:'POST',body:'{}'});PLAN.cfg=(Array.isArray(r)?r[0]:r)||{};}catch(e){PLAN.cfg={};}
+  try{PLAN.billing=(await sb('ohb_billing?select=*'))[0]||null;}catch(e){PLAN.billing=null;}
+}
+function planState(){
+  const t=trialInfo();const b=PLAN.billing;const st=b&&b.status;
+  if(st==='comped')return{kind:'comped'};
+  if(st==='active')return{kind:'active',renews:b.current_period_end};
+  if(st==='past_due')return{kind:'past_due'};
+  if(!t)return{kind:'trial',left:90};
+  const graceEnd=new Date(t.end.getTime()+GRACE_DAYS*864e5);
+  const day=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
+  const graceLeft=Math.round((day(graceEnd)-day(new Date()))/864e5);
+  if(t.left>0)return{kind:'trial',left:t.left,end:t.end,canceled:st==='canceled'};
+  if(graceLeft>0)return{kind:'grace',graceLeft,end:t.end,canceled:st==='canceled'};
+  return{kind:'paused',end:t.end};
+}
+function payURL(){
+  const c=PLAN.cfg||{};if(!c.pay_link)return'';
+  const email=(currentUser&&currentUser.email)||'';
+  return c.pay_link+(c.pay_link.includes('?')?'&':'?')+'client_reference_id='+encodeURIComponent(BIZ.id)+(email?'&prefilled_email='+encodeURIComponent(email):'');
+}
+function payButtonHTML(label){
+  const u=payURL();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';
+  return u?'<a class="btn-green plan-btn" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(label||('Keep my Hub · '+price))+'</a>'
+    :'<span class="bk-sub">Online payment is being set up. Write to <a href="mailto:hello@thepeoplesvoices.org">hello@thepeoplesvoices.org</a> to keep your Hub.</span>';
+}
+function planCardHTML(){
+  const p=planState();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';const st=isStewardUser();
+  const portal=PLAN.cfg&&PLAN.cfg.portal_link;
+  const fmtD=d=>new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  let body='';
+  if(p.kind==='comped')body='<b>Free for you.</b> Thanks for helping get the Hub off the ground.';
+  else if(p.kind==='active')body='<b>Active</b> · '+esc(price)+(p.renews?', renews '+esc(fmtD(p.renews)):'')+'. Watch alerts, the Bid & grant finder and rule explainers are included.'+(portal&&st?' <a href="'+esc(portal)+'" target="_blank" rel="noopener">Manage billing or cancel</a>':'');
+  else if(p.kind==='past_due')body='<b>Your last payment didn’t go through.</b> Your Hub keeps working while Stripe retries the card.'+(portal&&st?' <a href="'+esc(portal)+'" target="_blank" rel="noopener">Update your card</a>':'');
+  else if(p.kind==='trial')body='<b>'+p.left+' day'+(p.left===1?'':'s')+' left</b> of your 3 free months'+(p.end?' (through '+esc(fmtD(p.end))+')':'')+'. After that it’s '+esc(price)+', with everything included. Signing up starts the monthly charge right away, so there’s no need to until your free months are nearly up.';
+  else if(p.kind==='grace')body='<b>Your free months are over.</b> Everything still works for '+p.graceLeft+' more day'+(p.graceLeft===1?'':'s')+'. Keep your Hub for '+esc(price)+'.';
+  else body='<b>Your Hub is paused.</b> Nothing has been deleted.';
+  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'
+    +(st&&['trial','grace','paused'].includes(p.kind)?'<div class="bk-actions">'+payButtonHTML()+'</div>':'')
+    +'<div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;" href="/hub-help.html" target="_blank" rel="noopener">Help</a>'
+    +'<a class="btn-secondary" style="text-decoration:none;" href="/terms.html" target="_blank" rel="noopener">Terms</a>'
+    +'<a class="btn-secondary" style="text-decoration:none;" href="/privacy.html" target="_blank" rel="noopener">Privacy</a></div></div>';
+}
+function renderPlanBanner(){
+  let el=document.getElementById('planBanner');
+  const dash=document.getElementById('tab-dashboard');if(!dash)return;
+  if(!el){el=document.createElement('div');el.id='planBanner';dash.insertBefore(el,dash.firstChild);}
+  const p=planState();
+  if(!isStewardUser()||!((p.kind==='trial'&&p.left<=14)||p.kind==='grace'||p.kind==='past_due')){el.innerHTML='';return;}
+  el.innerHTML='<div class="card plan-banner"><div>'+(p.kind==='trial'?'<b>'+p.left+' day'+(p.left===1?'':'s')+' left</b> in your free months.'
+    :p.kind==='grace'?'<b>Your free months are over.</b> '+p.graceLeft+' day'+(p.graceLeft===1?'':'s')+' until the Hub pauses.'
+    :'<b>Your last payment didn’t go through.</b> Update your card to keep things running.')+'</div>'
+    +(p.kind==='past_due'?(PLAN.cfg&&PLAN.cfg.portal_link?'<a class="btn-green plan-btn" href="'+esc(PLAN.cfg.portal_link)+'" target="_blank" rel="noopener">Update card</a>':''):payButtonHTML())+'</div>';
+}
+function planGate(){
+  const p=planState();let g=document.getElementById('planGate');
+  if(p.kind!=='paused'){if(g)g.remove();return;}
+  if(!g){g=document.createElement('div');g.id='planGate';document.body.appendChild(g);}
+  const st=isStewardUser();
+  g.innerHTML='<div class="plan-gate"><div class="plan-gate-in"><h2>'+esc(BIZ.row.name)+'’s Hub is paused</h2>'
+    +(st?'<p>Your 3 free months ended on '+esc(p.end.toLocaleDateString('en-US',{month:'long',day:'numeric'}))+'. Nothing has been deleted: your books, pay history and paperwork are all here, and they come right back when you keep your Hub.</p>'
+        +'<div class="bk-actions" style="justify-content:center;">'+payButtonHTML()+'</div>'
+        +'<p class="bk-sub">Already paid? It can take a minute to show up. <a href="#" onclick="loadPlan().then(()=>{planGate();renderPlanBanner();});return false;">Check again</a></p>'
+        +'<div class="bk-actions" style="justify-content:center;"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button><button class="btn-secondary" onclick="signOut()">Sign out</button></div>'
+        +'<p class="bk-sub">Questions? <a href="mailto:hello@thepeoplesvoices.org">hello@thepeoplesvoices.org</a></p>'
+      :'<p>Ask the owner or a manager to keep the Hub going. Nothing has been deleted.</p><div class="bk-actions" style="justify-content:center;"><button class="btn-secondary" onclick="signOut()">Sign out</button></div>')
+    +'</div></div>';
+}
+// coming back from Stripe: give the payment a moment, then check
+(function(){if(!/[?&]paid=1/.test(location.search))return;let n=0;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
+  await loadPlan();renderPlanBanner();planGate();const p=planState();
+  if(p.kind==='active'){clearInterval(iv);toast('Thank you! Your Hub is all set.');try{history.replaceState(null,'',location.pathname);}catch(e){}}
+  else if(n>12)clearInterval(iv);},5000);})();
 
 const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]},"ohb_shifts":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"shift_date":["text",null],"start_time":["text",null],"end_time":["text",null],"job":["text",null],"note":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_inv_items":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"category":["text",null],"unit":["text","each"],"sku":["text",null],"supplier":["text",null],"location":["text",null],"notes":["text",null],"on_hand":["num",0],"par":["num",0],"order_qty":["num",null],"cost":["num",0],"price":["num",null],"active":["bool",true],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_inv_moves":{"id":["text","@uuid"],"business_id":["text",null],"item_id":["text",null],"change":["num",null],"reason":["text","adjust"],"note":["text",null],"by_name":["text",null],"move_date":["text","@today"],"created_at":["text","@now"]},"ohb_invoices":{"id":["text","@uuid"],"business_id":["text",null],"kind":["text","invoice"],"number":["text",null],"customer_name":["text",null],"customer_email":["text",null],"customer_phone":["text",null],"customer_address":["text",null],"issue_date":["text","@today"],"due_date":["text",null],"status":["text","draft"],"items":["json","[]"],"tax_rate":["num",0],"subtotal":["num",0],"tax":["num",0],"total":["num",0],"paid_amount":["num",0],"paid_date":["text",null],"income_category":["text",null],"notes":["text",null],"terms":["text",null],"revenue_id":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_time_off":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"start_date":["text",null],"end_date":["text",null],"reason":["text",null],"status":["text","pending"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_shift_swaps":{"id":["text","@uuid"],"business_id":["text",null],"shift_id":["text",null],"from_name":["text",null],"to_name":["text",null],"note":["text",null],"status":["text","open"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_bills":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"amount":["num",null],"category":["text",null],"next_due":["text",null],"repeat":["text","monthly"],"autopay":["bool",false],"notes":["text",null],"last_paid":["text",null],"active":["bool",true],"created_at":["text","@now"]}};
 
