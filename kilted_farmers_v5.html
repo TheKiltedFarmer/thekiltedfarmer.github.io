@@ -4336,6 +4336,11 @@ function personRate(name){
 }
 function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0)&&jobsOfPay('commission').length>0;}
 async function loadAcctSettings(){
+  // team members who don't see the whole business get the pay rules and only their own rate
+  if(typeof teamLimited==='function'&&teamLimited()){
+    try{const r=await sb('rpc/ohb_team_pay_rules',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});BOOKS.acct=(Array.isArray(r)?r[0]:r)||{};}catch(e){BOOKS.acct={};}
+    return;
+  }
   if(!BOOKS.schema.acct)return;
   const rows=await sb('kf_settings?key=eq.accountant&select=value');
   BOOKS.acct=(rows[0]&&rows[0].value)||{};
@@ -4447,13 +4452,20 @@ async function refreshDashboard(){
     const wb=getWeekBoundsFromLabel(label)||getWeekBounds(now);
     document.getElementById('dash-week-range').textContent=fmtDate(wb.mon)+' – '+fmtDate(wb.sun);
     document.getElementById('dash-accum-range').textContent='Period Total';
-    const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=2000');
-    const weekRev=allRev.filter(e=>e.period_label===label);
+    const limited=typeof teamLimited==='function'&&teamLimited();
+    let weekRev,ids,dbExp=[],times=[];
+    if(limited){
+      // just what this person's pay needs: everyone's hours (tips are shared by hours), tips, and sales they worked
+      const wk=await sb('rpc/ohb_team_week',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_label:label})});
+      const d=(Array.isArray(wk)?wk[0]:wk)||{};weekRev=d.revs||[];times=d.times||[];ids=[];
+    }else{
+      const allRev=await sb('kf_revenue_entries?order=created_at.asc&limit=2000');
+      weekRev=allRev.filter(e=>e.period_label===label);
+      // every pay-period record with this label (duplicates happen), so nothing gets missed
+      const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&select=id');
+      ids=periods.map(p=>p.id);
+    }
     const weekRevTotal=weekRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    // every pay-period record with this label (duplicates happen), so nothing gets missed
-    const periods=await sb('kf_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&select=id');
-    const ids=periods.map(p=>p.id);
-    let dbExp=[],times=[];
     if(ids.length){
       const inList='in.('+ids.join(',')+')';
       try{dbExp=await sb('kf_expenses?period_id='+inList+'&select=*');}catch(e){}
@@ -4504,14 +4516,15 @@ async function refreshDashboard(){
           +(line?'<div class="mwr-detail">'+line+'</div>':'')+'</div>'
           +'<div class="mwr-amount">'+fmt(p.pay)+'</div></div>';
       }).join('')
-      +(res.need>0.004&&hourlyStyle()?'<div class="pay-note">Overtime and minimum-wage top-ups this week: <b>'+fmt(res.need)+'</b>, included in pay above'+(res.pool-res.need<0?'. That’s more than this week’s sales covered, so <b style="color:var(--red);">'+fmt(res.need-res.pool)+' comes from business cash</b>':'')+'.</div>':'')
-      +(res.need>0.004&&!hourlyStyle()?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
+      +(res.need>0.004&&hourlyStyle()&&!limited?'<div class="pay-note">Overtime and minimum-wage top-ups this week: <b>'+fmt(res.need)+'</b>, included in pay above'+(res.pool-res.need<0?'. That’s more than this week’s sales covered, so <b style="color:var(--red);">'+fmt(res.need-res.pool)+' comes from business cash</b>':'')+'.</div>':'')
+      +(res.need>0.004&&!hourlyStyle()&&!limited?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
       +(!hourlyStyle()&&BOOKS.schema.pay&&!commissionOn()&&res.employees&&jobsOfPay('commission').length?'<div class="pay-note">Market commission isn’t set yet, so every hour shares the pool. Set it in <b>Team → Pay Rules</b>.</div>':'')
       +(()=>{const miss=res.people.filter(p=>!p.owner&&p.noRateH>0).map(p=>p.name);
         return miss.length&&isStewardUser()?'<div class="pay-note"><b>'+esc(miss.join(', '))+'</b> '+(miss.length>1?'don’t':'doesn’t')+' have an hourly rate yet, so '+(miss.length>1?'they’re':'they’re')+' shown at minimum wage. Set rates in <b>Team → Pay Rules</b>.</div>':'';})();
     }
     document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    if(isCurrentWeek){
+    // the week's snapshot is the owners' to write (in a business Hub, only owners and managers do it)
+    if(isCurrentWeek&&!(typeof teamLimited==='function'&&!isStewardUser())){
       const snapshotData={period_type:'Weekly',period_label:label,gross_revenue:weekRevTotal,total_expenses:expTotal,common_table:res.ct,distributable_pool:res.pool,total_hours:totalHours};
       if(ids.length){sb('kf_pay_periods?id=eq.'+ids[0],{method:'PATCH',body:JSON.stringify(snapshotData)}).catch(e=>console.warn(e));}
       else if(weekRevTotal>0||expTotal>0){
