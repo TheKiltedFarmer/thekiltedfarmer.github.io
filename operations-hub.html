@@ -4422,6 +4422,11 @@ function personRate(name){
 }
 function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0)&&jobsOfPay('commission').length>0;}
 async function loadAcctSettings(){
+  // team members who don't see the whole business get the pay rules and only their own rate
+  if(typeof teamLimited==='function'&&teamLimited()){
+    try{const r=await sb('rpc/ohb_team_pay_rules',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});BOOKS.acct=(Array.isArray(r)?r[0]:r)||{};}catch(e){BOOKS.acct={};}
+    return;
+  }
   if(!BOOKS.schema.acct)return;
   const rows=await sb('ohb_settings?key=eq.accountant&select=value');
   BOOKS.acct=(rows[0]&&rows[0].value)||{};
@@ -4533,13 +4538,20 @@ async function refreshDashboard(){
     const wb=getWeekBoundsFromLabel(label)||getWeekBounds(now);
     document.getElementById('dash-week-range').textContent=fmtDate(wb.mon)+' – '+fmtDate(wb.sun);
     document.getElementById('dash-accum-range').textContent='Period Total';
-    const allRev=await sb('ohb_revenue_entries?order=created_at.asc&limit=2000');
-    const weekRev=allRev.filter(e=>e.period_label===label);
+    const limited=typeof teamLimited==='function'&&teamLimited();
+    let weekRev,ids,dbExp=[],times=[];
+    if(limited){
+      // just what this person's pay needs: everyone's hours (tips are shared by hours), tips, and sales they worked
+      const wk=await sb('rpc/ohb_team_week',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_label:label})});
+      const d=(Array.isArray(wk)?wk[0]:wk)||{};weekRev=d.revs||[];times=d.times||[];ids=[];
+    }else{
+      const allRev=await sb('ohb_revenue_entries?order=created_at.asc&limit=2000');
+      weekRev=allRev.filter(e=>e.period_label===label);
+      // every pay-period record with this label (duplicates happen), so nothing gets missed
+      const periods=await sb('ohb_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&select=id');
+      ids=periods.map(p=>p.id);
+    }
     const weekRevTotal=weekRev.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    // every pay-period record with this label (duplicates happen), so nothing gets missed
-    const periods=await sb('ohb_pay_periods?period_label=eq.'+encodeURIComponent(label)+'&order=created_at.desc&select=id');
-    const ids=periods.map(p=>p.id);
-    let dbExp=[],times=[];
     if(ids.length){
       const inList='in.('+ids.join(',')+')';
       try{dbExp=await sb('ohb_expenses?period_id='+inList+'&select=*');}catch(e){}
@@ -4590,14 +4602,15 @@ async function refreshDashboard(){
           +(line?'<div class="mwr-detail">'+line+'</div>':'')+'</div>'
           +'<div class="mwr-amount">'+fmt(p.pay)+'</div></div>';
       }).join('')
-      +(res.need>0.004&&hourlyStyle()?'<div class="pay-note">Overtime and minimum-wage top-ups this week: <b>'+fmt(res.need)+'</b>, included in pay above'+(res.pool-res.need<0?'. That’s more than this week’s sales covered, so <b style="color:var(--red);">'+fmt(res.need-res.pool)+' comes from business cash</b>':'')+'.</div>':'')
-      +(res.need>0.004&&!hourlyStyle()?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
+      +(res.need>0.004&&hourlyStyle()&&!limited?'<div class="pay-note">Overtime and minimum-wage top-ups this week: <b>'+fmt(res.need)+'</b>, included in pay above'+(res.pool-res.need<0?'. That’s more than this week’s sales covered, so <b style="color:var(--red);">'+fmt(res.need-res.pool)+' comes from business cash</b>':'')+'.</div>':'')
+      +(res.need>0.004&&!hourlyStyle()&&!limited?'<div class="pay-note">Minimum-wage top-ups and overtime this week: <b>'+fmt(res.need)+'</b>'+(res.covered>0.004?' — '+fmt(res.covered)+' covered from the Stewards’ shares':'')+(res.shortfall>0.004?' · <b style="color:var(--red);">'+fmt(res.shortfall)+' has to come from business cash</b>':'')+'.</div>':'')
       +(!hourlyStyle()&&BOOKS.schema.pay&&!commissionOn()&&res.employees&&jobsOfPay('commission').length?'<div class="pay-note">Market commission isn’t set yet, so every hour shares the pool. Set it in <b>Team → Pay Rules</b>.</div>':'')
       +(()=>{const miss=res.people.filter(p=>!p.owner&&p.noRateH>0).map(p=>p.name);
         return miss.length&&isStewardUser()?'<div class="pay-note"><b>'+esc(miss.join(', '))+'</b> '+(miss.length>1?'don’t':'doesn’t')+' have an hourly rate yet, so '+(miss.length>1?'they’re':'they’re')+' shown at minimum wage. Set rates in <b>Team → Pay Rules</b>.</div>':'';})();
     }
     document.getElementById('dash-updated-time').textContent='Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    if(isCurrentWeek){
+    // the week's snapshot is the owners' to write (in a business Hub, only owners and managers do it)
+    if(isCurrentWeek&&!(typeof teamLimited==='function'&&!isStewardUser())){
       const snapshotData={period_type:'Weekly',period_label:label,gross_revenue:weekRevTotal,total_expenses:expTotal,common_table:res.ct,distributable_pool:res.pool,total_hours:totalHours};
       if(ids.length){sb('ohb_pay_periods?id=eq.'+ids[0],{method:'PATCH',body:JSON.stringify(snapshotData)}).catch(e=>console.warn(e));}
       else if(weekRevTotal>0||expTotal>0){
@@ -6533,6 +6546,9 @@ const TENANT_TABLES=new Set(['ohb_team_members','ohb_pay_periods','ohb_expenses'
 function fetchT(url,opts){
   opts=opts||{};
   const m=String(url).match(/\/rest\/v1\/([a-z_]+)(\?|$)/);
+  // Team members who don't see the whole business can't read pay weeks (they hold the week's totals).
+  // They still need a week's id to log hours, so ask the server for just that.
+  if(m&&m[1]==='ohb_pay_periods'&&BIZ.id&&typeof teamLimited==='function'&&teamLimited())return payWeekForTeam(url,opts);
   if(m&&TENANT_TABLES.has(m[1])){
     if(!BIZ.id)return Promise.reject(new Error('No business selected'));
     const method=(opts.method||'GET').toUpperCase();
@@ -6549,6 +6565,18 @@ function fetchT(url,opts){
     }
   }
   return fetch(url,opts);
+}
+
+async function payWeekForTeam(url,opts){
+  const method=(opts.method||'GET').toUpperCase();
+  const ok=b=>new Response(JSON.stringify(b),{status:200,headers:{'Content-Type':'application/json'}});
+  let label=null;
+  if(method==='GET'){const q=new URLSearchParams(String(url).split('?')[1]||'');const v=q.get('period_label');if(v&&v.startsWith('eq.'))label=v.slice(3);}
+  else if(method==='POST'&&opts.body){try{const b=JSON.parse(opts.body);label=(Array.isArray(b)?b[0]:b).period_label;}catch(e){}}
+  if(!label)return ok([]);                      // totals and history aren't theirs to see; snapshots are the owner's to write
+  const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/ohb_period_for',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({p_biz:BIZ.id,p_label:label})});
+  if(!r.ok)return r;
+  return ok(await r.json());
 }
 
 // ─── business-type presets ───
@@ -6640,7 +6668,7 @@ function applyBizConfig(){
 // ─── what the team can see (owners and managers always see everything) ───
 const TEAM_ACCESS_ITEMS=[
   ['schedule_all','See everyone’s schedule','Off: each person only sees their own shifts (and shifts offered up for trade).'],
-  ['log','Log sales and scan receipts','The Revenue & Expenses tab.'],
+  ['log','Log sales and scan receipts','The Revenue & Expenses tab, where they can also see the sales and expenses that have been logged.'],
   ['inventory','Count and update inventory','The Inventory tab.'],
   ['recipes','See recipes and make batches','The Ingredients tab, if recipes are turned on.'],
   ['see_pay','See everyone’s pay and the week’s numbers','Sales, profit and the whole team’s pay. Off: each person sees only their own hours and pay.']
@@ -7142,7 +7170,7 @@ function planCardHTML(){
   const p=planState();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';const st=isStewardUser();
   const portal=PLAN.cfg&&PLAN.cfg.portal_link;
   const fmtD=d=>new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  const manage=(label)=>portal&&st?' <a href="'+esc(portal)+'" target="_blank" rel="noopener">'+label+'</a>':'';
+  const manage=()=>'';
   let body='';
   if(p.kind==='comped')body='<b>Free for you.</b> Thanks for helping get the Hub off the ground.';
   else if(p.kind==='trialing')body='<b>Free'+(p.end?' until '+esc(fmtD(p.end)):' for your first 3 months')+'.</b> After that, '+esc(price)+' is charged automatically to the card you added. Cancel before then and you won’t be charged at all.'+manage('Manage billing or cancel');
@@ -7151,7 +7179,17 @@ function planCardHTML(){
   else if(p.kind==='ending')body='<b>Canceled.</b> Your Hub keeps working until '+esc(fmtD(p.end))+', then pauses. Nothing gets deleted.';
   else if(p.kind==='open')body='<b>Free for now.</b> Billing isn’t switched on yet.';
   else body='<b>Not subscribed.</b> Start your 3 free months to use the Hub. Nothing gets deleted.';
-  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'
+  // owners and managers can always change the card or cancel, in a couple of clicks
+  const mail='mailto:hello@thepeoplesvoices.org?subject='+encodeURIComponent('Cancel my Operations Hub: '+((BIZ.row&&BIZ.row.name)||''));
+  const billBtns=st&&['trialing','active','past_due'].includes(p.kind)
+    ?'<div class="bk-actions">'+(portal
+        ?'<a class="btn-secondary" style="text-decoration:none;" href="'+esc(portal)+'" target="_blank" rel="noopener">'+(p.kind==='past_due'?'Update my card':'Change my card')+'</a>'
+         +'<a class="btn-secondary danger" style="text-decoration:none;" href="'+esc(portal)+'" target="_blank" rel="noopener">Cancel subscription</a>'
+        :'<a class="btn-secondary danger" style="text-decoration:none;" href="'+esc(mail)+'">Cancel subscription</a>')
+      +'</div><div class="bk-sub">'+(portal?'Opens Stripe’s secure billing page. Enter the email you subscribed with and Stripe sends you a link. ':'Sends us an email and we’ll cancel it for you, usually the same day. ')
+      +(p.kind==='trialing'?'Cancel before your free months end and you’re never charged.':'You keep everything until the end of the month you’ve paid for, and your data is never deleted.')+'</div>'
+    :'';
+  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'+billBtns
     +(st&&['needs_sub','ending','paused'].includes(p.kind)?'<div class="bk-actions">'+payButtonHTML(p.kind==='needs_sub'?'Start my 3 free months':'Keep my Hub · '+price)+'</div>':'')
     +'<div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button>'
     +'<a class="btn-secondary" style="text-decoration:none;" href="/hub-help.html" target="_blank" rel="noopener">Help</a>'
