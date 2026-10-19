@@ -4264,6 +4264,7 @@ function printOnbPacket(member){
   w.document.close();
 }
 
+const MI_CITY_TAX=['Albion','Battle Creek','Benton Harbor','Big Rapids','Detroit','East Lansing','Flint','Grand Rapids','Grayling','Hamtramck','Highland Park','Hudson','Ionia','Jackson','Lansing','Lapeer','Muskegon','Muskegon Heights','Pontiac','Port Huron','Portland','Saginaw','Springfield','Walker'];
 // ═══════════════════════════════════════════════════════
 // PAY ENGINE — commission + hourly + shared pool by hours + minimum-wage floor (jobs set per business)
 // One calculation used by the Dashboard, Team, History, Books and payroll export
@@ -4620,6 +4621,7 @@ function renderPayRules(){
     const done=EMPLOYER_STEPS.filter(s=>steps[s[0]]).length;
     h+='<div class="card"><div class="ck-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Becoming an Employer</div><span class="ck-badge">'+done+' of '+EMPLOYER_STEPS.length+'</span></div>'
       +'<div class="card-sub">One-time setup before the first paycheck. Each new person also needs a W-4, MI-W4, I-9 and a new-hire report. Those are on each person’s onboarding checklist above.</div>'
+      +'<div class="ck-item"><span class="ck-ico">i</span><span class="ck-text"><b>City income tax.</b> '+esc(MI_CITY_TAX.length+' Michigan cities')+' have their own income tax: '+esc(MI_CITY_TAX.join(', '))+'. If your business is in one of them, or your people live in one, you may need to withhold city tax too. Tell your payroll service the city; it handles the withholding and filing. <a href="/hub-help.html#city-tax" target="_blank" rel="noopener">More</a></span></div>'
       +EMPLOYER_STEPS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox"'+(steps[k]?' checked':'')+(ok?'':' disabled')+' onchange="toggleEmployerStep(\''+k+'\',this.checked)"><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+(steps[k]?' · done '+esc(prettyDate(steps[k])):'')+'</div></div></label>').join('')
       +'<div class="bk-actions"><button class="btn-secondary" onclick="payrollCSV('+y+')">⬇ Payroll CSV ('+y+')</button></div></div>';
   }
@@ -6255,6 +6257,61 @@ async function renderComingUp(){
 }
 function goTabSafe2(id){const t=[...document.querySelectorAll('.tab')].find(x=>(x.getAttribute('onclick')||'').includes("'"+id+"'"));if(t)t.click();}
 if(typeof refreshDashboard==='function'){const _rdC=refreshDashboard;refreshDashboard=async function(){const r=await _rdC.apply(this,arguments);try{await renderComingUp();}catch(e){console.warn('coming up',e);}return r;};}
+
+// ═══════════════════════════════════════════════════════
+// DOWNLOAD EVERYTHING — your business's data, all of it, in plain spreadsheets
+// It's your data. You can always take it with you.
+// ═══════════════════════════════════════════════════════
+const EXPORT_TABLES=[
+  ['kf_revenue_entries','sales-and-income'],['kf_expenses','expenses'],['kf_transactions','other-transactions'],['kf_bank_lines','bank-statement-lines'],
+  ['kf_pay_periods','pay-weeks'],['kf_time_entries','hours'],['kf_team_members','team'],['kf_shifts','schedule'],['kf_time_off','time-off'],['kf_shift_swaps','shift-trades'],
+  ['kf_invoices','invoices-and-estimates'],['kf_bills','bills-and-renewals'],['kf_inv_items','inventory'],['kf_inv_moves','inventory-changes'],
+  ['kf_mileage','mileage'],['kf_budgets','budgets'],['kf_onboarding','new-hire-paperwork'],['kf_recipes','recipes'],['kf_recipe_ingredients','recipe-ingredients'],['kf_settings','settings']
+];
+function exportCell(v){
+  if(v===null||v===undefined)return'';
+  if(typeof v==='object')v=JSON.stringify(v);
+  v=String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+function exportCSV(rows){
+  if(!rows.length)return'';
+  const cols=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(c=>c!=='business_id');
+  return [cols.join(',')].concat(rows.map(r=>cols.map(c=>exportCell(r[c])).join(','))).join('\r\n');
+}
+function loadJSZip(){
+  if(window.JSZip)return Promise.resolve(window.JSZip);
+  return new Promise((ok,bad)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=()=>ok(window.JSZip);s.onerror=()=>bad(new Error('Couldn’t load the zip tool'));document.head.appendChild(s);});
+}
+async function exportAll(){
+  toast('Gathering everything…');
+  const files=[];const counts=[];
+  for(const[t,name]of EXPORT_TABLES){
+    try{const rows=await sbAll(t+'?select=*');if(rows.length){files.push([name+'.csv',exportCSV(rows)]);counts.push(name+': '+rows.length);}}
+    catch(e){/* a tool that isn't set up yet has nothing to export */}
+  }
+  const receipts=[];
+  files.forEach(([,csv])=>{(csv.match(/https?:\/\/[^,"\s]+\/storage\/v1\/object\/public\/[^,"\s]+/g)||[]).forEach(u=>receipts.push(u));});
+  const biz=(typeof HUB!=='undefined'&&HUB.bizName)||'Operations Hub';
+  const readme='Everything from '+biz+'\'s Operations Hub, downloaded '+new Date().toLocaleString('en-US')+'.\r\n\r\n'
+    +'Each file opens in Excel, Google Sheets or Numbers.\r\n\r\n'+counts.join('\r\n')
+    +(receipts.length?'\r\n\r\nReceipt photos stay online at the addresses in receipt-photos.txt. Open any of them to save a copy.':'');
+  if(receipts.length)files.push(['receipt-photos.txt',[...new Set(receipts)].join('\r\n')]);
+  files.unshift(['READ-ME.txt',readme]);
+  const slug=(typeof fileSlug==='function'?fileSlug():'hub')+'-all-data-'+isoLocal(new Date());
+  try{
+    const JSZip=await loadJSZip();const zip=new JSZip();const dir=zip.folder(slug);
+    files.forEach(([n,c])=>dir.file(n,'﻿'+c));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=slug+'.zip';document.body.appendChild(a);a.click();a.remove();
+    toast('Downloaded: '+(files.length-1)+' files');
+  }catch(e){
+    // no zip tool (offline, blocked): hand over the files one at a time
+    files.forEach(([n,c],i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+c],{type:n.endsWith('.csv')?'text/csv':'text/plain'}));a.download=slug+'-'+n;document.body.appendChild(a);a.click();a.remove();},i*400));
+    toast('Downloading '+files.length+' files one at a time');
+  }
+}
+// a way out from the Books → Taxes page too, in both Hubs
+if(typeof renderBooksTaxes==='function'){const _rbtE=renderBooksTaxes;renderBooksTaxes=function(){return _rbtE.apply(this,arguments)+'<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Data</div><div class="card-sub">Everything in the Hub, in plain spreadsheets you can open anywhere: sales, expenses, pay, hours, schedule, invoices, inventory and paperwork. It’s yours, and you can take it with you any time.</div><div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button></div></div>';};}
 
 // Hidden revenue input for calculate compatibility
 document.addEventListener('DOMContentLoaded',function(){
