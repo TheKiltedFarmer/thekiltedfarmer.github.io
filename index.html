@@ -12370,7 +12370,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       if(rest.length) ({data, error} = await send(rest, ((form.notes || '').trim() + ' | Wants the Operations Hub.').replace(/^ \| /,'')));
     }
     setSending(false);
-    if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
+    if(error) { setErr((error.code === 'PGRST202' || /could not find the function/i.test(error.message)) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : 'Something went wrong: ' + error.message + ' Please email hello@thepeoplesvoices.org if it keeps happening.'); return; }
     setDone(shown.filter(s=>services.includes(s.id)));
     setPicked({});
     loadMine();
@@ -12559,7 +12559,7 @@ function ExplainerRequestForm({service, user, profile, mine, onToast, onDone, on
     setSending(true);
     const {error} = await sb.rpc('tpv_explainer_request', {p_business:f.business, p_email:f.email, p_rule_url:f.url, p_rule_text:f.text, p_question:f.question});
     setSending(false);
-    if(error) { setErr(/function|schema cache/i.test(error.message) ? 'Explainers aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : error.message); return; }
+    if(error) { setErr((error.code === 'PGRST202' || /could not find the function/i.test(error.message)) ? 'Explainers aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : 'Something went wrong: ' + error.message + ' Please email hello@thepeoplesvoices.org if it keeps happening.'); return; }
     setSent(true); onDone && onDone();
     onToast && onToast('✓ Got it. Your explainer is on its way.');
   };
