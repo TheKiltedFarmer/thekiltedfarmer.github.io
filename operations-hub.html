@@ -4397,7 +4397,7 @@ function personRate(name){
   const r=payRules().rates||{};const k=normName(name);
   const hit=Object.keys(r).find(n=>normName(n)===k);return hit?(+r[hit]||0):0;
 }
-function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0);}
+function commissionOn(){return BOOKS.schema.pay&&(+payRules().commissionPct>0)&&jobsOfPay('commission').length>0;}
 async function loadAcctSettings(){
   if(!BOOKS.schema.acct)return;
   const rows=await sb('ohb_settings?key=eq.accountant&select=value');
@@ -6549,10 +6549,18 @@ function presetSettings(type,style){
     ct:0,food:p.food,recipes:p.recipes,unit:p.unit,units:p.units,sharedSpace:p.sharedSpace||'',allergens:p.allergens||'',rhythm:''};
 }
 function bizSettings(){
-  const saved=(BIZ.row&&BIZ.row.settings)||{};
-  // businesses set up before pay styles existed keep the shared pool they were set up with
-  const style=saved.payStyle||(saved.jobs&&saved.jobs.some(j=>j.pay==='pool')?'shared':'hourly');
-  return Object.assign({},presetSettings((BIZ.row&&BIZ.row.business_type)||'other',style),saved,{payStyle:style});
+  const type=(BIZ.row&&BIZ.row.business_type)||'other';
+  const saved=Object.assign({},(BIZ.row&&BIZ.row.settings)||{});
+  // Businesses set up before there was a choice never picked the shared pool; it was just the default then.
+  // They get regular wages unless they choose the pool in Settings.
+  if(!saved.payStyle){
+    const p=PRESETS[type]||PRESETS.other;const sig=a=>(a||[]).map(j=>j.key+':'+j.pay).join('|');
+    if(saved.jobs&&sig(saved.jobs)===sig(p.shared))saved.jobs=p.jobs.map(j=>Object.assign({},j));   // untouched old defaults: use today's
+    else if(saved.jobs)saved.jobs=saved.jobs.map(j=>j.pay==='pool'?Object.assign({},j,{pay:'hourly'}):j);
+    saved.ct=0;
+  }
+  const style=saved.payStyle==='shared'?'shared':'hourly';
+  return Object.assign({},presetSettings(type,style),saved,{payStyle:style});
 }
 
 function applyBizConfig(){
