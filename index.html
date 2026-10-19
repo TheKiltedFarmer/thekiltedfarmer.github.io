@@ -12090,7 +12090,7 @@ async function bizFn(body) {
 
 // The Hub's card shows even before its row is added to business_services.
 const HUB_SERVICE_FALLBACK = {id:'hub', name:'Operations Hub', price_label:'3 months free, then $10 a month', status:'available', sort:0, pay_url:'/operations-hub.html',
-  blurb:'Books, pay and paperwork for small Michigan businesses. Scan receipts, match your bank statement, figure pay by shared hours, commission or hourly with a minimum-wage floor, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
+  blurb:'Books, pay, scheduling, inventory, invoices and paperwork for small Michigan businesses. Bring in your Square or card-reader sales, scan receipts, match your bank statement, send invoices and estimates, schedule shifts with time-off requests and shift trades, track stock and make batches from recipes, figure pay by shared hours, commission or hourly with a minimum-wage floor and a legal tip pool, track Michigan sales tax and bill due dates, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
 
 // ── "See a sample": what each service actually looks like, before anyone pays ──
 const SAMPLE_KINDS = [{id:'food', label:'Food truck'}, {id:'hardware', label:'Hardware store'}, {id:'salon', label:'Hair salon'}];
@@ -12196,7 +12196,7 @@ function HubSample({box, tag}) {
       [['Slow week',{market:250,other:500,expenses:420}],['Good week',{market:1400,other:3200,expenses:900}],['Start over',START]].map(([l, p])=>
         h('button',{key:l,onClick:()=>setV(x=>({...x, ...p})),style:{background:'#fff',color:'#1a1a2e',border:'1px solid #c8bfa8',borderRadius:16,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, l))),
     h('div',{style:{fontWeight:700,color:'#1a1a2e',marginBottom:4}},'Also in the Hub'),
-    h('div',null,'📷 Snap receipts and the amounts fill themselves in · 🏦 Bring in a bank statement and it matches what\'s logged · 🚗 Import trips from your mileage app · 📝 New-hire paperwork signed on a phone · 🧾 A year-end package for taxes, with the 1099s flagged'),
+    h('div',null,'💳 Square and card-reader sales come in by themselves, with tax, tips and fees sorted · 🧾 Invoices and estimates, with overdue reminders · 📅 A weekly schedule with time-off requests and shift trades · 📦 Inventory with recipes, batches, low-stock alerts and a shopping list · 🏛 Michigan sales tax and bill due dates in one “Coming up” list · 📷 Snap receipts and the amounts fill themselves in · 🏦 Bring in a bank statement and it matches what\'s logged · 🚗 Import trips from your mileage app · 📝 New-hire paperwork signed on a phone · 🧾 A year-end package for taxes, with the 1099s flagged'),
     h('div',{style:{fontSize:12.5,color:'#666',marginTop:8}},'Pay rules are yours to set: shared hours, commission, hourly, or a mix, with a minimum-wage floor. The Hub works out what everyone is owed and hands your payroll service a file; the payroll service files the taxes and sends the pay.'));
 }
 function ServiceSample({id}) {
@@ -12249,7 +12249,7 @@ function ServiceSample({id}) {
 
 // ── How our prices compare (checked October 2026; sources linked on the page) ──
 const PRICE_COMPARE = [
-  {what:'Books, receipts and pay', ours:'Operations Hub: 3 months free, then $10 a month, with everything below included',
+  {what:'Books, receipts, invoices and pay', ours:'Operations Hub: 3 months free, then $10 a month, with invoices, scheduling, inventory and everything below included',
    theirs:['QuickBooks Online: $38 a month (Simple Start), $85 (Essentials)', 'Wave Pro: $19 a month'],
    free:'Wave Starter is free, but receipt scanning is $8 a month extra.',
    note:'None of these file payroll taxes for you. A payroll service does that: Gusto starts at $49 a month plus $6 a person, Wave Payroll at $40 plus $6 a person.'},
