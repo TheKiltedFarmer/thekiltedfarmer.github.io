@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>The People's Voice — your local government, in plain language</title>
+<title>The People's Voices — your local government, in plain language</title>
 <meta name="description" content="See what your city council, township board and county are deciding, weigh in, and find out whether officials listened. Free, nonpartisan, run by neighbors in all 83 Michigan counties."/>
 <meta name="theme-color" content="#1a1a2e"/>
 <meta property="og:type" content="website"/>
-<meta property="og:site_name" content="The People's Voice"/>
-<meta property="og:title" content="The People's Voice — your local government, in plain language"/>
+<meta property="og:site_name" content="The People's Voices"/>
+<meta property="og:title" content="The People's Voices — your local government, in plain language"/>
 <meta property="og:description" content="See what's being decided near you, weigh in, and find out whether officials listened. Free and nonpartisan."/>
 <meta property="og:image" content="https://thepeoplesvoices.org/og-image.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="The People's Voice: Vote. Build. Change."/>
+<meta property="og:image:alt" content="The People's Voices: Vote. Build. Change."/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="The People's Voice — your local government, in plain language"/>
+<meta name="twitter:title" content="The People's Voices — your local government, in plain language"/>
 <meta name="twitter:description" content="See what's being decided near you, weigh in, and find out whether officials listened."/>
 <meta name="twitter:image" content="https://thepeoplesvoices.org/og-image.png"/>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231a1a2e'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' fill='%23f0c040'%3EPV%3C/text%3E%3C/svg%3E"/>
@@ -43,11 +43,11 @@ input,textarea,select{font-family:'Lora',serif}
 </style>
 </head>
 <body>
-<noscript><div style="padding:24px;font-family:Georgia,serif;background:#1a1a2e;color:#fff">The People's Voice needs JavaScript turned on. It's a free, nonpartisan site where residents of Jackson, Calhoun and Washtenaw counties, Michigan, see what local officials are deciding, weigh in, and see whether officials listened.</div></noscript>
+<noscript><div style="padding:24px;font-family:Georgia,serif;background:#1a1a2e;color:#fff">The People's Voices needs JavaScript turned on. It's a free, nonpartisan site where residents of Jackson, Calhoun and Washtenaw counties, Michigan, see what local officials are deciding, weigh in, and see whether officials listened.</div></noscript>
 <div id="root">
   <div style="min-height:100vh;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
     <div class="spin" style="border-color:#444;border-top-color:#f0c040;width:32px;height:32px;border-width:4px"></div>
-    <div style="color:#f0c040;font-family:'Playfair Display',serif;font-size:20px;font-weight:900">The People's Voice</div>
+    <div style="color:#f0c040;font-family:'Playfair Display',serif;font-size:20px;font-weight:900">The People's Voices</div>
     <div style="color:#8899aa;font-size:13px">Loading...</div>
   </div>
 </div>
@@ -703,7 +703,7 @@ const BADGES = {
   rep_100:          {id:'rep_100',           icon:'🌳',  label:'Civic Pillar',        desc:'Earned 100 reputation points',               color:'#1a6b3c', bg:'#eef7f1'},
   rep_200:          {id:'rep_200',           icon:'🏆',  label:'Civic Champion',     desc:'Earned 200 reputation points — true community leader', color:'#8a6000', bg:'#fff8e7'},
   // Special / rare
-  founding_member:  {id:'founding_member',   icon:'🌾',  label:'Founding Member',    desc:'Among the first 25 members of The People\'s Voice', color:'#8a6000', bg:'#fff8e7'},
+  founding_member:  {id:'founding_member',   icon:'🌾',  label:'Founding Member',    desc:'Among the first 25 members of The People\'s Voices', color:'#8a6000', bg:'#fff8e7'},
   verified_official:{id:'verified_official', icon:'🏛',  label:'Verified Official',  desc:'Verified public official',                    color:'#1a5c8a', bg:'#e8f2fa'},
   // ZIP / community identity — Jackson County
   zip_49201:        {id:'zip_49201',         icon:'📍',  label:'Jackson Resident',   desc:'Verified resident of City of Jackson (49201-49204)', color:'#1a1a2e', bg:'#f0f0f8'},
@@ -1237,7 +1237,7 @@ function PrivacyModal({onClose}) {
         h('button',{onClick:onClose,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:20,cursor:'pointer'}},'×')
       ),
       h('div',{style:{padding:24,fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.8}},
-        h('div',{style:{fontSize:11,color:'#aaa',marginBottom:20}},'Last updated: March 2026 · The People\'s Voice, Concord, MI'),
+        h('div',{style:{fontSize:11,color:'#aaa',marginBottom:20}},'Last updated: March 2026 · The People\'s Voices, Concord, MI'),
 
         [
           ['What we collect',
@@ -1245,7 +1245,7 @@ function PrivacyModal({onClose}) {
           ['What we do NOT collect',
            'We do not collect your street address, phone number, social security number, financial information, or any government-issued ID. We do not track your browsing history or use third-party advertising trackers.'],
           ['How your data is used',
-           "Your data is used solely to operate The People's Voice — to verify you are a "+countyAreaPhrase()+" resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes."],
+           "Your data is used solely to operate The People's Voices — to verify you are a "+countyAreaPhrase()+" resident, to display your participation in the community, and to send platform notifications if you opt in. Your data is never sold, shared with advertisers, or used for commercial purposes."],
           ['Who can see your information',
            'Your display name and public activity (votes marked public, comments, ideas) are visible to other logged-in members. Your email address is never displayed publicly. "Anonymous" votes are not displayed publicly but are stored in our database associated with your account for fraud prevention.'],
           ['Neighbor Directory',
@@ -1488,7 +1488,7 @@ function AIBreakdown({bill}) {
   return h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderRadius:10,padding:20}},
     h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:8}},"🤖 AI Community Analysis"),
     h('div',{style:{background:'#f0f4ff',border:'1px solid #c8d8f0',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:11,color:'#1a5c8a',lineHeight:1.6}},
-      h('strong',null,"⚖️ Nonpartisan:")," This analysis presents factual, balanced information only. The People's Voice has no political affiliation and takes no position on any bill."
+      h('strong',null,"⚖️ Nonpartisan:")," This analysis presents factual, balanced information only. The People's Voices has no political affiliation and takes no position on any bill."
     ),
     h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,lineHeight:1.75,color:'#333',marginBottom:14}},data.plain),
 
@@ -1708,13 +1708,13 @@ function ShareButtons({bill,choice}) {
   const emoji = choice==='yes'?'✅':choice==='no'?'❌':'⬜';
   const link = billLink(bill);
   const word = choice==='yes'?'support':choice==='no'?'oppose':'am undecided on';
-  const text = `${emoji} I ${word} "${bill.title}". See how my neighbors are voting, and add yours, on The People's Voice:`;
+  const text = `${emoji} I ${word} "${bill.title}". See how my neighbors are voting, and add yours, on The People's Voices:`;
   const [copied,setCopied] = useState(false);
   const share = (platform) => {
     if(platform==='fb') window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(text)}`,'_blank','width=600,height=400');
     else if(platform==='x') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`,'_blank','width=600,height=400');
     else {
-      if(navigator.share) navigator.share({title:"My vote on The People's Voice",text,url:link}).catch(()=>{});
+      if(navigator.share) navigator.share({title:"My vote on The People's Voices",text,url:link}).catch(()=>{});
       else { navigator.clipboard&&navigator.clipboard.writeText(text+' '+link); setCopied(true); setTimeout(()=>setCopied(false),2500); }
     }
   };
@@ -1793,10 +1793,10 @@ function EmailRepButtons({bill,choice,user}) {
           "Dear "+rep.name+",\n\n"+
           "As a constituent, I am writing regarding:\n"+bill.title+" ("+bill.id+")\n\n"+
           bill.summary+"\n\n"+
-          "The People's Voice community platform shows "+bill.votes_yes+" residents support this measure vs "+bill.votes_no+" opposed.\n\n"+
+          "The People's Voices community platform shows "+bill.votes_yes+" residents support this measure vs "+bill.votes_no+" opposed.\n\n"+
           "I personally voted "+choice.toUpperCase()+" on this bill and wanted to share my perspective directly.\n\n"+
           "[Add your personal message here]\n\n"+
-          "Respectfully,\n[Your name]\nDistrict resident\nSent via The People's Voice - "+SITE_URL
+          "Respectfully,\n[Your name]\nDistrict resident\nSent via The People's Voices - "+SITE_URL
         );
         return h('a',{key:rep.id,
           href:`mailto:${rep.contact}?subject=${subject}&body=${body}`,
@@ -2070,7 +2070,7 @@ function ReportsQueue({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
   const removePoster = async(r)=>{
     if(!r.content_author_id) return;
     if(r.content_author_id === user?.id) { onToast('That\'s your own post.'); return; }
-    const reason = window.prompt('Remove '+(r.content_author_name||'this resident')+' from The People\'s Voice?\n\nThey\'ll be signed out and blocked. You can restore them from User Manager.\n\nReason (admins only):', r.reason);
+    const reason = window.prompt('Remove '+(r.content_author_name||'this resident')+' from The People\'s Voices?\n\nThey\'ll be signed out and blocked. You can restore them from User Manager.\n\nReason (admins only):', r.reason);
     if(reason === null) return;
     setBusy(r.id);
     const res = await removeResident(r.content_author_id, reason, user?.id);
@@ -2454,7 +2454,7 @@ function OutcomePanel({bill, userZip, myVote}) {
     h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',lineHeight:1.35}},
       (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + '.'),
     h('div',{style:{fontSize:13,color:'#444',fontFamily:LB,marginTop:6,lineHeight:1.6}},
-      support != null && h('span',null, h('strong',null, support + '%'), ' of People\'s Voice members were for it',
+      support != null && h('span',null, h('strong',null, support + '%'), ' of People\'s Voices members were for it',
         membersWon === true ? ' — officials went the same way.' : membersWon === false ? ' — officials went the other way.' : '.'),
       mine != null && h('div',null, 'You voted ', h('strong',null, myVote.choice === 'yes' ? 'Support' : 'Oppose'),
         mine ? ' — that\'s how it turned out.' : ' — it went the other way this time.')
@@ -2483,7 +2483,7 @@ function OutcomePanel({bill, userZip, myVote}) {
         style:{fontSize:12,color:'#1a5c8a',fontFamily:LB}},'📎 Meeting minutes / source ↗'),
       h('button',{onClick:()=>{
           const url = billLink(bill);
-          const text = (bill.outcome_body||'Officials')+' '+m.verb+tally+': "'+bill.title+'".'+(support!=null?' '+support+'% of residents on The People\'s Voice were for it.':'');
+          const text = (bill.outcome_body||'Officials')+' '+m.verb+tally+': "'+bill.title+'".'+(support!=null?' '+support+'% of residents on The People\'s Voices were for it.':'');
           if(navigator.share) navigator.share({title:bill.title,text,url}).catch(()=>{});
           else { navigator.clipboard && navigator.clipboard.writeText(text+' '+url); }
         },
@@ -2650,15 +2650,15 @@ function AskComposer({bills, presetBill, officials, user, onAsked, onToast}) {
 
   if(sent) {
     const rep = sent.rep;
-    const mailto = rep && rep.contact ? 'mailto:'+rep.contact+'?subject='+encodeURIComponent('A question from a constituent on The People\'s Voice')+
-      '&body='+encodeURIComponent('Dear '+rep.name+',\n\nA resident asked you this question in public on The People\'s Voice:\n\n'+
+    const mailto = rep && rep.contact ? 'mailto:'+rep.contact+'?subject='+encodeURIComponent('A question from a constituent on The People\'s Voices')+
+      '&body='+encodeURIComponent('Dear '+rep.name+',\n\nA resident asked you this question in public on The People\'s Voices:\n\n'+
         '"'+(sent.text||'')+'"\n\nYou can read it, see how many neighbors want an answer, and reply here:\n'+questionLink(sent.id)+
         '\n\nIf you reply to this email instead, a local admin can post your answer for you.\n\nThank you,\n[Your name]') : null;
     return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:8,padding:14,marginBottom:14,fontFamily:LB}},
       h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a6b3c',marginBottom:4}},'✓ Your question is posted'),
       h('div',{style:{fontSize:13,color:'#444',lineHeight:1.6}},
         rep
-          ? [rep.name+' isn\'t on The People\'s Voice yet, so send it to them too. When they reply, an admin can post the answer here.']
+          ? [rep.name+' isn\'t on The People\'s Voices yet, so send it to them too. When they reply, an admin can post the answer here.']
           : 'The official gets a notification. Neighbors can upvote it so it rises to the top.'),
       h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}},
         mailto && h('a',{href:mailto,style:{background:'#1a5c8a',color:'#fff',padding:'7px 14px',borderRadius:6,fontSize:12,
@@ -2678,7 +2678,7 @@ function AskComposer({bills, presetBill, officials, user, onAsked, onToast}) {
     h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}},
       h('select',{value:target,onChange:e=>setTarget(e.target.value),style:{...inputStyle,flex:'1 1 200px',minWidth:0,maxWidth:'100%'}},
         h('option',{value:''},'Ask who?'),
-        officials.length > 0 && h('optgroup',{label:'Verified on The People\'s Voice'},
+        officials.length > 0 && h('optgroup',{label:'Verified on The People\'s Voices'},
           officials.map(o=>h('option',{key:o.id,value:'p:'+o.id}, (o.display_name||'Official') + (o.official_title ? ' — '+o.official_title : '')))),
         suggested.length > 0 && h('optgroup',{label:'Votes on this bill'},
           suggested.map(r=>h('option',{key:r.id,value:'r:'+r.id}, r.name+' — '+r.title))),
@@ -3052,7 +3052,7 @@ async function outcomeImageBlob(bill) {
     const where = 'thepeoplesvoices.org/' + (getCurrentCounty().slug || countyTag());
     x.fillStyle = '#f0c040'; fit(where, '700', 40, PDF, W - 220); x.fillText(where, 110, ctaTop + 102);
   }
-  x.fillStyle = '#f0c040'; x.font = '700 38px ' + PDF; x.fillText('The People\'s Voice', 80, H - 96);
+  x.fillStyle = '#f0c040'; x.font = '700 38px ' + PDF; x.fillText('The People\'s Voices', 80, H - 96);
   x.fillStyle = '#a3afbf'; x.font = '400 26px ' + LBF; x.fillText('Free, nonpartisan, run by neighbors · Resident votes are unofficial', 80, H - 54);
   return await new Promise(res=>c.toBlob(res, 'image/png'));
 }
@@ -3083,7 +3083,7 @@ function DidTheyListenCard({bill, bills, userVotes, onNavigate, onToast}) {
   const rec = listeningRecord(bills);
   const d = outcomeDay(bill);
   const residentsSide = v.support > 50 ? v.support + '% for it' : (100 - v.support) + '% against it';
-  const shareText = (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + ': "' + bill.title + '". Residents on The People\'s Voice were ' + residentsSide + '. ' +
+  const shareText = (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + ': "' + bill.title + '". Residents on The People\'s Voices were ' + residentsSide + '. ' +
     (v.matched ? 'They listened.' : 'They went the other way.');
   const share = ()=>{
     const url = billLink(bill);
@@ -3140,8 +3140,8 @@ function decisionIcs(bill) {
   const esc = s=>String(s || '').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');
   const fold = line=>{ const out = []; let s = line; while(s.length > 73) { out.push(s.slice(0, 73)); s = ' ' + s.slice(73); } out.push(s); return out.join('\r\n'); };
   const title = decisionCalendarTitle(bill);
-  const desc = (bill.at_stake || firstSentence(bill.summary) || '') + '\n\nWeigh in on The People\'s Voice: ' + billLink(bill);
-  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//The People\'s Voice//Decisions//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT',
+  const desc = (bill.at_stake || firstSentence(bill.summary) || '') + '\n\nWeigh in on The People\'s Voices: ' + billLink(bill);
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//The People\'s Voices//Decisions//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT',
     'UID:tpv-' + String(bill.id).replace(/[^A-Za-z0-9-]/g,'') + '-' + stamp(start) + '@thepeoplesvoices.org',
     'DTSTAMP:' + stamp(new Date()), 'DTSTART:' + stamp(start), 'DTEND:' + stamp(end),
     'SUMMARY:' + esc(title), 'DESCRIPTION:' + esc(desc),
@@ -3220,7 +3220,7 @@ function CountyHelpersLine() {
   },[]);
   if(!n) return null;
   return h('div',{style:{textAlign:'center',fontFamily:LB,fontSize:13,color:'#555',marginTop:18,lineHeight:1.6}},
-    '🙌 ' + getCurrentCounty().name + ' on The People\'s Voice is kept up by ', h('strong',{style:{color:'#1a1a2e'}}, n + ' volunteer neighbor' + (n===1?'':'s')), '. ',
+    '🙌 ' + getCurrentCounty().name + ' on The People\'s Voices is kept up by ', h('strong',{style:{color:'#1a1a2e'}}, n + ' volunteer neighbor' + (n===1?'':'s')), '. ',
     !helping && h('button',{className:'tpv-link',onClick:()=>setHelping(true),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'Want to help?'),
     helping && h('div',{style:{maxWidth:420,margin:'10px auto 0',textAlign:'left',background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:12}},
       h(VolunteerForm,{countyId:countyTag()})));
@@ -3594,7 +3594,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
           onClick:()=>{
             const url=billLink(bill);
             // The bill's name rides along in the message, since link previews only show the site's card
-            const text='"'+bill.title+'" · see what neighbors think and weigh in on The People\'s Voice:';
+            const text='"'+bill.title+'" · see what neighbors think and weigh in on The People\'s Voices:';
             if(navigator.share) navigator.share({title:bill.title,text,url}).catch(()=>{});
             else { navigator.clipboard&&navigator.clipboard.writeText(text+' '+url); setToast('Link copied.'); }
           },
@@ -3752,7 +3752,7 @@ function SourceBadge({url}) {
 // AI neutralize a news story via Cloudflare Worker
 async function neutralizeStory(title, url, summary, category) {
   const countyName = getCurrentCounty().name;
-  const prompt = `You are a nonpartisan civic editor for The People's Voice, a community platform serving ${countyName}, Michigan.
+  const prompt = `You are a nonpartisan civic editor for The People's Voices, a community platform serving ${countyName}, Michigan.
 
 A community member submitted this news story:
 Title: "${title}"
@@ -6993,7 +6993,7 @@ function ProjectCard({project,user,onRepGain}) {
 
   const generateLetter=async()=>{
     const pledgeSummary=pledges.map(p=>p.display_name+": "+p.pledge_type+" - "+p.value).join(", ");
-    const text="Dear "+project.official_target_name+",\n\nWe, "+supportCount+" verified residents of "+project.jurisdiction+", write to formally request your support for:\n\n\""+project.title+"\"\n\n"+project.description+"\n\nOur community has already pledged: "+(pledgeSummary||"volunteer time and community support")+".\n\nThis reflects the genuine priorities of your constituents as documented through The People's Voice civic platform.\n\nWe respectfully request a response or a meeting to discuss how this project can receive official support.\n\nRespectfully,\nThe People of "+project.jurisdiction+"\nvia The People's Voice - "+SITE_URL;
+    const text="Dear "+project.official_target_name+",\n\nWe, "+supportCount+" verified residents of "+project.jurisdiction+", write to formally request your support for:\n\n\""+project.title+"\"\n\n"+project.description+"\n\nOur community has already pledged: "+(pledgeSummary||"volunteer time and community support")+".\n\nThis reflects the genuine priorities of your constituents as documented through The People's Voices civic platform.\n\nWe respectfully request a response or a meeting to discuss how this project can receive official support.\n\nRespectfully,\nThe People of "+project.jurisdiction+"\nvia The People's Voices - "+SITE_URL;
     await sb.from('projects').update({forwarded_letter:text,status:'forwarded'}).eq('id',project.id);
     setLetter(text);setShowLetter(true);setToast("Letter generated! Project marked as forwarded.");
   };
@@ -7320,7 +7320,7 @@ function ReplyContext({parentSnippet, parentAuthor, onJump}) {
 const TOUR_RESIDENT = [
   {
     icon:'👋',
-    title:"Welcome to The People's Voice",
+    title:"Welcome to The People's Voices",
     body:"This is a free, nonpartisan civic platform built for "+CNAME()+" residents. Everything here is real — real bills, real representatives, real neighbors. No ads, no algorithms, no party spin.",
     tip:"Your voice matters. Let's show you around."
   },
@@ -7390,7 +7390,7 @@ const TOUR_BUSINESS = [
   {
     icon:'🏪',
     title:"Welcome, local business",
-    body:"The People's Voice is a civic platform for "+CNAME()+", and you're now part of it as a local business. You're here as a community presence, not a campaign — no ads, no promotions, no spam. Just real participation.",
+    body:"The People's Voices is a civic platform for "+CNAME()+", and you're now part of it as a local business. You're here as a community presence, not a campaign — no ads, no promotions, no spam. Just real participation.",
     tip:"Business accounts can post events, list resources, and message neighbors — but cannot vote on bills, since civic votes are reserved for residents."
   },
   {
@@ -7435,7 +7435,7 @@ const TOUR_NONPROFIT = [
   {
     icon:'🏢',
     title:"Welcome, community organization",
-    body:"You're representing a nonprofit, faith community, or community group on The People's Voice. You're here as an organizer of community life — events, mutual aid, programs, and shared resources.",
+    body:"You're representing a nonprofit, faith community, or community group on The People's Voices. You're here as an organizer of community life — events, mutual aid, programs, and shared resources.",
     tip:"Organizations cannot vote on civic bills (votes are reserved for residents) but you can do almost everything else."
   },
   {
@@ -7519,7 +7519,7 @@ const TOUR_OFFICIAL = [
   {
     icon:'⚖️',
     title:"Welcome, official",
-    body:"You're signing up as an elected official, candidate, or verified government staff. The People's Voice exists to connect officials with the constituents you serve, transparently and outside of campaign machinery.",
+    body:"You're signing up as an elected official, candidate, or verified government staff. The People's Voices exists to connect officials with the constituents you serve, transparently and outside of campaign machinery.",
     tip:"Officials cannot vote on bills here (this is for resident sentiment, not legislator action). You can comment, message, and engage like any other user."
   },
   {
@@ -7706,7 +7706,7 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
 
   const shareProfile = ()=>{
     const url = profileLink(user.id, profile?.county);
-    const text = (displayName||'A neighbor')+'\'s page on The People\'s Voice';
+    const text = (displayName||'A neighbor')+'\'s page on The People\'s Voices';
     if(navigator.share) navigator.share({title:displayName,text,url}).catch(()=>{});
     else { navigator.clipboard&&navigator.clipboard.writeText(url); onToast('Link to your page copied!'); }
   };
@@ -8030,7 +8030,7 @@ function ProfilePage({user, profile, rep, bills, userVotes, onClose, onProfileUp
           h('div',{style:{background:'#fff',borderRadius:10,padding:16,marginBottom:14}},
             h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🔗 Invite Neighbors'),
             h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginBottom:10,lineHeight:1.5}},
-              'Share The People\'s Voice with neighbors in '+getCurrentCounty().name+'.'
+              'Share The People\'s Voices with neighbors in '+getCurrentCounty().name+'.'
             ),
             h('button',{onClick:()=>{navigator.clipboard&&navigator.clipboard.writeText(countyUrl(countyTag()));onToast('Link copied!');},
               style:{background:'#1a1a2e',color:'#f0c040',border:'none',padding:'10px 20px',borderRadius:7,
@@ -8332,7 +8332,7 @@ async function sendDirectMessage(fromUser, fromName, toId, toName, content) {
 
 // ── Admins: a ready-to-edit welcome note ─────────────────────────────────────
 const WELCOME_TEMPLATE_KEY = 'tpv_welcome_template';
-const DEFAULT_WELCOME = 'Hi {name}! Welcome to The People\'s Voice. I\'m {me}, one of the volunteers who runs it here in {county}.\n\n' +
+const DEFAULT_WELCOME = 'Hi {name}! Welcome to The People\'s Voices. I\'m {me}, one of the volunteers who runs it here in {county}.\n\n' +
   'A good place to start is the Decision of the Week on the home page. It takes about ten seconds to weigh in, and officials can see the totals. ' +
   'If something\'s going on in {area} that your neighbors should know about, tell me.\n\nI\'m glad you\'re here.';
 function fillWelcome(tpl, member, viewerProfile) {
@@ -8438,7 +8438,7 @@ function AdminProfileBox({member, viewer}) {
 // pages), so every page stays safe and readable.
 // ═════════════════════════════════════════════════════════════════════════════
 const PROFILE_THEMES = {
-  classic:    {label:'The People\'s Voice', hero:'linear-gradient(135deg,#1a1a2e,#2a1540)', page:'#f4f1ea', card:'#ffffff', ink:'#1a1a2e', muted:'#777', accent:'#b8860b', chip:'#f6efd9', line:'#e5dece', name:'#f0c040'},
+  classic:    {label:'The People\'s Voices', hero:'linear-gradient(135deg,#1a1a2e,#2a1540)', page:'#f4f1ea', card:'#ffffff', ink:'#1a1a2e', muted:'#777', accent:'#b8860b', chip:'#f6efd9', line:'#e5dece', name:'#f0c040'},
   barn:       {label:'Barn Red',        hero:'linear-gradient(135deg,#7a1f1f,#a8372b)', page:'#f7efe6', card:'#fffaf4', ink:'#3a1a14', muted:'#8a6a5a', accent:'#a8372b', chip:'#f6e0d6', line:'#ead7c8', name:'#fff3e0'},
   lake:       {label:'Lake Blue',       hero:'linear-gradient(135deg,#0d4a6b,#2b86b8)', page:'#eaf3f8', card:'#ffffff', ink:'#0d2e42', muted:'#5f7c8c', accent:'#1f74a3', chip:'#dcedf6', line:'#cfe2ec', name:'#ffffff'},
   meadow:     {label:'Meadow',          hero:'linear-gradient(135deg,#2f5d2a,#6a9a3a)', page:'#f1f5ea', card:'#ffffff', ink:'#22351c', muted:'#6a7a5e', accent:'#3d7a2f', chip:'#e2edd5', line:'#d7e3c8', name:'#fbf7d6'},
@@ -8630,7 +8630,7 @@ function PublicProfileModal({userId, onClose}) {
   const showPhotos = photos.filter(x=>!x.hidden_at || isSelf || adminHere);
   const link = p ? profileLink(p.id, p.county) : SITE_URL;
   const share = ()=>{
-    const text = displayName + '\'s page on The People\'s Voice';
+    const text = displayName + '\'s page on The People\'s Voices';
     if(navigator.share) { navigator.share({title:displayName, text, url:link}).catch(()=>{}); return; }
     try { navigator.clipboard.writeText(link); setCopied(true); setTimeout(()=>setCopied(false), 2500); } catch(e) { window.prompt('Copy this link:', link); }
   };
@@ -10615,7 +10615,7 @@ function CountyFinder({onGo, dark, autoFocus, placeholder}) {
     q.trim() && h('div',{style:{marginTop:6}},
       results.length === 0
         ? h('div',{style:{fontSize:13,color:sub,fontFamily:"'Lora',serif",padding:'6px 2px'}},
-            /^\d{5}$/.test(q.trim()) ? 'That ZIP isn\'t a Michigan ZIP code. The People\'s Voice covers Michigan for now.' : 'No match yet. Try your ZIP code.')
+            /^\d{5}$/.test(q.trim()) ? 'That ZIP isn\'t a Michigan ZIP code. The People\'s Voices covers Michigan for now.' : 'No match yet. Try your ZIP code.')
         : results.map(r=>{ const c = COUNTIES[r.id]; return h('button',{key:r.id,onClick:()=>onGo(r.id),
             style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:dark?'rgba(255,255,255,.05)':'#faf8f3',
               border:'1px solid '+(dark?'rgba(255,255,255,.12)':'#eee'),borderRadius:8,padding:'10px 12px',marginBottom:6,cursor:'pointer',color:fg}},
@@ -10671,7 +10671,7 @@ function StarterCountyBanner({user, onNavigate}) {
   if(!isStarterCounty(c.id)) return null;
   const invite = ()=>{
     const url = countyUrl(c.id);
-    if(navigator.share) { navigator.share({title:'The People\'s Voice · ' + c.name, text:'Our county is on The People\'s Voice. See what\'s being decided and weigh in.', url}).catch(()=>{}); return; }
+    if(navigator.share) { navigator.share({title:'The People\'s Voices · ' + c.name, text:'Our county is on The People\'s Voices. See what\'s being decided and weigh in.', url}).catch(()=>{}); return; }
     try { navigator.clipboard.writeText(url); setCopied(true); setTimeout(()=>setCopied(false), 2500); } catch(e) { window.prompt('Copy this link:', url); }
   };
   return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:16,fontFamily:"'Lora',serif"}},
@@ -10849,7 +10849,7 @@ function CountyPickerLanding({onPick, profile}) {
     h('div',{style:{maxWidth:600,margin:'0 auto'}},
       // Hero
       h('div',{style:{textAlign:'center',marginBottom:26}},
-        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,color:GOLD,margin:'0 0 10px',letterSpacing:'-.02em'}},"The People's Voice"),
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,color:GOLD,margin:'0 0 10px',letterSpacing:'-.02em'}},"The People's Voices"),
         h('p',{style:{fontFamily:"'Lora',serif",fontSize:17,color:'#fff',lineHeight:1.55,margin:'0 0 8px'}},
           'Your local government, in plain language.'),
         h('p',{style:{fontFamily:"'Lora',serif",fontSize:14,color:SOFT,lineHeight:1.65,margin:0}},
@@ -10968,7 +10968,7 @@ function CountyPickerLanding({onPick, profile}) {
       h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.7,borderTop:'1px solid rgba(255,255,255,.1)',paddingTop:18}},
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,color:'#fff',marginBottom:6}},'Who runs this'),
         h('p',{style:{margin:'0 0 8px'}},
-          'The People\'s Voice is a volunteer project started in Concord, Michigan by Justin Fairchild. ',
+          'The People\'s Voices is a volunteer project started in Concord, Michigan by Justin Fairchild. ',
           'It isn\'t affiliated with any government, party or candidate, and it doesn\'t sell ads or data. Neighbors pay for it, and every dollar is shown in the open.'),
         h('p',{style:{margin:'0 0 8px'}},
           'Votes here are unofficial. They show officials where residents stand. To join, we ask for an email and your ZIP code. Never your street address.'),
@@ -11638,7 +11638,7 @@ function JacketCard({o, profile, highlight, onToast, onChanged}) {
   const share = async()=>{
     const url = shareLink(getCurrentCounty().slug, 'j=' + encodeURIComponent(o.id));
     const text = o.name + '\'s sponsor jacket: who funds their campaign, straight from federal filings.';
-    if(navigator.share) { try { await navigator.share({title:'Sponsor Jackets · The People\'s Voice', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
+    if(navigator.share) { try { await navigator.share({title:'Sponsor Jackets · The People\'s Voices', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
   };
   const saveFec = async()=>{
@@ -11756,7 +11756,7 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNaviga
         'Every member of Congress from Michigan gets the same jacket, with numbers straight from federal filings.'),
       onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('funding'),
         style:{background:'none',border:'none',padding:0,marginTop:6,marginRight:14,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
-        'Fair\'s fair: see who funds The People\'s Voice →'),
+        'Fair\'s fair: see who funds The People\'s Voices →'),
       h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,marginTop:6,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
         why ? 'Hide' : 'What counts as PAC money?'),
       why && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:8}}, h(PacMoneyExplainer))),
@@ -11841,7 +11841,7 @@ function FundingTab({profile, onToast, onNavigate}) {
     style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}}, label);
 
   const intro = h('div',{style:{marginBottom:14}},
-    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Who funds The People\'s Voice'),
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Who funds The People\'s Voices'),
     h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10,marginBottom:8}},
       'We show who pays for politicians. Fair\'s fair: here\'s who pays for us, every dollar, every month.'),
     h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#555',lineHeight:1.6}},
@@ -11851,7 +11851,7 @@ function FundingTab({profile, onToast, onNavigate}) {
   if(sum === null) return h('div',null, intro,
     h('div',{style:card},
       h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',lineHeight:1.6,marginBottom:12}},
-        'The People\'s Voice is free, nonpartisan and run by volunteers. If it\'s useful to you, you can help keep it that way.'),
+        'The People\'s Voices is free, nonpartisan and run by volunteers. If it\'s useful to you, you can help keep it that way.'),
       h(KofiButton,null),
       admin && h('div',{style:{marginTop:12,fontSize:12.5,color:'#8a6000',fontFamily:LB}},'Admins: run tpv_funding.sql in Supabase to turn on this page\'s numbers.')));
 
@@ -11875,7 +11875,7 @@ function FundingTab({profile, onToast, onNavigate}) {
 
   // Our jacket has no patches: nobody can buy one
   const jacket = {
-    name:'The People\'s Voice', subtitle:'Who funds us · ' + monthLabel(sum.month),
+    name:'The People\'s Voices', subtitle:'Who funds us · ' + monthLabel(sum.month),
     top_pacs:[], from_pacs:0, status:'reported',
     band:'Neighbors · ' + fmtMoney(gifts),
     emptyTitle:'No sponsors', emptySub:'Nobody can buy a patch here',
@@ -11883,8 +11883,8 @@ function FundingTab({profile, onToast, onNavigate}) {
 
   const share = async()=>{
     const url = shareLink(countyTag(), 'tab=funding');
-    const text = 'Who funds The People\'s Voice? Every dollar, every month, out in the open.';
-    if(navigator.share) { try { await navigator.share({title:'Who funds The People\'s Voice', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
+    const text = 'Who funds The People\'s Voices? Every dollar, every month, out in the open.';
+    if(navigator.share) { try { await navigator.share({title:'Who funds The People\'s Voices', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(text + ' ' + url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
   };
 
@@ -11984,7 +11984,7 @@ function FundingTab({profile, onToast, onNavigate}) {
 
     h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.7,margin:'4px 2px 14px'}},
       'Donations and service payments go through Ko-fi to Justin Fairchild, the volunteer who started and runs the site, and pay for running it. ',
-      'Donations aren\'t tax-deductible: The People\'s Voice isn\'t a registered nonprofit.',
+      'Donations aren\'t tax-deductible: The People\'s Voices isn\'t a registered nonprofit.',
       sum.updated_at ? ' Numbers last updated ' + new Date(sum.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '.' : ''),
 
     admin && h('div',{style:{...card, border:'1px solid #f0c040', background:'#fffdf5'}},
@@ -12419,7 +12419,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     h('div',{style:{marginBottom:14}},
       h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Services for local businesses'),
       h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',lineHeight:1.6}},
-        'Tools that save you time keeping up with local government. What businesses pay for them covers the cost of running The People\'s Voice, so it stays free for everyone.'),
+        'Tools that save you time keeping up with local government. What businesses pay for them covers the cost of running The People\'s Voices, so it stays free for everyone.'),
       h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6,marginTop:8,background:'#faf8f3',borderRadius:8,padding:'9px 12px'}},
         h('strong',{style:{color:'#1a1a2e'}},'What you\'re buying is the service, nothing else. '),
         'No ads, no sponsorships, no say in what the site shows. Everyone pays the same posted price, and every business gets the same 3 free months of the Operations Hub. Prices are kept low on purpose: most of the work is automated, and the point is to cover costs, not to make a profit. ',
@@ -13342,7 +13342,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
   const handleSignup=async()=>{
     if(!zip.trim()){setError('ZIP code is required.');return;}
     if(!zipValid){
-      setError('That ZIP code (' + zip.trim() + ') isn\'t a Michigan ZIP. The People\'s Voice covers Michigan for now. Use the ZIP where you live.');
+      setError('That ZIP code (' + zip.trim() + ') isn\'t a Michigan ZIP. The People\'s Voices covers Michigan for now. Use the ZIP where you live.');
       return;
     }
     if(!attested){setError('Please confirm the attestation to continue.');return;}
@@ -13360,7 +13360,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
       try {
         const {count: total} = await sb.from('profiles').select('id',{count:'exact',head:true});
         if((total||0) >= TOTAL_SIGNUP_BUDGET) {
-          setError('The People\'s Voice is full for the moment. We\'re making room. Please check back soon!');
+          setError('The People\'s Voices is full for the moment. We\'re making room. Please check back soon!');
           setLoading(false);
           return;
         }
@@ -13427,7 +13427,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
       let {data:prof} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
       if(prof && prof.deleted_at) {
         await sb.auth.signOut();
-        setError('This account has been removed from The People\'s Voice. If you think this is a mistake, email chef.justinfairchild@gmail.com.');
+        setError('This account has been removed from The People\'s Voices. If you think this is a mistake, email chef.justinfairchild@gmail.com.');
         setLoading(false);
         return;
       }
@@ -13734,7 +13734,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
             style:{width:'100%',border:'1px solid #ddd',borderRadius:6,padding:'10px 13px',fontSize:14,boxSizing:'border-box'}})
         ),
         community&&h('div',{style:{fontSize:12,color:'#1a6b3c',marginBottom:8,paddingLeft:4,fontWeight:600}},
-          "✓ "+community+((zipCounty&&COUNTIES[zipCounty]&&!/county/i.test(community))?', '+COUNTIES[zipCounty].name:'')+" — welcome to The People's Voice!"),
+          "✓ "+community+((zipCounty&&COUNTIES[zipCounty]&&!/county/i.test(community))?', '+COUNTIES[zipCounty].name:'')+" — welcome to The People's Voices!"),
         // Started on another county's page? Say where they'll land, and let them choose.
         crossCounty&&h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',marginBottom:12,fontSize:12.5,fontFamily:"'Lora',serif",color:'#5a4500',lineHeight:1.6}},
           stayHere
@@ -13747,7 +13747,7 @@ function AuthScreen({onAuth, onGuest, initialMode, reason, notice:initialNotice,
                   "My home is in "+COUNTIES[hereCounty].name))),
         zip.trim().length===5&&!zipValid&&h('div',{style:{background:'#fdf0ef',border:'1px solid #f0c0b8',borderRadius:6,padding:'10px 12px',marginBottom:8,fontSize:13,color:'#c0392b',lineHeight:1.6}},
           h('strong',null,"❌ ZIP code not in our service area. "),
-          "The People's Voice is open in all 83 Michigan counties.",
+          "The People's Voices is open in all 83 Michigan counties.",
           h('br'),
           h('span',{style:{color:'#555',fontSize:12}},"You can still ",
             h('button',{onClick:onGuest,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',padding:0,fontFamily:"'Lora',serif",fontWeight:700}},"browse as a guest"),
@@ -14151,7 +14151,7 @@ function EventCard({event, user, profile, onToast, onDelete, onUpdate, isAdmin})
   };
 
   const shareEvent = ()=>{
-    const text = `📅 ${event.title}\n${new Date(event.event_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}${event.event_time?' at '+event.event_time:''}\n📍 ${event.location}\n\nJackson County community event on The People's Voice`;
+    const text = `📅 ${event.title}\n${new Date(event.event_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}${event.event_time?' at '+event.event_time:''}\n📍 ${event.location}\n\nJackson County community event on The People's Voices`;
     const url = shareLink(countyTag(), 'tab=events');
     if(navigator.share) {
       navigator.share({title:event.title,text,url}).catch(()=>{});
@@ -15387,7 +15387,7 @@ function PulseTab({bills, user, profile, onNavigate}) {
           'Every vote, comment, and idea on this platform is a real act of civic participation. Share this platform with a neighbor and double our impact.')
       ),
       h('button',{onClick:()=>{
-        if(navigator.share){navigator.share({title:"The People's Voice",text:"A free civic platform for "+CNAME()+" neighbors.",url:'https://thepeoplesvoices.org'});}
+        if(navigator.share){navigator.share({title:"The People's Voices",text:"A free civic platform for "+CNAME()+" neighbors.",url:'https://thepeoplesvoices.org'});}
         else{navigator.clipboard.writeText('https://thepeoplesvoices.org');alert('Link copied!');}
       },style:{background:'#f0c040',color:'#1a1a2e',border:'none',padding:'10px 18px',borderRadius:7,
         fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer',flexShrink:0}},
@@ -17536,7 +17536,7 @@ function IdeasTab({user, profile, rep, onToast}) {
   };
 
   const forwardIdea = async(idea)=>{
-    const letter = `Dear ${idea.target_official||'Local Official'},\n\nA community idea on The People\'s Voice civic platform has reached ${IDEA_THRESHOLD} verified resident upvotes and is being formally forwarded to you:\n\n"${idea.title}"\n\n${idea.description}\n\nLocation: ${idea.location||'Jackson County'}\nCategory: ${idea.category}\nUpvotes: ${idea.upvotes} verified residents\n\nThis reflects genuine community priorities. We respectfully request your consideration.\n\nSincerely,\nThe People\'s Voice Community\nthekiltedfarmer.github.io`;
+    const letter = `Dear ${idea.target_official||'Local Official'},\n\nA community idea on The People\'s Voices civic platform has reached ${IDEA_THRESHOLD} verified resident upvotes and is being formally forwarded to you:\n\n"${idea.title}"\n\n${idea.description}\n\nLocation: ${idea.location||'Jackson County'}\nCategory: ${idea.category}\nUpvotes: ${idea.upvotes} verified residents\n\nThis reflects genuine community priorities. We respectfully request your consideration.\n\nSincerely,\nThe People\'s Voices Community\nthekiltedfarmer.github.io`;
     await sb.from('community_ideas').update({forwarded:true,forwarded_letter:letter}).eq('id',idea.id);
     setIdeas(prev=>prev.map(i=>i.id===idea.id?{...i,forwarded:true}:i));
     onToast('🎉 This idea has been forwarded to local leadership!');
@@ -17889,7 +17889,7 @@ function FeedbackInbox({onToast}) {
           !m.read&&h('button',{onClick:()=>markRead(m.id),
             style:{background:'#5b3a8c',color:'#fff',border:'none',padding:'5px 12px',borderRadius:5,fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}
           },'Mark Read'),
-          m.submitted_by_email&&h('a',{href:'mailto:'+m.submitted_by_email+'?subject=Re: Your feedback on The People\'s Voice',
+          m.submitted_by_email&&h('a',{href:'mailto:'+m.submitted_by_email+'?subject=Re: Your feedback on The People\'s Voices',
             style:{background:'#1a5c8a',color:'#fff',textDecoration:'none',padding:'5px 12px',borderRadius:5,fontSize:12,fontFamily:"'Playfair Display',serif",fontWeight:700}
           },'Reply'),
           h('button',{onClick:()=>del(m.id),
@@ -18278,7 +18278,7 @@ function AdminPasswordHelp({member, me, isSelf, onToast}) {
     if(!res.ok) { setErr(failMsg(res)); return; }
     const d = res.data || {};
     setResult({kind:'password', text:
-      'Hi ' + first + ', I reset your password on The People\'s Voice. Sign in at ' + where +
+      'Hi ' + first + ', I reset your password on The People\'s Voices. Sign in at ' + where +
       ' with your email (' + (d.email || member.email) + ') and this temporary password:\n\n' + p + '\n\n' +
       (d.must_change ? 'It will ask you to choose your own password right after.' : 'You can change it anytime on your Profile page.') +
       (sig ? ' — ' + sig : '')});
@@ -18294,7 +18294,7 @@ function AdminPasswordHelp({member, me, isSelf, onToast}) {
     const d = res.data || {};
     if(!d.link) { setErr('No link came back. Try again.'); return; }
     setResult({kind:'link', text:
-      'Hi ' + first + ', here\'s a link to choose a new password on The People\'s Voice:\n\n' + d.link +
+      'Hi ' + first + ', here\'s a link to choose a new password on The People\'s Voices:\n\n' + d.link +
       '\n\nIt works once, within about an hour.' + (sig ? ' — ' + sig : '')});
   };
 
@@ -18351,7 +18351,7 @@ function AdminPasswordHelp({member, me, isSelf, onToast}) {
           h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}},
             h('button',{onClick:copy,style:btn('#1a6b3c','#fff')}, copied ? '✓ Copied' : '📋 Copy'),
             h('a',{href:'sms:?&body=' + encodeURIComponent(result.text),style:{...btn('#fff','#1a6b3c',{border:'1px solid #a8e6c0'}),textDecoration:'none'}},'💬 Text it'),
-            member.email && h('a',{href:'mailto:' + encodeURIComponent(member.email) + '?subject=' + encodeURIComponent('Getting back into The People\'s Voice') + '&body=' + encodeURIComponent(result.text),
+            member.email && h('a',{href:'mailto:' + encodeURIComponent(member.email) + '?subject=' + encodeURIComponent('Getting back into The People\'s Voices') + '&body=' + encodeURIComponent(result.text),
               style:{...btn('#fff','#1a6b3c',{border:'1px solid #a8e6c0'}),textDecoration:'none'}},'✉️ Email it')),
           h('div',{style:{fontSize:11,color:'#5a7a64',marginTop:6,lineHeight:1.5}},
             result.kind === 'password'
@@ -18396,7 +18396,7 @@ function UserManager({onToast, user, profile}) {
     if(!selected) return;
     if(selected.id === user?.id) { onToast('You can\'t remove your own account.'); return; }
     if(selected.is_admin) { onToast('Remove admin access first, then remove the account.'); return; }
-    if(!window.confirm('Remove '+(selected.display_name||selected.email)+' from The People\'s Voice?\n\nThey\'ll be signed out and blocked from signing in. You can restore them later.')) return;
+    if(!window.confirm('Remove '+(selected.display_name||selected.email)+' from The People\'s Voices?\n\nThey\'ll be signed out and blocked from signing in. You can restore them later.')) return;
     setRemoving(true);
     const res = await removeResident(selected.id, removeReason, user?.id);
     if(!res.ok) onToast('❌ Could not remove: '+res.error);
@@ -19565,12 +19565,12 @@ function NotificationPreferences({user, profile, onClose, onToast}) {
           textTransform:'uppercase',letterSpacing:1,marginBottom:8}},'Notify me about:'),
 
         h(Toggle,{label:'✉️ Direct Messages',pkey:'notify_dm',desc:'When someone sends you a private message'}),
-        h(Toggle,{label:'📋 New Bills Added',pkey:'notify_new_bill',desc:'When a new bill is added to The People\'s Voice'}),
+        h(Toggle,{label:'📋 New Bills Added',pkey:'notify_new_bill',desc:'When a new bill is added to The People\'s Voices'}),
         h(Toggle,{label:'💬 Replies to My Comments',pkey:'notify_comment_reply',desc:'When someone replies to your bill comment'}),
         h(Toggle,{label:'🗳 Community Votes',pkey:'notify_bill_vote',desc:'Vote milestone updates on bills you\'ve voted on'}),
         h(Toggle,{label:'🏅 Badges & Reputation',pkey:'notify_badge',desc:'When you earn a new badge or level up'}),
         h(Toggle,{label:'💡 Idea Updates',pkey:'notify_idea_update',desc:'When your idea reaches the forwarding threshold'}),
-        h(Toggle,{label:'📢 Platform Announcements',pkey:'notify_system',desc:'Important updates from The People\'s Voice'}),
+        h(Toggle,{label:'📢 Platform Announcements',pkey:'notify_system',desc:'Important updates from The People\'s Voices'}),
         h(Toggle,{label:'📧 Weekly Digest Email',pkey:'notify_digest',desc:'Monday morning summary of what happened in your community'}),
 
         h('div',{style:{marginTop:16,display:'flex',gap:10}},
@@ -19945,7 +19945,7 @@ function App() {
         if(founder && founder.id !== authUser.id) {
           const firstName = (prof.display_name || '').split(' ')[0] || 'neighbor';
           const welcomeBody =
-            "Hi " + firstName + " — I'm Justin, the guy who built this. Welcome to The People's Voice.\n\n" +
+            "Hi " + firstName + " — I'm Justin, the guy who built this. Welcome to The People's Voices.\n\n" +
             "Quick context: this platform is for "+CNAME()+" residents. No ads, no algorithms picking sides, no bots. Just a place where neighbors can vote on real legislation, see what local government is actually doing, and find each other.\n\n" +
             "A few things to try:\n" +
             "• Vote on a bill in the Civic tab — your voice gets counted alongside your neighbors'\n" +
@@ -20012,7 +20012,7 @@ function App() {
   useEffect(()=>{ if(feedNavCtx?.billId) setPinnedBillId(String(feedNavCtx.billId)); },[feedNavCtx]);
   useEffect(()=>{ setPinnedBillId(p=>p && feedNavCtx?.billId ? p : null); },[keywordSearch, billFilter]);
 
-  if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voice..."));
+  if(loading)return h('div',{style:{minHeight:'100vh',background:'#1a1a2e',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}},h(Spinner),h('div',{style:{color:'#f0c040',fontFamily:"'Playfair Display',serif",fontSize:18}},"Loading The People's Voices..."));
 
   // County picker: if no county in URL and not opted-out via ?nopicker, show
   // a landing page where the user picks their county.
@@ -20181,7 +20181,7 @@ function App() {
             // County switcher dropdown
             showCountyMenu && h(CountySwitcherMenu,{currentCountyId, onClose:()=>setShowCountyMenu(false)})
           ),
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voice")
+          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voices")
         ),
         h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
           !user ? h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
@@ -20545,7 +20545,7 @@ function App() {
 
     // Footer
     h('div',{style:{background:'#1a1a2e',borderTop:'3px solid #f0c040',color:'#9aa8b8',textAlign:'center',padding:'20px 16px',fontSize:12,lineHeight:1.9}},
-      h('div',{style:{fontFamily:"'Playfair Display',serif",color:'#f0c040',fontSize:14,marginBottom:6}},"The People's Voice"),
+      h('div',{style:{fontFamily:"'Playfair Display',serif",color:'#f0c040',fontSize:14,marginBottom:6}},"The People's Voices"),
       h('div',{style:{display:'flex',gap:10,justifyContent:'center',alignItems:'center',flexWrap:'wrap',margin:'2px 0 12px'}},
         h(KofiButton,{small:true}),
         h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('funding'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
