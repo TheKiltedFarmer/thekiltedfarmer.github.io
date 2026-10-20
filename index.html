@@ -10946,6 +10946,16 @@ function CountyPickerLanding({onPick, profile}) {
               h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:13.5,fontWeight:700}}, c.short),
               h('div',{style:{fontFamily:"'Lora',serif",fontSize:11,color:DIM}}, m ? m + ' member' + (m===1?'':'s') : c.primaryCity)); }))),
 
+      // For local business owners
+      h('div',{style:{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.35)',borderRadius:8,padding:'16px 18px',marginBottom:18}},
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'🏪 Run a small business in Michigan?'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:10}},
+          'The Operations Hub does your books, pay, scheduling, inventory and invoices, built for Michigan’s rules. $10 a month after 3 free months, with local government alerts and a grant finder included. Sign up yourself in minutes, nobody to call.'),
+        h('div',{style:{display:'flex',gap:10,flexWrap:'wrap'}},
+          h('a',{href:'/?tab=business',style:{background:GOLD,color:'#1a1a2e',textDecoration:'none',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13.5}},'See what’s included →'),
+          h('a',{href:'/operations-hub.html?demo',target:'_blank',rel:'noopener',style:{color:GOLD,fontFamily:"'Lora',serif",fontSize:13.5,alignSelf:'center'}},'Try the demo')),
+      ),
+
       // Volunteers
       h('div',{style:{background:'rgba(255,255,255,.04)',border:'1px dashed rgba(255,255,255,.2)',borderRadius:8,padding:'16px 18px',marginBottom:26}},
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'Help get your county going'),
@@ -12300,6 +12310,21 @@ const TPV_PICK_HUB = (function(){ try { return new URLSearchParams(window.locati
 const HUB_DEMO_URL = '/operations-hub.html?demo';
 const TPV_FROM_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('hub') === '1'; } catch(e) { return false; } })();
 // The Operations Hub's row in business_services is shown as a link, not a sign-up box.
+// A small, dismissible doorway on the home feed for local business owners
+function BizDoorway({profile, onOpen}){
+  const [hidden, setHidden] = useState(()=>{ try { return localStorage.getItem('tpv_biz_doorway') === 'hide'; } catch(e) { return false; } });
+  if(hidden) return null;
+  const isBiz = profile && profile.account_type === 'business';
+  const hide = ()=>{ try { localStorage.setItem('tpv_biz_doorway','hide'); } catch(e) {} setHidden(true); };
+  return h('div',{style:{background:'#eef7f1',border:'1px solid #b9dcc5',borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}},
+    h('span',{style:{fontSize:22,flexShrink:0}},'🏪'),
+    h('div',{style:{flex:'1 1 240px',minWidth:0,fontFamily:"'Lora',serif",fontSize:13.5,color:'#1a4a2a',lineHeight:1.55}},
+      h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:'#1a1a2e'}}, isBiz ? 'Run your business from here too' : 'Run a small business in Michigan?'),
+      ' The Operations Hub does your books, pay, scheduling, inventory and invoices for $10 a month after 3 free months, with local alerts and a grant finder included. Try the demo, no account needed.'),
+    h('div',{style:{display:'flex',gap:8,alignItems:'center',flexShrink:0}},
+      h('button',{onClick:onOpen,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},'See what’s included →'),
+      h('button',{onClick:hide,'aria-label':'Hide this',title:'Hide this',style:{background:'none',border:'none',color:'#7a9a85',fontSize:18,cursor:'pointer',padding:'2px 6px'}},'×')));
+}
 const isHubService = s=>s && (s.id === 'hub' || s.id === 'operations-hub' || /operations-hub/.test(s.pay_url || ''));
 
 function BusinessServicesTab({profile, user, onToast, onNavigate}) {
@@ -20330,6 +20355,7 @@ function App() {
       // Bills tab
       // Feed tab — community activity stream
       h(PageBoundary,{tab:mainTab},
+      mainTab==='feed'&&h(BizDoorway,{profile,onOpen:()=>{ setFeedNavCtx(null); setMainTab('business'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } }}),
       mainTab==='feed'&&h(CommunityFeed,{user,profile,bills,guestMode,userVotes,followedIds,onToggleFollow:toggleFollow,memberCount,onToast:setToast,
         voteUser:user?{...user,reputation:rep,account_type:profile?.account_type}:null,onVoteCast:handleVoteCast,onRepGain:gainRep,
         onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
