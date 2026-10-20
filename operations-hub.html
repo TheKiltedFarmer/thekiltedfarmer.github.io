@@ -6713,22 +6713,35 @@ async function exportAll(){
   }
   const receipts=[];
   files.forEach(([,csv])=>{(csv.match(/https?:\/\/[^,"\s]+\/storage\/v1\/object\/public\/[^,"\s]+/g)||[]).forEach(u=>receipts.push(u));});
+  const uniq=[...new Set(receipts)];
+  // private receipt photos (business Hubs): put the photos themselves in the download
+  const photos=[];
+  if(uniq.length&&typeof receiptPath==='function'){
+    toast('Adding '+uniq.length+' receipt photo'+(uniq.length===1?'':'s')+'…');
+    for(const u of uniq.slice(0,1000)){
+      const path=receiptPath(u);if(!path)continue;
+      try{const r=await fetch(SUPABASE_URL+'/storage/v1/object/authenticated/ohb-receipts/'+path,{headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken}});
+        if(r.ok)photos.push(['receipts/'+path.split('/').pop(),await r.blob()]);}catch(e){}
+    }
+  }
   const biz=(typeof HUB!=='undefined'&&HUB.bizName)||'Operations Hub';
   const readme='Everything from '+biz+'\'s Operations Hub, downloaded '+new Date().toLocaleString('en-US')+'.\r\n\r\n'
     +'Each file opens in Excel, Google Sheets or Numbers.\r\n\r\n'+counts.join('\r\n')
-    +(receipts.length?'\r\n\r\nReceipt photos stay online at the addresses in receipt-photos.txt. Open any of them to save a copy.':'');
-  if(receipts.length)files.push(['receipt-photos.txt',[...new Set(receipts)].join('\r\n')]);
+    +(photos.length?'\r\n\r\nReceipt photos: '+photos.length+', in the "receipts" folder. The receipt_url column in each spreadsheet ends with the photo\'s file name.'
+      :uniq.length?'\r\n\r\nReceipt photos stay online at the addresses in receipt-photos.txt. Open any of them to save a copy.':'');
+  if(uniq.length&&!photos.length)files.push(['receipt-photos.txt',uniq.join('\r\n')]);
   files.unshift(['READ-ME.txt',readme]);
   const slug=(typeof fileSlug==='function'?fileSlug():'hub')+'-all-data-'+isoLocal(new Date());
   try{
     const JSZip=await loadJSZip();const zip=new JSZip();const dir=zip.folder(slug);
-    files.forEach(([n,c])=>dir.file(n,'﻿'+c));
+    files.forEach(([n,c])=>dir.file(n,'\ufeff'+c));
+    photos.forEach(([n,b])=>dir.file(n,b));
     const blob=await zip.generateAsync({type:'blob'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=slug+'.zip';document.body.appendChild(a);a.click();a.remove();
-    toast('Downloaded: '+(files.length-1)+' files');
+    toast('Downloaded: '+(files.length-1)+' files'+(photos.length?' and '+photos.length+' receipt photo'+(photos.length===1?'':'s'):''));
   }catch(e){
     // no zip tool (offline, blocked): hand over the files one at a time
-    files.forEach(([n,c],i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+c],{type:n.endsWith('.csv')?'text/csv':'text/plain'}));a.download=slug+'-'+n;document.body.appendChild(a);a.click();a.remove();},i*400));
+    files.forEach(([n,c],i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+c],{type:n.endsWith('.csv')?'text/csv':'text/plain'}));a.download=slug+'-'+n;document.body.appendChild(a);a.click();a.remove();},i*400));
     toast('Downloading '+files.length+' files one at a time');
   }
 }
@@ -6784,6 +6797,23 @@ async function payWeekForTeam(url,opts){
   if(!r.ok)return r;
   return ok(await r.json());
 }
+
+// ─── receipt photos are private: they open with a short-lived link, only for people allowed to see expenses ───
+function receiptPath(u){const m=String(u||'').match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/ohb-receipts\/([^?#]+)/);return m?decodeURIComponent(m[1]):null;}
+async function signedReceiptURL(u,secs){
+  const path=receiptPath(u);if(!path)return u;
+  const r=await fetch(SUPABASE_URL+'/storage/v1/object/sign/ohb-receipts/'+path,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:secs||600})});
+  if(!r.ok)throw new Error(r.status===400||r.status===404?'That receipt photo couldn’t be found':'You don’t have access to that receipt');
+  const j=await r.json();const su=j.signedURL||j.signedUrl||'';
+  return /^https?:/.test(su)?su:SUPABASE_URL+'/storage/v1'+su;
+}
+document.addEventListener('click',e=>{
+  const a=e.target&&e.target.closest&&e.target.closest('a[href*="/ohb-receipts/"]');if(!a)return;
+  e.preventDefault();
+  if(typeof DEMO!=='undefined'&&DEMO.on){toast('In your real Hub, this opens the receipt photo.');return;}
+  const w=window.open('','_blank');
+  signedReceiptURL(a.href).then(u=>{if(w)w.location.href=u;else location.href=u;}).catch(err=>{if(w)w.close();toast(err.message,true);});
+},true);
 
 // ─── business-type presets ───
 const COMMON_EXPENSES=['Supplies','Equipment','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Rent','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Other Expense'];
