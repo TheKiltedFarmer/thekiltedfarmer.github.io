@@ -7060,7 +7060,7 @@ async function enterApp(){
   applyBizConfig();
   try{await autoInit();}catch(e){console.warn('Start-up:',e.message);}
   try{renderStartHere();}catch(e){console.warn('Start here:',e.message);}
-  await loadPlan();renderPlanBanner();planGate();await termsGate();
+  await loadPlan();renderPlanBanner();planGate();planSelfCheck();await termsGate();
   renderHelpButton();maybeStartTour();
 }
 // came from The People's Voices sign-up form: open on "Create an account" with their email filled in
@@ -7346,7 +7346,7 @@ function trialCardHTML(){
 // ═══ TERMS ═══
 // Everyone agrees to the Terms and Privacy notes once (and again if they change in a way that matters).
 // The agreement is kept with each person's signed papers for this business.
-const TERMS_VERSION='2026-10-19';
+const TERMS_VERSION='2026-10-20';
 async function recordTerms(signedName){
   const me=(BIZ.member&&BIZ.member.name)||signedName;
   return upsertOnb({member_name:me,item:'hub_terms',version:TERMS_VERSION,status:'signed',signed_name:signedName||me,signed_at:new Date().toISOString(),
@@ -7355,14 +7355,14 @@ async function recordTerms(signedName){
 async function termsGate(){
   if(typeof DEMO!=='undefined'&&DEMO.on)return;
   if(!BIZ.id||!BIZ.member)return;
-  let ok=false;
-  try{const rows=await sb('ohb_onboarding?item=eq.hub_terms&member_name=eq.'+encodeURIComponent(BIZ.member.name)+'&select=version');ok=rows.some(r=>r.version===TERMS_VERSION);}
+  let ok=false,before=false;
+  try{const rows=await sb('ohb_onboarding?item=eq.hub_terms&member_name=eq.'+encodeURIComponent(BIZ.member.name)+'&select=version');ok=rows.some(r=>r.version===TERMS_VERSION);before=rows.length>0;}
   catch(e){return;}   // the papers table isn't set up yet: don't lock anyone out
   let g=document.getElementById('termsGate');
   if(ok){if(g)g.remove();return;}
   if(!g){g=document.createElement('div');g.id='termsGate';document.body.appendChild(g);}
-  g.innerHTML='<div class="plan-gate"><div class="plan-gate-in" style="text-align:left;"><h2 style="text-align:center;">Before you start</h2>'
-    +'<p>The Operations Hub is run by The People’s Voices. Please read and agree to how it works:</p>'
+  g.innerHTML='<div class="plan-gate"><div class="plan-gate-in" style="text-align:left;"><h2 style="text-align:center;">'+(before?'We’ve updated the Terms':'Before you start')+'</h2>'
+    +(before?'<p>What changed: clearer wording on canceling, on who’s responsible for wage and tax filings, and on where a disagreement would be settled. Your price and your data didn’t change.</p>':'<p>The Operations Hub is run by The People’s Voices. Please read and agree to how it works:</p>')
     +'<ul style="line-height:1.6;"><li><b>Your data is yours.</b> We never sell it or show ads, and you can download all of it any time.</li>'
     +'<li><b>It’s a tool, not a professional.</b> It does the math and keeps the records; you (or your tax preparer or payroll service) check them and file.</li>'
     +(BIZ.member.role==='member'?'':'<li><b>3 months free, then $10 a month</b> per business, charged automatically to the card you add. Cancel any time; cancel within the first 90 days and you pay nothing.</li>')
@@ -7444,6 +7444,24 @@ async function openBilling(flow,btn){
   if(btn){btn.disabled=false;btn.textContent=btn.dataset.label;}
   location.href='mailto:hello@thepeoplesvoices.org?subject='+encodeURIComponent((flow==='cancel'?'Cancel my Operations Hub: ':'My Operations Hub plan: ')+((BIZ.row&&BIZ.row.name)||''));
 }
+// ask our billing function to check with Stripe directly, in case a message from Stripe never
+// arrived (owners and managers only; quietly does nothing if it isn't set up)
+async function syncPlanFromStripe(sid){
+  if(typeof DEMO!=='undefined'&&DEMO.on)return false;
+  if(!isStewardUser()||!BIZ.id)return false;
+  try{const r=await fetch(SUPABASE_URL+'/functions/v1/hub-billing',{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({action:'sync',business_id:BIZ.id,session_id:sid||''})});return r.ok;}
+  catch(e){return false;}
+}
+// on opening the Hub: a business waiting on its first sign-up, or a plan nobody has heard about in a day, gets checked
+async function planSelfCheck(){
+  if(typeof DEMO!=='undefined'&&DEMO.on)return;
+  if(!isStewardUser()||!BIZ.id||!PLAN.ok)return;
+  if(/[?&](billing|paid)=1/.test(location.search))return;   // just back from Stripe: the check below handles it
+  const b=PLAN.billing,k=planState().kind;
+  const stale=b&&b.stripe_customer&&b.status!=='comped'&&(!b.updated_at||Date.now()-new Date(b.updated_at).getTime()>864e5);
+  if(!stale&&k!=='needs_sub')return;
+  if(await syncPlanFromStripe()){await loadPlan();renderPlanBanner();planGate();}
+}
 function billBtn(label,flow,cls){return '<button type="button" class="'+(cls||'btn-secondary')+'" onclick="openBilling(\''+flow+'\',this)">'+esc(label)+'</button>';}
 // canceled but still running, with the subscription still there: undo it on Stripe's page (no second sign-up)
 function canUndoCancel(){const p=planState();return p.kind==='ending'&&!!(PLAN.billing&&PLAN.billing.stripe_subscription);}
@@ -7494,7 +7512,7 @@ function planGate(){
   if(!['needs_sub','paused'].includes(p.kind)){if(g){g.remove();if(typeof maybeStartTour==='function')maybeStartTour();}return;}
   if(!g){g=document.createElement('div');g.id='planGate';document.body.appendChild(g);}
   const st=isStewardUser();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';
-  const again='<p class="bk-sub">Already done? It can take a minute to show up. <a href="#" onclick="loadPlan().then(()=>{planGate();renderPlanBanner();});return false;">Check again</a></p>';
+  const again='<p class="bk-sub">Already done? It can take a minute to show up. <a href="#" onclick="syncPlanFromStripe().then(loadPlan).then(()=>{planGate();renderPlanBanner();});return false;">Check again</a></p>';
   const foot='<div class="bk-actions" style="justify-content:center;">'+(p.kind==='paused'?'<button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button>':'')
     +(BIZ.list&&BIZ.list.length>1?BIZ.list.filter(m=>m.business_id!==BIZ.id).map(m=>'<button class="btn-secondary" onclick="switchBusiness(\''+m.business_id+'\')">Go to '+esc(m.ohb_businesses.name)+'</button>').join(''):'')
     +'<button class="btn-secondary" onclick="signOut()">Sign out</button></div><p class="bk-sub">Questions? <a href="mailto:hello@thepeoplesvoices.org">hello@thepeoplesvoices.org</a></p>';
@@ -7509,13 +7527,15 @@ function planGate(){
   g.innerHTML='<div class="plan-gate"><div class="plan-gate-in">'+inner+foot+'</div></div>';
 }
 // back from Stripe's billing page: the change reaches the Hub a few seconds later, so look a few times
-(function(){if(!/[?&]billing=1/.test(location.search))return;let n=0,was=null;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
+(function(){if(!/[?&]billing=1/.test(location.search))return;let n=0,was=null,asked=false;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
   const seen=planState().kind;if(was===null&&seen!=='checking')was=seen;
+  if(!asked){asked=true;await syncPlanFromStripe();}
   await loadPlan();renderPlanBanner();planGate();const k=planState().kind;if(was===null&&k!=='checking')was=k;
   if((was!==null&&k!=='checking'&&k!==was)||n>=8){clearInterval(iv);try{history.replaceState(null,'',location.pathname);}catch(e){}
     if(k==='ending'&&was!=='ending')toast('Your subscription is canceled. You won’t be charged again.');else if(was==='ending'&&k!=='ending')toast('You’re back on. Welcome back!');}},4000);})();
 // coming back from Stripe: give it a moment, then check
-(function(){if(!/[?&]paid=1/.test(location.search))return;let n=0;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
+(function(){if(!/[?&]paid=1/.test(location.search))return;let n=0,asked=0;const sid=new URLSearchParams(location.search).get('session_id')||'';const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
+  if(asked<2&&(n===1||n===3)){asked++;await syncPlanFromStripe(sid);}
   await loadPlan();renderPlanBanner();planGate();const p=planState();
   if(['trialing','active'].includes(p.kind)){clearInterval(iv);toast(p.kind==='trialing'?'You’re all set! Your 3 free months have started.':'Thank you! Your Hub is all set.');try{history.replaceState(null,'',location.pathname);}catch(e){}}
   else if(n>12)clearInterval(iv);},5000);})();
