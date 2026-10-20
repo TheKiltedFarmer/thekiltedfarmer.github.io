@@ -7417,9 +7417,38 @@ function payButtonHTML(label){
   return u?'<a class="btn-green plan-btn" href="'+esc(u)+'">'+esc(label||('Keep my Hub · '+price))+'</a>'
     :'<span class="bk-sub">Online payment is being set up. Write to <a href="mailto:hello@thepeoplesvoices.org">hello@thepeoplesvoices.org</a> to keep your Hub.</span>';
 }
+// Change the card, cancel, or undo a cancel in one click: our billing function opens Stripe's
+// billing page already signed in for this business. If that isn't set up yet (or Stripe says no),
+// fall back to Stripe's sign-in page, which emails a link to the address they subscribed with.
+function billingEmail(){const m=String((PLAN.billing&&PLAN.billing.note)||'').match(/^Subscribed by (\S+@\S+)$/);return m?m[1]:'';}
+function portalLoginURL(){
+  const p=PLAN.cfg&&PLAN.cfg.portal_link;if(!p)return'';
+  const e=billingEmail()||(currentUser&&currentUser.email)||'';
+  return p+(e?(p.includes('?')?'&':'?')+'prefilled_email='+encodeURIComponent(e):'');
+}
+async function openBilling(flow,btn){
+  if(btn){if(btn.disabled)return;btn.disabled=true;btn.dataset.label=btn.textContent;btn.textContent='Opening Stripe…';}
+  const back=location.origin+location.pathname+'?billing=1';
+  let why='';
+  try{
+    const r=await fetch(SUPABASE_URL+'/functions/v1/hub-billing',{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({action:'portal',business_id:BIZ.id,flow:flow||'',return_url:back})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.url){location.href=j.url;return;}
+    if(j.error&&j.error!=='not_set_up')why=j.message||j.error;
+  }catch(e){why='couldn’t reach the billing service';}
+  const login=portalLoginURL();
+  if(login){
+    if(why){console.warn('Billing page:',why);toast('Opening Stripe’s sign-in page instead ('+why+')');await new Promise(ok=>setTimeout(ok,2500));}
+    location.href=login;return;
+  }
+  if(btn){btn.disabled=false;btn.textContent=btn.dataset.label;}
+  location.href='mailto:hello@thepeoplesvoices.org?subject='+encodeURIComponent((flow==='cancel'?'Cancel my Operations Hub: ':'My Operations Hub plan: ')+((BIZ.row&&BIZ.row.name)||''));
+}
+function billBtn(label,flow,cls){return '<button type="button" class="'+(cls||'btn-secondary')+'" onclick="openBilling(\''+flow+'\',this)">'+esc(label)+'</button>';}
+// canceled but still running, with the subscription still there: undo it on Stripe's page (no second sign-up)
+function canUndoCancel(){const p=planState();return p.kind==='ending'&&!!(PLAN.billing&&PLAN.billing.stripe_subscription);}
 function planCardHTML(){
   const p=planState();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';const st=isStewardUser();
-  const portal=PLAN.cfg&&PLAN.cfg.portal_link;
   const fmtD=d=>new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const manage=()=>'';
   let body='';
@@ -7427,22 +7456,21 @@ function planCardHTML(){
   else if(p.kind==='trialing')body='<b>Free'+(p.end?' until '+esc(fmtD(p.end)):' for your first 3 months')+'.</b> After that, '+esc(price)+' is charged automatically to the card you added. Cancel before then and you won’t be charged at all.'+manage('Manage billing or cancel');
   else if(p.kind==='active')body='<b>Active</b> · '+esc(price)+(p.renews?', renews '+esc(fmtD(p.renews)):'')+'. Watch alerts, the Bid & grant finder and rule explainers are included.'+manage('Manage billing or cancel');
   else if(p.kind==='past_due')body='<b>Your last payment didn’t go through.</b> Your Hub keeps working while Stripe retries the card.'+manage('Update your card');
-  else if(p.kind==='ending')body='<b>Canceled.</b> Your Hub keeps working until '+esc(fmtD(p.end))+', then pauses. Nothing gets deleted.';
+  else if(p.kind==='ending')body='<b>Canceled.</b> Your Hub keeps working until '+esc(fmtD(p.end))+', then pauses. You won’t be charged again, and nothing gets deleted.';
   else if(p.kind==='open')body='<b>Free for now.</b> Billing isn’t switched on yet.';
   else if(p.kind==='checking')body='Checking your plan… <a href="#" onclick="refreshPlan();return false;">Check again</a>';
   else body='<b>Not subscribed.</b> Start your 3 free months to use the Hub. Nothing gets deleted.';
-  // owners and managers can always change the card or cancel, in a couple of clicks
-  const mail='mailto:hello@thepeoplesvoices.org?subject='+encodeURIComponent('Cancel my Operations Hub: '+((BIZ.row&&BIZ.row.name)||''));
+  // owners and managers can always change the card or cancel, in one click
+  const em=billingEmail();
   const billBtns=st&&['trialing','active','past_due'].includes(p.kind)
-    ?'<div class="bk-actions">'+(portal
-        ?'<a class="btn-secondary" style="text-decoration:none;" href="'+esc(portal)+'" target="_blank" rel="noopener">'+(p.kind==='past_due'?'Update my card':'Change my card')+'</a>'
-         +'<a class="btn-secondary danger" style="text-decoration:none;" href="'+esc(portal)+'" target="_blank" rel="noopener">Cancel subscription</a>'
-        :'<a class="btn-secondary danger" style="text-decoration:none;" href="'+esc(mail)+'">Cancel subscription</a>')
-      +'</div><div class="bk-sub">'+(portal?'Opens Stripe’s secure billing page. Enter the email you subscribed with and Stripe sends you a link. ':'Sends us an email and we’ll cancel it for you, usually the same day. ')
+    ?'<div class="bk-actions">'+billBtn(p.kind==='past_due'?'Update my card':'Change my card','card')+billBtn('Cancel subscription','cancel','btn-secondary danger')+'</div>'
+      +'<div class="bk-sub">Opens Stripe’s secure billing page'+(em?' for <b>'+esc(em)+'</b>':'')+'. '
       +(p.kind==='trialing'?'Cancel before your free months end and you’re never charged.':'You keep everything until the end of the month you’ve paid for, and your data is never deleted.')+'</div>'
+    :st&&canUndoCancel()
+    ?'<div class="bk-actions">'+billBtn('Keep my Hub (undo cancel)','','btn-green')+'</div><div class="bk-sub">Changed your mind? This opens Stripe’s billing page, where you can turn the subscription back on'+(p.left!=null&&p.end?'. Nothing is charged before '+esc(fmtD(p.end)):'')+'.</div>'
     :'';
   return '<div class="card" id="planCard"><div class="card-title"><div class="card-title-dot"></div>Your Plan</div><div class="card-sub">'+body+'</div>'+billBtns
-    +(st&&['needs_sub','ending','paused'].includes(p.kind)?'<div class="bk-actions">'+payButtonHTML(p.kind==='needs_sub'?'Start my 3 free months':'Keep my Hub · '+price)+'</div>':'')
+    +(st&&(['needs_sub','paused'].includes(p.kind)||(p.kind==='ending'&&!canUndoCancel()))?'<div class="bk-actions">'+payButtonHTML(p.kind==='needs_sub'?'Start my 3 free months':'Keep my Hub · '+price)+'</div>':'')
     +'<div class="bk-actions"><button class="btn-secondary" onclick="exportAll()">⬇ Download all my data</button>'
     +'<a class="btn-secondary" style="text-decoration:none;" href="/hub-help.html" target="_blank" rel="noopener">Help</a>'
     +'<a class="btn-secondary" style="text-decoration:none;" href="/terms.html" target="_blank" rel="noopener">Terms</a>'
@@ -7454,11 +7482,10 @@ function renderPlanBanner(){
   if(!el){el=document.createElement('div');el.id='planBanner';dash.insertBefore(el,dash.firstChild);}
   const p=planState();const price=(PLAN.cfg&&PLAN.cfg.price_label)||'$10 a month';
   const fmtD=d=>new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric'});
-  const portal=PLAN.cfg&&PLAN.cfg.portal_link;
   let msg='',btn='';
-  if(p.kind==='trialing'&&p.left!=null&&p.left<=7){msg='<b>Your free months end '+(p.end?'on '+esc(fmtD(p.end)):'soon')+'.</b> Then '+esc(price)+' is charged to your card. Nothing to do if you’re staying.';if(portal)btn='<a class="btn-secondary plan-btn" href="'+esc(portal)+'" target="_blank" rel="noopener">Manage billing</a>';}
-  else if(p.kind==='past_due'){msg='<b>Your last payment didn’t go through.</b> Update your card to keep things running.';if(portal)btn='<a class="btn-green plan-btn" href="'+esc(portal)+'" target="_blank" rel="noopener">Update card</a>';}
-  else if(p.kind==='ending'){msg='<b>Your Hub is canceled</b> and pauses on '+esc(fmtD(p.end))+'. Changed your mind?';btn=payButtonHTML();}
+  if(p.kind==='trialing'&&p.left!=null&&p.left<=7){msg='<b>Your free months end '+(p.end?'on '+esc(fmtD(p.end)):'soon')+'.</b> Then '+esc(price)+' is charged to your card. Nothing to do if you’re staying.';btn='<button type="button" class="btn-secondary plan-btn" onclick="openBilling(\'\',this)">Manage billing</button>';}
+  else if(p.kind==='past_due'){msg='<b>Your last payment didn’t go through.</b> Update your card to keep things running.';btn='<button type="button" class="btn-green plan-btn" onclick="openBilling(\'card\',this)">Update card</button>';}
+  else if(p.kind==='ending'){msg='<b>Your Hub is canceled</b> and pauses on '+esc(fmtD(p.end))+'. Changed your mind?';btn=canUndoCancel()?'<button type="button" class="btn-green plan-btn" onclick="openBilling(\'\',this)">Keep my Hub</button>':payButtonHTML();}
   if(!isStewardUser()||!msg){el.innerHTML='';return;}
   el.innerHTML='<div class="card plan-banner"><div>'+msg+'</div>'+btn+'</div>';
 }
@@ -7481,6 +7508,12 @@ function planGate(){
     +'<div class="bk-actions" style="justify-content:center;">'+payButtonHTML()+'</div>'+again;
   g.innerHTML='<div class="plan-gate"><div class="plan-gate-in">'+inner+foot+'</div></div>';
 }
+// back from Stripe's billing page: the change reaches the Hub a few seconds later, so look a few times
+(function(){if(!/[?&]billing=1/.test(location.search))return;let n=0,was=null;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
+  const seen=planState().kind;if(was===null&&seen!=='checking')was=seen;
+  await loadPlan();renderPlanBanner();planGate();const k=planState().kind;if(was===null&&k!=='checking')was=k;
+  if((was!==null&&k!=='checking'&&k!==was)||n>=8){clearInterval(iv);try{history.replaceState(null,'',location.pathname);}catch(e){}
+    if(k==='ending'&&was!=='ending')toast('Your subscription is canceled. You won’t be charged again.');else if(was==='ending'&&k!=='ending')toast('You’re back on. Welcome back!');}},4000);})();
 // coming back from Stripe: give it a moment, then check
 (function(){if(!/[?&]paid=1/.test(location.search))return;let n=0;const iv=setInterval(async()=>{n++;if(!BIZ.id){if(n>30)clearInterval(iv);return;}
   await loadPlan();renderPlanBanner();planGate();const p=planState();
