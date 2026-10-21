@@ -2013,6 +2013,7 @@ function timeSince(iso) {
 // ── Admin: Reports queue ─────────────────────────────────────────────────────
 function ReportsQueue({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('reports', setOpen);
   const [view, setView] = useState('open'); // open | resolved
   const [reports, setReports] = useState([]);
   const [openCount, setOpenCount] = useState(0);
@@ -2180,6 +2181,7 @@ const ADMIN_ACTION_LABELS = {
 };
 function ModerationLog({profile}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('log', setOpen);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const load = async()=>{
@@ -8230,6 +8232,7 @@ function PressBadgeInbox({onToast}) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('pressBadges', setOpen);
 
   useEffect(()=>{
     sb.from('press_badge_requests').select('*')
@@ -8239,8 +8242,10 @@ function PressBadgeInbox({onToast}) {
   },[]);
 
   const approve = async(req)=>{
-    await sb.from('profiles').update({is_press:true,press_outlet:req.outlet,press_beat:req.beat||null}).eq('id',req.user_id);
-    await sb.from('press_badge_requests').update({status:'approved'}).eq('id',req.id);
+    const {data:saved, error} = await sb.from('profiles').update({is_press:true,press_outlet:req.outlet,press_beat:req.beat||null}).eq('id',req.user_id).select('id');
+    if(error || !saved || !saved.length) { onToast('❌ Badge not saved' + (error ? ': ' + error.message : ': their profile could not be updated.')); return; }
+    const {error:e2} = await sb.from('press_badge_requests').update({status:'approved'}).eq('id',req.id);
+    if(e2) { onToast('⚠️ Badge granted, but the request could not be closed: ' + e2.message); return; }
     // Notify them
     try {
       await sb.from('notifications').insert({
@@ -8255,7 +8260,8 @@ function PressBadgeInbox({onToast}) {
   };
 
   const deny = async(req)=>{
-    await sb.from('press_badge_requests').update({status:'denied'}).eq('id',req.id);
+    const {error} = await sb.from('press_badge_requests').update({status:'denied'}).eq('id',req.id);
+    if(error) { onToast('❌ ' + error.message); return; }
     setRequests(prev=>prev.filter(r=>r.id!==req.id));
     onToast('Request from '+req.display_name+' denied.');
   };
@@ -9025,6 +9031,7 @@ function OfficialBadgeInbox({onToast}) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('officialBadges', setOpen);
 
   useEffect(()=>{
     sb.from('official_badge_requests').select('*')
@@ -9033,19 +9040,25 @@ function OfficialBadgeInbox({onToast}) {
   },[]);
 
   const approve = async(req)=>{
-    // Grant the badge
-    await sb.from('profiles').update({
+    // Grant the badge, and only close the request if the badge really saved
+    const {data:saved, error} = await sb.from('profiles').update({
       is_official: true,
       official_title: req.title
-    }).eq('id',req.user_id);
-    // Mark request as approved
-    await sb.from('official_badge_requests').update({status:'approved'}).eq('id',req.id);
+    }).eq('id',req.user_id).select('id');
+    if(error || !saved || !saved.length) { onToast('❌ Badge not saved' + (error ? ': ' + error.message : ': their profile could not be updated.')); return; }
+    const {error:e2} = await sb.from('official_badge_requests').update({status:'approved'}).eq('id',req.id);
+    if(e2) { onToast('⚠️ Badge granted, but the request could not be closed: ' + e2.message); return; }
+    try {
+      await sb.from('notifications').insert({user_id:req.user_id,type:'official',title:'Your Official badge has been approved!',
+        body:'Your 🏛 Official badge is now live on your profile.',read:false,created_at:new Date().toISOString()});
+    } catch(e) {}
     setRequests(prev=>prev.filter(r=>r.id!==req.id));
     onToast('✅ Official badge granted to '+req.display_name+'!');
   };
 
   const deny = async(req)=>{
-    await sb.from('official_badge_requests').update({status:'denied'}).eq('id',req.id);
+    const {error} = await sb.from('official_badge_requests').update({status:'denied'}).eq('id',req.id);
+    if(error) { onToast('❌ ' + error.message); return; }
     setRequests(prev=>prev.filter(r=>r.id!==req.id));
     onToast('Request from '+req.display_name+' denied.');
   };
@@ -13063,6 +13076,7 @@ function normalizeSourceUrl(u, kind) {
 
 function CalendarSourcesPanel({profile, onToast}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('calendars', setOpen);
   const [sources, setSources] = useState(null);
   const [running, setRunning] = useState(null); // 'all' | id
   const [lastResult, setLastResult] = useState(null);
@@ -13181,6 +13195,7 @@ function CalendarSourcesPanel({profile, onToast}) {
 // ── Admin: where people are asking for the platform ─────────────────────────
 function CountyRequestsPanel({profile}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('volunteers', setOpen);
   const [rows, setRows] = useState(null);
   const [admins, setAdmins] = useState({});   // volunteer user_id -> {is_admin, admin_counties}
   const [busy, setBusy] = useState('');
@@ -13215,6 +13230,14 @@ function CountyRequestsPanel({profile}) {
     setAdmins(m=>({...m,[p.id]:{...p, is_admin:true, admin_counties:list}}));
     setMsg('✅ ' + who + ' is now a county admin for ' + where + '. Send them a welcome message so they know.');
   };
+  const removeReq = async(r)=>{
+    if(!r.id) { setMsg('❌ This sign-up has no id, so it can\'t be removed here.'); return; }
+    if(!window.confirm('Remove ' + (r.name || 'this sign-up') + ' from the list? Use this for spam or duplicates.')) return;
+    const {data:gone, error} = await sb.from('county_requests').delete().eq('id', r.id).select('id');
+    if(error || !gone || !gone.length) { setMsg('❌ Not removed' + (error ? ': ' + error.message : '. The database doesn\'t allow deleting sign-ups yet.')); return; }
+    setRows(prev=>prev.filter(x=>x.id!==r.id));
+    setMsg('Removed ' + (r.name || 'that sign-up') + '.');
+  };
   const byCounty = {};
   (rows||[]).forEach(r=>{ const c = r.county || countyForZip(r.zip) || 'unknown'; (byCounty[c] = byCounty[c] || []).push(r); });
   const ranked = Object.entries(byCounty).sort((a,b)=>b[1].filter(r=>r.kind==='volunteer').length-a[1].filter(r=>r.kind==='volunteer').length || b[1].length-a[1].length);
@@ -13245,7 +13268,8 @@ function CountyRequestsPanel({profile}) {
                     : adminFor(admins[r.user_id], cid) ? h('span',{style:{marginLeft:8,color:'#1a6b3c',fontWeight:700,fontSize:12}},'✓ County admin')
                     : h('button',{onClick:()=>approve(r, cid),disabled:busy===r.user_id+cid,
                         style:{marginLeft:8,background:'#1a6b3c',color:'#fff',border:'none',borderRadius:4,fontSize:11.5,fontWeight:700,cursor:'pointer',padding:'3px 10px',opacity:busy===r.user_id+cid?0.6:1}},
-                        busy===r.user_id+cid ? 'Approving…' : 'Approve as county admin'))),
+                        busy===r.user_id+cid ? 'Approving…' : 'Approve as county admin'),
+                  h('button',{onClick:()=>removeReq(r),style:{marginLeft:6,background:'none',border:'1px solid #ddd',borderRadius:4,fontSize:11,color:'#999',cursor:'pointer',padding:'2px 8px'}},'Remove'))),
                 !vols.length && list.filter(r=>r.note).slice(0,2).map((r,i)=>h('div',{key:i,style:{fontSize:12,color:'#666',fontStyle:'italic',marginTop:2}},'“'+r.note+'”')));
             })
           ))
@@ -13257,6 +13281,7 @@ function CountyRequestsPanel({profile}) {
 // are used, fullest first, so nobody is surprised when a county fills up.
 function CountySpotsPanel({profile}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('spots', setOpen);
   const [showAll, setShowAll] = useState(false);
   const [stats, setStats] = useState(null);
   useEffect(()=>{
@@ -14656,6 +14681,7 @@ function EventsApprovalQueue({onToast}) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('events', setOpen);
 
   const load = async()=>{
     setLoading(true);
@@ -15980,6 +16006,7 @@ const QUESTION_SEEDS = [
 // ── Admin: Author a new Question ─────────────────────────────────────────────
 function QuestionAuthorPanel({user, profile, onToast}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('question', setOpen);
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [draftQuestions, setDraftQuestions] = useState([]);
   const [title, setTitle] = useState('');
@@ -16565,6 +16592,7 @@ function StuckSignupsQueue({user, profile, onToast}) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('stuck', setOpen);
   const [resending, setResending] = useState(null); // user.id being resent
 
   const load = ()=>{
@@ -16684,6 +16712,7 @@ function NewsApprovalQueue({user, profile, onToast}) {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('news', setOpen);
 
   const load = ()=>{
     setLoading(true);
@@ -16790,6 +16819,7 @@ function MeetingPopulator({user, profile, onToast}) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [open, setOpen] = useState(false);
+  useAdminOpen('drafts', setOpen);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
@@ -17173,6 +17203,7 @@ function CorrectionsQueue({user, profile, onToast}) {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('corrections', setOpen);
 
   const load = ()=>{
     setLoading(true);
@@ -17291,6 +17322,7 @@ function DeletedItemsPanel({onToast}) {
   const [items, setItems] = useState({community_resources:[], events:[], exchange_listings:[]});
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('deleted', setOpen);
 
   const load = async()=>{
     setLoading(true);
@@ -17708,6 +17740,7 @@ function IdeasTab({user, profile, rep, onToast}) {
 function ResourceApprovalQueue({onToast}) {
   const [pending, setPending] = useState([]);
   const [open, setOpen] = useState(false);
+  useAdminOpen('resources', setOpen);
 
   useEffect(()=>{
     sb.from('resource_suggestions').select('*').eq('status','pending').eq('county', countyTag()).order('created_at',{ascending:false})
@@ -17871,6 +17904,7 @@ function FeedbackInbox({onToast}) {
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
+  useAdminOpen('feedback', setOpen);
 
   useEffect(()=>{
     sb.from('user_feedback').select('*').order('created_at',{ascending:false})
@@ -17882,13 +17916,15 @@ function FeedbackInbox({onToast}) {
   },[]);
 
   const markRead = async(id)=>{
-    await sb.from('user_feedback').update({read:true}).eq('id',id);
+    const {error} = await sb.from('user_feedback').update({read:true}).eq('id',id);
+    if(error) { onToast('❌ ' + error.message); return; }
     setMessages(prev=>prev.map(m=>m.id===id?{...m,read:true}:m));
     setUnread(u=>Math.max(0,u-1));
   };
 
   const del = async(id)=>{
-    await sb.from('user_feedback').delete().eq('id',id);
+    const {data:gone, error} = await sb.from('user_feedback').delete().eq('id',id).select('id');
+    if(error || !gone || !gone.length) { onToast('❌ Not deleted' + (error ? ': ' + error.message : '.')); return; }
     setMessages(prev=>prev.filter(m=>m.id!==id));
     onToast('Message deleted.');
   };
@@ -17940,6 +17976,7 @@ function OfficialManager({onToast}) {
   const [officials, setOfficials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('officials', setOpen);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -18066,6 +18103,7 @@ function NewUsersInbox({onToast, profile, focusMemberId, onFocusConsumed}) {
   const [welcomes, setWelcomes] = useState({});
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('neighbors', setOpen);
   const [showAll, setShowAll] = useState(false);
 
   const load = async()=>{
@@ -18156,6 +18194,7 @@ function ProjectsManager({onToast}) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
   const [open, setOpen] = useState(false);
+  useAdminOpen('projects', setOpen);
 
   const load = async()=>{
     setLoading(true);
@@ -18215,10 +18254,11 @@ function ProjectsManager({onToast}) {
   );
 }
 
-function NominationsInbox({onToast}) {
+function NominationsInbox({onToast, onStartBill}) {
   const [nominations, setNominations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  useAdminOpen('nominations', setOpen);
 
   useEffect(()=>{
     sb.from('bill_nominations').select('*').order('created_at',{ascending:false})
@@ -18226,7 +18266,8 @@ function NominationsInbox({onToast}) {
   },[]);
 
   const dismiss = async(id)=>{
-    await sb.from('bill_nominations').delete().eq('id',id);
+    const {data:gone, error} = await sb.from('bill_nominations').delete().eq('id',id).select('id');
+    if(error || !gone || !gone.length) { onToast('❌ Not dismissed' + (error ? ': ' + error.message : '.')); return; }
     setNominations(prev=>prev.filter(n=>n.id!==id));
     onToast('Nomination dismissed.');
   };
@@ -18258,7 +18299,11 @@ function NominationsInbox({onToast}) {
           n.source_url&&h('a',{href:n.source_url,target:'_blank',
             style:{background:'#1a5c8a',color:'#fff',textDecoration:'none',padding:'6px 14px',borderRadius:5,
               fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}
-          },'View & Add to App'),
+          },'View source'),
+          onStartBill&&h('button',{onClick:()=>onStartBill(n),
+            style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'6px 14px',borderRadius:5,cursor:'pointer',
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}
+          },'📝 Start a bill from this'),
           h('button',{onClick:()=>dismiss(n.id),
             style:{background:'transparent',border:'1px solid #ddd',color:'#aaa',padding:'6px 12px',borderRadius:5,fontSize:12,cursor:'pointer'}
           },'Dismiss')
@@ -18398,6 +18443,7 @@ function UserManager({onToast, user, profile}) {
   const full = isFullAdmin(profile);
   const myCounties = adminCounties(profile);
   const [open, setOpen] = useState(false);
+  useAdminOpen('users', setOpen);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -18778,6 +18824,7 @@ const JURISDICTIONS = [
 // to the multi-county architecture. Visible only when user is admin.
 function AdminChat({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
   const [open, setOpen] = useState(false);
+  useAdminOpen('chat', setOpen);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -19049,7 +19096,451 @@ function AdminChat({user, profile, onToast, autoOpen, onAutoOpenConsumed}) {
   );
 }
 
-function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed}) {
+// ── Admin: jump to a tool ────────────────────────────────────────────────────
+// Every admin tool sits inside <div id="adm-KEY">. adminJump scrolls there and
+// tells the tool to open itself (tools listen with useAdminOpen).
+function adminJump(key) {
+  try { document.dispatchEvent(new CustomEvent('tpv:admin-open', {detail:key})); } catch(e) {}
+  setTimeout(()=>{ const el = document.getElementById('adm-' + key); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+}
+function useAdminOpen(key, setOpen) {
+  useEffect(()=>{
+    const f = e=>{ if(e && e.detail === key) setOpen(true); };
+    document.addEventListener('tpv:admin-open', f);
+    return ()=>document.removeEventListener('tpv:admin-open', f);
+  },[]);
+}
+// Open another county's Admin tab (full page load, then App opens Admin)
+function openCountyAdmin(id) {
+  try { sessionStorage.setItem('tpv_open_admin', '1'); } catch(e) {}
+  goToCounty(id);
+}
+
+// ── Admin: what's waiting ────────────────────────────────────────────────────
+// Counts mirror the filters each tool uses, so the number here matches what
+// you see when you open that tool.
+const ADMIN_QUEUE_LABELS = {
+  reports:'Reports', neighbors:'New neighbors to welcome', submissions:'Community bill submissions',
+  events:'Pending events', news:'News submissions', resources:'Resource suggestions', drafts:'Meeting drafts',
+  corrections:'Suggested corrections', candidates:'Candidates to verify', stuck:'Stuck sign-ups',
+  volunteers:'Volunteers to approve', officialBadges:'Official badge requests', pressBadges:'Press badge requests',
+  feedback:'Unread feedback', nominations:'Bill nominations',
+};
+const ADMIN_QUEUE_ONE = {
+  reports:'Report', neighbors:'New neighbor to welcome', submissions:'Community bill submission', events:'Pending event',
+  news:'News submission', resources:'Resource suggestion', drafts:'Meeting draft', corrections:'Suggested correction',
+  candidates:'Candidate to verify', stuck:'Stuck sign-up', volunteers:'Volunteer to approve', officialBadges:'Official badge request',
+  pressBadges:'Press badge request', feedback:'Unread feedback', nominations:'Bill nomination',
+};
+const adminQueueLabel = (k, n)=> n === 1 ? ADMIN_QUEUE_ONE[k] : ADMIN_QUEUE_LABELS[k];
+const ADMIN_PER_COUNTY = [
+  ['submissions','pending_bills', q=>q.eq('pending',true)],
+  ['events','events', q=>q.eq('approved',false).is('deleted_at',null).gte('event_date',new Date().toISOString().slice(0,10))],
+  ['news','news_stories', q=>q.eq('approved',false)],
+  ['resources','resource_suggestions', q=>q.eq('status','pending')],
+  ['drafts','meeting_drafts', q=>q.eq('status','draft')],
+];
+function AdminWaitingBoard({profile}) {
+  const [here, setHere] = useState(null);      // {key: count} for this county + statewide items
+  const [others, setOthers] = useState(null);  // [{county, items:{key:count}}]
+  const [loading, setLoading] = useState(false);
+  const full = isFullAdmin(profile);
+  const mine = adminCounties(profile);
+  const cur = countyTag();
+  const count = async(table, build)=>{
+    try {
+      const {count:n, error} = await build(sb.from(table).select('id',{count:'exact', head:true}));
+      return error ? null : (n||0);
+    } catch(e) { return null; }
+  };
+  const load = async()=>{
+    setLoading(true);
+    const out = {};
+    const jobs = [];
+    // Reports: every open report in counties you cover
+    jobs.push((async()=>{ out.reports = await count('content_reports', q=>{ q = q.eq('status','open'); return full ? q : q.in('county', mine); }); })());
+    // This county's queues
+    ADMIN_PER_COUNTY.forEach(([key, table, f])=>jobs.push((async()=>{ out[key] = await count(table, q=>f(q).eq('county', cur)); })()));
+    // Statewide lists every admin sees
+    jobs.push((async()=>{ out.corrections = await count('content_corrections', q=>q.eq('status','pending')); })());
+    jobs.push((async()=>{ out.candidates = await count('guide_claims', q=>q.eq('status','pending')); })());
+    jobs.push((async()=>{ out.nominations = await count('bill_nominations', q=>q); })());
+    // New neighbors still waiting for a hello (same rule as the New neighbors tool)
+    jobs.push((async()=>{
+      try {
+        let q = sb.from('profiles').select('id,is_admin,created_at').is('deleted_at', null);
+        if(!full) q = q.in('county', mine);
+        const {data} = await q.order('created_at',{ascending:false}).limit(30);
+        const recent = (data||[]).filter(u=>!u.is_admin && Date.now()-new Date(u.created_at).getTime() < 14*86400000);
+        if(!recent.length) { out.neighbors = 0; return; }
+        const {data:w} = await sb.from('member_welcomes').select('member_id').in('member_id', recent.map(u=>u.id));
+        const done = new Set((w||[]).map(x=>x.member_id));
+        out.neighbors = recent.filter(u=>!done.has(u.id)).length;
+      } catch(e) { out.neighbors = null; }
+    })());
+    jobs.push((async()=>{
+      try {
+        const {data, error} = await sb.rpc('get_stuck_signups');
+        if(error) { out.stuck = null; return; }
+        const rows = full ? (data||[]) : (data||[]).filter(r=>mine.includes(r.county || countyForZip(r.zip)));
+        out.stuck = rows.length;
+      } catch(e) { out.stuck = null; }
+    })());
+    if(full) {
+      jobs.push((async()=>{ out.officialBadges = await count('official_badge_requests', q=>q.eq('status','pending')); })());
+      jobs.push((async()=>{ out.pressBadges = await count('press_badge_requests', q=>q.eq('status','pending')); })());
+      jobs.push((async()=>{ out.feedback = await count('user_feedback', q=>q.eq('read', false)); })());
+      jobs.push((async()=>{
+        try {
+          const {data} = await sb.from('county_requests').select('county,user_id,kind').eq('kind','volunteer').limit(1000);
+          const vols = (data||[]).filter(r=>r.user_id && COUNTIES[r.county]);
+          if(!vols.length) { out.volunteers = 0; return; }
+          const {data:ps} = await sb.from('profiles').select('id,is_admin,admin_counties').in('id', [...new Set(vols.map(v=>v.user_id))]);
+          const byId = {}; (ps||[]).forEach(p=>{ byId[p.id] = p; });
+          out.volunteers = vols.filter(v=>{ const p = byId[v.user_id]; return !(p && p.is_admin && (!Array.isArray(p.admin_counties) || !p.admin_counties.length || p.admin_counties.includes(v.county))); }).length;
+        } catch(e) { out.volunteers = null; }
+      })());
+    }
+    // Other counties you cover with something waiting
+    const other = {};
+    if(mine.length > 1) {
+      ADMIN_PER_COUNTY.forEach(([key, table, f])=>jobs.push((async()=>{
+        try {
+          let q = f(sb.from(table).select('county')).neq('county', cur);
+          if(!full) q = q.in('county', mine);
+          const {data, error} = await q.limit(2000);
+          if(error) return;
+          (data||[]).forEach(r=>{ if(!COUNTIES[r.county]) return; const o = other[r.county] = other[r.county] || {}; o[key] = (o[key]||0) + 1; });
+        } catch(e) {}
+      })()));
+    }
+    await Promise.all(jobs);
+    setHere(out);
+    setOthers(Object.entries(other).map(([county, items])=>({county, items, total:Object.values(items).reduce((a,b)=>a+b,0)}))
+      .sort((a,b)=>b.total-a.total));
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+  const order = ['reports','neighbors','submissions','events','news','resources','drafts','corrections','candidates','stuck','volunteers','officialBadges','pressBadges','feedback','nominations'];
+  const items = here ? order.filter(k=>here[k] > 0) : [];
+  const urgent = new Set(['reports','neighbors','volunteers']);
+  return h('div',{style:{background:'#1a1a2e',borderRadius:12,padding:'14px 16px',marginBottom:20,color:'#fff'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#f0c040'}},'📥 Waiting for you'),
+        h('div',{style:{fontSize:12,color:'#9aa8b8',fontFamily:"'Lora',serif",marginTop:2}},
+          'In ' + getCurrentCounty().name + (full ? ', plus statewide items' : '') + '. Tap Go to open that tool.')),
+      h('button',{onClick:load,disabled:loading,style:{background:'transparent',border:'1px solid #f0c040',color:'#f0c040',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}},
+        loading ? 'Checking…' : '↻ Refresh')),
+    here === null
+      ? h('div',{style:{fontSize:13,color:'#9aa8b8'}},'Checking every queue…')
+      : items.length === 0
+        ? h('div',{style:{fontSize:14,color:'#6bcf8a',fontFamily:"'Lora',serif"}},'Nothing waiting here. 🌱')
+        : h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
+            items.map(k=>h('button',{key:k,onClick:()=>adminJump(k),
+              style:{display:'flex',alignItems:'center',gap:8,background:urgent.has(k)?'#c0392b':'rgba(255,255,255,.08)',color:'#fff',
+                border:'1px solid '+(urgent.has(k)?'#c0392b':'rgba(255,255,255,.18)'),borderRadius:8,padding:'7px 11px',cursor:'pointer',fontFamily:"'Lora',serif",fontSize:13}},
+              h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:urgent.has(k)?'#fff':'#f0c040'}}, here[k]),
+              adminQueueLabel(k, here[k]),
+              h('span',{style:{fontSize:11,opacity:.8}},'Go →')))),
+    others && others.length > 0 && h('div',{style:{marginTop:12,paddingTop:10,borderTop:'1px solid rgba(255,255,255,.12)'}},
+      h('div',{style:{fontSize:11,letterSpacing:1.2,textTransform:'uppercase',color:'#9aa8b8',marginBottom:6}},'Other counties with something waiting'),
+      others.slice(0,25).map(o=>h('div',{key:o.county,style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',fontSize:13,fontFamily:"'Lora',serif",flexWrap:'wrap'}},
+        h('span',null, h('strong',null, COUNTIES[o.county].name), ' · ',
+          Object.entries(o.items).map(([k,n])=>n + ' ' + adminQueueLabel(k, n).toLowerCase()).join(', ')),
+        h('button',{onClick:()=>openCountyAdmin(o.county),style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:5,padding:'4px 10px',fontSize:12,fontWeight:700,cursor:'pointer'}},'Open →'))),
+      others.length > 25 && h('div',{style:{fontSize:12,color:'#9aa8b8'}},'…and ' + (others.length-25) + ' more counties.'))
+  );
+}
+
+// ── Admin: section headings ──────────────────────────────────────────────────
+function AdminSection({title, note, guide}) {
+  return h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,flexWrap:'wrap',margin:'26px 0 10px',paddingBottom:6,borderBottom:'2px solid #1a1a2e'}},
+    h('div',null,
+      h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:16,color:'#1a1a2e'}}, title),
+      note && h('div',{style:{fontSize:12,color:'#888',fontFamily:"'Lora',serif",marginTop:2}}, note)),
+    guide && h('button',{onClick:()=>openAdminGuide(guide),style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},'How this works'));
+}
+
+// ── Admin guide (SOP) ────────────────────────────────────────────────────────
+// Plain-language how-to for every admin. Each topic can jump to its tool.
+// Body items: a string is a paragraph; {steps:[...]} a numbered list;
+// {list:[...]} bullets; {tip:'...'} a highlighted note.
+const COUNTY_ADMIN_GUIDE = [
+  {id:'role', title:'Your role, and what you cover', body:[
+    'You\'re the local keeper of The People\'s Voices for your county. Your job is to keep it accurate, current, welcoming and nonpartisan, so neighbors can see what their local government is doing and have a say in it.',
+    'The Admin tab only shows up while you\'re looking at a county you cover. The blue banner at the top of this tab says which counties those are. To work on a different county you cover, switch county with the county name at the top of the site.',
+    'Reports, residents and removals outside your counties stay with the other admins. Some lists are statewide (corrections, nominations, candidate verification). Only act on items from your own county unless another admin asks you to.',
+    {tip:'Only the master admin can give or remove admin access, approve Official and Press badges, read site feedback, run the business services and funding pages, or permanently delete an account. If you need any of those, ask in Admin Chat.'},
+  ]},
+  {id:'firstday', title:'Your first day (checklist)', body:[
+    {steps:[
+      'Read this whole guide once. It takes about 15 minutes.',
+      'Say hello in Admin Chat so the other admins know you.',
+      'Open your own profile and make sure your county and ZIP are right.',
+      'Open each tool below once, so you know what it looks like when it\'s empty.',
+      'Add your county\'s official meeting calendars in Calendar sources (city, township, village, county, school board).',
+      'Look up the latest agendas for your local governments and add the decisions coming up as bills.',
+      'Welcome everyone in New neighbors who hasn\'t been greeted yet.',
+    ]},
+  ]},
+  {id:'daily', title:'Every day (about 10 minutes)', body:[
+    'Start at the "Waiting for you" board at the top of this tab. Work through it from left to right; red items come first.',
+    {steps:[
+      'Reports. Anything a resident flagged. Handle these the same day.',
+      'New neighbors. Send each new person a short welcome message.',
+      'Approvals. Community bill submissions, pending events, news submissions and resource suggestions. Approve what\'s accurate and local; reject what isn\'t.',
+      'Admin Chat. Read anything new and answer questions from other admins.',
+    ]},
+    {tip:'If the board says "Nothing waiting here", you\'re done for the day.'},
+  ]},
+  {id:'weekly', title:'Every week (about an hour)', body:[
+    {steps:[
+      'Check the agendas for each local government in your county. Add anything up for a decision as a bill (use "Import from a Government Website" to save typing).',
+      'For each bill with a meeting coming up, tap 🗓 Track and set the meeting date. Everyone following it gets told the decision is coming.',
+      'After meetings, tap 🗳 Outcome on each decided bill. Record what happened, the vote count, and a link to the minutes or news story. Everyone who voted on it gets the result.',
+      'Open Meeting Auto-Populate and review any drafts. Check each one against the official calendar before publishing.',
+      'Open Calendar sources and make sure each calendar checked in recently without errors.',
+      'Open The Question. If there\'s no active question for your county, write and publish one.',
+      'Clear Suggested corrections and Bill nominations for your county.',
+      'Skim the Moderation log to see what other admins did in your county.',
+    ]},
+  ]},
+  {id:'reports', go:'reports', title:'Reports', body:[
+    'Residents can flag a post, comment, message, event or listing. Open reports show what was posted, who posted it, and why it was flagged.',
+    {list:[
+      '🛡 Hide post: hides it from everyone. Use it for posts that break the rules. You\'ll be asked for a reason, which only admins see.',
+      '🗑 Take down: for events and Exchange listings. You can restore it later from Deleted items.',
+      '🚫 Remove poster: signs them out and blocks them. This is serious. Use it only for threats, harassment, spam, sharing someone\'s private information, or repeated rule-breaking after a warning. It can be undone in User Manager.',
+      '✓ Mark handled: for reported direct messages, after you\'ve dealt with it.',
+      'Dismiss: the report doesn\'t break the rules. Leave a short note so other admins know why.',
+    ]},
+    {tip:'Disagreement is not a rule violation. Hide rudeness, threats and spam, never opinions you don\'t share.'},
+  ]},
+  {id:'neighbors', go:'neighbors', title:'New neighbors', body:[
+    'Everyone who joined in your counties recently. People who haven\'t been greeted are highlighted.',
+    'Tap 👋 Welcome to send a short direct message. A ready-made welcome is filled in for you; edit it to sound like you. Tick the box to remember your wording for next time.',
+    'Once someone is welcomed, every admin can see it, so nobody gets greeted twice.',
+  ]},
+  {id:'submissions', go:'submissions', title:'Community bill submissions', body:[
+    'Residents can send in a local proposal or decision they want on the site.',
+    'Approve it only if you can find it on an official source (an agenda, minutes or the government\'s website). Approving publishes it right away as a bill. Reject anything you can\'t verify, anything that isn\'t a real government decision, or duplicates.',
+  ]},
+  {id:'events', go:'events', title:'Pending events', body:[
+    'Events residents posted, plus non-meeting events from your calendar sources. Only upcoming events show here.',
+    'Approve local, public events: markets, town halls, festivals, volunteer days, candidate forums. Reject ads, private parties, past events and anything outside your county.',
+  ]},
+  {id:'news', go:'news', title:'News submissions', body:[
+    'Stories residents sent in. Approve real local news from a real outlet. Reject opinion pieces passed off as news, rumors, and anything without a source.',
+    'Daily news is also fetched automatically. If your county\'s news looks stale, tap "📰 Get today\'s news now" at the top of this tab.',
+  ]},
+  {id:'resources', go:'resources', title:'Resource suggestions', body:[
+    'Places residents want added to the community map: food pantries, blessing boxes, free clinics and so on. "Approve & Map" puts the pin on the map.',
+    'Check the address and that it\'s actually open to the public before approving.',
+  ]},
+  {id:'drafts', go:'drafts', title:'Meeting Auto-Populate', body:[
+    'This tool uses AI to draft the usual meeting schedule for each local government in your county. These are typical schedules, not real fetched data.',
+    'Check each draft against the official calendar. Fix the date, time and place, then tap "Publish as Event". Reject anything you can\'t confirm.',
+    {tip:'Generating drafts costs AI credits. Run it about once a month, not every day.'},
+  ]},
+  {id:'calendars', go:'calendars', title:'Calendar sources', body:[
+    'Add the web address of an official calendar (city, township, county, school board) and the site checks it automatically.',
+    'Council, board and commission meetings publish on their own. Other events wait in Pending events for you, unless you tick "Publish everything automatically".',
+    'If a calendar shows an error, check that the link still works. Remove calendars that have moved or closed; events already imported stay.',
+  ]},
+  {id:'bills', go:'bills', title:'Bills manager (bottom of this tab)', body:[
+    {list:[
+      '+ Add New Bill: add a local proposal or decision. Paste a government page link into "Import from a Government Website" and tap Auto-Fill to have it filled in, then check every field before publishing.',
+      'Always put the official source link in Full Text / Source.',
+      '🗓 Track: set when it will be decided. Followers are told it\'s coming.',
+      '🗳 Outcome: record what happened after the vote, with the count, how each official voted if you know, and a source link.',
+      '✏️ Edit: fix mistakes. Changes go live right away.',
+      '🗑 Delete: removes the bill and every vote and comment on it. This can\'t be undone, so use it only for duplicates or mistakes.',
+    ]},
+  ]},
+  {id:'question', go:'question', title:'The Question', body:[
+    'One big local question at a time for your county, with a balanced briefing: what everyone agrees on, where people really disagree, and what it means locally.',
+    'Type a title and tap "🤖 AI: Draft balanced briefing" for a first draft. Read it carefully and remove anything that leans one way. Then publish. Only one question is active at a time.',
+  ]},
+  {id:'corrections', go:'corrections', title:'Suggested corrections', body:[
+    'Residents can suggest a fix to a bill, event or listing. "Apply Correction" makes the change live. Check the fix against the source first. Reject suggestions that change facts without a source.',
+  ]},
+  {id:'candidates', go:'candidates', title:'Candidates asking to be verified', body:[
+    'Candidates in the Voter\'s Guide can ask to manage their own listing. Before you verify, confirm it\'s really them: contact the campaign through the details on file with the clerk, or check their official campaign site.',
+    'Never verify someone just because they say so.',
+  ]},
+  {id:'stuck', go:'stuck', title:'Stuck sign-ups', body:[
+    'People who signed up but never confirmed their email or never signed in. You can resend their confirmation email from here.',
+    'If someone still can\'t get in, ask the master admin in Admin Chat. They can give a temporary password.',
+  ]},
+  {id:'nominations', go:'nominations', title:'Bill nominations and community projects', body:[
+    'Bill nominations are decisions residents want added. If one is in your county and real, tap "Start a bill from this", finish the form, and publish. Then dismiss the nomination.',
+    'Community projects are resident-led efforts. Remove only spam or projects that break the rules.',
+  ]},
+  {id:'people', go:'users', title:'User Manager and Verified officials', body:[
+    'User Manager lets you look up residents in your counties, fix a display name, ZIP or county, and remove or restore a resident.',
+    'Verified officials: give the 🏛 Official badge only to people who actually hold office in your county, after you\'ve confirmed it through the government\'s website or office.',
+  ]},
+  {id:'logs', go:'deleted', title:'Moderation log and Deleted items', body:[
+    'The Moderation log records every hide, removal and report decision, with the admin who did it and their reason. Use it to stay consistent with the other admins.',
+    'Deleted items keeps recently taken-down events, listings and map pins. Tap ↩ Restore if something came down by mistake.',
+  ]},
+  {id:'chat', go:'chat', title:'Admin Chat', body:[
+    'The private room for all admins across every county. Ask questions, give a heads-up about anything controversial, and coordinate when something touches more than one county.',
+  ]},
+  {id:'rules', title:'Ground rules', body:[
+    {list:[
+      'Stay nonpartisan. Describe what a proposal does; don\'t argue for or against it. Never endorse a candidate or party on the site.',
+      'Source everything. Every bill, outcome and correction needs an official link.',
+      'Protect privacy. Never share a resident\'s email, phone, address or messages with anyone outside the admin team.',
+      'Moderate behavior, not opinions. Hide threats, harassment, spam and private information. Let disagreement stand.',
+      'Talk before you remove. A direct message often fixes things. Removal is for serious or repeated problems.',
+      'Leave a reason. Every hide, removal and dismissal asks for a short note. Write one so others understand.',
+      'Conflicts of interest. If you\'re running for office, work for an official, or are personally involved in an issue, tell the master admin and let another admin handle it.',
+    ]},
+  ]},
+  {id:'escalate', title:'When to bring in the master admin', body:[
+    {list:[
+      'A threat of violence or self-harm. If anyone is in danger, call 911 first, then tell the master admin.',
+      'Anything legal: a lawyer, police or court asking for information or a takedown.',
+      'Press asking about the site itself.',
+      'Something on the site is broken or shows an error message.',
+      'Someone asks for admin access, or an Official or Press badge.',
+      'Anything involving money, donations or business services.',
+      'You\'re unsure. Asking is always better than guessing.',
+    ]},
+    'Post in Admin Chat for anything non-urgent. For anything urgent, message the master admin directly.',
+  ]},
+];
+
+const MASTER_ADMIN_GUIDE = [
+  {id:'m-only', title:'What only you can do', body:[
+    {list:[
+      'Give or remove admin access: approve volunteers in County volunteers, or use Admin access in User Manager.',
+      'Approve Official and Press badges (Master admin section of this tab).',
+      'Read and answer site feedback.',
+      'See every county\'s queues: the "Other counties with something waiting" list on the board.',
+      'Sign-in help: open a resident in User Manager to give a temporary password or make a reset link.',
+      'Permanently delete an account (User Manager).',
+      'Business services: the services menu, business sign-ups, rule explainer requests and bid pages, at the bottom of Resources → For Businesses. The "💼 Business services admin" button in the Master admin section takes you there.',
+      'Funding numbers: Resources → Who Funds Us, or the "💵 Funding numbers" button in the Master admin section.',
+    ]},
+  ]},
+  {id:'m-accounts', title:'Accounts you must keep access to', body:[
+    'If you lose any of these, part of the site stops working and nobody else can fix it. Turn on two-step login for each, keep the recovery codes in a password manager, and give one trusted person emergency access.',
+    {list:[
+      'GitHub: the TheKiltedFarmer/TheKiltedFarmer.github.io repository. It holds the whole site (index.html) and the CNAME file that points thepeoplesvoices.org at it.',
+      'Your domain registrar (wherever thepeoplesvoices.org was bought). Renew it every year; if it lapses the site disappears.',
+      'Supabase project zhnilrohxoixsgmdyqiw: the database, every login, and the server functions (admin-manage-user, ai-answers, business-services, events-import, finance-refresh, news-daily, the weekly digest and the Ko-fi webhook).',
+      'Cloudflare: the peoples-voice-ai worker. It holds the AI key; if it stops, AI answers and summaries stop.',
+      'Anthropic console: pays for the AI. Keep credits topped up.',
+      'Resend: sends the weekly email digest.',
+      'Ko-fi: donations and business service payments.',
+      'The hello@thepeoplesvoices.org inbox, and the Facebook page.',
+    ]},
+  ]},
+  {id:'m-deploy', title:'Putting a new version of the site live', body:[
+    {steps:[
+      'On GitHub, open the repository and download the current index.html as a backup.',
+      'Tap Add file → Upload files, drop in the new index.html (the name must be exactly index.html), and commit.',
+      'Wait one to two minutes, then reload the site (pull down to refresh on your phone).',
+      'Check the home page, sign in, and open the Admin tab.',
+      'If something is broken, open index.html on GitHub → History, open the previous version, and upload your backup again.',
+    ]},
+    {tip:'Never delete or rename the CNAME file. That\'s what keeps the site on thepeoplesvoices.org.'},
+  ]},
+  {id:'m-onboard', title:'Bringing on a county admin', body:[
+    {steps:[
+      'Someone signs up from the front page or a county banner. They appear in County volunteers.',
+      'Check they\'re a real person. A random-looking email address is a red flag. Message them, and ideally talk by phone or video.',
+      'They need an account with their county set correctly. If they signed up without one, ask them to create an account first.',
+      'Tap "Approve as county admin". They\'ll see the Admin tab the next time they open their county.',
+      'Send a welcome message pointing them to this guide and Admin Chat.',
+      'Check in after their first week, and read the Moderation log for their county.',
+    ]},
+    'To remove someone as an admin: User Manager → find them → turn off Admin access → Save. If they misused it, also remove them as a resident.',
+    'Spam volunteer sign-ups can be cleared with Remove in County volunteers.',
+  ]},
+  {id:'m-weekly', title:'Your weekly master checklist', body:[
+    {steps:[
+      'Work through the board here, then each county on the "Other counties" list.',
+      'Approve or remove volunteers.',
+      'Approve or deny Official and Press badges.',
+      'Read feedback and reply to anything that needs it.',
+      'Clear stuck sign-ups across all counties.',
+      'Check the daily news status (at the top of this tab) for counties that haven\'t updated.',
+      'Read Admin Chat and the Moderation log.',
+    ]},
+    'Monthly: update the funding numbers, and check the Supabase, Cloudflare, Anthropic and Resend dashboards for usage and bills.',
+  ]},
+  {id:'m-broken', title:'When something breaks', body:[
+    {list:[
+      '"Run tpv_….sql in Supabase" or "This form isn\'t switched on yet": a database update hasn\'t been applied. Open the Supabase SQL editor and run the named file.',
+      'A server function "isn\'t set up" or returns 404: that function isn\'t deployed in Supabase.',
+      'AI answers stop: check the Cloudflare worker and your Anthropic credits.',
+      'Weekly email didn\'t go out: check Resend, then the digest function\'s logs in Supabase.',
+      'Someone can\'t sign in: User Manager → their profile → Sign-in help, or confirm them in Supabase → Authentication → Users.',
+      'The whole site is blank: put the previous index.html back on GitHub (see "Putting a new version of the site live").',
+    ]},
+  ]},
+];
+
+let __openAdminGuide = null;
+function openAdminGuide(topicId) {
+  if(__openAdminGuide) __openAdminGuide(topicId);
+  setTimeout(()=>{ const el = document.getElementById('adm-guide'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+}
+function AdminGuideBody({items}) {
+  return h('div',null, items.map((b,i)=>{
+    const p = {fontSize:14,color:'#333',fontFamily:"'Lora',serif",lineHeight:1.65,margin:'0 0 10px'};
+    if(typeof b === 'string') return h('p',{key:i,style:p}, b);
+    if(b.steps) return h('ol',{key:i,style:{...p,paddingLeft:22}}, b.steps.map((s,j)=>h('li',{key:j,style:{marginBottom:6}}, s)));
+    if(b.list) return h('ul',{key:i,style:{...p,paddingLeft:20}}, b.list.map((s,j)=>h('li',{key:j,style:{marginBottom:6}}, s)));
+    if(b.tip) return h('div',{key:i,style:{...p,background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',color:'#5c4300'}}, '💡 ', b.tip);
+    return null;
+  }));
+}
+function AdminGuide({profile}) {
+  const full = isFullAdmin(profile);
+  const SEEN = 'tpv_admin_guide_seen';
+  const [open, setOpen] = useState(()=>{ try { return !full && !localStorage.getItem(SEEN); } catch(e) { return false; } });
+  const [tab, setTab] = useState('county');
+  const [topic, setTopic] = useState(()=>full ? null : 'role');
+  useEffect(()=>{
+    __openAdminGuide = (id)=>{ setOpen(true); const isMaster = MASTER_ADMIN_GUIDE.some(t=>t.id===id); setTab(isMaster ? 'master' : 'county'); setTopic(id); };
+    return ()=>{ __openAdminGuide = null; };
+  },[]);
+  useEffect(()=>{ if(open) { try { localStorage.setItem(SEEN, '1'); } catch(e) {} } },[open]);
+  const topics = tab === 'master' ? MASTER_ADMIN_GUIDE : COUNTY_ADMIN_GUIDE;
+  const tabBtn = (id, label)=>h('button',{onClick:()=>{ setTab(id); setTopic(null); },
+    style:{background:tab===id?'#1a1a2e':'transparent',color:tab===id?'#f0c040':'#1a1a2e',border:'1px solid #1a1a2e',borderRadius:20,
+      padding:'5px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}}, label);
+  return h('div',{id:'adm-guide',style:{background:'#fdfbf6',border:'1px solid #e5dece',borderRadius:12,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'},onClick:()=>setOpen(!open)},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:17,color:'#1a1a2e'}},'📘 Admin guide'),
+        h('div',{style:{fontSize:12.5,color:'#777',fontFamily:"'Lora',serif",marginTop:2}},
+          open ? 'Tap a topic to read it.' : 'How to run your county: daily and weekly routines, every tool explained, and the ground rules.')),
+      h('span',{style:{color:'#888',fontSize:14}}, open ? '▲' : '▼')),
+    open && h('div',{style:{marginTop:12}},
+      full && h('div',{style:{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}, tabBtn('county','County admin guide'), tabBtn('master','Master admin')),
+      topics.map(t=>{
+        const isOpen = topic === t.id;
+        return h('div',{key:t.id,style:{borderTop:'1px solid #eee5d6'}},
+          h('button',{onClick:()=>setTopic(isOpen ? null : t.id),'aria-expanded':isOpen,
+            style:{display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%',background:'none',border:'none',padding:'11px 2px',cursor:'pointer',textAlign:'left',
+              fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14.5,color:'#1a1a2e'}},
+            t.title, h('span',{style:{color:'#aaa',fontSize:13,marginLeft:8}}, isOpen ? '–' : '+')),
+          isOpen && h('div',{style:{padding:'2px 2px 12px'}},
+            h(AdminGuideBody,{items:t.body}),
+            t.go && h('button',{onClick:()=>adminJump(t.go),
+              style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},
+              'Go to this tool →')));
+      }))
+  );
+}
+
+function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed,onNavigate}) {
   // Admin access is granted via is_admin flag on the profile — no password in source code
   const isAdmin = isAdminHere(profile);
   const [authed,setAuthed]=useState(isAdmin);
@@ -19119,6 +19610,12 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
 
   const openAdd=()=>{setForm(EMPTY);setEditing(null);setView('add');setSourceUrl('');setFetchMsg('');};
   const openEdit=(bill)=>{setForm({...bill});setEditing(bill.id);setView('edit');setSourceUrl('');setFetchMsg('');};
+  const startFromNomination=(n)=>{
+    setForm({...EMPTY,title:n.title||'',full_text:[n.note||'', n.source_url?('Source: '+n.source_url):''].filter(Boolean).join('\n\n')});
+    setEditing(null); setSourceUrl(n.source_url||'');
+    setFetchMsg(n.source_url?'Tap Auto-Fill to read the source page, then check every field before publishing.':'');
+    setView('add'); try { window.scrollTo(0,0); } catch(e) {}
+  };
 
   const genId=()=>{
     const slug=form.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,20);
@@ -19198,10 +19695,10 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:10}},
       h('div',null,
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19,color:'#1a1a2e'}},
-          "⚙️ Admin Panel - Bills Manager"
+          "⚙️ Admin"
         ),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#888',marginTop:3}},
-          "Add or update bills for any community. Changes go live immediately."
+          "Everything you need to run "+getCurrentCounty().name+": what's waiting, the admin guide, and every tool."
         )
       ),
       h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-start'}},
@@ -19214,9 +19711,9 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
 
     isFullAdmin(profile) && h(AiSavingsLine),
 
-    // Cross-county admin chat — coordination channel for admins
+    // New county admins: who you cover, and where the guide is
     !isFullAdmin(profile) && h('div',{style:{background:'#e8f2fa',border:'1px solid #c8d8f0',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#1a5c8a'}},
-      '🛡 You\'re an admin for ',h('strong',null,adminScopeLabel(profile).replace(' only','')),'. Residents, reports and removals outside your county stay with the other admins.'),
+      '🛡 You\'re an admin for ',h('strong',null,adminScopeLabel(profile).replace(' only','')),'. Residents, reports and removals outside your county stay with the other admins. ', h('button',{onClick:()=>openAdminGuide('role'),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:"'Lora',serif"}},'Read the Admin guide')),
 
     // A thank-you for the work that closes the loop
     (()=>{
@@ -19226,39 +19723,49 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         '🙌 You recorded ', h('strong',null, mine + ' decision' + (mine===1?'':'s')), ' this past month. Each one shows neighbors whether officials listened, and everyone who voted got the result.');
     })(),
 
-    // Reports from residents come first: they're time-sensitive
-    h(ReportsQueue,{user,profile,onToast,autoOpen:navCtx?.openReports,onAutoOpenConsumed:onNavCtxConsumed}),
-
-    // New neighbors and who's welcomed them
-    h(NewUsersInbox,{onToast,profile,focusMemberId:navCtx?.memberId,onFocusConsumed:onNavCtxConsumed}),
-
-    // Cross-county admin chat — coordination channel for admins
-    h(AdminChat,{user,profile,onToast,autoOpen:navCtx?.openAdminChat,onAutoOpenConsumed:onNavCtxConsumed}),
+    // How to run a county, then everything waiting for a decision
+    h(AdminGuide,{profile}),
+    h(AdminWaitingBoard,{profile}),
     tracking&&h(BillTrackerModal,{bill:tracking,onToast,onClose:()=>setTracking(null),
       onSaved:(patch)=>{ setBills(prev=>prev.map(b=>b.id===tracking.id?{...b,...patch}:b)); setTracking(t=>t?{...t,...patch}:t); }}),
 
-    // Pending community submissions review queue
-    h(ProjectsManager,{onToast}),
-    h(CandidateClaimsPanel,{onToast}),
-    h(CalendarSourcesPanel,{profile,onToast}),
-    h(EventsApprovalQueue,{onToast}),
-    h(UserManager,{user,profile,onToast}),
-    h(ModerationLog,{profile}),
-    h(CountySpotsPanel,{profile}),
-    h(CountyRequestsPanel,{profile}),
-    h(OfficialBadgeInbox,{onToast}),
-    h(PressBadgeInbox,{onToast}),
-    h(PendingReviewQueue,{onToast,setBills}),
-    h(ResourceApprovalQueue,{onToast}),
-    h(StuckSignupsQueue,{user,profile,onToast}),
-    h(NewsApprovalQueue,{user,profile,onToast}),
-    h(QuestionAuthorPanel,{user,profile,onToast}),
-    h(MeetingPopulator,{user,profile,onToast}),
-    h(CorrectionsQueue,{user,profile,onToast}),
-    h(DeletedItemsPanel,{onToast}),
-    h(NominationsInbox,{onToast}),
-    h(FeedbackInbox,{onToast}),
-    h(OfficialManager,{onToast}),
+    h(AdminSection,{title:'Needs a decision',note:'Work through these every day. Reports come first.',guide:'daily'}),
+    h('div',{id:'adm-reports'}, h(ReportsQueue,{user,profile,onToast,autoOpen:navCtx?.openReports,onAutoOpenConsumed:onNavCtxConsumed})),
+    h('div',{id:'adm-neighbors'}, h(NewUsersInbox,{onToast,profile,focusMemberId:navCtx?.memberId,onFocusConsumed:onNavCtxConsumed})),
+    h('div',{id:'adm-submissions'}, h(PendingReviewQueue,{onToast,setBills})),
+    h('div',{id:'adm-events'}, h(EventsApprovalQueue,{onToast})),
+    h('div',{id:'adm-news'}, h(NewsApprovalQueue,{user,profile,onToast})),
+    h('div',{id:'adm-resources'}, h(ResourceApprovalQueue,{onToast})),
+    h('div',{id:'adm-corrections'}, h(CorrectionsQueue,{user,profile,onToast})),
+    h('div',{id:'adm-candidates'}, h(CandidateClaimsPanel,{onToast})),
+    h('div',{id:'adm-stuck'}, h(StuckSignupsQueue,{user,profile,onToast})),
+
+    h(AdminSection,{title:'Team and residents',note:'Admin Chat, residents, officials and the record of what admins did.',guide:'people'}),
+    h('div',{id:'adm-chat'}, h(AdminChat,{user,profile,onToast,autoOpen:navCtx?.openAdminChat,onAutoOpenConsumed:onNavCtxConsumed})),
+    h('div',{id:'adm-users'}, h(UserManager,{user,profile,onToast})),
+    h('div',{id:'adm-officials'}, h(OfficialManager,{onToast})),
+    h('div',{id:'adm-spots'}, h(CountySpotsPanel,{profile})),
+    h('div',{id:'adm-log'}, h(ModerationLog,{profile})),
+    h('div',{id:'adm-deleted'}, h(DeletedItemsPanel,{onToast})),
+
+    h(AdminSection,{title:'Keep the county stocked',note:'Weekly work: meetings, calendars, The Question and ideas from residents.',guide:'weekly'}),
+    h('div',{id:'adm-drafts'}, h(MeetingPopulator,{user,profile,onToast})),
+    h('div',{id:'adm-calendars'}, h(CalendarSourcesPanel,{profile,onToast})),
+    h('div',{id:'adm-question'}, h(QuestionAuthorPanel,{user,profile,onToast})),
+    h('div',{id:'adm-nominations'}, h(NominationsInbox,{onToast,onStartBill:startFromNomination})),
+    h('div',{id:'adm-projects'}, h(ProjectsManager,{onToast})),
+
+    isFullAdmin(profile) && h(AdminSection,{title:'Master admin only',note:'Only you see this section.',guide:'m-only'}),
+    isFullAdmin(profile) && h('div',{id:'adm-volunteers'}, h(CountyRequestsPanel,{profile})),
+    isFullAdmin(profile) && h('div',{id:'adm-officialBadges'}, h(OfficialBadgeInbox,{onToast})),
+    isFullAdmin(profile) && h('div',{id:'adm-pressBadges'}, h(PressBadgeInbox,{onToast})),
+    isFullAdmin(profile) && h('div',{id:'adm-feedback'}, h(FeedbackInbox,{onToast})),
+    isFullAdmin(profile) && onNavigate && h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}},
+      h('button',{onClick:()=>onNavigate('business'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'💼 Business services admin →'),
+      h('button',{onClick:()=>onNavigate('funding'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'💵 Funding numbers →')),
+
+    h(AdminSection,{title:'Bills',note:'Add, track and record outcomes. Changes go live right away.',guide:'bills'}),
+    h('div',{id:'adm-bills'}),
 
     h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'12px 16px',marginBottom:16,fontSize:13,fontFamily:"'Lora',serif",color:'#8a6000',lineHeight:1.7}},
       "⚠️ ",h('strong',null,"Admin tips:")," Only add bills with verified, publicly-sourced information. Include the source in the Full Text field. Bills you add go live immediately for all users. Deleting a bill also removes all votes and comments on it - use carefully."
@@ -19648,6 +20155,10 @@ function App() {
   const [subTab, setSubTab] = useState('feed');
   // Backward-compat shim: any code calling setMainTab('bills') etc. still works.
   const setMainTab = (t)=>{ const r = resolveRoute(t); setHub(r.hub); setSubTab(r.subTab); };
+  // Arrived from "Open →" on another county in the admin board: go straight to Admin
+  useEffect(()=>{
+    try { if(sessionStorage.getItem('tpv_open_admin') && isAdminHere(profile)) { sessionStorage.removeItem('tpv_open_admin'); setMainTab('admin'); } } catch(e) {}
+  },[profile]);
   const mainTab = subTab; // legacy reads
   const [feedNavCtx,setFeedNavCtx]=useState(null); // context from feed click {billId, userId}
   const [profileModalId,setProfileModalId]=useState(null);
@@ -20573,7 +21084,7 @@ function App() {
       mainTab==='jackets'&&h(SponsorJacketsTab,{profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       // Admin tab
-      mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null)})
+      mainTab==='admin'&&isAdmin&&h(AdminPanel,{bills,setBills,onToast:setToast,user,profile,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}})
       )
     ),
 
