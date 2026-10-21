@@ -13182,12 +13182,39 @@ function CalendarSourcesPanel({profile, onToast}) {
 function CountyRequestsPanel({profile}) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState(null);
+  const [admins, setAdmins] = useState({});   // volunteer user_id -> {is_admin, admin_counties}
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
   useEffect(()=>{
     if(!open || rows) return;
     sb.from('county_requests').select('*').order('created_at',{ascending:false}).limit(1000)
       .then(({data})=>setRows(data||[]), ()=>setRows([]));
   },[open]);
+  // Look up each volunteer's current admin access so the button shows the right state
+  useEffect(()=>{
+    if(!rows) return;
+    const ids = [...new Set(rows.filter(r=>r.kind==='volunteer' && r.user_id).map(r=>r.user_id))];
+    if(!ids.length) return;
+    sb.from('profiles').select('id,is_admin,admin_counties').in('id',ids)
+      .then(({data})=>{ const m = {}; (data||[]).forEach(p=>{ m[p.id] = p; }); setAdmins(m); }, ()=>{});
+  },[rows]);
   if(!isFullAdmin(profile)) return null;
+  const adminFor = (p, cid)=> !!(p && p.is_admin && (!Array.isArray(p.admin_counties) || p.admin_counties.length===0 || p.admin_counties.includes(cid)));
+  const approve = async(r, cid)=>{
+    const who = r.name || 'this member', where = COUNTIES[cid].name;
+    if(!window.confirm('Make ' + who + ' a county admin for ' + where + '? They will be able to manage ' + where + ' on the site.')) return;
+    setBusy(r.user_id + cid); setMsg('');
+    const {data:p, error:e1} = await sb.from('profiles').select('id,is_admin,admin_counties').eq('id', r.user_id).single();
+    if(e1 || !p) { setBusy(''); setMsg('❌ Couldn\'t load their profile' + (e1 ? ': ' + e1.message : '.')); return; }
+    if(adminFor(p, cid)) { setBusy(''); setAdmins(m=>({...m,[p.id]:p})); setMsg('✓ ' + who + ' is already an admin for ' + where + '.'); return; }
+    // Keep any counties they already run; add this one
+    const list = p.is_admin && Array.isArray(p.admin_counties) && p.admin_counties.length ? [...new Set([...p.admin_counties, cid])] : [cid];
+    const {error} = await sb.from('profiles').update({is_admin:true, admin_counties:list}).eq('id', r.user_id);
+    setBusy('');
+    if(error) { setMsg('❌ ' + error.message); return; }
+    setAdmins(m=>({...m,[p.id]:{...p, is_admin:true, admin_counties:list}}));
+    setMsg('✅ ' + who + ' is now a county admin for ' + where + '. Send them a welcome message so they know.');
+  };
   const byCounty = {};
   (rows||[]).forEach(r=>{ const c = r.county || countyForZip(r.zip) || 'unknown'; (byCounty[c] = byCounty[c] || []).push(r); });
   const ranked = Object.entries(byCounty).sort((a,b)=>b[1].filter(r=>r.kind==='volunteer').length-a[1].filter(r=>r.kind==='volunteer').length || b[1].length-a[1].length);
@@ -13201,7 +13228,8 @@ function CountyRequestsPanel({profile}) {
       : rows.length===0
         ? h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic'}},'No one yet. Volunteers sign up from the front page and the 🌱 banner in new counties.')
         : h('div',null,
-            h('div',{style:{fontSize:12,color:'#888',marginBottom:8,fontFamily:"'Lora',serif"}}, volunteers + ' volunteer' + (volunteers===1?'':'s') + ' · ' + rows.length + ' total, across ' + ranked.length + ' counties. To make someone a county admin, find them in User Manager.'),
+            h('div',{style:{fontSize:12,color:'#888',marginBottom:8,fontFamily:"'Lora',serif"}}, volunteers + ' volunteer' + (volunteers===1?'':'s') + ' · ' + rows.length + ' total, across ' + ranked.length + ' counties. Approve a volunteer below to make them a county admin. You can change or remove access later in User Manager.'),
+            msg && h('div',{style:{fontSize:12.5,margin:'0 0 8px',padding:'6px 10px',borderRadius:6,background:msg.startsWith('❌')?'#fdecea':'#eaf6ee',color:msg.startsWith('❌')?'#c0392b':'#1a6b3c',fontFamily:"'Lora',serif"}}, msg),
             ranked.slice(0,90).map(([cid,list])=>{
               const vols = list.filter(r=>r.kind==='volunteer');
               return h('div',{key:cid,style:{padding:'8px 0',borderTop:'1px solid #f0ece4',fontSize:13,fontFamily:"'Lora',serif"}},
@@ -13211,7 +13239,13 @@ function CountyRequestsPanel({profile}) {
                   style:{marginLeft:8,background:'none',border:'1px solid #ddd',borderRadius:4,fontSize:11,color:'#1a5c8a',cursor:'pointer',padding:'1px 6px'}},'Copy emails'),
                 vols.map((r,i)=>h('div',{key:i,style:{fontSize:12.5,color:'#444',marginTop:3,paddingLeft:10}},
                   '🙋 ', r.user_id ? h('button',{onClick:()=>openProfile(r.user_id),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12.5}}, r.name || 'A member') : (r.name || 'Someone'),
-                  r.email ? ' · ' + r.email : '', r.note ? h('span',{style:{color:'#777',fontStyle:'italic'}},' · “' + r.note + '”') : null)),
+                  r.email ? ' · ' + r.email : '', r.note ? h('span',{style:{color:'#777',fontStyle:'italic'}},' · “' + r.note + '”') : null,
+                  !COUNTIES[cid] ? null
+                    : !r.user_id ? h('span',{style:{color:'#999',fontStyle:'italic'}},' · No account yet. Ask them to sign up, then approve them here.')
+                    : adminFor(admins[r.user_id], cid) ? h('span',{style:{marginLeft:8,color:'#1a6b3c',fontWeight:700,fontSize:12}},'✓ County admin')
+                    : h('button',{onClick:()=>approve(r, cid),disabled:busy===r.user_id+cid,
+                        style:{marginLeft:8,background:'#1a6b3c',color:'#fff',border:'none',borderRadius:4,fontSize:11.5,fontWeight:700,cursor:'pointer',padding:'3px 10px',opacity:busy===r.user_id+cid?0.6:1}},
+                        busy===r.user_id+cid ? 'Approving…' : 'Approve as county admin'))),
                 !vols.length && list.filter(r=>r.note).slice(0,2).map((r,i)=>h('div',{key:i,style:{fontSize:12,color:'#666',fontStyle:'italic',marginTop:2}},'“'+r.note+'”')));
             })
           ))
