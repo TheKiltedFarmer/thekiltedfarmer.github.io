@@ -13192,6 +13192,30 @@ function CalendarSourcesPanel({profile, onToast}) {
   );
 }
 
+// ── Admin access: give, change or remove, and confirm it really saved ────────
+// Uses the tpv_set_admin_access database function (tpv_set_admin_access.sql).
+// If that isn't installed yet, tries a direct update and reads the row back,
+// because the database can refuse an update without reporting an error.
+async function setAdminAccess(userId, isAdmin, counties) {
+  const want = isAdmin ? (Array.isArray(counties) && counties.length ? counties : null) : null;
+  let row = null, viaFunction = true;
+  const res = await sb.rpc('tpv_set_admin_access', {p_user_id:userId, p_is_admin:!!isAdmin, p_counties:want});
+  if(res.error) {
+    if(!/tpv_set_admin_access|function|schema cache/i.test(res.error.message || '')) return {ok:false, error:res.error.message};
+    viaFunction = false;
+    const up = await sb.from('profiles').update({is_admin:!!isAdmin, admin_counties:want}).eq('id', userId).select('id,is_admin,admin_counties');
+    if(up.error) return {ok:false, error:up.error.message};
+    row = up.data && up.data[0];
+  } else row = res.data;
+  const got = !!(row && row.is_admin === true);
+  const list = row && Array.isArray(row.admin_counties) ? row.admin_counties : [];
+  const ok = isAdmin ? (got && (want === null ? list.length === 0 : want.every(c=>list.includes(c)))) : !got;
+  if(ok) return {ok:true, row};
+  return {ok:false, row, error: viaFunction
+    ? 'The database saved it and then something undid it. Send Claude the result of the last query in tpv_set_admin_access.sql.'
+    : 'The database refused the change, so nothing was saved. Run tpv_set_admin_access.sql in Supabase (SQL Editor), then try again.'};
+}
+
 // ── Admin: where people are asking for the platform ─────────────────────────
 function CountyRequestsPanel({profile}) {
   const [open, setOpen] = useState(false);
@@ -13224,10 +13248,10 @@ function CountyRequestsPanel({profile}) {
     if(adminFor(p, cid)) { setBusy(''); setAdmins(m=>({...m,[p.id]:p})); setMsg('✓ ' + who + ' is already an admin for ' + where + '.'); return; }
     // Keep any counties they already run; add this one
     const list = p.is_admin && Array.isArray(p.admin_counties) && p.admin_counties.length ? [...new Set([...p.admin_counties, cid])] : [cid];
-    const {error} = await sb.from('profiles').update({is_admin:true, admin_counties:list}).eq('id', r.user_id);
+    const res = await setAdminAccess(r.user_id, true, list);
     setBusy('');
-    if(error) { setMsg('❌ ' + error.message); return; }
-    setAdmins(m=>({...m,[p.id]:{...p, is_admin:true, admin_counties:list}}));
+    if(!res.ok) { setMsg('❌ Not saved. ' + res.error); return; }
+    setAdmins(m=>({...m,[p.id]:{...p, is_admin:true, admin_counties:(res.row && res.row.admin_counties) || list}}));
     setMsg('✅ ' + who + ' is now a county admin for ' + where + '. Send them a welcome message so they know.');
   };
   const removeReq = async(r)=>{
@@ -18557,13 +18581,23 @@ function UserManager({onToast, user, profile}) {
     if(selected.id === user?.id && selected.is_admin && updates.is_admin === false) {
       if(!window.confirm('You are about to remove your OWN admin access. Continue?')) { setSaving(false); return; }
     }
-    const {error} = await sb.from('profiles').update(updates).eq('id',selected.id);
-    if(!error) {
+    // Admin access goes through its own check so we know it really saved
+    const sameList = (a,b)=>JSON.stringify((a||[]).slice().sort())===JSON.stringify((b||[]).slice().sort());
+    const adminChanged = full && ('is_admin' in updates) &&
+      (!!updates.is_admin !== !!selected.is_admin || !sameList(updates.admin_counties, Array.isArray(selected.admin_counties)?selected.admin_counties:null));
+    const rest = {...updates}; delete rest.is_admin; delete rest.admin_counties;
+    if(adminChanged) {
+      const res = await setAdminAccess(selected.id, updates.is_admin, updates.admin_counties);
+      if(!res.ok) { onToast('❌ Admin access not saved. ' + res.error); setSaving(false); return; }
+    }
+    const {data:savedRows, error} = await sb.from('profiles').update(rest).eq('id',selected.id).select('id');
+    if(!error && savedRows && savedRows.length) {
       onToast('✅ User updated successfully.');
       setSelected({...selected,...updates});
       setResults(prev=>prev.map(u=>u.id===selected.id?{...u,...updates}:u));
     } else {
-      onToast('❌ Error: '+error.message);
+      onToast(error ? '❌ Error: '+error.message : (adminChanged ? '⚠️ Admin access saved, but the other changes were refused by the database.' : '❌ Not saved: the database refused the change.'));
+      if(adminChanged) setSelected({...selected, is_admin:updates.is_admin, admin_counties:updates.admin_counties});
     }
     setSaving(false);
   };
