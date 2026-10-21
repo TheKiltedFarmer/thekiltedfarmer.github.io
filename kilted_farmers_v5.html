@@ -3466,6 +3466,10 @@ async function onBankFile(input){
   const file=input.files[0];input.value='';if(!file)return;
   try{
     const rows=parseCSV(await file.text());
+    if(looksLikeSalesReport(rows)){
+      toast('That’s a sales report from your card reader, not a bank statement. Opening it as sales instead.');
+      posHandleRows(file.name,rows);return;
+    }
     const C=detectBankCols(rows);
     const lines=bankLinesFrom(rows,C);
     if(!lines.length){toast('Couldn’t find transactions in that file — it needs to be a CSV download from your bank',true);return;}
@@ -3547,6 +3551,31 @@ async function autoMatchBank(){
   for(const l of stale){try{await sb('kf_bank_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'open',match_key:null})});l.status='open';l.match_key=null;}catch(e){}}
   return patches.length;
 }
+async function setBankStatusMany(ids,status){
+  ids=ids.filter(Boolean);if(!ids.length)return;
+  try{
+    for(let i=0;i<ids.length;i+=100){
+      await sb('kf_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'PATCH',body:JSON.stringify({status,match_key:null})});
+    }
+    const set=new Set(ids);(BOOKS.bank||[]).forEach(l=>{if(set.has(l.id)){l.status=status;l.match_key=null;}});
+    const lab={logged:'marked already logged',payout:'marked as pay-outs',ignored:'skipped'};
+    toast(ids.length+' '+(lab[status]||'updated')+'. Undo any of them under Already handled.');
+    renderBooks();
+  }catch(e){toast(e.message,true);}
+}
+function bankGroupStatus(gi,status){const g=(BOOKS._bankGroups||[])[gi];if(g)setBankStatusMany(g.map(l=>l.id),status);}
+function bankToggleGroup(gi){BOOKS._bankOpenGroup=BOOKS._bankOpenGroup===gi?null:gi;renderBooks();}
+async function removeBankAccountLines(ai){
+  const name=(BOOKS._bankAcctNames||[])[ai];if(name==null)return;
+  const ids=(BOOKS.bank||[]).filter(l=>l.account===name&&bankEffectiveStatus(l)==='open').map(l=>l.id);
+  if(!ids.length)return;
+  if(!confirm('Remove the '+ids.length+' unreviewed line'+(ids.length===1?'':'s')+' from “'+name+'”?\n\nUse this when the wrong file was imported. Anything you already matched or added stays.'))return;
+  try{
+    for(let i=0;i<ids.length;i+=100)await sb('kf_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'DELETE'});
+    const set=new Set(ids);BOOKS.bank=(BOOKS.bank||[]).filter(l=>!set.has(l.id));
+    toast(ids.length+' line'+(ids.length===1?'':'s')+' removed');renderBooks();
+  }catch(e){toast('Couldn’t remove them: '+e.message,true);}
+}
 async function setBankStatus(id,status,key){
   const l=(BOOKS.bank||[]).find(x=>x.id===id);if(!l)return;
   try{
@@ -3578,8 +3607,10 @@ function renderBooksBank(){
   const accts={};lines.forEach(l=>{const a=accts[l.account]||(accts[l.account]={n:0,open:0,min:'9999',max:'0000',bal:null,balDate:''});a.n++;if(bankEffectiveStatus(l)==='open')a.open++;
     const d=String(l.txn_date).slice(0,10);if(d<a.min)a.min=d;if(d>a.max)a.max=d;if(l.balance!=null&&d>=a.balDate){a.bal=+l.balance;a.balDate=d;}});
   if(lines.length){
-    h+='<div class="bank-accts">'+Object.entries(accts).map(([n,a])=>'<div class="bank-acct"><div class="bk-payee">'+esc(n)+'</div><div class="bk-sub">'+esc(prettyDate(a.min))+' – '+esc(prettyDate(a.max))+' · '+a.n+' lines'
-      +(a.bal!=null?' · balance '+fmt(a.bal)+' on '+esc(prettyDate(a.balDate)):'')+'</div></div>').join('')+'</div>';
+    BOOKS._bankAcctNames=Object.keys(accts);
+    h+='<div class="bank-accts">'+Object.entries(accts).map(([n,a],ai)=>'<div class="bank-acct"><div class="bk-payee">'+esc(n)+'</div><div class="bk-sub">'+esc(prettyDate(a.min))+' – '+esc(prettyDate(a.max))+' · '+a.n+' lines'
+      +(a.bal!=null?' · balance '+fmt(a.bal)+' on '+esc(prettyDate(a.balDate)):'')+'</div>'
+      +(a.open?'<button class="link-btn" style="margin-top:4px;" onclick="removeBankAccountLines('+ai+')">Wrong file? Remove its '+a.open+' unreviewed line'+(a.open===1?'':'s')+'</button>':'')+'</div>').join('')+'</div>';
     const now=new Date();let chips='';
     for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const k=isoLocal(d).slice(0,7);
       const ml=lines.filter(l=>String(l.txn_date).slice(0,7)===k);const o=ml.filter(l=>bankEffectiveStatus(l)==='open').length;
@@ -3592,8 +3623,8 @@ function renderBooksBank(){
   if(!lines.length)h+='<div class="bk-empty">No statements yet. Import last month’s to start.</div>';
   else if(!open.length)h+='<div class="ck-ok">✓ Every bank transaction is accounted for.</div>';
   else{
-    h+='<div class="card-sub">Tap what each one is. <b>Add</b> puts it in the books; <b>Already logged</b> is for market deposits and sales you entered another way; <b>Pay-out</b> is a member’s weekly share; <b>Skip</b> is for moving money between your own accounts.</div>';
-    open.sort((a,b)=>a.txn_date<b.txn_date?1:-1).slice(0,80).forEach(l=>{
+    h+='<div class="card-sub">Tap what each one is. <b>Add</b> puts it in the books; <b>Already logged</b> is for market deposits and sales you entered another way; <b>Pay-out</b> is a member’s weekly share; <b>Skip</b> is for moving money between your own accounts. Three or more from the same place are grouped so you can handle them in one tap.</div>';
+    const lineHTML=l=>{let h='';
       const amt=+l.amount,cands=bankCandidates(l,used);
       h+='<div class="bank-line open"><div class="bank-main"><div class="bk-payee">'+esc(cleanBankDesc(l.description)||'(no description)')+'</div>'
         +'<div class="bk-sub">'+esc(prettyDate(l.txn_date))+' · '+esc(l.account)+' · '+esc(String(l.description||'').slice(0,60))+'</div>'
@@ -3602,8 +3633,26 @@ function renderBooksBank(){
         +(amt>0?'<button class="receipt-btn" onclick="setBankStatus(\''+l.id+'\',\'logged\')">Already logged</button>':'<button class="receipt-btn" onclick="setBankStatus(\''+l.id+'\',\'payout\')">Pay-out</button>')
         +'<button class="receipt-btn" onclick="setBankStatus(\''+l.id+'\',\'ignored\')">Skip</button></div></div>'
         +'<div class="bk-amt '+(amt>0?'in':'out')+'">'+(amt>0?'+':'−')+fmt(Math.abs(amt))+'</div></div>';
+      return h;};
+    // Lots from the same place (same name, same direction, same account) are handled in one tap
+    const gmap={};open.forEach(l=>{const k=(cleanBankDesc(l.description)||'').toLowerCase()+'|'+(+l.amount>0?'in':'out')+'|'+l.account;(gmap[k]=gmap[k]||[]).push(l);});
+    const groups=Object.values(gmap).filter(g=>g.length>=3).sort((x,y)=>y.length-x.length);
+    BOOKS._bankGroups=groups;
+    const inGroup=new Set(groups.flat().map(l=>l.id));
+    groups.forEach((g,gi)=>{
+      const tot=g.reduce((t,l)=>t+(+l.amount),0),inflow=tot>0,ds=g.map(l=>String(l.txn_date).slice(0,10)).sort();
+      h+='<div class="bank-line open" style="background:var(--cream,#faf7f0);"><div class="bank-main"><div class="bk-payee">'+esc(cleanBankDesc(g[0].description)||'(no description)')+' <span class="ck-badge" style="margin-left:4px;">'+g.length+'</span></div>'
+        +'<div class="bk-sub">'+g.length+' transactions · '+esc(prettyDate(ds[0]))+' – '+esc(prettyDate(ds[ds.length-1]))+' · '+esc(g[0].account)+'</div>'
+        +'<div class="bank-btns">'
+        +(inflow?'<button class="receipt-btn" onclick="bankGroupStatus('+gi+',\'logged\')">All '+g.length+' already logged</button>':'<button class="receipt-btn" onclick="bankGroupStatus('+gi+',\'payout\')">All '+g.length+' are pay-outs</button>')
+        +'<button class="receipt-btn" onclick="bankGroupStatus('+gi+',\'ignored\')">Skip all '+g.length+'</button>'
+        +'<button class="receipt-btn" onclick="bankToggleGroup('+gi+')">'+(BOOKS._bankOpenGroup===gi?'Hide them':'One by one')+'</button></div></div>'
+        +'<div class="bk-amt '+(inflow?'in':'out')+'">'+(inflow?'+':'−')+fmt(Math.abs(tot))+'</div></div>';
+      if(BOOKS._bankOpenGroup===gi)g.slice().sort((x,y)=>x.txn_date<y.txn_date?1:-1).slice(0,80).forEach(l=>{h+='<div style="margin-left:14px;">'+lineHTML(l)+'</div>';});
     });
-    if(open.length>80)h+='<div class="bk-sub" style="text-align:center;padding:8px;">Showing the newest 80 of '+open.length+'.</div>';
+    const singles=open.filter(l=>!inGroup.has(l.id));
+    singles.sort((a,b)=>a.txn_date<b.txn_date?1:-1).slice(0,80).forEach(l=>{h+=lineHTML(l);});
+    if(singles.length>80)h+='<div class="bk-sub" style="text-align:center;padding:8px;">Showing the newest 80 of '+singles.length+'.</div>';
   }
   h+='</div>';
   // books entries missing from the bank
@@ -5895,12 +5944,12 @@ function posMount(){
 }
 const posH=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function posFind(h,...res){return h.findIndex(c=>res.some(r=>r.test(c)));}
-function posDetect(rows){
+function posDetect(rows,forceSales){
   let hi=-1;for(let i=0;i<Math.min(rows.length,15);i++){const h=rows[i].map(posH);if(h.some(c=>/date/.test(c))&&h.some(c=>/sales|amount|total|qty|collected/.test(c))){hi=i;break;}}
   if(hi<0)return null;
   const h=rows[hi].map(posH);
   const itemCol=posFind(h,/^item$/,/^item name$/,/^product$/);const qtyCol=posFind(h,/^qty$/,/^quantity$/,/^units sold$/,/^count$/);
-  if(itemCol>=0&&qtyCol>=0)return{kind:'items',hi,C:{date:posFind(h,/^date$/,/date/),item:itemCol,qty:qtyCol,variant:posFind(h,/price point/,/variation/),sku:posFind(h,/^sku$/),event:posFind(h,/event type/),tx:posFind(h,/transaction id/,/payment id/)}};
+  if(!forceSales&&itemCol>=0&&qtyCol>=0)return{kind:'items',hi,C:{date:posFind(h,/^date$/,/date/),item:itemCol,qty:qtyCol,variant:posFind(h,/price point/,/variation/),sku:posFind(h,/^sku$/),event:posFind(h,/event type/),tx:posFind(h,/transaction id/,/payment id/)}};
   return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),net:posFind(h,/^net sales$/),amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/),
     tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/),tip:posFind(h,/^tips?$/,/gratuity/),fee:posFind(h,/^fees?$/,/processing fee/),refunds:posFind(h,/partial refunds/),
     staff:posFind(h,/staff name/,/employee/,/team member/,/^server$/),event:posFind(h,/event type/,/^type$/),tx:posFind(h,/^transaction id$/,/^payment id$/,/transaction id/),
@@ -5909,10 +5958,33 @@ function posDetect(rows){
 async function onPosFile(input){
   const file=input.files[0];input.value='';if(!file)return;
   let rows;try{rows=parseCSV(await file.text());}catch(e){toast('Couldn’t read that file',true);return;}
+  posHandleRows(file.name,rows);
+}
+// Shared by the sales importer and the bank importer (when a sales report lands there by mistake)
+function posHandleRows(name,rows){
   const d=posDetect(rows);
   if(!d){toast('Couldn’t find dates and sales in that file. It needs to be a CSV export of your sales.',true);return;}
-  if(d.kind==='items')return posItemsPreview(file.name,rows,d);
-  posSalesPreview(file.name,rows,d);
+  if(d.kind==='items'){
+    // Square's Item Sales export lists every sale as an "item". If most are "Custom Amount"
+    // it isn't stock, it's the day's sales: total them up as sales instead.
+    const h=rows[d.hi].map(posH);
+    const hasMoney=posFind(h,/^net sales$/)>=0||posFind(h,/^gross sales$/)>=0;
+    const items=rows.slice(d.hi+1).map(r=>String(r[d.C.item]||'').trim().toLowerCase()).filter(Boolean);
+    const custom=items.filter(i=>/custom amount/.test(i)).length;
+    if(hasMoney&&items.length&&custom/items.length>0.5)return posSalesPreview(name,rows,posDetect(rows,true));
+    return posItemsPreview(name,rows,d);
+  }
+  posSalesPreview(name,rows,d);
+}
+// A card reader's sales report, not a bank statement?
+function looksLikeSalesReport(rows){
+  for(let i=0;i<Math.min(rows.length,15);i++){
+    const h=rows[i].map(posH);
+    if(h.includes('gross sales')||h.includes('net sales'))return true;
+    if(h.includes('item')&&(h.includes('qty')||h.includes('quantity')))return true;
+    if(h.includes('transaction id')&&h.includes('payment id'))return true;
+  }
+  return false;
 }
 function posMoney(v){const n=moneyVal(v);return n===null?0:n;}
 function posStaffName(s){
