@@ -712,6 +712,8 @@ details[open]>summary.card-title::after{content:'▴';}
 .onb-contact a{color:var(--green);font-weight:600;}
 @media(max-width:620px){.tp-grid{grid-template-columns:1fr auto;}.tax-table tr.pl-net td{font-size:15px;}.tax-table td.ref{white-space:normal;max-width:90px;}}
 
+.svc-pill{font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;white-space:nowrap;background:var(--cream-dark);color:var(--mid);}
+.svc-pill.done{background:#e6f4ec;color:var(--green);}
 </style>
 </head>
 <body>
@@ -761,6 +763,7 @@ details[open]>summary.card-title::after{content:'▴';}
   <div class="tab" onclick="switchTab('ingredients',this)">Ingredients</div>
   <div class="tab" id="invTab" onclick="switchTab('inventory',this)">Inventory</div>
   <div class="tab" onclick="switchTab('history',this)">History</div>
+  <div class="tab" id="servicesTab" style="display:none;" onclick="switchTab('services',this)">Grants &amp; Alerts</div>
   <div class="tab" id="adminTab" style="display:none;" onclick="switchTab('admin',this)">Admin</div>
 </div>
 
@@ -1024,6 +1027,13 @@ details[open]>summary.card-title::after{content:'▴';}
 </div>
 
 <!-- ─── ADMIN ─── -->
+<div class="tab-content" id="tab-services">
+  <div style="margin-top:8px;" class="card">
+    <div class="card-title"><div class="card-title-dot"></div>Grants &amp; Alerts</div>
+    <div class="card-sub">Your services from The People’s Voices: the Bid &amp; grant finder, Watch alerts for meetings and news that touch the business, and plain-language rule explainers.</div>
+    <div id="pvServicesBody"><div class="bk-empty">Checking your services…</div></div>
+  </div>
+</div>
 <div class="tab-content" id="tab-admin">
   <div style="margin-top:8px;" class="card">
     <div class="card-title"><div class="card-title-dot"></div>Create New Login</div>
@@ -1342,7 +1352,7 @@ async function loadProfile(){
 
 function applyRoleAccess(){
   const isSteward=currentProfile?.role==='Steward'||currentProfile?.name==='Justin'||currentProfile?.name==='Jessica';
-  if(isSteward){const t=document.getElementById('adminTab');if(t)t.style.display='block';}
+  if(isSteward){const t=document.getElementById('adminTab');if(t)t.style.display='block';const sv=document.getElementById('servicesTab');if(sv)sv.style.display='block';}
   const reporter=document.getElementById('revReporter');
   if(reporter&&currentProfile?.name)reporter.value=currentProfile.name;
   document.getElementById('userNameDisplay').textContent=currentProfile?.name||'';
@@ -1358,7 +1368,7 @@ function signOut(){
   ['onbBanner','onbMine','onbTeam','payRules','booksCheckup','booksBody'].forEach(i=>{const el=document.getElementById(i);if(el)el.innerHTML='';});
   const lb=document.getElementById('loginBtn');if(lb){lb.disabled=false;lb.textContent='Sign In';}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('active',t.id==='tab-dashboard'));document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
-  const at=document.getElementById('adminTab');if(at)at.style.display='none';
+  const at=document.getElementById('adminTab');if(at)at.style.display='none';const svt=document.getElementById('servicesTab');if(svt)svt.style.display='none';
   const pw=document.getElementById('loginPassword');if(pw)pw.value='';
   document.getElementById('authGate').style.display='flex';
   document.getElementById('userBar').style.display='none';
@@ -1430,9 +1440,70 @@ function switchTab(id,el){
   }
   if(id==='team'||id==='timeclock'){loadCurrentPeriodHours().then(()=>{renderTeam();renderClock();calculate();});}
   if(id==='admin')adminLoadUsers();
+  if(id==='services')loadPVServices();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
+}
+
+// ─── The People's Voices services: Watch alerts, the Bid & grant finder, rule explainers ───
+const PV_BIZ_URL='https://thepeoplesvoices.org/?tab=business&hub=1';
+const PV_KIND={watch:'Watch heads-up',roundup:'Weekly roundup',bids:'Bids & grants',explainer:'Rule explainer'};
+const PV_STATUS={new:['Requested','#8a5d00','#fff4d6'],active:['On','#1f6b43','#e6f4ec'],paused:['Paused','#666','#eee'],canceled:['Canceled','#a33','#fdf0ef']};
+const PV_NAMES={watch:'Watch alerts',bids:'Bid & grant finder',explainer:'Rule explainers'};
+let PVS={mine:null,list:null,open:null};
+async function loadPVServices(){
+  const el=document.getElementById('pvServicesBody');if(!el)return;
+  el.innerHTML='<div class="bk-empty">Checking your services…</div>';
+  try{PVS.mine=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});if(!Array.isArray(PVS.mine))PVS.mine=PVS.mine?[PVS.mine]:[];}
+  catch(e){PVS.mine=null;PVS.err=e.message;}
+  try{PVS.list=(await sb('business_services?select=id,name,blurb,price_label,status,sort&order=sort.asc')).filter(x=>x.status==='available'&&!/hub/.test(x.id));}catch(e){PVS.list=[];}
+  renderPVServices();
+}
+function renderPVServices(){
+  const el=document.getElementById('pvServicesBody');if(!el)return;
+  const fmtD=d=>{try{return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});}catch(e){return'';}};
+  if(PVS.mine===null){el.innerHTML='<div class="bk-empty">Couldn’t reach The People’s Voices'+(PVS.err?': '+esc(PVS.err):'')+'. Try again in a minute.</div>';return;}
+  const live=PVS.mine.filter(b=>b.status!=='canceled');
+  if(!live.length){
+    const list=(PVS.list&&PVS.list.length)?PVS.list:[{id:'watch',name:'Watch alerts',blurb:'An email when a meeting agenda, local decision or news story mentions what matters to your business.'},{id:'bids',name:'Bid & grant finder',blurb:'Every Monday: public bids and small-business grants that fit your line of work.'},{id:'explainer',name:'Plain-language rule explainer',blurb:'Send a new ordinance, rule or permit requirement and get back what changes for you.'}];
+    el.innerHTML='<div class="card-sub">This login isn’t signed up for any services yet. Sign up on The People’s Voices with the same email you use here ('+esc((currentUser&&currentUser.email)||'your Hub email')+') and they’ll show up on this tab.</div>'
+      +list.map(x=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(x.name)+'</div><div class="bk-sub" style="white-space:normal;">'+esc(x.blurb||'')+'</div></div>'+(x.price_label?'<span class="svc-pill">'+esc(x.price_label)+'</span>':'')+'</div>').join('')
+      +'<div class="bk-actions"><a class="btn-green" style="text-decoration:none;display:inline-block;" href="'+PV_BIZ_URL+'" target="_blank" rel="noopener">Turn them on ↗</a> <button class="btn-secondary" onclick="loadPVServices()">↻ Check again</button></div>';
+    return;
+  }
+  el.innerHTML=live.map((b,bi)=>{
+    const st=PV_STATUS[b.status]||PV_STATUS.new;const has=s=>(b.services||[]).includes(s);
+    let h='<div class="card" style="margin:0 0 12px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;"><div class="bk-payee" style="font-size:16px;">'+esc(b.business_name||'Your business')+'</div>'
+      +'<span class="svc-pill" style="background:'+st[2]+';color:'+st[1]+';">'+st[0]+'</span></div>';
+    h+='<div class="bk-sub" style="white-space:normal;margin:4px 0 10px;">'+(b.status==='new'?'Requested. Alerts start once it’s switched on.':b.status==='paused'?'Paused. Email hello@thepeoplesvoices.org to pick back up.':'Alerts go to the email you signed up with, and show up here too.')+'</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+['watch','bids'].map(s=>'<span class="svc-pill'+(has(s)?' done':'')+'">'+(has(s)?'✓ ':'')+PV_NAMES[s]+'</span>').join('')+'<span class="svc-pill done">✓ Rule explainers</span></div>';
+    if(has('watch'))h+='<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">What we watch for</label><textarea id="pvWatch'+bi+'" rows="2" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;" placeholder="Separate with commas: your street, your line of work, licenses...">'+esc(b.watch_for||'')+'</textarea>';
+    if(has('bids'))h+='<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Your line of work (for bids and grants)</label><input id="pvTrade'+bi+'" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;" value="'+esc(b.trade||'')+'" placeholder="Handmade pasta, catering, farmers market vendor...">';
+    if(has('watch')||has('bids'))h+='<div class="bk-actions" style="margin-top:0;"><button class="btn-green" onclick="savePVBusiness('+bi+')">Save</button></div>';
+    const rec=b.recent||[];
+    h+='<div class="card-title" style="font-size:15px;margin-top:14px;"><div class="card-title-dot"></div>Recent alerts, bids and grants</div>';
+    h+=rec.length?rec.map(r=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee" style="white-space:normal;">'+esc(r.subject||'')+'</div><div class="bk-sub">'+esc(fmtD(r.sent_at))+' · '+esc(PV_KIND[r.service]||r.service||'')+'</div></div></div>').join('')
+      :'<div class="bk-empty">Nothing sent yet. The Bid & grant finder runs every Monday; Watch heads-ups go out as matching agendas and news come in.</div>';
+    const ex=b.explainers||[];
+    if(ex.length){
+      h+='<div class="card-title" style="font-size:15px;margin-top:14px;"><div class="card-title-dot"></div>Rule explainers</div>';
+      h+=ex.map(e=>{const k=b.id+':'+e.id,open=PVS.open===k;
+        return '<div class="bk-row" style="cursor:default;display:block;"><div class="bk-payee" style="white-space:normal;">'+esc(e.question||(e.rule_url?'Rule from a link':'Rule you pasted'))+'</div>'
+          +'<div class="bk-sub">'+esc(fmtD(e.created_at))+' · '+(e.status==='sent'?'<button class="link-btn" onclick="PVS.open='+(open?'null':'\''+esc(k)+'\'')+';renderPVServices()">'+(open?'Hide':'Read it')+'</button>':e.status==='declined'?'We couldn’t do this one':'Being written')+'</div>'
+          +(open&&e.final_text?'<div style="white-space:pre-wrap;background:var(--cream,#faf7f0);border-radius:8px;padding:10px 12px;margin-top:6px;font-size:14px;line-height:1.55;">'+esc(e.final_text)+'</div>':'')+'</div>';}).join('');
+    }
+    h+='<div class="bk-actions"><a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="'+PV_BIZ_URL+'" target="_blank" rel="noopener">Send a rule to explain, or change services ↗</a></div></div>';
+    return h;
+  }).join('')+'<div class="bk-actions"><button class="btn-secondary" onclick="loadPVServices()">↻ Refresh</button></div>';
+}
+async function savePVBusiness(bi){
+  const b=(PVS.mine||[]).filter(x=>x.status!=='canceled')[bi];if(!b)return;
+  const w=document.getElementById('pvWatch'+bi),t=document.getElementById('pvTrade'+bi);
+  try{
+    await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:b.id,p_watch_for:w?w.value:(b.watch_for||''),p_trade:t?t.value:(b.trade||'')})});
+    toast('Saved. Your next alert will use these.');loadPVServices();
+  }catch(e){toast('Didn’t save: '+e.message,true);}
 }
 
 // ─── TEAM ───
