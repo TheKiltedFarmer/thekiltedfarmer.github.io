@@ -6038,7 +6038,7 @@ function posDetect(rows,forceSales){
   if(!forceSales&&itemCol>=0&&qtyCol>=0)return{kind:'items',hi,C:{date:posFind(h,/^date$/,/date/),item:itemCol,qty:qtyCol,variant:posFind(h,/price point/,/variation/),sku:posFind(h,/^sku$/),event:posFind(h,/event type/),tx:posFind(h,/transaction id/,/payment id/)}};
   return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),net:posFind(h,/^net sales$/),amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/),
     tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/),tip:posFind(h,/^tips?$/,/gratuity/),fee:posFind(h,/^fees?$/,/processing fee/),refunds:posFind(h,/partial refunds/),
-    staff:posFind(h,/staff name/,/employee/,/team member/,/^server$/),event:posFind(h,/event type/,/^type$/),tx:posFind(h,/^transaction id$/,/^payment id$/,/transaction id/),
+    staff:posFind(h,/staff name/,/employee/,/team member/,/^server$/,/^device name$/),event:posFind(h,/event type/,/^type$/),tx:posFind(h,/^transaction id$/,/^payment id$/,/transaction id/),
     location:posFind(h,/^location$/),cash:posFind(h,/^cash$/),card:posFind(h,/^card$/)}};
 }
 async function onPosFile(input){
@@ -6047,7 +6047,34 @@ async function onPosFile(input){
   posHandleRows(file.name,rows);
 }
 // Shared by the sales importer and the bank importer (when a sales report lands there by mistake)
+// Square's "Sales summary" export has no dates: one line per device (or person)
+// for the whole range. Its range is in the file name.
+function posSummaryFrom(name,rows){
+  let hi=-1;
+  for(let i=0;i<Math.min(rows.length,10);i++){const h=rows[i].map(posH);if(h.includes('net sales')&&h.includes('gross sales')&&!h.some(c=>/^date$|^day$/.test(c))){hi=i;break;}}
+  if(hi<0)return null;
+  const h=rows[hi].map(posH);
+  const C={net:posFind(h,/^net sales$/),tax:posFind(h,/^taxes$/,/^tax$/),tip:posFind(h,/^tips$/),fee:posFind(h,/^fees$/),n:posFind(h,/total number of sales/,/^count$/)};
+  const m=String(name).match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
+  const start=m?m[1]:'',end=m?m[2]:isoLocal(new Date());
+  const byWho={};
+  rows.slice(hi+1).forEach(r=>{
+    const label=String(r[0]||'').trim();if(!label||/^total$/i.test(label))return;
+    const who=posStaffName(label);const g=byWho[who]||(byWho[who]={date:end,who,net:0,tax:0,tip:0,fee:0,n:0,labels:[]});
+    g.net+=posMoney(r[C.net]);g.tax+=C.tax>=0?posMoney(r[C.tax]):0;g.tip+=C.tip>=0?posMoney(r[C.tip]):0;
+    g.fee+=C.fee>=0?Math.abs(posMoney(r[C.fee])):0;g.n+=C.n>=0?(parseInt(String(r[C.n]).replace(/\D/g,''))||0):1;g.labels.push(label);
+  });
+  const days=Object.values(byWho).filter(g=>g.net||g.tip||g.fee);
+  if(!days.length)return null;
+  return{start,end,days};
+}
 function posHandleRows(name,rows){
+  const sum=posSummaryFrom(name,rows);
+  if(sum){
+    POS.preview={name,kind:'sales',days:sum.days,refunds:0,skipped:0,summary:sum,src:'possum:'+(sum.start||'')+'_'+sum.end,
+      cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+    return posShowSales();
+  }
   const d=posDetect(rows);
   if(!d){toast('Couldn’t find dates and sales in that file. It needs to be a CSV export of your sales.',true);return;}
   if(d.kind==='items'){
@@ -6074,7 +6101,7 @@ function looksLikeSalesReport(rows){
 }
 function posMoney(v){const n=moneyVal(v);return n===null?0:n;}
 function posStaffName(s){
-  const t=String(s||'').trim().toLowerCase();if(!t)return'';
+  const t=String(s||'').trim().toLowerCase().replace(/[’']s\b/g,'').replace(/\b(iphone|ipad|android|phone|note\d*|galaxy|pixel|tablet|register|terminal|reader)\b.*$/,'').replace(/\s+/g,' ').trim();if(!t)return'';
   const list=(typeof members!=='undefined'?members:[]).map(m=>m.name);
   return list.find(n=>n.toLowerCase()===t)||list.find(n=>t.startsWith(n.toLowerCase()+' ')||n.toLowerCase().startsWith(t.split(' ')[0]))||'';
 }
@@ -6104,13 +6131,14 @@ function posModal(){
 }
 function posShowSales(){
   const p=POS.preview;const t=k=>p.days.reduce((a,g)=>a+g[k],0);
-  const m=posModal();document.getElementById('posTitle').textContent='Import sales';
+  const m=posModal();document.getElementById('posTitle').textContent=p.summary?'Import a sales summary':'Import sales';
   const dates=p.days.map(g=>g.date);
   document.getElementById('posBody').innerHTML='<div class="bk-sub" style="margin-bottom:10px;">'+esc(p.name)+' · '+esc(prettyDate(dates[0]))+' – '+esc(prettyDate(dates[dates.length-1]))+'</div>'
     +'<div class="bk-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">'
     +[['Sales',t('net'),'var(--green)'],['Sales tax',t('tax')],['Tips',t('tip')],['Card fees',t('fee'),'var(--red)']].map(([l,v,c])=>'<div class="bk-stat"><div class="bk-stat-l">'+l+'</div><div class="bk-stat-v"'+(c?' style="color:'+c+';"':'')+'>'+fmt(v)+'</div></div>').join('')+'</div>'
     +'<div class="txn-grid"><div><label>File the sales under</label><select class="period-select" onchange="POS.preview.cat=this.value">'+INCOME_CATS.filter(c=>!/tip/i.test(c)).map(c=>'<option'+(c===p.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div></div>'
-    +'<div class="bk-sub" style="margin:8px 0;">Becomes '+p.days.length+' daily entr'+(p.days.length===1?'y':'ies')
+    +(p.summary?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">This is a <b>summary</b>'+(p.summary.start?' for '+esc(prettyDate(p.summary.start))+' – '+esc(prettyDate(p.summary.end)):'')+', with no day-by-day detail. It goes in as one entry per person, dated '+esc(prettyDate(p.summary.end))+', so it all lands in that pay week. For sales spread over the right weeks, export <b>Item sales</b> from Square instead. Don’t import both for the same dates, or sales count twice.</span></div>':'')
+    +'<div class="bk-sub" style="margin:8px 0;">Becomes '+p.days.length+(p.summary?' entr'+(p.days.length===1?'y':'ies'):' daily entr'+(p.days.length===1?'y':'ies'))
     +(p.days.some(g=>g.who)?', split by who made the sale (so market commission goes to the right person)':'')+'. '
     +(t('tax')?'Sales tax is kept out of your income and tracked for your sales tax return. ':'')
     +(t('tip')?'Tips are filed as Tips so they go to the tip pool, not the sales pool. ':'')
@@ -6123,7 +6151,7 @@ function posShowSales(){
 }
 async function posImportSales(){
   const p=POS.preview;if(!p)return;const btn=document.getElementById('posGo');btn.disabled=true;btn.textContent='Importing…';
-  const src='pos';const revs=[],exps=[];
+  const src=p.src||'pos';const revs=[],exps=[];
   p.days.forEach(g=>{
     const label=getWeekLabel(parseISO(g.date));const tag=src+':'+g.date+':'+(g.who||'all');
     if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
@@ -6138,6 +6166,19 @@ async function posImportSales(){
       (await sb('ohb_revenue_entries?select=import_key&import_key=in.('+encodeURIComponent(chunk)+')')).forEach(r=>have.add(r.import_key));
       (await sb('ohb_expenses?select=import_key&import_key=in.('+encodeURIComponent(chunk)+')')).forEach(r=>have.add(r.import_key));
     }
+    // A day already brought in from another file (split differently, e.g. by person) is left alone,
+    // so the same sales never count twice
+    const doneDays=new Set();
+    for(const dt of [...new Set(p.days.map(g=>g.date))]){
+      try{
+        const pat=encodeURIComponent(src+':'+dt+':*');
+        const r1=await sb('ohb_revenue_entries?select=import_key&import_key=like.'+pat+'&limit=1');
+        const r2=await sb('ohb_expenses?select=import_key&import_key=like.'+pat+'&limit=1');
+        if(r1.length||r2.length)doneDays.add(dt);
+      }catch(e){}
+    }
+    revs.forEach(x=>{if(doneDays.has(x.body.txn_date))have.add(x.key);});
+    exps.forEach(x=>{if(doneDays.has(x.date))have.add(x.key);});
     const newRevs=revs.filter(x=>!have.has(x.key)).map(x=>Object.assign(x.body,{import_key:x.key}));
     // saving many rows at once needs every row to carry the same fields
     const allKeys=[...new Set(newRevs.flatMap(r=>Object.keys(r)))];newRevs.forEach(r=>allKeys.forEach(k=>{if(!(k in r))r[k]=null;}));
