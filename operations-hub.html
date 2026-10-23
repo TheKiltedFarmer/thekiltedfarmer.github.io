@@ -702,6 +702,10 @@ details[open]>summary.card-title::after{content:'▴';}
 .onb-sig{width:100%;font-family:'Playfair Display',serif;font-size:20px;font-style:italic;padding:10px 12px;}
 .onb-signed{margin-top:16px;background:#f6fbf8;border-left:3px solid var(--green);padding:10px 12px;border-radius:6px;font-size:13px;color:var(--green-dark);}
 .onb-task{display:flex;gap:12px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--cream-dark);cursor:pointer;}
+.tabs-tip{display:flex;gap:12px;align-items:flex-start;border-left:4px solid var(--green);}
+.tabs-tip-ico{font-size:26px;line-height:1;flex-shrink:0;margin-top:2px;}
+.tabs-tip .bk-actions{flex-wrap:wrap;}
+.tabs-warn{background:var(--cream-dark);border-left:3px solid var(--tan,#A67C52);border-radius:6px;padding:8px 10px;margin:10px 0 4px;font-size:13.5px;line-height:1.5;}
 .onb-task input{width:20px;height:20px;accent-color:var(--green);margin-top:2px;flex-shrink:0;}
 .onb-task.pending{opacity:.7;cursor:default;}
 .onb-task>div{flex:1;min-width:0;}
@@ -870,6 +874,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
 <div class="tab-content active" id="tab-dashboard">
   <div id="comingUp"></div>
   <div id="onbBanner"></div>
+  <div id="tabsTip"></div>
   <div id="startHere"></div>
   <div class="dash-refresh" style="margin-top:8px;">
     <div>
@@ -7025,6 +7030,67 @@ const TEAM_ACCESS_ITEMS=[
   ['recipes','See recipes and make batches','The Ingredients tab, if recipes are turned on.'],
   ['see_pay','See everyone’s pay and the week’s numbers','Sales, profit and the whole team’s pay. Off: each person sees only their own hours and pay.']
 ];
+// ─── tabs you use: hide the ones this business doesn't need (for everyone in it; nothing is deleted) ───
+const HIDEABLE_TABS=[
+  ['log','Revenue & Expenses','Log sales, scan receipts and bring in card-reader sales.'],
+  ['books','Books','Bookkeeping, bank statements, budgets, taxes, bills and Cash ahead.'],
+  ['invoices','Invoices','Estimates, invoices and their Pay now pages.'],
+  ['timeclock','Time Clock','Clocking in and out, and the hours pay is figured from.'],
+  ['schedule','Schedule','Shifts, time off and shift trades.'],
+  ['team','Team','People, pay rules, paid sick time and new-hire paperwork.'],
+  ['inventory','Inventory','Stock counts, reorder points and batches.'],
+  ['history','History','Past weeks and what everyone was paid.']
+];
+const SOLO_TABS=['timeclock','schedule','team','history'];
+const TAB_NAME=k=>(HIDEABLE_TABS.find(x=>x[0]===k)||[k,k])[1];
+function hiddenTabs(){
+  const h=(BIZ.row&&BIZ.row.settings&&BIZ.row.settings.hiddenTabs)||[];
+  return Array.isArray(h)?h.filter(k=>HIDEABLE_TABS.some(x=>x[0]===k)):[];
+}
+const tabHidden=k=>hiddenTabs().includes(k);
+const listWords=a=>a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+// save a few business settings without touching the rest
+async function patchBizSettings(patch){
+  const settings=Object.assign({},BIZ.row.settings||{},patch);
+  const rows=await sb('ohb_businesses?id=eq.'+BIZ.id,{method:'PATCH',body:JSON.stringify({settings})});
+  if(!rows||!rows.length)throw new Error('Only owners and managers can change this');
+  BIZ.row=rows[0];const m=BIZ.list.find(x=>x.business_id===BIZ.id);if(m)m.ohb_businesses=rows[0];
+  applyBizConfig();
+}
+// Just the owner so far? Offer to tidy away the team tabs, once.
+function renderTabsTip(){
+  const el=document.getElementById('tabsTip');if(!el)return;
+  const s=(BIZ.row&&BIZ.row.settings)||{};
+  const show=typeof isStewardUser==='function'&&isStewardUser()&&!s.tabsAsked&&members.length<=1&&!SOLO_TABS.some(tabHidden);
+  el.innerHTML=show?'<div class="card tabs-tip"><div class="tabs-tip-ico" aria-hidden="true">🧹</div><div class="bk-main"><div class="bk-payee">Just you for now?</div>'
+    +'<div class="bk-sub">You can hide '+listWords(SOLO_TABS.map(TAB_NAME))+' until you hire someone. Nothing is deleted, and they come back with one tap in Settings → Tabs You Use.</div>'
+    +'<div class="bk-actions" style="margin-top:8px;"><button class="btn-green" onclick="tabsTipAnswer(true,this)">Hide them</button><button class="btn-secondary" onclick="tabsTipAnswer(false,this)">Keep them</button></div></div></div>':'';
+}
+async function tabsTipAnswer(hide,btn){
+  if(btn)btn.disabled=true;
+  try{
+    const patch={tabsAsked:true};
+    if(hide)patch.hiddenTabs=[...new Set(hiddenTabs().concat(SOLO_TABS))];
+    await patchBizSettings(patch);
+    toast(hide?'Done. Bring them back any time in Settings → Tabs You Use.':'Okay, they’ll stay.');
+  }catch(e){toast('Didn’t save: '+e.message,true);if(btn)btn.disabled=false;return;}
+  renderTabsTip();renderStartHere();
+}
+// Settings: check every tab, or just the ones for working alone, then save
+function tabsPreset(which){
+  document.querySelectorAll('.st-tab').forEach(c=>{c.checked=which==='all'?true:!SOLO_TABS.includes(c.dataset.k);});
+  saveSettings();
+}
+function tabsCardHTML(){
+  const hid=hiddenTabs();const n=members.length;
+  return '<div class="card" id="tabsBox"><div class="card-title"><div class="card-title-dot"></div>Tabs You Use</div>'
+    +'<div class="card-sub">Turn off any tab '+esc(BIZ.row.name)+' doesn’t need right now. It’s hidden for everyone in this business, but nothing in it is deleted, and you can turn it back on any time. Dashboard and Settings always stay.</div>'
+    +HIDEABLE_TABS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox" class="st-tab" data-k="'+k+'"'+(hid.includes(k)?'':' checked')+'><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+'</div></div></label>').join('')
+    +(s_hasRecipes()?'<div class="bk-sub" style="margin-top:6px;">Ingredients is switched on and off under <b>Features</b>, with recipe &amp; product costing.</div>':'')
+    +(n>1?'<div class="tabs-warn">You have '+n+' people on your team. They use '+listWords(['Time Clock','Schedule','Team'])+' to clock in, see shifts and sign paperwork, so hiding those hides them for everyone.</div>':'')
+    +'<div class="bk-actions"><button class="btn-secondary" onclick="tabsPreset(\'solo\')">It’s just me for now</button>'+(hid.length?'<button class="btn-secondary" onclick="tabsPreset(\'all\')">Show every tab</button>':'')+'</div></div>';
+}
+function s_hasRecipes(){try{return !!bizSettings().recipes;}catch(e){return false;}}
 function teamAccess(){
   const s=bizSettings();
   return Object.assign({schedule_all:true,log:false,inventory:true,recipes:false,see_pay:s.payStyle==='shared'},s.teamAccess||{});
@@ -7034,9 +7100,11 @@ function applyTeamAccess(){
   if(!BIZ.row)return;
   const st=isStewardUser(),a=teamAccess(),s=bizSettings();
   const tab=k=>document.querySelector('.tab[onclick*="\''+k+'\'"]');
-  const show=(k,on)=>{const t=tab(k);if(t)t.style.display=on?'':'none';};
+  const hid=hiddenTabs();
+  const show=(k,on)=>{const t=tab(k);if(t)t.style.display=(on&&!hid.includes(k))?'':'none';};
   show('books',st);show('invoices',st);show('history',st||a.see_pay);show('log',st||a.log);show('inventory',st||a.inventory);
   show('ingredients',!!s.recipes&&(st||a.recipes));
+  show('timeclock',true);show('schedule',true);show('team',true);
   document.body.classList.toggle('team-limited',teamLimited());
   // if the open tab just got hidden, go back to the dashboard
   const act=document.querySelector('.tab.active');if(act&&act.style.display==='none')goTab('dashboard');
@@ -7268,19 +7336,20 @@ function cancelSetup(){document.getElementById('setupGate').style.display='none'
 // ─── start here (new businesses) ───
 async function renderStartHere(){
   const el=document.getElementById('startHere');if(!el)return;
+  try{renderTabsTip();}catch(e){}
   if(currentProfile?.role!=='Steward'){el.innerHTML='';return;}
   let hidden=false;try{hidden=localStorage.getItem('ohb_starthere_'+BIZ.id)==='done';}catch(e){}
   if(hidden){el.innerHTML='';return;}
   const has=async p=>{try{return(await sb(p)).length>0;}catch(e){return false;}};
   const [rev,exp,bank,svc]=await Promise.all([has('ohb_revenue_entries?select=id&limit=1'),has('ohb_expenses?select=id&amount=gt.0&limit=1'),has('ohb_bank_lines?select=id&limit=1'),pvServiceStatus()]);
   const steps=[
-    [members.length>1,'Invite your team','Settings → People & logins',"goTab('settings')"],
-    [rev,'Log a sale','Revenue & Expenses',"goTab('log')"],
-    [exp,'Scan a receipt','Revenue & Expenses → Scan Receipts',"goTab('log')"],
-    [!!(BOOKS.acct&&BOOKS.acct.pay&&BOOKS.acct.pay.workers),'Check your pay rules','Team → Pay Rules',"goTab('team')"],
+    [members.length>1,'Invite your team','Settings → People & logins',"goTab('settings')",'team'],
+    [rev,'Log a sale','Revenue & Expenses',"goTab('log')",'log'],
+    [exp,'Scan a receipt','Revenue & Expenses → Scan Receipts',"goTab('log')",'log'],
+    [!!(BOOKS.acct&&BOOKS.acct.pay&&BOOKS.acct.pay.workers),'Check your pay rules','Team → Pay Rules',"goTab('team')",'team'],
     [svc.signed,'Turn on your included services','Watch alerts and the Bid & grant finder, from The People’s Voices',"openPVServices()"],
-    [bank,'Bring in a bank statement','Books → Bank',"goTab('books');setTimeout(()=>setBooksView('bank'),300)"]
-  ];
+    [bank,'Bring in a bank statement','Books → Bank',"goTab('books');setTimeout(()=>setBooksView('bank'),300)",'books']
+  ].filter(x=>!x[4]||!tabHidden(x[4]));
   const done=steps.filter(s=>s[0]).length;
   el.innerHTML='<div class="card start-here"><div class="ck-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Start here</div><span class="ck-badge">'+done+' of '+steps.length+'</span></div>'
     +steps.map(([ok,t,where,fn])=>'<div class="onb-item'+(ok?' done':'')+'" onclick="'+fn+'"><span class="onb-dot">'+(ok?'✓':'')+'</span><div class="bk-main"><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(where)+'</div></div><span class="onb-go">›</span></div>').join('')
@@ -7314,13 +7383,15 @@ async function renderSettings(){
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Features</div>'
     +'<label class="onb-task"><input type="checkbox" id="stFood"'+(s.food?' checked':'')+'><div><div class="bk-payee">We handle food</div><div class="bk-sub">Adds the food safety &amp; illness agreement and kitchen rules to onboarding</div></div></label>'
     +'<label class="onb-task"><input type="checkbox" id="stRecipes"'+(s.recipes?' checked':'')+'><div><div class="bk-payee">Recipe &amp; product costing</div><div class="bk-sub">The Ingredients tab: cost per item and a suggested price</div></div></label></div>';
+  h+=tabsCardHTML();
   const ta=teamAccess();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>What Your Team Can See</div>'
-    +'<div class="card-sub">Owners and managers always see everything. Everyone else always gets the Time Clock, their schedule, their own pay and their paperwork. Turn on anything else you want them to have.</div>'
+    +'<div class="card-sub">Owners and managers always see everything. Everyone else always gets the Time Clock, their schedule, their own pay and their paperwork (unless you’ve hidden those tabs under Tabs You Use). Turn on anything else you want them to have.</div>'
     +TEAM_ACCESS_ITEMS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox" class="st-access" data-k="'+k+'"'+(ta[k]?' checked':'')+'><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+'</div></div></label>').join('')+'</div>';
   h+='<div class="bk-actions" style="margin:-4px 0 18px;"><button class="btn-green" id="stSaveBtn" onclick="saveSettings()">Save settings</button></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>People &amp; Logins</div>'
     +'<div class="card-sub">Send someone an invite link by text or email. When they open it and make an account, they join '+esc(BIZ.row.name)+' and nothing else.</div>'
+    +(SOLO_TABS.filter(k=>k!=='history').some(tabHidden)?'<div class="tabs-warn">Hiring? '+esc(listWords(SOLO_TABS.filter(tabHidden).map(TAB_NAME)))+(SOLO_TABS.filter(tabHidden).length>1?' are':' is')+' hidden right now, and your team needs them to clock in and see their shifts. <a href="#tabsBox" onclick="event.preventDefault();document.getElementById(\'tabsBox\').scrollIntoView({behavior:\'smooth\'})">Turn them back on under Tabs You Use</a>.</div>':'')
     +'<div id="stPeople"><div class="bk-empty">Loading…</div></div>'
     +'<div class="txn-grid" style="margin-top:12px;"><div><label>Their name</label><input id="invName" class="period-input" placeholder="As it shows on the team"></div>'
     +'<div><label>Role</label><select id="invRole" class="period-select"><option value="member">Team member'+(HUB.payStyle==='shared'?' (Contributor)':'')+'</option><option value="manager">Manager'+(HUB.payStyle==='shared'?' (Steward)':'')+'</option>'+(isOwner?'<option value="owner">Co-owner'+(HUB.payStyle==='shared'?' (Steward)':'')+'</option>':'')+'</select></div></div>'
@@ -7352,8 +7423,10 @@ async function saveSettings(){
   if(!expense.length||!income.length){toast('Keep at least one sales source and one expense category',true);return;}
   const cogs=stLines('stCogs').filter(c=>expense.includes(c));
   const teamAccessSet={};document.querySelectorAll('.st-access').forEach(c=>{teamAccessSet[c.dataset.k]=c.checked;});
+  const tabBoxes=[...document.querySelectorAll('.st-tab')];
+  const hiddenTabsSet=tabBoxes.length?tabBoxes.filter(c=>!c.checked).map(c=>c.dataset.k):hiddenTabs();
   const settings=Object.assign({},BIZ.row.settings||{},{payStyle:style,teamAccess:teamAccessSet,jobs,income,expense,cogs,ct:Math.max(0,Math.min(50,parseFloat(document.getElementById('stCT').value)||0)),
-    food:document.getElementById('stFood').checked,recipes:document.getElementById('stRecipes').checked});
+    food:document.getElementById('stFood').checked,recipes:document.getElementById('stRecipes').checked,hiddenTabs:hiddenTabsSet,tabsAsked:true});
   const name=document.getElementById('stName').value.trim(),county=document.getElementById('stCounty').value;
   if(name.length<2){toast('Enter the business name',true);return;}
   const btn=document.getElementById('stSaveBtn');btn.disabled=true;btn.textContent='Saving…';
@@ -7362,6 +7435,7 @@ async function saveSettings(){
     if(!rows.length)throw new Error('Only Stewards can change settings');
     BIZ.row=rows[0];const m=BIZ.list.find(x=>x.business_id===BIZ.id);if(m)m.ohb_businesses=rows[0];
     applyBizConfig();renderClock();renderTeam();renderRevWorkers();refreshDashboard();BOOKS.stale=true;BOOKS._weeks=null;
+    try{renderTabsTip();renderStartHere();}catch(e){}
     toast('Settings saved');renderSettings();
   }catch(e){toast('Didn’t save: '+e.message,true);}
   finally{btn.disabled=false;btn.textContent='Save settings';}
@@ -7676,7 +7750,7 @@ function tourSteps(){
       ...(a.log?[{tab:'log',t:'Logging sales and receipts',b:'<ul><li>Record a sale with the amount and where it came from.</li><li><b>Scan a receipt</b>: snap a photo and the Hub reads it for you.</li></ul>'}]:[]),
       ...(a.inventory?[{tab:'inventory',t:'Inventory',b:'<ul><li>Tap <b>+</b> or <b>−</b> to update what’s on the shelf.</li><li><b>Count everything</b> walks you through a full count.</li></ul>'}]:[]),
       {t:'That’s it!',b:'<p>Questions about your schedule or pay? Ask your manager. You can open this tour again any time with the <b>Help</b> button in the corner.</p>'}
-    ];
+    ].filter(x=>!x.tab||!tabHidden(x.tab));
   }
   return [
     {t:'Welcome to your Operations Hub',b:'<p>'+name+'’s books, pay, schedule, inventory, invoices and paperwork, all in one place, on any phone or computer.</p><p>This quick tour shows what each tab does and how to use it. Tap <b>Show me</b> on any step to jump there, and reopen the tour any time with the <b>Help</b> button in the corner.</p>'},
@@ -7688,7 +7762,7 @@ function tourSteps(){
     {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
     {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
     {tab:'inventory',t:'Inventory',b:'<ul><li>Track what’s on hand with quick <b>+ / −</b> buttons, or <b>Count everything</b> at once.</li><li>Set a reorder point and the Hub builds your <b>shopping list</b>.</li><li>Edit as a table to change many items at once, or import a spreadsheet.</li>'+(s.recipes?'<li>Add a <b>recipe</b> to anything you make. <b>Make a batch</b> uses up the ingredients, adds the finished goods, and shows your cost per item.</li>':'')+'</ul>'},
-    {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Getting paid</b>: how customers pay you, and automatic reminders.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time. Send another business your link and you both get a free month.</li></ul>'},
+    {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>Tabs you use</b>: hide the ones you don’t need, like Time Clock and Schedule if it’s just you.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Getting paid</b>: how customers pay you, and automatic reminders.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time. Send another business your link and you both get a free month.</li></ul>'},
     {t:'What the Hub does, and what it doesn’t',b:'<ul><li>✅ It keeps your records, does the math (pay, overtime, minimum wage, tips, sales tax, quarterly estimates), and reminds you what’s due.</li><li>➡️ It doesn’t file taxes or send paychecks. Hand the <b>payroll file</b> to your payroll service and the <b>year-end package</b> to your tax preparer.</li><li>📬 Included with your Hub: Watch alerts on local government and the Bid & grant finder, from The People’s Voices. Turn them on from <b>Start here</b> on the Dashboard.</li></ul>'},
     {t:'You’re all set',b:'<p>Start with the <b>Start here</b> checklist on your Dashboard: add your team, log a sale, and scan a receipt.</p><p>The <b>Help</b> button in the corner reopens this tour. For more detail, see the <a href="/hub-help.html" target="_blank" rel="noopener">Help page</a>.</p>'}
   ].filter(x=>!x.tab||(()=>{const t=document.querySelector('.tab[onclick*="\''+x.tab+'\'"]');return !t||t.style.display!=='none';})());
@@ -8423,7 +8497,7 @@ if(typeof renderBooks==='function'){const _rbCF=renderBooks;renderBooks=function
 async function renderCashWarn(){
   const host=document.getElementById('comingUp');if(!host)return;
   let el=document.getElementById('cashWarn');
-  if(!(typeof isStewardUser==='function'&&isStewardUser())||!BOOKS.raw||!BOOKS.schema.acct){if(el)el.innerHTML='';return;}
+  if(!(typeof isStewardUser==='function'&&isStewardUser())||!BOOKS.raw||!BOOKS.schema.acct||(typeof tabHidden==='function'&&tabHidden('books'))){if(el)el.innerHTML='';return;}
   if(!el){el=document.createElement('div');el.id='cashWarn';host.parentNode.insertBefore(el,host);}
   try{if(typeof BILLS!=='undefined'&&!BILLS.loaded)await loadBills();if(typeof INVC!=='undefined'&&!INVC.loaded)await loadInvoices();}catch(e){}
   const P=cfPlan();if(!P){el.innerHTML='';return;}
