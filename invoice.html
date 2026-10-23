@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Invoice</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1f2a24;--muted:#5d6b63;--line:#e3ddd0;--paper:#fffdf8;--bg:#f4f1ea;--green:#2D6A4F;--green-dark:#1B4332;--red:#C0392B;--gold:#f0c040;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Source Sans 3',system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px;}
+.sheet{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px 20px;box-shadow:0 6px 24px rgba(0,0,0,.06);}
+.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start;}
+.biz{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:26px;line-height:1.15;margin:0;color:var(--green-dark);}
+.place{color:var(--muted);font-size:14px;}
+.doc{text-align:right;}
+.kind{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:20px;}
+.num{color:var(--muted);font-size:14px;}
+.pill{display:inline-block;border-radius:999px;padding:3px 11px;font-size:13px;font-weight:700;margin-top:6px;}
+.pill.due{background:#eaf2fa;color:#1a5c8a;}.pill.over{background:#fdf0ef;color:var(--red);}.pill.paid{background:#eef7f1;color:var(--green);}.pill.void{background:#f2f2f2;color:#777;}
+.due-box{margin:20px 0 6px;padding:16px;border-radius:12px;background:#f6faf7;border:1px solid #cfe5d6;}
+.due-l{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700;}
+.due-v{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:38px;line-height:1.1;color:var(--green-dark);}
+.due-s{color:var(--muted);font-size:14.5px;}
+.pay{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;border-radius:10px;padding:14px 16px;font-weight:700;font-size:17px;min-height:48px;border:1.5px solid var(--green);color:var(--green-dark);background:#fff;}
+.btn.primary{background:var(--green);color:#fff;border-color:var(--green);}
+.btn:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
+.way{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;font-size:15px;}
+.way b{display:block;}
+.ref{font-size:14px;color:var(--muted);margin-top:4px;}
+h2{font-family:'Playfair Display',Georgia,serif;font-size:17px;margin:24px 0 6px;}
+.billto{font-size:15px;}
+table{width:100%;border-collapse:collapse;margin-top:6px;font-size:15px;}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:2px solid var(--ink);padding:6px 4px;}
+td{border-bottom:1px solid var(--line);padding:9px 4px;vertical-align:top;}
+.r{text-align:right;white-space:nowrap;}
+.tot td{border:none;padding:4px;}
+.tot .big td{font-size:19px;font-weight:700;border-top:2px solid var(--ink);padding-top:8px;}
+.note{margin-top:16px;font-size:15px;}
+.terms{color:var(--muted);font-size:14px;}
+.actions{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;}
+.link-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-size:15px;color:var(--green-dark);cursor:pointer;font-family:inherit;}
+.foot{text-align:center;color:var(--muted);font-size:13px;margin-top:18px;line-height:1.6;}
+.foot a{color:var(--green-dark);}
+.banner{background:var(--green-dark);color:#f4efe4;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14.5px;}
+.msg{text-align:center;padding:40px 10px;}
+.msg h1{font-family:'Playfair Display',Georgia,serif;font-size:24px;margin:0 0 8px;}
+.thanks{color:var(--green);font-weight:700;font-size:17px;}
+@media print{body{background:#fff;}.wrap{padding:0;}.sheet{border:none;box-shadow:none;}.pay .btn,.actions,.banner,.foot{display:none!important;}.way{border:none;padding:2px 0;}}
+@media(max-width:480px){.doc{text-align:left;}.due-v{font-size:32px;}}
+</style>
+</head>
+<body>
+<main class="wrap" id="app" aria-live="polite"><div class="msg"><p>Opening the invoice…</p></div></main>
+<script>
+// The People's Voices · Operations Hub: a customer's view of one invoice, with ways to pay.
+// The link carries a long random code; it shows this one invoice and nothing else.
+const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE';
+const app=document.getElementById('app');
+const q=new URLSearchParams(location.search);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'$'+(+n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const parseISO=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?new Date(+m[1],+m[2]-1,+m[3],12):null;};
+const pretty=s=>{const d=parseISO(s);return d?d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'';};
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const trim=s=>String(s==null?'':s).trim();
+const handle=s=>trim(s).replace(/^https?:\/\/(www\.)?[^/]+\/(u\/)?/i,'').replace(/^[@$]/,'').replace(/[/?#].*$/,'');
+function safeUrl(u){u=trim(u);if(!u)return'';if(!/^https?:\/\//i.test(u))u='https://'+u;try{const x=new URL(u);return /^https?:$/.test(x.protocol)&&x.hostname.includes('.')?x.href:'';}catch(e){return'';}}
+function ways(p,amount){
+  p=p||{};const out=[];const amt=(+amount||0).toFixed(2);
+  const card=safeUrl(p.card);if(card)out.push({label:'Pay '+money(amount)+' by card',url:card,primary:true});
+  const pp=handle(p.paypal);if(pp)out.push({label:'Pay with PayPal',url:'https://paypal.me/'+encodeURIComponent(pp)+'/'+amt});
+  const vm=handle(p.venmo);if(vm)out.push({label:'Pay with Venmo (@'+vm+')',url:'https://venmo.com/u/'+encodeURIComponent(vm)});
+  const ca=handle(p.cashapp);if(ca)out.push({label:'Pay with Cash App ($'+ca+')',url:'https://cash.app/$'+encodeURIComponent(ca)+'/'+amt});
+  if(trim(p.zelle))out.push({label:'Zelle',text:'Send it to '+trim(p.zelle)+' from your bank’s app.'});
+  if(trim(p.checkTo))out.push({label:'By check',text:'Make it out to '+trim(p.checkTo)+(trim(p.checkMail)?' and mail it to '+trim(p.checkMail):'')+'.'});
+  if(trim(p.other))out.push({label:'Other ways to pay',text:trim(p.other)});
+  return out;
+}
+function show(html){app.innerHTML=html;}
+function fail(title,text){document.title=title;show('<div class="sheet msg"><h1>'+esc(title)+'</h1><p>'+esc(text)+'</p></div>');}
+function render(d,preview){
+  const b=d.business||{},v=d.invoice||{},p=d.pay||{};
+  const est=v.kind==='estimate';const left=Math.max(0,(+v.total||0)-(+v.paid_amount||0));
+  const paid=!est&&(v.status==='paid'||left<0.005);const voided=v.status==='void';
+  const overdue=!est&&!paid&&!voided&&v.due_date&&v.due_date<today();
+  document.title=(est?'Estimate ':'Invoice ')+(v.number||'')+' · '+(b.name||'');
+  let pill;
+  if(voided)pill='<span class="pill void">Canceled</span>';
+  else if(paid)pill='<span class="pill paid">Paid'+(v.paid_date?' '+esc(pretty(v.paid_date)):'')+'</span>';
+  else if(est)pill=v.due_date?'<span class="pill due">Good until '+esc(pretty(v.due_date))+'</span>':'';
+  else pill=v.due_date?'<span class="pill '+(overdue?'over':'due')+'">'+(overdue?'Past due since ':'Due ')+esc(pretty(v.due_date))+'</span>':'';
+  let h=preview?'<div class="banner">Preview: this is the page your customer sees. Opening it here doesn’t count as them opening it.</div>':'';
+  h+='<div class="sheet"><div class="top"><div><h1 class="biz">'+esc(b.name||'')+'</h1><div class="place">'+esc(b.county?b.county+' County, Michigan':'Michigan')+'</div></div>'
+    +'<div class="doc"><div class="kind">'+(est?'Estimate':'Invoice')+'</div><div class="num">'+esc(v.number||'')+(v.issue_date?' · '+esc(pretty(v.issue_date)):'')+'</div>'+pill+'</div></div>';
+  if(voided)h+='<div class="due-box"><div class="thanks">This '+(est?'estimate':'invoice')+' was canceled. Nothing is owed on it.</div></div>';
+  else if(paid)h+='<div class="due-box"><div class="thanks">Paid in full. Thank you!</div><div class="due-s">'+money(v.total)+(v.paid_date?' received '+esc(pretty(v.paid_date)):'')+'.</div></div>';
+  else if(est)h+='<div class="due-box"><div class="due-l">Estimate total</div><div class="due-v">'+money(v.total)+'</div><div class="due-s">To go ahead, reply to '+esc(b.name||'the business')+'.</div></div>';
+  else{
+    const W=ways(p,left);
+    h+='<div class="due-box"><div class="due-l">'+(+v.paid_amount>0?'Balance due':'Amount due')+'</div><div class="due-v">'+money(left)+'</div>'
+      +'<div class="due-s">'+(v.due_date?(overdue?'It was due '+esc(pretty(v.due_date))+'.':'Due '+esc(pretty(v.due_date))+'.'):'')+(+v.paid_amount>0?' '+money(v.paid_amount)+' already paid. Thank you!':'')+'</div>';
+    if(W.length){
+      h+='<div class="pay">'+W.map(w=>w.url
+        ?'<a class="btn'+(w.primary?' primary':'')+'" href="'+esc(w.url)+'" target="_blank" rel="noopener noreferrer">'+esc(w.label)+' ›</a>'
+        :'<div class="way"><b>'+esc(w.label)+'</b>'+esc(w.text)+'</div>').join('')+'</div>'
+        +'<div class="ref">Please include <b>'+esc(v.number||'')+'</b> with your payment'+(W.some(w=>w.url)?', and enter '+money(left)+' if it asks for the amount':'')+'.</div>';
+    }else h+='<div class="ref">To pay, contact '+esc(b.name||'the business')+'.</div>';
+    h+='</div>';
+  }
+  if(v.customer_name)h+='<h2>'+(est?'For':'Bill to')+'</h2><div class="billto">'+esc(v.customer_name)+(v.customer_address?'<br>'+esc(v.customer_address):'')+'</div>';
+  const items=Array.isArray(v.items)?v.items:[];
+  h+='<h2>Details</h2><table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>'
+    +items.map(l=>'<tr><td>'+esc(l.desc)+'</td><td class="r">'+esc(Math.round((+l.qty||0)*100)/100)+'</td><td class="r">'+money(l.price)+'</td><td class="r">'+money((+l.qty||0)*(+l.price||0))+'</td></tr>').join('')
+    +'</tbody></table><table class="tot"><tr><td class="r" style="width:70%">Subtotal</td><td class="r">'+money(v.subtotal)+'</td></tr>'
+    +(+v.tax?'<tr><td class="r">Sales tax ('+esc(+v.tax_rate)+'%)</td><td class="r">'+money(v.tax)+'</td></tr>':'')
+    +'<tr class="big"><td class="r">Total</td><td class="r">'+money(v.total)+'</td></tr>'
+    +(+v.paid_amount&&!paid?'<tr><td class="r">Paid</td><td class="r">−'+money(v.paid_amount)+'</td></tr><tr><td class="r"><b>Balance due</b></td><td class="r"><b>'+money(left)+'</b></td></tr>':'')+'</table>';
+  if(v.notes)h+='<p class="note">'+esc(v.notes)+'</p>';
+  if(v.terms)h+='<p class="terms">'+esc(v.terms)+'</p>';
+  h+='</div><div class="actions"><button class="link-btn" onclick="window.print()">Print or save as PDF</button>'
+    +(p.replyTo?'<a class="link-btn" style="text-decoration:none;" href="mailto:'+esc(p.replyTo)+'?subject='+encodeURIComponent('About '+(v.number||''))+'">Questions? Email '+esc(b.name||'them')+'</a>':'')+'</div>'
+    +'<div class="foot">Sent by '+esc(b.name||'this business')+' with the <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">Operations Hub</a> from The People’s Voices.<br>Payments go straight to '+esc(b.name||'the business')+'; we never see your card.</div>';
+  show(h);
+}
+(async function(){
+  const preview=q.get('preview')==='1';
+  // the Hub's demo builds its made-up invoice right into the link
+  if(q.get('demo')==='1'&&location.hash.length>1){
+    try{render(JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1))))),preview);}catch(e){fail('That demo link didn’t open','Go back to the demo and try again.');}
+    return;
+  }
+  const t=q.get('t')||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)){fail('This link isn’t complete','Check that the whole link was copied, or ask the business to send it again.');return;}
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/ohb_invoice_public',{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({p_token:t,p_mark:!preview})});
+    const j=await r.json().catch(()=>null);
+    const d=Array.isArray(j)?j[0]:j;
+    if(!r.ok&&r.status>=500){fail('Couldn’t open the invoice right now','Please try again in a few minutes.');return;}
+    if(!r.ok||!d||!d.invoice){fail('This invoice can’t be found','The link may be old, or the invoice was removed. Ask the business to send it again.');return;}
+    render(d,preview);
+  }catch(e){fail('Couldn’t open the invoice','Check your connection and try again.');}
+})();
+</script>
+</body>
+</html>

@@ -10959,6 +10959,7 @@ function CountyBar({profile}) {
 }
 
 function CountyPickerLanding({onPick, profile}) {
+  const foundingLeft = useFoundingLeft();
   const list = Object.values(COUNTIES);
   const [stats, setStats] = useState({});
   const [spotlights, setSpotlights] = useState({});
@@ -11097,7 +11098,9 @@ function CountyPickerLanding({onPick, profile}) {
       h('div',{style:{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.35)',borderRadius:8,padding:'16px 18px',marginBottom:18}},
         h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'🏪 Run a small business in Michigan?'),
         h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:10}},
-          'The Operations Hub does your books, pay, scheduling, inventory and invoices, built for Michigan’s rules. $10 a month after 3 free months, with local government alerts and a grant finder included. Sign up yourself in minutes, nobody to call.'),
+          'The Operations Hub does your books, budgets, pay, scheduling, inventory and invoices, built for Michigan’s rules. Every invoice gets a Pay now button, and your history comes over from QuickBooks or Wave in a few minutes. $10 a month after 3 free months, with local government alerts and a grant finder included. ',
+          foundingLeft > 0 ? foundingSentence(foundingLeft) + ' ' : '',
+          'Sign up yourself in minutes, nobody to call.'),
         h('div',{style:{display:'flex',gap:10,flexWrap:'wrap'}},
           h('a',{href:'/?tab=business',style:{background:GOLD,color:'#1a1a2e',textDecoration:'none',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13.5}},'See what’s included →'),
           h('a',{href:'/operations-hub.html?demo',target:'_blank',rel:'noopener',style:{color:GOLD,fontFamily:"'Lora',serif",fontSize:13.5,alignSelf:'center'}},'Try the demo')),
@@ -12247,7 +12250,7 @@ async function bizFn(body) {
 
 // The Hub's card shows even before its row is added to business_services.
 const HUB_SERVICE_FALLBACK = {id:'hub', name:'Operations Hub', price_label:'3 months free, then $10 a month', status:'available', sort:0, pay_url:'/operations-hub.html',
-  blurb:'Books, pay, scheduling, inventory, invoices and paperwork for small Michigan businesses. Bring in your Square or card-reader sales, scan receipts, match your bank statement, send invoices and estimates, schedule shifts with time-off requests and shift trades, track stock and make batches from recipes, figure pay by shared hours, commission or hourly with a minimum-wage floor and a legal tip pool, track Michigan sales tax and bill due dates, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
+  blurb:'Books, budgets, pay, scheduling, inventory, invoices and paperwork for small Michigan businesses. Bring your history over from QuickBooks or Wave in a few minutes. Bring in your Square or card-reader sales, scan receipts, and match your bank statement (CSV, OFX or QFX files). Send invoices and estimates with a Pay now button for your own Square, Stripe, PayPal, Venmo, Cash App or Zelle, and friendly reminders go out on their own when one is late. See your cash 13 weeks ahead, with payday, bills and sales tax counted. Schedule shifts with time-off requests and shift trades, track stock and make batches from recipes, figure pay by shared hours, commission or hourly with a minimum-wage floor and a legal tip pool, track Michigan sales tax and bill due dates, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
 
 // ── "See a sample": what each service actually looks like, before anyone pays ──
 const SAMPLE_KINDS = [{id:'food', label:'Food truck'}, {id:'hardware', label:'Hardware store'}, {id:'salon', label:'Hair salon'}];
@@ -12406,10 +12409,16 @@ function ServiceSample({id}) {
 
 // ── How our prices compare (checked October 2026; sources linked on the page) ──
 const PRICE_COMPARE = [
-  {what:'Books, receipts, invoices and pay', ours:'Operations Hub: 3 months free, then $10 a month, with invoices, scheduling, inventory and everything below included',
+  {what:'Books, receipts, invoices and pay', ours:'Operations Hub: 3 months free, then $10 a month, with budgets, invoices, scheduling, inventory and everything below included',
    theirs:['QuickBooks Online: $38 a month (Simple Start), $85 (Essentials)', 'Wave Pro: $19 a month'],
    free:'Wave Starter is free, but receipt scanning is $8 a month extra.',
    note:'None of these file payroll taxes for you. A payroll service does that: Gusto starts at $49 a month plus $6 a person, Wave Payroll at $40 plus $6 a person.'},
+  {what:'Budgets', ours:'Included in the Hub: a monthly budget for each spending category, a sales goal, and where the month will land at the pace you\'re spending',
+   theirs:['QuickBooks Online: only in Plus ($140 a month) and Advanced ($340 a month)', 'Wave: no budgeting'],
+   free:'A spreadsheet you keep up by hand.'},
+  {what:'Getting paid on invoices', ours:'Every invoice gets a Pay now page with your own Square, Stripe, PayPal, Venmo, Cash App, Zelle or check details, and friendly reminders when it\'s late. We add no fee: a card payment costs only what your own payment company charges, and Zelle or a check costs nothing.',
+   theirs:['QuickBooks Payments: 2.99% of each invoice paid by card, 1% for bank transfers ($1 minimum)', 'Wave Starter: 2.9% + 60¢ per card payment, 1% for bank payments ($1 minimum)'],
+   free:'Texting your payment handle and keeping track of who paid yourself.'},
   {what:'Public bids', ours:'Bid & grant finder: $5 a month, grants included',
    theirs:['BidNet Direct alerts for Michigan (MITN): $108 a year for 200+ agencies, $396 a year statewide'],
    free:'Free MITN registration, if you log in and check every day.'},
@@ -12426,6 +12435,10 @@ const PRICE_COMPARE = [
 const PRICE_SOURCES = [
   ['QuickBooks Online prices after the August 2026 increase','https://auditfriendly.co/answers/quickbooks-online-price-increase-2026'],
   ['Wave prices (2026 review)','https://ifeeltech.com/blog/wave-accounting-review-small-business-freelancers'],
+  ['Which QuickBooks plans have budgets (Intuit)','https://community.intuit.com/articles/1771942-how-to-create-edit-and-manage-budgets'],
+  ['Wave has no budgeting tools (Tech.co review)','https://tech.co/accounting-software/wave-accounting-review'],
+  ['QuickBooks Payments rates (Intuit, September 2026)','https://quickbooks.intuit.com/payments/credit-card-processing-fees/'],
+  ['Wave payment fees (Wave Help Center)','https://support.waveapps.com/hc/en-us/articles/218323823'],
   ['Gusto prices (2026 guide)','https://www.hireinsouth.com/post/gusto-pricing'],
   ['BidNet Direct / MITN plans (City of Portage FAQ)','https://portagemi.gov/DocumentCenter/View/7696/BidNet-Direct-FAQ'],
   ['GrantWatch and Instrumentl prices (GrantWatch comparison, Oct 2026)','https://www.grantwatch.com/grant-database-comparison.php']
@@ -12456,6 +12469,42 @@ function PriceCompare() {
 const TPV_PICK_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('pick') === 'hub'; } catch(e) { return false; } })();
 const HUB_DEMO_URL = '/operations-hub.html?demo';
 const TPV_FROM_HUB = (function(){ try { return new URLSearchParams(window.location.search).get('hub') === '1'; } catch(e) { return false; } })();
+// "Give a month, get a month": a Hub link with ?ref=CODE is remembered (same site as the Hub),
+// so the Hub can credit the business that sent them once the new one makes its first payment.
+const TPV_HUB_REF = (function(){
+  try {
+    const c = (new URLSearchParams(window.location.search).get('ref') || '').trim().toUpperCase();
+    if(/^[A-Z0-9]{4,10}$/.test(c)) { try { localStorage.setItem('ohb_ref', c); } catch(e) {} return c; }
+    const kept = (localStorage.getItem('ohb_ref') || '').toUpperCase();
+    return /^[A-Z0-9]{4,10}$/.test(kept) ? kept : '';
+  } catch(e) { return ''; }
+})();
+const HUB_SETUP_URL = '/operations-hub.html' + (TPV_HUB_REF ? '?ref=' + TPV_HUB_REF : '');
+// Founding price: the first 100 businesses keep $10 a month for life. Asked once per visit.
+let _foundingAsk = null;
+function useFoundingLeft(){
+  const [left, setLeft] = useState(null);
+  useEffect(()=>{
+    let alive = true;
+    if(!_foundingAsk) _foundingAsk = Promise.resolve(sb.rpc('ohb_founding_left')).then(r=>(r && !r.error && typeof r.data === 'number') ? r.data : null).catch(()=>null);
+    _foundingAsk.then(n=>{ if(alive) setLeft(n); });
+    return ()=>{ alive = false; };
+  },[]);
+  return left;   // null until known, or if it isn't switched on yet
+}
+const foundingSentence = left=>left > 0 ? 'The first 100 businesses keep $10 a month for as long as they keep their Hub, even if the price goes up later, and ' + left + (left === 1 ? ' spot is' : ' spots are') + ' left.' : '';
+function HubReferralBanner(){
+  const [from, setFrom] = useState(null);
+  useEffect(()=>{
+    if(!TPV_HUB_REF) return;
+    let alive = true;
+    Promise.resolve(sb.rpc('ohb_referrer_info',{p_code:TPV_HUB_REF})).then(r=>{ const d = r && !r.error ? (Array.isArray(r.data) ? r.data[0] : r.data) : null; if(alive && d && d.name) setFrom(d); }).catch(()=>{});
+    return ()=>{ alive = false; };
+  },[]);
+  if(!from) return null;
+  return h('div',{style:{background:'#fff8e7',border:'1px solid #f0d48a',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#5a4500',lineHeight:1.6}},
+    '🤝 ', h('strong',null, from.name), from.county ? ' in ' + from.county + ' County' : '', ' sent you. Start your Operations Hub below, and once your first payment goes through, you both get a month free.');
+}
 // The Operations Hub's row in business_services is shown as a link, not a sign-up box.
 // A small, dismissible doorway on the home feed for local business owners
 function BizDoorway({profile, onOpen}){
@@ -12467,12 +12516,22 @@ function BizDoorway({profile, onOpen}){
     h('span',{style:{fontSize:22,flexShrink:0}},'🏪'),
     h('div',{style:{flex:'1 1 240px',minWidth:0,fontFamily:"'Lora',serif",fontSize:13.5,color:'#1a4a2a',lineHeight:1.55}},
       h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:'#1a1a2e'}}, isBiz ? 'Run your business from here too' : 'Run a small business in Michigan?'),
-      ' The Operations Hub does your books, pay, scheduling, inventory and invoices for $10 a month after 3 free months, with local alerts and a grant finder included. Try the demo, no account needed.'),
+      ' The Operations Hub does your books, budgets, pay, scheduling, inventory and invoices for $10 a month after 3 free months, with local alerts and a grant finder included. Coming from QuickBooks or Wave? It brings your history over. Try the demo, no account needed.'),
     h('div',{style:{display:'flex',gap:8,alignItems:'center',flexShrink:0}},
       h('button',{onClick:onOpen,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},'See what’s included →'),
       h('button',{onClick:hide,'aria-label':'Hide this',title:'Hide this',style:{background:'none',border:'none',color:'#7a9a85',fontSize:18,cursor:'pointer',padding:'2px 6px'}},'×')));
 }
 const isHubService = s=>s && (s.id === 'hub' || s.id === 'operations-hub' || /operations-hub/.test(s.pay_url || ''));
+
+// Under the Hub's card: the founding price and "give a month, get a month"
+function HubPerks(){
+  const left = useFoundingLeft();
+  const line = {display:'flex',gap:8,alignItems:'flex-start',fontFamily:LB,fontSize:13,color:'#1a4a2a',lineHeight:1.55};
+  return h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'9px 12px',marginBottom:10,display:'flex',flexDirection:'column',gap:5}},
+    left > 0 && h('div',{style:line}, h('span',{'aria-hidden':true},'🌾'), h('span',null, h('strong',null,'Founding price. '), foundingSentence(left))),
+    left === 0 && h('div',{style:line}, h('span',{'aria-hidden':true},'🌾'), h('span',null,'All 100 founding spots are taken. Thank you, Michigan!')),
+    h('div',{style:line}, h('span',{'aria-hidden':true},'🤝'), h('span',null, h('strong',null,'Give a month, get a month. '), 'Your Hub has a link to share. When another business starts from it and makes its first payment, you each get a month free.')));
+}
 
 function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [list, setList] = useState(undefined);     // undefined loading, null not set up
@@ -12573,6 +12632,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
           style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
 
+    h(HubReferralBanner),
     h(PriceCompare),
 
     TPV_FROM_HUB && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
@@ -12593,6 +12653,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e'}}, s.name),
         h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e'}}, s.price_label)),
       h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}}, s.blurb),
+      isHubService(s) && !TPV_FROM_HUB && h(HubPerks),
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         pill(s),
         !(TPV_FROM_HUB && isHubService(s)) && h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
@@ -12615,7 +12676,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
               h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,marginBottom:4}},'Next: set up your Operations Hub'),
               'Make your account with this same email, tell the Hub about your business, and add a card to start your 3 free months. You won\'t be charged until they\'re up, and the Hub walks you through everything from there. About 5 minutes.',
               done.some(x=>!isHubService(x)) && h('div',{style:{marginTop:6}},'Watch alerts and the Bid & grant finder come with your Hub, so there\'s nothing extra to pay for them.'),
-              h('a',{href:'/operations-hub.html',style:{display:'inline-block',marginTop:10,background:'#1a6b3c',color:'#fff',textDecoration:'none',borderRadius:8,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14}},'Set up my Hub →')),
+              h('a',{href:HUB_SETUP_URL,style:{display:'inline-block',marginTop:10,background:'#1a6b3c',color:'#fff',textDecoration:'none',borderRadius:8,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14}},'Set up my Hub →')),
             !done.some(isHubService) && h('div',null,
               done.filter(x=>x.status === 'available' && x.pay_url && !isHubService(x)).length
                 ? h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'Last step: start your subscription below. Your service begins as soon as it goes through, and you can cancel any time.')

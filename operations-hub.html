@@ -811,6 +811,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
     <div class="setup-eyebrow">Operations Hub · Michigan pilot</div>
     <h1>Set up your business</h1>
     <p class="setup-lead">About five minutes. You can change any of this later in Settings.</p>
+    <div id="setupRefNote"></div>
     <div class="txn-grid">
       <div class="txn-full"><label>Business name</label><input id="suName" class="period-input" placeholder="e.g. Grand River Bakery"></div>
       <div class="txn-full"><label>Your name, as your team will see it</label><input id="suOwner" class="period-input" placeholder="First and last name"></div>
@@ -1011,19 +1012,21 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
       <button class="btn-green" onclick="openTxnModal()">+ Transaction</button>
       <button class="btn-secondary" onclick="booksScanReceipts()">📷 Scan Receipts</button>
       <button class="btn-secondary" onclick="booksExportCSV()">⬇ Export CSV</button>
+      <button class="btn-secondary" onclick="openSwitch()">⇄ Bring over from QuickBooks or Wave</button>
     </div>
   </div>
   <div class="bk-summary" id="booksSummary"></div>
   <div class="bk-pills">
     <button data-v="txns" class="active" onclick="setBooksView('txns')">Ledger</button>
     <button data-v="budget" onclick="setBooksView('budget')">Budget</button>
+    <button data-v="cash" onclick="setBooksView('cash')">Cash ahead</button>
     <button data-v="reports" onclick="setBooksView('reports')">Reports</button>
     <button data-v="bank" onclick="setBooksView('bank')">Bank</button>
     <button data-v="taxes" onclick="setBooksView('taxes')">Taxes</button>
     <button data-v="bills" onclick="setBooksView('bills')">Bills</button>
   </div>
   <div id="booksBody"></div>
-  <input type="file" id="bankInput" accept=".csv,.txt,text/csv" style="display:none;" onchange="onBankFile(this)">
+  <input type="file" id="bankInput" accept=".csv,.txt,.ofx,.qfx,.qbo,text/csv" style="display:none;" onchange="onBankFile(this)">
   <input type="file" id="mileInput" accept=".csv,.txt,text/csv" style="display:none;" onchange="onMileFile(this)">
 </div>
 
@@ -3641,7 +3644,7 @@ async function setBankStatusMany(ids,status){
   ids=ids.filter(Boolean);if(!ids.length)return;
   try{
     for(let i=0;i<ids.length;i+=100){
-      await sb('kf_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'PATCH',body:JSON.stringify({status,match_key:null})});
+      await sb('ohb_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'PATCH',body:JSON.stringify({status,match_key:null})});
     }
     const set=new Set(ids);(BOOKS.bank||[]).forEach(l=>{if(set.has(l.id)){l.status=status;l.match_key=null;}});
     const lab={logged:'marked already logged',payout:'marked as pay-outs',ignored:'skipped'};
@@ -3657,7 +3660,7 @@ async function removeBankAccountLines(ai){
   if(!ids.length)return;
   if(!confirm('Remove the '+ids.length+' unreviewed line'+(ids.length===1?'':'s')+' from “'+name+'”?\n\nUse this when the wrong file was imported. Anything you already matched or added stays.'))return;
   try{
-    for(let i=0;i<ids.length;i+=100)await sb('kf_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'DELETE'});
+    for(let i=0;i<ids.length;i+=100)await sb('ohb_bank_lines?id=in.('+ids.slice(i,i+100).join(',')+')',{method:'DELETE'});
     const set=new Set(ids);BOOKS.bank=(BOOKS.bank||[]).filter(l=>!set.has(l.id));
     toast(ids.length+' line'+(ids.length===1?'':'s')+' removed');renderBooks();
   }catch(e){toast('Couldn’t remove them: '+e.message,true);}
@@ -7679,13 +7682,13 @@ function tourSteps(){
     {t:'Welcome to your Operations Hub',b:'<p>'+name+'’s books, pay, schedule, inventory, invoices and paperwork, all in one place, on any phone or computer.</p><p>This quick tour shows what each tab does and how to use it. Tap <b>Show me</b> on any step to jump there, and reopen the tour any time with the <b>Help</b> button in the corner.</p>'},
     {tab:'dashboard',t:'Dashboard: your week at a glance',b:'<ul><li>This week’s sales, what you spent, '+(hs?'everyone’s pay, and what’s left as profit':'the pool and everyone’s share')+'. It updates as your team logs hours and you log sales.</li><li><b>Coming up</b> lists what needs you: bills due, unpaid invoices, the next sales tax return, and time-off or shift-trade requests.</li><li><b>Start here</b> is a short checklist for your first week.</li></ul>'},
     {tab:'log',t:'Revenue & Expenses: money in and out',b:'<ul><li><b>Log a sale</b>: amount, where it came from, who worked it.</li><li><b>Scan a receipt</b>: take a photo and the Hub reads the store, date and total for you.</li><li>Use Square or another card reader? <b>Import</b> its sales file. The Hub adds each day’s sales, tips, sales tax and card fees, and skips anything it already has.</li></ul>'},
-    {tab:'books',t:'Books: your bookkeeping, done as you go',b:'<ul><li>Every sale and expense lands here, sorted into categories. Select several to fix a category or delete them at once.</li><li><b>Bank</b>: upload your bank statement once a month and the Hub matches each line to what’s already logged, so nothing gets missed.</li><li><b>Bills</b>: rent, insurance, licenses and renewals, with reminders before they’re due.</li><li><b>Taxes</b>: estimated quarterly taxes, Michigan sales tax with due dates, and a year-end package for your tax preparer.</li></ul>'},
-    {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
+    {tab:'books',t:'Books: your bookkeeping, done as you go',b:'<ul><li>Every sale and expense lands here, sorted into categories. Select several to fix a category or delete them at once.</li><li><b>Bank</b>: upload your bank statement once a month and the Hub matches each line to what’s already logged, so nothing gets missed.</li><li><b>Bills</b>: rent, insurance, licenses and renewals, with reminders before they’re due.</li><li><b>Taxes</b>: estimated quarterly taxes, Michigan sales tax with due dates, and a year-end package for your tax preparer.</li><li><b>Cash ahead</b>: what’s coming in and going out for the next 13 weeks, so a tight week never sneaks up on you.</li><li>Coming from QuickBooks or Wave? <b>Bring over</b> your history, customers and who owes you in a few minutes.</li></ul>'},
+    {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder. Every invoice gets a <b>Pay now</b> page with your own card link, PayPal, Venmo or check details, and the Hub can send late reminders for you.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
     {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared, and download the payroll file for your payroll service.':'set the commission rate, how tips are shared, and download the payroll file.')+'</li><li><b>Michigan Paid Sick Time</b>: the Hub tracks what each employee has earned (1 hour per 30 worked), what they’ve used, and what’s left, and pays sick hours at their regular rate.</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
     {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
     {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
     {tab:'inventory',t:'Inventory',b:'<ul><li>Track what’s on hand with quick <b>+ / −</b> buttons, or <b>Count everything</b> at once.</li><li>Set a reorder point and the Hub builds your <b>shopping list</b>.</li><li>Edit as a table to change many items at once, or import a spreadsheet.</li>'+(s.recipes?'<li>Add a <b>recipe</b> to anything you make. <b>Make a batch</b> uses up the ingredients, adds the finished goods, and shows your cost per item.</li>':'')+'</ul>'},
-    {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time.</li></ul>'},
+    {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Getting paid</b>: how customers pay you, and automatic reminders.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time. Send another business your link and you both get a free month.</li></ul>'},
     {t:'What the Hub does, and what it doesn’t',b:'<ul><li>✅ It keeps your records, does the math (pay, overtime, minimum wage, tips, sales tax, quarterly estimates), and reminds you what’s due.</li><li>➡️ It doesn’t file taxes or send paychecks. Hand the <b>payroll file</b> to your payroll service and the <b>year-end package</b> to your tax preparer.</li><li>📬 Included with your Hub: Watch alerts on local government and the Bid & grant finder, from The People’s Voices. Turn them on from <b>Start here</b> on the Dashboard.</li></ul>'},
     {t:'You’re all set',b:'<p>Start with the <b>Start here</b> checklist on your Dashboard: add your team, log a sale, and scan a receipt.</p><p>The <b>Help</b> button in the corner reopens this tour. For more detail, see the <a href="/hub-help.html" target="_blank" rel="noopener">Help page</a>.</p>'}
   ].filter(x=>!x.tab||(()=>{const t=document.querySelector('.tab[onclick*="\''+x.tab+'\'"]');return !t||t.style.display!=='none';})());
@@ -7742,6 +7745,901 @@ function renderHelpButton(){
 }
 
 const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"],"import_key":["text",null]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"],"import_key":["text",null],"sales_tax":["num",null]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]},"ohb_shifts":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"shift_date":["text",null],"start_time":["text",null],"end_time":["text",null],"job":["text",null],"note":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_inv_items":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"category":["text",null],"unit":["text","each"],"sku":["text",null],"supplier":["text",null],"location":["text",null],"notes":["text",null],"on_hand":["num",0],"par":["num",0],"order_qty":["num",null],"cost":["num",0],"price":["num",null],"active":["bool",true],"updated_at":["text","@now"],"created_at":["text","@now"],"recipe":["json",null],"batch_yield":["num",null]},"ohb_inv_moves":{"id":["text","@uuid"],"business_id":["text",null],"item_id":["text",null],"change":["num",null],"reason":["text","adjust"],"note":["text",null],"by_name":["text",null],"move_date":["text","@today"],"created_at":["text","@now"]},"ohb_invoices":{"id":["text","@uuid"],"business_id":["text",null],"kind":["text","invoice"],"number":["text",null],"customer_name":["text",null],"customer_email":["text",null],"customer_phone":["text",null],"customer_address":["text",null],"issue_date":["text","@today"],"due_date":["text",null],"status":["text","draft"],"items":["json","[]"],"tax_rate":["num",0],"subtotal":["num",0],"tax":["num",0],"total":["num",0],"paid_amount":["num",0],"paid_date":["text",null],"income_category":["text",null],"notes":["text",null],"terms":["text",null],"revenue_id":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_time_off":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"start_date":["text",null],"end_date":["text",null],"reason":["text",null],"status":["text","pending"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"],"kind":["text","off"],"sick_hours":["num",null]},"ohb_shift_swaps":{"id":["text","@uuid"],"business_id":["text",null],"shift_id":["text",null],"from_name":["text",null],"to_name":["text",null],"note":["text",null],"status":["text","open"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_bills":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"amount":["num",null],"category":["text",null],"next_due":["text",null],"repeat":["text","monthly"],"autopay":["bool",false],"notes":["text",null],"last_paid":["text",null],"active":["bool",true],"created_at":["text","@now"]},"ohb_billing":{"business_id":["text",null],"status":["text","trialing"],"stripe_customer":["text",null],"stripe_subscription":["text",null],"current_period_end":["text",null],"note":["text",null],"updated_at":["text","@now"]}};
+
+// ═══════════════════════════════════════════════════════
+// GETTING PAID · SWITCHING OVER · CASH AHEAD · FOUNDING PRICE & REFERRALS
+// What it takes to beat QuickBooks and Wave for a Michigan small business:
+// a Pay now button on every invoice (with the business's own processor, no cut
+// for us), friendly reminders that send themselves, bringing your history over
+// in minutes, a look at the cash coming in and going out, and a price that
+// never goes up for the first 100 businesses.
+// ═══════════════════════════════════════════════════════
+const PUBLIC_SITE='https://thepeoplesvoices.org';
+function siteOrigin(){return /^https?:$/.test(location.protocol)?location.origin:PUBLIC_SITE;}
+function isDemo(){return typeof DEMO!=='undefined'&&DEMO.on;}
+function hashStr(s){let h=5381;s=String(s||'');for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return(h>>>0).toString(36);}
+// one modal for these tools, always drawn on top of whatever else is open
+function growthModal(title,html,wide){
+  let m=document.getElementById('growthModal');
+  if(!m){m=document.createElement('div');m.className='modal-overlay';m.id='growthModal';m.onclick=e=>{if(e.target===m)closeGrowthModal();};
+    m.innerHTML='<div class="modal" id="growthModalBox"><button class="modal-close" onclick="closeGrowthModal()" aria-label="Close">×</button><div class="modal-title" id="growthTitle"></div><div id="growthBody"></div></div>';}
+  document.body.appendChild(m);   // moving it to the end keeps it above the invoice window
+  document.getElementById('growthModalBox').style.maxWidth=wide?'760px':'560px';
+  document.getElementById('growthTitle').textContent=title;
+  document.getElementById('growthBody').innerHTML=html;
+  m.classList.add('open');return m;
+}
+function closeGrowthModal(){const m=document.getElementById('growthModal');if(m)m.classList.remove('open');}
+async function hubFn(name,body){
+  // a server function, with one quiet retry if the sign-in needs refreshing
+  const call=()=>fetch(SUPABASE_URL+'/functions/v1/'+name,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  let r=await call();
+  if(r.status===401&&await silentRefresh())r=await call();
+  const j=await r.json().catch(()=>({}));
+  return{ok:r.ok&&!j.error,status:r.status,data:j,missing:r.status===404&&!j.error};
+}
+
+// ─── how customers can pay you (Settings → Getting Paid) ───
+const GP={v:null,loaded:false};
+const GP_DEFAULTS={card:'',paypal:'',venmo:'',cashapp:'',zelle:'',checkTo:'',checkMail:'',other:'',autoRemind:false,replyTo:''};
+async function loadGP(force){
+  if(GP.loaded&&!force)return GP.v;
+  try{const r=await sb('ohb_settings?key=eq.get_paid&select=value');GP.v=Object.assign({},GP_DEFAULTS,(r[0]&&r[0].value)||{});}
+  catch(e){GP.v=Object.assign({},GP_DEFAULTS);}
+  GP.loaded=true;return GP.v;
+}
+function gp(){return GP.v||Object.assign({},GP_DEFAULTS);}
+async function saveGP(patch){
+  const cur=await sb('ohb_settings?key=eq.get_paid&select=value').catch(()=>[]);
+  const next=Object.assign({},GP_DEFAULTS,(cur[0]&&cur[0].value)||GP.v||{},patch);
+  await sb('ohb_settings?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
+    body:JSON.stringify({key:'get_paid',value:next,updated_at:new Date().toISOString()})});
+  GP.v=next;GP.loaded=true;return next;
+}
+const gpTrim=s=>String(s==null?'':s).trim();
+function gpHandle(s){return gpTrim(s).replace(/^https?:\/\/(www\.)?[^/]+\/(u\/)?/i,'').replace(/^[@$]/,'').replace(/[/?#].*$/,'');}
+function gpUrl(u){u=gpTrim(u);if(!u)return'';if(!/^https?:\/\//i.test(u))u='https://'+u;try{const x=new URL(u);return /^https?:$/.test(x.protocol)&&x.hostname.includes('.')?x.href:'';}catch(e){return'';}}
+// every way this business takes payment, for one amount
+function gpMethods(g,amount){
+  g=Object.assign({},GP_DEFAULTS,g||{});const out=[];const amt=(+amount||0).toFixed(2);const some=+amount>0;
+  const card=gpUrl(g.card);if(card)out.push({k:'card',label:'Pay by card',url:card,primary:true});
+  const pp=gpHandle(g.paypal);if(pp)out.push({k:'paypal',label:'PayPal',url:'https://paypal.me/'+encodeURIComponent(pp)+(some?'/'+amt:''),note:'paypal.me/'+pp});
+  const vm=gpHandle(g.venmo);if(vm)out.push({k:'venmo',label:'Venmo',url:'https://venmo.com/u/'+encodeURIComponent(vm),note:'@'+vm});
+  const ca=gpHandle(g.cashapp);if(ca)out.push({k:'cashapp',label:'Cash App',url:'https://cash.app/$'+encodeURIComponent(ca)+(some?'/'+amt:''),note:'$'+ca});
+  if(gpTrim(g.zelle))out.push({k:'zelle',label:'Zelle',text:'Send it to '+gpTrim(g.zelle)+' from your bank’s app.'});
+  if(gpTrim(g.checkTo))out.push({k:'check',label:'Check',text:'Make it out to '+gpTrim(g.checkTo)+(gpTrim(g.checkMail)?' and mail it to '+gpTrim(g.checkMail):'')+'.'});
+  if(gpTrim(g.other))out.push({k:'other',label:'Other ways to pay',text:gpTrim(g.other)});
+  return out;
+}
+function gpCardHTML(){
+  const g=gp();const me=(currentUser&&currentUser.email)||'';
+  const f=(id,label,val,ph,full,type)=>'<div'+(full?' class="txn-full"':'')+'><label for="'+id+'">'+label+'</label><input id="'+id+'" class="period-input" '+(type?'type="'+type+'" ':'')+'value="'+esc(val||'')+'" placeholder="'+esc(ph||'')+'" autocomplete="off" autocapitalize="none" spellcheck="false"></div>';
+  return '<div class="card" id="gpBox"><div class="card-title"><div class="card-title-dot"></div>Getting Paid</div>'
+    +'<div class="card-sub">How customers can pay you. Every invoice gets its own <b>Pay now</b> page with these, and they’re printed on invoices and put in the emails. '
+    +'The money goes straight to you: the Hub takes no cut. (Your card processor’s usual fee still applies. Checks and Zelle cost nothing.)</div>'
+    +'<div class="txn-grid">'
+    +f('gpCardUrl','Card payment link',g.card,'https://square.link/… or https://buy.stripe.com/…',true,'url')
+    +'<div class="txn-full bk-sub" style="margin-top:-4px;">In Square, Stripe or PayPal, make a payment link where the customer types in the amount, and paste it here.</div>'
+    +f('gpPaypal','PayPal.Me name',g.paypal,'yourname')
+    +f('gpVenmo','Venmo username',g.venmo,'@yourname')
+    +f('gpCashapp','Cash App $cashtag',g.cashapp,'$yourname')
+    +f('gpZelle','Zelle email or phone',g.zelle,'')
+    +f('gpCheckTo','Checks made out to',g.checkTo,BIZ.row?BIZ.row.name:'')
+    +f('gpCheckMail','Mail checks to',g.checkMail,'Street, city, ZIP')
+    +'<div class="txn-full"><label for="gpOther">Anything else (optional)</label><input id="gpOther" class="period-input" value="'+esc(g.other||'')+'" placeholder="Cash at the market is fine too"></div>'
+    +'</div>'
+    +'<label class="onb-task" style="margin-top:10px;"><input type="checkbox" id="gpAuto"'+(g.autoRemind?' checked':'')+'><div><div class="bk-payee">Send friendly reminders for me</div>'
+    +'<div class="bk-sub">When an invoice you sent is past due, the Hub emails the customer a polite reminder with the Pay now link: the day after it’s due, then once a week, three at most. You can turn it off for any one invoice.</div></div></label>'
+    +'<div class="txn-grid">'+f('gpReplyTo','Customer replies go to',g.replyTo||me,me,true,'email')+'</div>'
+    +'<div class="bk-actions"><button class="btn-green" id="gpSaveBtn" onclick="saveGPForm()">Save</button></div></div>';
+}
+async function saveGPForm(){
+  const v=id=>gpTrim((document.getElementById(id)||{}).value);
+  const card=v('gpCardUrl');
+  if(card&&!gpUrl(card)){toast('That card link doesn’t look like a web address. It should start with https://',true);return;}
+  const reply=v('gpReplyTo');if(reply&&!/^\S+@\S+\.\S+$/.test(reply)){toast('Check the email address for replies',true);return;}
+  const btn=document.getElementById('gpSaveBtn');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    await saveGP({card:card?gpUrl(card):'',paypal:gpHandle(v('gpPaypal')),venmo:gpHandle(v('gpVenmo')),cashapp:gpHandle(v('gpCashapp')),zelle:v('gpZelle'),
+      checkTo:v('gpCheckTo'),checkMail:v('gpCheckMail'),other:v('gpOther'),autoRemind:!!(document.getElementById('gpAuto')||{}).checked,replyTo:reply});
+    toast('Saved. Your invoices now show how to pay you.');
+  }catch(e){toast('Didn’t save: '+e.message,true);}
+  finally{if(btn){btn.disabled=false;btn.textContent='Save';}}
+}
+
+// ─── the Pay now page for one invoice ───
+function invcLink(v){return v&&v.share_token?siteOrigin()+'/invoice.html?t='+v.share_token:'';}
+function withPreview(link){const i=link.indexOf('#');return i<0?link+'&preview=1':link.slice(0,i)+'&preview=1'+link.slice(i);}
+function invcLeft(v){return Math.max(0,(+v.total||0)-(+v.paid_amount||0));}
+function invcPayLinesText(v){
+  if(!v||v.kind!=='invoice'||invcLeft(v)<=0)return'';
+  const link=invcLink(v);const ms=gpMethods(gp(),invcLeft(v));
+  let t='';
+  if(link)t+='\nView and pay online: '+link+'\n';
+  if(ms.length){t+='\nWays to pay '+fmt(invcLeft(v))+':\n'+ms.map(m=>'- '+m.label+': '+(m.url?m.url:m.text)).join('\n')+'\nPlease include '+v.number+' with your payment.\n';}
+  return t;
+}
+function invcPayBlockHTML(v){
+  if(!v||v.kind!=='invoice'||invcLeft(v)<=0)return'';
+  const link=invcLink(v);const ms=gpMethods(gp(),invcLeft(v));
+  if(!link&&!ms.length)return'';
+  return '<div style="margin-top:22px;padding:14px 16px;border:2px solid #222;border-radius:8px;"><b style="font-size:17px;">How to pay '+fmt(invcLeft(v))+'</b>'
+    +(link?'<p style="margin:8px 0;">Pay online: <b>'+esc(link)+'</b></p>':'')
+    +(ms.length?'<ul style="margin:6px 0 0;padding-left:20px;">'+ms.map(m=>'<li><b>'+esc(m.label)+':</b> '+esc(m.url?m.url:m.text)+'</li>').join('')+'</ul>':'')
+    +'<p class="muted" style="margin:8px 0 0;">Please include '+esc(v.number)+' with your payment.</p></div>';
+}
+if(typeof invcDocHTML==='function'){const _doc=invcDocHTML;invcDocHTML=function(v){const h=_doc(v);const pay=invcPayBlockHTML(v);return pay?h.replace('<script>window.print()',pay+'<script>window.print()'):h;};}
+
+// email from the owner's own email app (the original way), now with the Pay now link
+function invcEmailApp(v,reminder){
+  const what=v.kind==='estimate'?'estimate':'invoice';const left=invcLeft(v);
+  const lines=(v.items||[]).map(l=>'- '+l.desc+(+l.qty!==1?' × '+qtyFmt(l.qty):'')+': '+fmt((+l.qty||0)*(+l.price||0))).join('\n');
+  const first=String(v.customer_name||'').split(' ')[0]||'there';
+  const subject=reminder?'Friendly reminder: '+what+' '+v.number+' from '+HUB.bizName:(v.kind==='estimate'?'Estimate ':'Invoice ')+v.number+' from '+HUB.bizName;
+  const body=(reminder?'Hi '+first+',\n\nJust a friendly reminder that '+what+' '+v.number+' for '+fmt(left)+' was due on '+prettyDate(v.due_date)+'. If you’ve already sent it, thank you, and please ignore this note.\n\n'
+      :'Hi '+first+',\n\nHere’s your '+what+' from '+HUB.bizName+'.\n\n')
+    +lines+'\n'+(+v.tax?'Sales tax: '+fmt(v.tax)+'\n':'')+'Total: '+fmt(v.total)+(+v.paid_amount?'\nBalance due: '+fmt(left):'')+'\n'+(v.due_date?(v.kind==='estimate'?'Good until ':'Due ')+prettyDate(v.due_date)+'\n':'')
+    +invcPayLinesText(v)
+    +(v.notes?'\n'+v.notes+'\n':'')+'\nThank you,\n'+(currentProfile&&currentProfile.name||'')+'\n'+HUB.bizName;
+  location.href='mailto:'+encodeURIComponent(v.customer_email||'')+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  if(v.status==='draft')sb('ohb_invoices?id=eq.'+v.id,{method:'PATCH',body:JSON.stringify({status:'sent'})}).then(()=>loadInvoices()).then(()=>drawInvoices()).catch(()=>{});
+  toast(v.customer_email?'Your email app is opening with the '+what+' filled in':'Add the customer’s email to send it straight to them');
+}
+// "Email" on an invoice: send it from the Hub (with a Pay now button), or from your own email app
+invcEmail=async function(reminder){
+  const saved=await saveInvoice(true);if(!saved)return;const v=INVC.list.find(x=>x.id===saved.id)||saved;
+  await loadGP();
+  if(!v.customer_email||!v.share_token)return invcEmailApp(v,reminder);
+  const what=reminder?'a reminder about '+v.number:(v.kind==='estimate'?'estimate ':'invoice ')+v.number;
+  growthModal(reminder?'Send a reminder':'Send '+(v.kind==='estimate'?'the estimate':'the invoice'),
+    '<p class="card-sub" style="margin-top:0;">Send '+esc(what)+' to <b>'+esc(v.customer_email)+'</b>.</p>'
+    +'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">Send it now from the Hub</div><div class="bk-sub" style="white-space:normal;">It comes from “'+esc(HUB.bizName)+' via Operations Hub” with a <b>View and pay</b> button. Replies go to '+esc(gp().replyTo||(currentUser&&currentUser.email)||'you')+'.</div></div></div>'
+    +'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">Or use my own email app</div><div class="bk-sub" style="white-space:normal;">Opens a filled-in email, with the Pay now link, from your own address.</div></div></div>'
+    +'<div class="txn-actions"><button class="btn-secondary" onclick="closeGrowthModal();invcEmailApp(INVC.list.find(x=>x.id===\''+v.id+'\'),'+(reminder?'true':'false')+')">Use my email app</button>'
+    +'<button class="btn-green" id="gpSendBtn" onclick="invcSendFromHub(\''+v.id+'\','+(reminder?'true':'false')+')">Send it now</button></div>');
+};
+async function invcSendFromHub(id,reminder){
+  const btn=document.getElementById('gpSendBtn');if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  if(isDemo()){closeGrowthModal();toast('In your real Hub, this emails the customer right now, with a Pay now button.');return;}
+  const r=await hubFn('hub-money',{action:'send',invoice_id:id,reminder:!!reminder});
+  if(r.missing){closeGrowthModal();toast('Sending from the Hub isn’t switched on yet. Opening your email app instead.');setTimeout(()=>invcEmailApp(INVC.list.find(x=>x.id===id),reminder),1200);return;}
+  if(!r.ok){if(btn){btn.disabled=false;btn.textContent='Send it now';}toast('Didn’t send: '+((r.data&&(r.data.error||r.data.message))||'try again in a minute'),true);return;}
+  closeGrowthModal();toast('Sent to '+(r.data.to||'the customer'));
+  await loadInvoices();drawInvoices();openInvoice(id);
+}
+async function invcCopyLink(id){
+  const v=INVC.list.find(x=>x.id===id);if(!v)return;const link=invcLink(v);if(!link)return;
+  copyText(link,'Pay now link copied. Text it or email it to '+(String(v.customer_name||'the customer').split(' ')[0])+'.');
+  if(v.status==='draft'&&v.kind==='invoice'){try{await sb('ohb_invoices?id=eq.'+v.id,{method:'PATCH',body:JSON.stringify({status:'sent'})});await loadInvoices();drawInvoices();openInvoice(v.id);}catch(e){}}
+}
+async function invcSetAuto(id,on){
+  try{await sb('ohb_invoices?id=eq.'+id,{method:'PATCH',body:JSON.stringify({auto_remind:!!on})});const v=INVC.list.find(x=>x.id===id);if(v)v.auto_remind=!!on;toast(on?'Reminders on for this invoice':'No more reminders for this invoice');}
+  catch(e){toast(e.message,true);}
+}
+// under each saved invoice: its Pay now page, whether the customer has opened it, and reminders
+function invcGetPaidStrip(id){
+  const v=id?INVC.list.find(x=>x.id===id):null;if(!v||v.kind!=='invoice')return;
+  const box=document.getElementById('invcMBody');if(!box||box.querySelector('.gp-strip'))return;
+  const acts=box.querySelector('.invc-acts');if(!acts)return;
+  const link=invcLink(v);const g=gp();const ms=gpMethods(g,invcLeft(v));
+  const done=['paid','void'].includes(v.status);
+  let h='<div class="gp-strip">';
+  if(link&&!done){
+    h+='<div class="gp-line"><b>Pay now page</b> <a href="'+esc(withPreview(link))+'" target="_blank" rel="noopener">See it</a> · <button type="button" class="link-btn" onclick="invcCopyLink(\''+v.id+'\')">Copy the link</button></div>';
+    const bits=[];
+    if(v.sent_at)bits.push('Emailed '+prettyDate(isoLocal(v.sent_at)));
+    bits.push(v.viewed_at?'<span style="color:var(--green);">Opened by the customer '+esc(prettyDate(isoLocal(v.viewed_at)))+'</span>':'Not opened yet');
+    if(+v.reminder_count)bits.push(v.reminder_count+' reminder'+(v.reminder_count==1?'':'s')+' sent'+(v.last_reminded_at?', last '+esc(prettyDate(isoLocal(v.last_reminded_at))):''));
+    h+='<div class="bk-sub">'+bits.join(' · ')+'</div>';
+    if(g.autoRemind)h+='<label class="gp-check"><input type="checkbox"'+(v.auto_remind!==false?' checked':'')+' onchange="invcSetAuto(\''+v.id+'\',this.checked)"> Send automatic reminders if this one runs late'+(v.customer_email?'':' (add their email first)')+'</label>';
+    if(!ms.length)h+='<div class="bk-sub" style="margin-top:4px;">Tip: add how customers can pay you in <a href="#" onclick="closeInvoice();goTab(\'settings\');setTimeout(()=>{const b=document.getElementById(\'gpBox\');if(b)b.scrollIntoView({behavior:\'smooth\'});},500);return false;">Settings → Getting Paid</a>, and it shows on this page.</div>';
+  }
+  if(v.carried_over)h+='<div class="bk-sub">Carried over from before you switched. Paying it off doesn’t count it as a new sale.</div>';
+  h+='</div>';
+  if(h!=='<div class="gp-strip"></div>')acts.insertAdjacentHTML('beforebegin',h);
+}
+if(typeof openInvoice==='function'){const _oi=openInvoice;openInvoice=function(id,kind){_oi(id,kind);try{invcGetPaidStrip(id);}catch(e){console.warn('pay strip',e);}};}
+if(typeof loadInvoices==='function'){const _li=loadInvoices;loadInvoices=async function(){const r=await _li.apply(this,arguments);if(!GP.loaded)await loadGP().catch(()=>{});if(!CUST.loaded)await loadCustomers().catch(()=>{});return r;};}
+
+// a balance carried over from QuickBooks or Wave was already counted as a sale there: paying it off isn't a new sale
+if(typeof invcPaid==='function'){const _ip=invcPaid;invcPaid=async function(){
+  const v=INVC.editing;if(!v||!v.carried_over)return _ip.apply(this,arguments);
+  const cur=INVC.list.find(x=>x.id===v.id)||v;const left=invcLeft(cur);
+  const a=prompt('How much was paid? (Full amount left is '+fmt(left).replace('$','')+')',left.toFixed(2));if(a===null)return;
+  const amt=r2(String(a).replace(/[$,\s]/g,''));if(!(amt>0)){toast('Enter an amount',true);return;}
+  const d=prompt('Date paid (YYYY-MM-DD)',todayStr());if(d===null)return;const date=dateVal(d)||todayStr();
+  try{
+    const paid=r2((+cur.paid_amount||0)+amt);
+    await sb('ohb_invoices?id=eq.'+cur.id,{method:'PATCH',body:JSON.stringify({paid_amount:paid,paid_date:date,status:paid>=(+cur.total||0)-0.004?'paid':'partial'})});
+    toast(fmt(amt)+' recorded. It was already counted as a sale before you switched, so it isn’t added again.');
+    await loadInvoices();openInvoice(cur.id);drawInvoices();
+  }catch(e){toast('Didn’t record: '+e.message,true);}
+};}
+
+// ─── saved customers (brought over from QuickBooks or Wave): filled in when you start an invoice ───
+const CUST={list:[],loaded:false};
+async function loadCustomers(){
+  try{const r=await sb('ohb_settings?key=eq.customers&select=value');CUST.list=((r[0]&&r[0].value&&r[0].value.list)||[]).filter(c=>c&&c.name);}
+  catch(e){CUST.list=[];}
+  CUST.loaded=true;
+}
+if(typeof invcCustomers==='function'){const _ic=invcCustomers;invcCustomers=function(){
+  const seen={};_ic().forEach(c=>{seen[String(c.customer_name).toLowerCase()]=c;});
+  CUST.list.forEach(c=>{const k=String(c.name).toLowerCase();if(!seen[k])seen[k]={customer_name:c.name,customer_email:c.email||'',customer_phone:c.phone||'',customer_address:c.address||''};});
+  return Object.values(seen);
+};}
+
+// ─── switching from QuickBooks or Wave: bring the history, customers and who owes you ───
+// QuickBooks: Settings ⚙ → Tools → Export Data → Export to Excel gives a ZIP of Excel files
+// (General Ledger, Profit and Loss, Customers…). Wave: Business settings → Data Export → Accounting
+// gives a spreadsheet of every transaction. Either one goes in whole: the Hub finds what's what.
+// the spreadsheet and ZIP readers load only when someone brings their books over (with a second place to get them from)
+const XLSX_URL=['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+const JSZIP_URL=['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'];
+const SW={src:'qb',tables:[],lines:[],accounts:[],customers:[],balances:[],before:'',bringCust:true,bringBal:true,busy:false};
+const SW_SRC={qb:'QuickBooks',wave:'Wave',other:'your old program'};
+async function loadScriptOnce(srcs){
+  srcs=[].concat(srcs);
+  if(srcs===XLSX_URL&&window.XLSX||srcs===JSZIP_URL&&window.JSZip)return;
+  for(const src of srcs){
+    const ok=await new Promise(done=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>done(true);s.onerror=()=>{s.remove();done(false);};document.head.appendChild(s);});
+    if(ok)return;
+  }
+  throw new Error('Couldn’t load the spreadsheet reader. Check your connection and try again.');
+}
+function openSwitch(src){
+  if(src)SW.src=src;
+  const how={
+    qb:'<ol><li>In QuickBooks Online, tap the <b>⚙ gear</b> and pick <b>Export Data</b> (under Tools).</li><li>On <b>Reports</b>, set the dates to <b>All dates</b>. Keep <b>General Ledger</b> and <b>Profit and Loss</b> switched on. On <b>Lists</b>, keep <b>Customers</b> on.</li><li>Tap <b>Export to Excel</b>. QuickBooks makes a ZIP file. Pick that ZIP below, just as it is.</li></ol>'
+      +'<p class="bk-sub">Customers who still owe you: in QuickBooks, open the <b>A/R Aging Summary</b> report and export it to Excel, then add that file too.</p>',
+    wave:'<ol><li>In Wave, tap your business name (top right) → <b>Business settings</b> → <b>Data Export</b>.</li><li>Choose <b>Accounting</b>. Wave emails you a download link (it works for 24 hours).</li><li>Download it and pick the file below.</li></ol>'
+      +'<p class="bk-sub">Customers who still owe you: open <b>Reports → Aged Receivables</b> in Wave, export it, and add that file too. A customer list export works as well.</p>',
+    other:'<p>Any spreadsheet (CSV or Excel) of transactions with a <b>date</b>, a <b>description</b> and an <b>amount</b> (or money in and money out columns) works, and so does a customer list with names and emails.</p>'
+  }[SW.src];
+  growthModal('Bring your books over',
+    '<p class="card-sub" style="margin-top:0;">Bring your history, your customers and who still owes you over from where you keep your books now. Nothing in '+esc(SW_SRC[SW.src])+' changes, and you can run this again later: anything already brought over is skipped.</p>'
+    +'<div class="seg mini" style="margin:6px 0 12px;">'+[['qb','QuickBooks'],['wave','Wave'],['other','Something else']].map(([k,l])=>'<button class="'+(SW.src===k?'active':'')+'" onclick="openSwitch(\''+k+'\')">'+l+'</button>').join('')+'</div>'
+    +'<div class="sw-how">'+how+'</div>'
+    +'<label class="btn-green sw-pick" for="swFiles">Pick the file'+(SW.src==='qb'?' (the ZIP)':'')+'</label>'
+    +'<input type="file" id="swFiles" multiple accept=".zip,.csv,.xlsx,.xls,.txt" style="display:none;" onchange="swFiles(this)">'
+    +'<div id="swMsg" class="bk-sub" style="margin-top:8px;"></div>',true);
+}
+async function swRead(file){
+  const name=file.name||'file';const ext=(name.toLowerCase().match(/\.([a-z0-9]+)$/)||[])[1]||'';
+  const out=[];
+  const sheetRows=ws=>XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''}).map(r=>r.map(c=>String(c==null?'':c)));
+  const fromBook=async(buf,base)=>{if(!window.XLSX)await loadScriptOnce(XLSX_URL);const wb=XLSX.read(buf,{type:'array'});wb.SheetNames.forEach(sn=>out.push({name:base+(wb.SheetNames.length>1?' · '+sn:''),rows:sheetRows(wb.Sheets[sn])}));};
+  if(ext==='zip'){
+    if(!window.JSZip)await loadScriptOnce(JSZIP_URL);
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    for(const e of Object.values(zip.files)){
+      if(e.dir||/(^|\/)(__MACOSX|\.)/.test(e.name))continue;
+      const x=(e.name.toLowerCase().match(/\.([a-z0-9]+)$/)||[])[1]||'';const base=e.name.split('/').pop();
+      if(x==='csv'||x==='txt')out.push({name:base,rows:parseCSV(await e.async('string'))});
+      else if(x==='xlsx'||x==='xls')await fromBook(await e.async('arraybuffer'),base);
+    }
+  }else if(ext==='xlsx'||ext==='xls')await fromBook(await file.arrayBuffer(),name);
+  else out.push({name,rows:parseCSV(await file.text())});
+  return out;
+}
+const swNorm=s=>String(s||'').toLowerCase().replace(/_/g,' ').replace(/[^a-z0-9&/ ]+/g,' ').replace(/\s+/g,' ').trim();
+// the row that holds the column names, wherever it is in the first few rows
+function swHeader(rows){
+  for(let i=0;i<Math.min(rows.length,25);i++){
+    const c=rows[i].map(swNorm);const n=c.filter(Boolean).length;if(n<2)continue;
+    const has=re=>c.some(x=>re.test(x));
+    if((has(/date/)&&has(/amount|debit|credit/))||(has(/^(customer|customer name|name|display name|company name)$/)&&has(/e ?mail|phone|balance|total|address/))||(c.includes('current')&&has(/total/)))return{i,cols:c};
+  }
+  return null;
+}
+function swKind(t){
+  const title=t.rows.slice(0,6).map(r=>r.join(' ')).join(' ').toLowerCase();
+  if(/profit (and|&) loss|income statement/.test(title)&&!/general ledger/.test(title))return 'pl';
+  const h=swHeader(t.rows);if(!h)return 'unknown';
+  const has=re=>h.cols.some(x=>re.test(x));
+  if(has(/date/)&&has(/amount|debit|credit/))return 'ledger';
+  if(has(/e ?mail|phone|address/))return 'customers';
+  return 'balances';
+}
+function swCol(cols,res,not){for(const re of res){const i=cols.findIndex(c=>re.test(c)&&!(not&&not.test(c)));if(i>=0)return i;}return -1;}
+function swParseLedger(t){
+  const h=swHeader(t.rows);const H=h.cols;
+  const C={date:swCol(H,[/^(transaction )?date$/,/date/],/added|modified|due|created/),
+    account:swCol(H,[/^(account|account name|account full name|full name|category|distribution account)$/,/account/],/type|group|id|number|class|other|split|balance/),
+    atype:swCol(H,[/^account (type|group)$/,/account type|account group/]),
+    desc:swCol(H,[/^memo\/description$/,/^(description|memo|transaction description|notes \/ memo|memo \/ description)$/,/description|memo/],/line/),
+    line:swCol(H,[/line description/]),
+    names:H.map((c,k)=>/^(name|payee|customer\/vendor|contact|customer|vendor|supplier)$/.test(c)?k:-1).filter(k=>k>=0),
+    amount:swCol(H,[/^amount$/,/amount \(one column\)/,/^amount\b/],/before|tax|balance|two column|debit|credit/),
+    debit:swCol(H,[/^debit$/,/debit/]),credit:swCol(H,[/^credit$/,/credit/],/card/),
+    id:swCol(H,[/^transaction id$/,/^(num|no|number|ref no|reference)$/]),ttype:swCol(H,[/^transaction type$/,/^type$/])};
+  const out=[];let cur='';
+  for(let i=h.i+1;i<t.rows.length;i++){
+    const cells=t.rows[i].map(x=>String(x==null?'':x).trim());
+    const d=C.date>=0?dateVal(cells[C.date]):'';
+    if(!d){
+      // QuickBooks puts each account's lines under a heading row with just the account's name
+      const ne=cells.filter(Boolean);
+      if(ne.length&&ne.length<=2&&moneyVal(ne[0])==null&&!/^(total|beginning balance|opening balance|balance forward|net)/i.test(ne[0]))cur=ne[0];
+      continue;
+    }
+    const acct=(C.account>=0&&cells[C.account])||cur;if(!acct)continue;
+    const amt=C.amount>=0?moneyVal(cells[C.amount]):null;
+    const dr=C.debit>=0?moneyVal(cells[C.debit]):null,cr=C.credit>=0?moneyVal(cells[C.credit]):null;
+    if(amt==null&&dr==null&&cr==null)continue;
+    if(/^(beginning|opening) balance/i.test(cells.join(' ')))continue;
+    out.push({date:d,account:acct,atype:C.atype>=0?cells[C.atype]:'',desc:[C.desc>=0?cells[C.desc]:'',C.line>=0?cells[C.line]:''].filter(Boolean).filter((x,k,a)=>a.indexOf(x)===k).join(' · '),
+      name:(C.names.map(k=>cells[k]).find(Boolean)||''),amt,dr,cr,id:C.id>=0?cells[C.id]:'',ttype:C.ttype>=0?cells[C.ttype]:''});
+  }
+  return out;
+}
+// Profit and Loss: which accounts are income and which are costs
+function swParsePL(t){
+  const map={};let sec=null;
+  t.rows.forEach(r=>{
+    const first=(r.map(x=>String(x||'').trim()).find(Boolean)||'');const low=swNorm(first);
+    if(!low)return;
+    if(/^(total (income|revenue|cost of goods sold|cost of sales|expenses|operating expenses|other income|other expenses?))$/.test(low)){sec=null;return;}
+    if(/^(gross profit|net (operating |other )?income|net (profit|loss)|total)/.test(low))return;
+    if(/^(income|revenue|other income)$/.test(low)){sec='in';return;}
+    if(/^(cost of goods sold|cost of sales|expenses|operating expenses|other expenses?)$/.test(low)){sec='out';return;}
+    if(sec&&!/^total /.test(low))map[low]=sec;
+  });
+  return map;
+}
+function swGuess(name,atype){
+  const t=swNorm(atype),s=swNorm(name);
+  if(/income|revenue|sales/.test(t))return 'in';
+  if(/expense|cost of goods|cost of sales|cogs/.test(t))return 'out';
+  if(t&&/asset|liabilit|equity|bank|receivable|payable|credit card|cash/.test(t))return 'skip';
+  if(/checking|savings|undeposited|receivable|payable|credit card|visa|mastercard|amex|loan|line of credit|equity|opening balance|owner|draw|distribution|investment|retained|liabilit|sales tax (payable|agency)|accrued|prepaid|inventory asset|fixed asset|accumulated|clearing|transfer|petty cash|^cash$|paypal bank|square balance|security deposit/.test(s))return 'skip';
+  if(/income|sales|revenue|fees earned|services? (income|revenue)|refunds? received|interest earned|tips|discounts? received/.test(s))return 'in';
+  return 'out';
+}
+function swCleanName(n){return String(n||'').replace(/^\d{3,6}\s*[-·:]?\s*/,'').split(':').pop().trim()||String(n||'');}
+function swDefaultCat(a){
+  const nm=swCleanName(a.name);
+  const list=a.cls==='in'?INCOME_CATS:EXPENSE_CATS;
+  const exact=list.find(c=>c.toLowerCase()===nm.toLowerCase());if(exact)return exact;
+  if(a.cls==='in'&&/tip/i.test(nm)&&list.includes('Tips'))return 'Tips';
+  if(a.cls==='out'){const g=guessCategory(nm);if(g&&EXPENSE_CATS.includes(g)&&g!=='Other Expense')return g;}
+  return 'new:'+nm;
+}
+async function swFiles(input){
+  const files=[...(input.files||[])];input.value='';if(!files.length)return;
+  const msg=document.getElementById('swMsg');if(msg)msg.textContent='Reading '+files.map(f=>f.name).join(', ')+'…';
+  try{
+    let tables=[];for(const f of files)tables=tables.concat(await swRead(f));
+    SW.tables=tables.map(t=>Object.assign(t,{kind:swKind(t)}));
+    // the books
+    let pl={};SW.tables.filter(t=>t.kind==='pl').forEach(t=>Object.assign(pl,swParsePL(t)));
+    const ledgers=SW.tables.filter(t=>t.kind==='ledger');
+    // QuickBooks' General Ledger lists every line under each account; the Journal repeats the same lines. Use one.
+    const gl=ledgers.find(t=>/general ledger|transaction detail/i.test(t.name+' '+t.rows.slice(0,4).join(' ')))||ledgers[0];
+    SW.lines=gl?swParseLedger(gl):[];
+    const by={};
+    SW.lines.forEach(l=>{const a=by[l.account]||(by[l.account]={name:l.account,atype:l.atype,n:0,lines:[]});a.n++;a.lines.push(l);if(!a.atype&&l.atype)a.atype=l.atype;});
+    SW.accounts=Object.values(by).map(a=>{
+      const key=swNorm(a.name),short=swNorm(swCleanName(a.name));
+      a.cls=pl[key]||pl[short]||swGuess(a.name,a.atype);
+      a.guessed=!pl[key]&&!pl[short]&&!a.atype;
+      a.cat=a.cls==='skip'?'':swDefaultCat(a);
+      return a;
+    }).sort((x,y)=>(x.cls==='skip')-(y.cls==='skip')||y.n-x.n);
+    // customers and who owes you
+    SW.customers=[];SW.balances=[];
+    SW.tables.filter(t=>t.kind==='customers'||t.kind==='balances').forEach(t=>{const r=swParsePeople(t);SW.customers=SW.customers.concat(r.people);SW.balances=SW.balances.concat(r.owed);});
+    const seenC={};SW.customers=SW.customers.filter(c=>{const k=c.name.toLowerCase();if(seenC[k])return false;seenC[k]=1;return true;});
+    const seenB={};SW.balances=SW.balances.filter(c=>{const k=c.name.toLowerCase();if(seenB[k])return false;seenB[k]=1;return true;});
+    // if they've already been logging in the Hub, stop the history the day before they started
+    const mine=BOOKS.rows.filter(r=>!(r.src==='txn'&&/^Brought over from /.test(r.by||'')));
+    const first=mine.map(r=>r.date).filter(Boolean).sort()[0]||'';
+    SW.before=first?isoLocal(new Date(parseISO(first).getTime()-864e5)):'';
+    if(!SW.lines.length&&!SW.customers.length&&!SW.balances.length){
+      if(msg)msg.innerHTML='<span style="color:var(--red);">Couldn’t find transactions or customers in '+esc(files.map(f=>f.name).join(', '))+'.</span> '+(SW.src==='qb'?'Pick the ZIP QuickBooks made, or the General Ledger file inside it.':'It needs a date and an amount on each line, or names with emails.');
+      return;
+    }
+    swReview();
+  }catch(e){console.error(e);if(msg)msg.innerHTML='<span style="color:var(--red);">Couldn’t read that: '+esc(e.message)+'</span>';}
+}
+function swParsePeople(t){
+  const h=swHeader(t.rows);if(!h)return{people:[],owed:[]};const H=h.cols;
+  let name=swCol(H,[/^(customer|customer name|display name|name|company name|company)$/,/customer/]);
+  if(name<0&&!H[0])name=0;   // aging reports leave the customer column's heading blank
+  const C={email:swCol(H,[/^e ?mail$/,/e ?mail/]),phone:swCol(H,[/^phone$/,/phone|mobile/]),
+    addr:swCol(H,[/^billing address$/,/^address$/,/address line 1|street|address/],/shipping|e ?mail/),
+    city:swCol(H,[/^(billing )?city$/]),state:swCol(H,[/^(billing )?(state|province)/]),zip:swCol(H,[/^(billing )?(zip|postal)/]),
+    first:swCol(H,[/^(contact )?first name$/]),last:swCol(H,[/^(contact )?last name$/]),
+    bal:swCol(H,[/^open balance$/,/^(total unpaid|total due|amount due|balance due|unpaid)$/,/^total$/,/balance|unpaid/],/date|current/)};
+  const people=[],owed=[];
+  for(let i=h.i+1;i<t.rows.length;i++){
+    const c=t.rows[i].map(x=>String(x==null?'':x).trim());
+    let nm=name>=0?c[name]:'';
+    if(!nm&&C.first>=0)nm=[c[C.first],C.last>=0?c[C.last]:''].filter(Boolean).join(' ');
+    if(!nm||/^total\b/i.test(nm))continue;
+    const addr=[C.addr>=0?c[C.addr]:'',C.city>=0?c[C.city]:'',[C.state>=0?c[C.state]:'',C.zip>=0?c[C.zip]:''].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const p={name:nm.slice(0,120),email:C.email>=0?(c[C.email].split(/[,;\s]+/).find(x=>/@/.test(x))||''):'',phone:C.phone>=0?c[C.phone].slice(0,40):'',address:addr.slice(0,200)};
+    if(p.email||p.phone||p.address)people.push(p);
+    const b=C.bal>=0?moneyVal(c[C.bal]):null;
+    if(b&&b>0.004)owed.push(Object.assign({},p,{balance:r2(b)}));
+  }
+  return{people,owed};
+}
+function swUse(a){return a.cls!=='skip'&&a.cat;}
+// money in or out for one line, in the account's own direction (refunds come out negative)
+function swValues(a){
+  const dc=a.lines.some(l=>l.dr!=null||l.cr!=null);
+  if(dc)return a.lines.map(l=>{const d=Math.abs(l.dr||0),c=Math.abs(l.cr||0);return a.cls==='in'?c-d:d-c;});
+  const sum=a.lines.reduce((s,l)=>s+(l.amt||0),0);const dir=sum<0?-1:1;
+  return a.lines.map(l=>(l.amt||0)*dir);
+}
+function swPreviewRows(){
+  const rows=[];
+  SW.accounts.filter(swUse).forEach(a=>{const vals=swValues(a);a.lines.forEach((l,i)=>{if(SW.before&&l.date>SW.before)return;const v=r2(vals[i]);if(Math.abs(v)<0.005)return;rows.push({l,a,v});});});
+  return rows;
+}
+function swCatSelect(a,i){
+  const list=a.cls==='in'?INCOME_CATS:EXPENSE_CATS;const nm=swCleanName(a.name);
+  const opts=['<option value="">Don’t bring over</option>']
+    .concat(list.map(c=>'<option value="'+esc(c)+'"'+(a.cat===c?' selected':'')+'>'+esc(c)+'</option>'))
+    .concat(list.some(c=>c.toLowerCase()===nm.toLowerCase())?[]:['<option value="new:'+esc(nm)+'"'+(a.cat==='new:'+nm?' selected':'')+'>New: '+esc(nm)+'</option>']);
+  return '<select class="period-select sw-sel" onchange="SW.accounts['+i+'].cat=this.value;swReview(true)">'+opts.join('')+'</select>';
+}
+function swReview(keepScroll){
+  const body=document.getElementById('growthBody');const top=keepScroll&&body?body.parentElement.scrollTop:0;
+  const rows=swPreviewRows();
+  const tin=rows.filter(r=>r.a.cls==='in').reduce((s,r)=>s+r.v,0),tout=rows.filter(r=>r.a.cls==='out').reduce((s,r)=>s+r.v,0);
+  const dates=rows.map(r=>r.l.date).sort();
+  const src=SW_SRC[SW.src];
+  let h='';
+  if(SW.lines.length){
+    h+='<div class="bk-summary" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:10px;">'
+      +'<div class="bk-stat"><div class="bk-stat-l">Transactions</div><div class="bk-stat-v">'+rows.length.toLocaleString()+'</div><div class="bk-stat-s">'+(dates.length?esc(prettyDate(dates[0]))+' – '+esc(prettyDate(dates[dates.length-1])):'')+'</div></div>'
+      +'<div class="bk-stat"><div class="bk-stat-l">Money in</div><div class="bk-stat-v" style="color:var(--green);">'+fmt(tin)+'</div></div>'
+      +'<div class="bk-stat"><div class="bk-stat-l">Money out</div><div class="bk-stat-v" style="color:var(--red);">'+fmt(tout)+'</div></div></div>';
+    h+='<div class="card-sub" style="margin:0 0 8px;"><b>Your accounts from '+esc(src)+'.</b> Pick where each one goes in the Hub. Bank, credit card, loan and owner accounts stay out: those are already counted where the money landed.'
+      +(SW.accounts.some(a=>a.guessed&&a.cls!=='skip')?' Accounts marked <b>check</b> were sorted by name, so give them a look.':'')+'</div>';
+    h+='<div class="sw-accts">'+SW.accounts.map((a,i)=>{
+      const vals=swValues(a);const tot=a.cls==='skip'?0:vals.reduce((s,v)=>s+v,0);
+      return '<div class="sw-acct'+(a.cls==='skip'?' off':'')+'"><div class="bk-main"><div class="bk-payee">'+esc(a.name)+(a.guessed&&a.cls!=='skip'?' <span class="st-pill warn">check</span>':'')+'</div>'
+        +'<div class="bk-sub">'+a.n+' line'+(a.n===1?'':'s')+(a.cls==='skip'?' · not income or a cost':' · '+(a.cls==='in'?'money in ':'money out ')+fmt(tot))+'</div></div>'
+        +'<div class="sw-ctl"><select class="period-select sw-sel" onchange="SW.accounts['+i+'].cls=this.value;SW.accounts['+i+'].cat=this.value===\'skip\'?\'\':swDefaultCat(SW.accounts['+i+']);swReview(true)">'
+        +[['in','Money in'],['out','Money out'],['skip','Leave out']].map(([v,l])=>'<option value="'+v+'"'+(a.cls===v?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+        +(a.cls==='skip'?'':swCatSelect(a,i))+'</div></div>';}).join('')+'</div>';
+    h+='<div class="txn-grid" style="margin-top:10px;"><div><label for="swBefore">Bring over everything up to</label><input id="swBefore" type="date" class="period-input" value="'+esc(SW.before)+'" onchange="SW.before=this.value;swReview(true)"></div>'
+      +'<div class="bk-sub" style="align-self:end;">'+(SW.before?'You started logging in the Hub after this, so later lines are left out to avoid counting them twice.':'Leave it empty to bring over everything.')+'</div></div>';
+  }
+  if(SW.customers.length)h+='<label class="onb-task" style="margin-top:10px;"><input type="checkbox"'+(SW.bringCust?' checked':'')+' onchange="SW.bringCust=this.checked"><div><div class="bk-payee">'+SW.customers.length+' customer'+(SW.customers.length===1?'':'s')+'</div><div class="bk-sub">Names, emails, phones and addresses, filled in when you start an invoice.</div></div></label>';
+  if(SW.balances.length){const owed=SW.balances.reduce((s,b)=>s+b.balance,0);
+    h+='<label class="onb-task"><input type="checkbox"'+(SW.bringBal?' checked':'')+' onchange="SW.bringBal=this.checked"><div><div class="bk-payee">'+SW.balances.length+' customer'+(SW.balances.length===1?'':'s')+' who owe you '+fmt(owed)+'</div><div class="bk-sub">Each becomes an unpaid invoice for what’s left, so you can send a Pay now link and reminders. They were already counted as sales in '+esc(src)+', so paying them off doesn’t count them twice.</div></div></label>';}
+  h+='<div id="swMsg" class="bk-sub" style="margin-top:8px;"></div><div class="txn-actions"><button class="btn-secondary" onclick="openSwitch()">‹ Pick other files</button><button class="btn-green" id="swGo" onclick="swImport()">Bring it over</button></div>';
+  growthModal('Bring your books over from '+src,h,true);
+  if(top&&body)body.parentElement.scrollTop=top;
+}
+async function swImport(){
+  if(SW.busy)return;SW.busy=true;
+  const btn=document.getElementById('swGo');const msg=document.getElementById('swMsg');
+  const say=t=>{if(msg)msg.textContent=t;};
+  if(btn){btn.disabled=true;btn.textContent='Bringing it over…';}
+  const src=SW_SRC[SW.src];const done={txns:0,skipped:0,cust:0,owed:0,owedAmt:0};
+  try{
+    // new categories first, so everything lands somewhere you can see
+    const rows=swPreviewRows();
+    const newIn=[...new Set(rows.filter(r=>r.a.cls==='in'&&r.a.cat.startsWith('new:')).map(r=>r.a.cat.slice(4)))];
+    const newOut=[...new Set(rows.filter(r=>r.a.cls==='out'&&r.a.cat.startsWith('new:')).map(r=>r.a.cat.slice(4)))];
+    if(newIn.length||newOut.length){
+      const s=Object.assign({},BIZ.row.settings||{});const base=bizSettings();
+      s.income=[...new Set((s.income||base.income).concat(newIn))];s.expense=[...new Set((s.expense||base.expense).concat(newOut))];
+      const r=await sb('ohb_businesses?id=eq.'+BIZ.id,{method:'PATCH',body:JSON.stringify({settings:s})});
+      if(r[0]){BIZ.row=r[0];const m=BIZ.list.find(x=>x.business_id===BIZ.id);if(m)m.ohb_businesses=r[0];applyBizConfig();}
+    }
+    // the history, marked so running it again skips what's already here
+    const seen={};
+    const body=rows.map(({l,a,v})=>{
+      const cat=a.cat.startsWith('new:')?a.cat.slice(4):a.cat;
+      const base=SW.src+'|'+l.date+'|'+a.name+'|'+v.toFixed(2)+'|'+l.desc+'|'+l.name+'|'+l.id;seen[base]=(seen[base]||0)+1;
+      return{txn_date:l.date,direction:a.cls==='in'?'in':'out',amount:v,payee:(l.name||swCleanName(l.desc)||'').slice(0,120)||null,category:cat,
+        payment_method:null,notes:('From '+src+(l.ttype?' ('+l.ttype+(l.id?' '+l.id:'')+')':'')+(l.desc?': '+l.desc:'')).slice(0,300),
+        created_by:'Brought over from '+src,import_key:'sw:'+hashStr(base)+':'+seen[base]};
+    });
+    for(let i=0;i<body.length;i+=200){
+      say('Bringing over transactions… '+Math.min(i+200,body.length).toLocaleString()+' of '+body.length.toLocaleString());
+      const res=await sb('ohb_transactions?on_conflict=import_key',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(body.slice(i,i+200))});
+      done.txns+=res.length;
+    }
+    done.skipped=body.length-done.txns;
+    // customers
+    if(SW.bringCust&&SW.customers.length){
+      say('Saving customers…');
+      await loadCustomers();const have={};CUST.list.forEach(c=>{have[c.name.toLowerCase()]=c;});
+      SW.customers.forEach(c=>{const k=c.name.toLowerCase();if(!have[k]){have[k]=c;done.cust++;}else{['email','phone','address'].forEach(f=>{if(!have[k][f]&&c[f])have[k][f]=c[f];});}});
+      const list=Object.values(have).slice(0,5000);
+      await sb('ohb_settings?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'customers',value:{list},updated_at:new Date().toISOString()})});
+      CUST.list=list;CUST.loaded=true;
+    }
+    // who owes you
+    if(SW.bringBal&&SW.balances.length){
+      say('Adding what customers owe you…');
+      await loadInvoices();
+      const taken=new Set(INVC.list.filter(v=>v.carried_over).map(v=>String(v.customer_name).toLowerCase()));
+      let n=INVC.list.filter(v=>/^OPEN-\d+$/.test(v.number)).length;
+      const inc=(INCOME_CATS.find(c=>!/tip|other/i.test(c))||INCOME_CATS[0]);
+      for(const b of SW.balances){
+        if(taken.has(b.name.toLowerCase()))continue;
+        let num;do{num='OPEN-'+(++n);}while(INVC.list.some(v=>v.number===num));
+        await sb('ohb_invoices',{method:'POST',body:JSON.stringify({kind:'invoice',number:num,customer_name:b.name,customer_email:b.email||null,customer_phone:b.phone||null,customer_address:b.address||null,
+          issue_date:todayStr(),due_date:todayStr(),status:'sent',items:[{desc:'Balance carried over from '+src,qty:1,price:b.balance}],tax_rate:0,subtotal:b.balance,tax:0,total:b.balance,
+          paid_amount:0,income_category:inc,notes:'Carried over from '+src+' on '+prettyDate(todayStr())+'.',terms:'Payment due on receipt.',carried_over:true,created_by:currentProfile&&currentProfile.name||null})});
+        done.owed++;done.owedAmt+=b.balance;
+      }
+      await loadInvoices();
+    }
+    BOOKS.stale=true;await loadBooks(true);
+    const parts=[];
+    if(body.length)parts.push('<b>'+done.txns.toLocaleString()+'</b> transaction'+(done.txns===1?'':'s')+(done.skipped?' ('+done.skipped.toLocaleString()+' were already here)':''));
+    if(done.cust)parts.push('<b>'+done.cust+'</b> customer'+(done.cust===1?'':'s'));
+    if(done.owed)parts.push('<b>'+done.owed+'</b> unpaid balance'+(done.owed===1?'':'s')+' ('+fmt(done.owedAmt)+')');
+    growthModal('All moved over',
+      '<p>Brought over '+(parts.length?parts.join(', '):'nothing new: it was all here already')+'.</p>'
+      +'<ul class="card-sub" style="line-height:1.7;"><li>History is in <b>Books</b>, filed under the categories you picked. Filter the ledger to check it.</li>'
+      +(done.owed?'<li>What customers owe is under <b>Invoices → Unpaid</b>. Send each one a Pay now link.</li>':'')
+      +'<li>Keep '+esc(src)+' until you’ve looked things over, then cancel it whenever you’re ready.</li></ul>'
+      +'<div class="txn-actions"><button class="btn-green" onclick="closeGrowthModal();goTab(\'books\')">See my books</button></div>');
+  }catch(e){
+    console.error(e);
+    if(msg)msg.innerHTML='<span style="color:var(--red);">Stopped partway: '+esc(e.message)+'</span> Anything already brought over stays, and running it again skips it.';
+    if(btn){btn.disabled=false;btn.textContent='Bring it over';}
+  }finally{SW.busy=false;}
+}
+
+// ─── Cash ahead: what's coming in and going out for the next 13 weeks ───
+// Starts from the bank balance (typed in, or the newest one on an imported statement, whichever is
+// newer), adds what's been logged since, then each week adds invoices coming due and usual sales,
+// and takes off bills, pay, usual spending and sales tax returns.
+const CF_WEEKS=13;
+function cfSettings(){return Object.assign({amount:null,date:'',cushion:0,outlook:0},acct().cash||{});}
+function cfStart(){
+  const S=cfSettings();let base=null;
+  if(S.amount!==null&&S.amount!==''&&S.date)base={amount:+S.amount,date:S.date,src:'typed'};
+  // the newest balance on each bank statement you've imported (checking and savings, not credit cards)
+  const by={};
+  (BOOKS.bank||[]).forEach(l=>{if(l.balance==null||l.balance==='')return;const a=l.account||'Business checking';if(/credit|card|loan/i.test(a))return;
+    const d=String(l.txn_date).slice(0,10);if(!by[a]||d>by[a].d)by[a]={d,b:+l.balance};});
+  const accts=Object.values(by);
+  if(accts.length){const d=accts.map(x=>x.d).sort()[0];const fromBank={amount:accts.reduce((s,x)=>s+x.b,0),date:d,src:'bank',n:accts.length};
+    if(!base||fromBank.date>base.date)base=fromBank;}
+  if(!base)return null;
+  // plus what's been logged since then
+  const today=todayISO();
+  const since=BOOKS.rows.filter(r=>r.date>base.date&&r.date<=today&&r.category!=='Transfer');
+  const net=since.reduce((s,r)=>s+(r.dir==='in'?r.amount:-r.amount),0);
+  return Object.assign(base,{logged:net,since:since.length,now:r2(base.amount+net)});
+}
+function cfPlan(){
+  const S=cfSettings();const start=cfStart();if(!start)return null;
+  const today=parseISO(todayISO());
+  const mon0=new Date(today);mon0.setDate(today.getDate()+(today.getDay()===0?-6:1-today.getDay()));
+  const weeks=[];
+  for(let w=0;w<CF_WEEKS;w++){const a=new Date(mon0);a.setDate(mon0.getDate()+7*w);const b=new Date(a);b.setDate(a.getDate()+6);weeks.push({from:isoLocal(a),to:isoLocal(b),ins:[],outs:[]});}
+  const first=weeks[0].from,horizon=weeks[CF_WEEKS-1].to;
+  const wk=iso=>{if(!iso||iso<first)return 0;for(let i=0;i<weeks.length;i++)if(iso<=weeks[i].to)return i;return -1;};
+  const frac=(7-Math.round((today-mon0)/864e5))/7;   // what's left of this week
+  // usual weekly sales and spending, from the last 8 full weeks (or however many weeks there are so far)
+  const h1=isoLocal(new Date(mon0.getTime()-864e5)),h0=isoLocal(new Date(mon0.getTime()-56*864e5));
+  // weeks with sales in them (a business that's only been at it a few weeks isn't averaged over eight)
+  const weekOf=iso=>{const d=parseISO(iso);d.setDate(d.getDate()+(d.getDay()===0?-6:1-d.getDay()));return isoLocal(d);};
+  const salesWeeks=new Set(BOOKS.rows.filter(r=>isPL(r)&&r.dir==='in'&&r.date>=h0&&r.date<=h1).map(r=>weekOf(r.date)));const nW=salesWeeks.size;
+  // bills (and what they're filed under) and pay are counted on their own, so they're left out of "usual"
+  const bills=(typeof BILLS!=='undefined'?BILLS.list:[]).filter(b=>b.active!==false&&b.amount!=null&&+b.amount>0);
+  const billNames=new Set(bills.map(b=>normName(b.name))),billCats=new Set(bills.map(b=>b.category).filter(Boolean));
+  const payLike=/payroll|wages|salar|pay-?outs?|distribution/i;
+  const hist=nW?BOOKS.rows.filter(r=>isPL(r)&&r.date>=h0&&r.date<=h1&&salesWeeks.has(weekOf(r.date))):[];
+  const usualIn=nW?hist.filter(r=>r.dir==='in'&&!/^Invoice /.test(r.notes||'')).reduce((s,r)=>s+r.amount,0)/nW:0;
+  const usualOut=nW?hist.filter(r=>r.dir==='out'&&r.notes!=='Bill'&&!billNames.has(normName(r.payee))&&!billCats.has(r.category)&&!payLike.test(r.category||'')).reduce((s,r)=>s+r.amount,0)/nW:0;
+  // pay: the average of the last 4 weeks with hours, from the same pay engine as the Dashboard
+  let payAvg=0;
+  try{const pw=(typeof computeWeeks==='function'?computeWeeks():[]).filter(w=>w.end<first).filter(w=>Object.keys(w.hours||{}).length).slice(-4);
+    if(pw.length)payAvg=pw.reduce((s,w)=>s+Object.values(w.shares||{}).reduce((a,b)=>a+(+b||0),0),0)/pw.length;}catch(e){}
+  const adj=1+(+S.outlook||0)/100;
+  weeks.forEach((w,i)=>{const f=i===0?frac:1;
+    if(usualIn>0.005)w.ins.push({k:'sales',label:'Usual sales'+(adj!==1?' ('+(adj>1?'+':'')+Math.round((adj-1)*100)+'%)':''),amt:usualIn*f*adj});
+    if(usualOut>0.005)w.outs.push({k:'spend',label:'Usual spending',amt:usualOut*f});
+    if(payAvg>0.005)w.outs.push({k:'pay',label:'Pay',amt:payAvg});});
+  // invoices coming due (overdue ones are counted this week, if they get paid)
+  (typeof INVC!=='undefined'?INVC.list:[]).filter(v=>v.kind==='invoice'&&['sent','partial'].includes(v.status)&&invcLeft(v)>0.004).forEach(v=>{
+    const due=v.due_date||isoLocal(new Date(mon0.getTime()+7*864e5));const i=wk(due);if(i<0)return;
+    weeks[i].ins.push({k:'inv',label:v.customer_name+' · '+v.number+(due<first?' (overdue)':''),amt:invcLeft(v)});});
+  // bills and renewals
+  (typeof BILLS!=='undefined'?BILLS.list:[]).filter(b=>b.active!==false&&b.amount!=null&&+b.amount>0).forEach(b=>{
+    let d=b.next_due,guard=0;
+    while(d&&d<=horizon&&guard++<60){const i=wk(d);if(i>=0)weeks[i].outs.push({k:'bill',label:b.name+(d<first?' (late)':''),amt:+b.amount});
+      if(b.repeat==='once')break;d=billNext(d,b.repeat);}
+  });
+  // Michigan sales tax returns not filed yet
+  try{const T=stx();if(T.on&&BOOKS.raw)stxPeriods(8).forEach(p=>{if(T.filed[p.key]||p.tax<0.005)return;const due=stxDue(p.key);if(due>horizon)return;
+    weeks[wk(due)].outs.push({k:'tax',label:'Sales tax for '+stxLabel(p.key),amt:p.tax});});}catch(e){}
+  let bal=start.now;
+  weeks.forEach(w=>{w.in=w.ins.reduce((s,x)=>s+x.amt,0);w.out=w.outs.reduce((s,x)=>s+x.amt,0);bal+=w.in-w.out;w.end=bal;});
+  const low=weeks.reduce((a,w,i)=>w.end<a.v?{v:w.end,i}:a,{v:Infinity,i:0});
+  return{S,start,weeks,low,usualIn,usualOut,payAvg,nW};
+}
+function cfSaveForm(){
+  const v=id=>(document.getElementById(id)||{}).value;
+  const amt=v('cfAmt');const S=cfSettings();
+  const next={cushion:Math.max(0,parseFloat(v('cfCushion'))||0),outlook:parseFloat(v('cfOutlook'))||0};
+  if(amt!==undefined&&String(amt).trim()!==''){const a=moneyVal(amt);if(a==null){toast('Enter the amount in the bank, like 4200',true);return;}
+    next.amount=a;next.date=todayISO();}
+  else{next.amount=S.amount;next.date=S.date;}
+  saveAcct({cash:Object.assign({},S,next)},true).then(ok=>{if(ok){toast('Saved');renderBooks();}});
+}
+function cfWeekLabel(w){const a=parseISO(w.from);return a.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+function renderCashAhead(){
+  if(typeof INVC!=='undefined'&&!INVC.loaded){loadInvoices().then(()=>{if(BOOKS.view==='cash')renderBooks();}).catch(()=>{});}
+  if(typeof BILLS!=='undefined'&&!BILLS.loaded){loadBills().then(()=>{if(BOOKS.view==='cash')renderBooks();}).catch(()=>{});}
+  if(!BOOKS.schema.acct)return '<div class="card"><div class="bk-empty">Cash ahead turns on after the one-time setup at the top of this tab.</div></div>';
+  const P=cfPlan();const S=cfSettings();
+  const form=(withAmt)=>'<div class="txn-grid">'
+    +(withAmt?'<div><label for="cfAmt">In the bank today (checking and savings)</label><input id="cfAmt" class="period-input" inputmode="decimal" placeholder="$0.00" value=""></div>':'')
+    +'<div><label for="cfCushion">Keep at least this much on hand</label><input id="cfCushion" class="period-input" inputmode="decimal" value="'+esc(S.cushion||'')+'" placeholder="$0"></div>'
+    +'<div><label for="cfOutlook">The next few months, sales will be</label><select id="cfOutlook" class="period-select">'
+    +[[0,'About like lately'],[-25,'A bit slower (25% less)'],[-50,'Much slower (half)'],[25,'Busier (25% more)']].map(([v,l])=>'<option value="'+v+'"'+(+S.outlook===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="cfSaveForm()">'+(withAmt?'Show me':'Update')+'</button></div>';
+  if(!P)return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Cash Ahead</div>'
+    +'<div class="card-sub">See what’s coming in and going out for the next 13 weeks, and spot a tight week before it gets here. Start with what’s in the business bank account today, or import a bank statement with balances under <b>Bank</b>.</div>'+form(true)+'</div>';
+  const cushion=+S.cushion||0;const low=P.low;const wks=P.weeks;
+  const short=wks.filter(w=>w.end<cushion);
+  const maxAbs=Math.max(1,...wks.map(w=>Math.abs(w.end)));
+  const srcTxt=P.start.src==='bank'?'your bank statement'+(P.start.n>1?'s':'')+' on '+prettyDate(P.start.date):'what you entered on '+prettyDate(P.start.date);
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Cash Ahead · next 13 weeks</div>';
+  h+=short.length
+    ?'<div class="cf-hero bad"><span class="cf-ico" aria-hidden="true">⚠</span><div><b>Cash could get tight the week of '+esc(cfWeekLabel(short[0]))+'.</b> It may drop to '+(short[0].end<0?'−':'')+fmt(Math.abs(short[0].end))+(cushion?', below the '+fmt(cushion)+' you want on hand':'')+'. Lowest point: '+(low.v<0?'−':'')+fmt(Math.abs(low.v))+' the week of '+esc(cfWeekLabel(wks[low.i]))+'.</div></div>'
+    :'<div class="cf-hero ok"><span class="cf-ico" aria-hidden="true">✓</span><div><b>Cash stays above '+fmt(cushion)+' for all 13 weeks.</b> Lowest point: '+fmt(low.v)+' the week of '+esc(cfWeekLabel(wks[low.i]))+'.</div></div>';
+  h+='<div class="bk-sub" style="margin:8px 0 10px;">Starting from <b>'+fmt(P.start.now)+'</b>: '+esc(srcTxt)+(P.start.since?', plus the '+P.start.since+' thing'+(P.start.since===1?'':'s')+' logged since':'')+'. Tap a week to see what’s in it.</div>';
+  h+='<div class="cf-table" role="table" aria-label="Cash at the end of each week"><div class="cf-row cf-head" role="row"><span role="columnheader">Week of</span><span role="columnheader">In</span><span role="columnheader">Out</span><span role="columnheader">Cash at week’s end</span></div>'
+    +wks.map((w,i)=>{const below=w.end<cushion;const pct=Math.max(2,Math.round(Math.abs(w.end)/maxAbs*100));
+      const items=w.ins.map(x=>'<div class="cf-item"><span>'+esc(x.label)+'</span><b style="color:var(--green);">+'+fmt(x.amt)+'</b></div>').join('')+w.outs.map(x=>'<div class="cf-item"><span>'+esc(x.label)+'</span><b style="color:var(--red);">−'+fmt(x.amt)+'</b></div>').join('');
+      return '<details class="cf-week'+(below?' below':'')+'"><summary class="cf-row" role="row"><span role="cell">'+esc(cfWeekLabel(w))+(i===0?' <span class="bk-sub">(this week)</span>':'')+'</span><span role="cell" class="cf-in">+'+fmt(w.in)+'</span><span role="cell" class="cf-out">−'+fmt(w.out)+'</span>'
+        +'<span role="cell" class="cf-end"><span class="cf-bar'+(w.end<0?' neg':'')+(below?' low':'')+'" style="width:'+pct+'%"></span><b>'+(w.end<0?'−':'')+fmt(Math.abs(w.end))+'</b>'+(below?' <span class="cf-flag">⚠ low</span>':'')+'</span></summary>'
+        +'<div class="cf-items">'+(items||'<div class="bk-sub">Nothing expected.</div>')+'</div></details>';}).join('')+'</div>';
+  h+='<details class="cf-how"><summary>How this is figured</summary><ul>'
+    +'<li><b>Usual sales:</b> '+(P.nW?fmt(P.usualIn)+' a week, the average of the last '+Math.round(P.nW)+' week'+(Math.round(P.nW)===1?'':'s')+', not counting invoice payments (those are counted on their due dates).':'not enough history yet. Log a few weeks and this fills in.')+'</li>'
+    +'<li><b>Usual spending:</b> '+(P.nW?fmt(P.usualOut)+' a week, the same way, not counting pay or anything filed under the same category as one of your bills (those are counted on their due dates).':'not enough history yet.')+'</li>'
+    +'<li><b>Pay:</b> '+(P.payAvg?fmt(P.payAvg)+' a week, the average of the last few weeks of pay.':'no pay weeks yet.')+' Employer payroll taxes aren’t included.</li>'
+    +'<li><b>Invoices</b> come in on their due dates. Overdue ones are counted this week, <i>if</i> they get paid.</li>'
+    +'<li><b>Bills &amp; licenses</b> from the Bills tab, on their due dates. <b>Sales tax</b> returns you haven’t marked filed, on the 20th.</li>'
+    +'<li>It’s an estimate from your own numbers, so the further out, the rougher it gets.</li></ul></details>';
+  h+='<details class="cf-how"'+(S.amount==null?'':'')+'><summary>Change the starting amount or what you want on hand</summary>'+form(true)+'</details>';
+  return h+'</div>';
+}
+// the Cash ahead view in Books
+if(typeof renderBooks==='function'){const _rbCF=renderBooks;renderBooks=function(){
+  if(BOOKS.view==='cash'){const body=document.getElementById('booksBody');const sumEl=document.getElementById('booksSummary');
+    document.querySelectorAll('.bk-pills button').forEach(b=>b.classList.toggle('active',b.dataset.v==='cash'));
+    const rs=document.getElementById('booksRange');if(rs)rs.style.visibility='hidden';if(sumEl)sumEl.style.display='none';
+    if(body)body.innerHTML=renderCashAhead();return;}
+  const sumEl=document.getElementById('booksSummary');if(sumEl&&BOOKS.view!=='cash')sumEl.style.display='';
+  return _rbCF.apply(this,arguments);};}
+// a heads-up on the Dashboard when a tight week is coming
+async function renderCashWarn(){
+  const host=document.getElementById('comingUp');if(!host)return;
+  let el=document.getElementById('cashWarn');
+  if(!(typeof isStewardUser==='function'&&isStewardUser())||!BOOKS.raw||!BOOKS.schema.acct){if(el)el.innerHTML='';return;}
+  if(!el){el=document.createElement('div');el.id='cashWarn';host.parentNode.insertBefore(el,host);}
+  try{if(typeof BILLS!=='undefined'&&!BILLS.loaded)await loadBills();if(typeof INVC!=='undefined'&&!INVC.loaded)await loadInvoices();}catch(e){}
+  const P=cfPlan();if(!P){el.innerHTML='';return;}
+  const cushion=+P.S.cushion||0;const w=P.weeks.find(x=>x.end<cushion);
+  el.innerHTML=w?'<div class="card plan-banner cf-dash" onclick="goTab(\'books\');setTimeout(()=>setBooksView(\'cash\'),300)" style="cursor:pointer;"><div><b>⚠ Cash could get tight the week of '+esc(cfWeekLabel(w))+'.</b> It may drop to '+(w.end<0?'−':'')+fmt(Math.abs(w.end))+'. See Books → Cash ahead.</div></div>':'';
+}
+if(typeof renderComingUp==='function'){const _rcuCF=renderComingUp;renderComingUp=async function(){const r=await _rcuCF.apply(this,arguments);try{await renderCashWarn();}catch(e){console.warn('cash ahead',e);}return r;};}
+
+// ─── bank statements as OFX or QFX (the "Quicken" or "Money" download many credit unions offer) ───
+function parseOFX(t){
+  t=String(t||'');
+  const tag=(blk,name)=>{const m=blk.match(new RegExp('<'+name+'>\\s*([^<\\r\\n]*)','i'));return m?m[1].trim():'';};
+  const unesc=s=>s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&apos;|&#39;/g,"'").replace(/&quot;/g,'"');
+  const lines=[];const re=/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;let m;
+  while((m=re.exec(t))){
+    const b=m[1];const d=tag(b,'DTPOSTED').slice(0,8);const amt=moneyVal(tag(b,'TRNAMT'));
+    if(!/^\d{8}$/.test(d)||amt==null)continue;
+    const name=unesc(tag(b,'NAME')),memo=unesc(tag(b,'MEMO'));
+    lines.push({date:d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8),desc:(name+(memo&&memo!==name?' '+memo:'')).replace(/\s+/g,' ').trim()||unesc(tag(b,'TRNTYPE')),amount:r2(amt),balance:null});
+  }
+  const isCC=/<CCSTMTRS>/i.test(t);
+  const lb=t.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>|<\/CCSTMTRS>)/i);
+  const bal=lb?moneyVal(tag(lb[1],'BALAMT')):null;
+  if(lines.length&&bal!=null&&!isCC){const last=lines.reduce((a,b)=>a.date>=b.date?a:b);last.balance=r2(bal);}
+  const id=tag(t,'ACCTID');
+  return{lines,isCC,name:id?(isCC?'Credit card':'Checking')+' ••'+id.replace(/\s/g,'').slice(-4):''};
+}
+if(typeof onBankFile==='function'){const _obf=onBankFile;onBankFile=async function(input){
+  const file=input&&input.files&&input.files[0];if(!file)return;
+  let text='';try{text=await file.text();}catch(e){}
+  if(/\.(ofx|qfx|qbo)$/i.test(file.name)||/<OFX>|OFXHEADER/i.test(text.slice(0,4000))){
+    input.value='';
+    const o=parseOFX(text);
+    if(!o.lines.length){toast('Couldn’t find transactions in that file. Try the CSV download from your bank instead.',true);return;}
+    const accts=acct().accounts||['Business checking'];
+    const suggest=o.isCC?(accts.find(a=>/credit|card/i.test(a))||o.name||'Business credit card'):accts[0];
+    ACC.preview={name:file.name,lines:o.lines,flipped:false,mostlyIn:false,account:suggest,newAcct:accts.includes(suggest)?null:suggest};
+    renderBankPreview();document.getElementById('bankModal').classList.add('open');return;
+  }
+  // everything else: the CSV reader, exactly as before
+  return _obf({files:[file],set value(v){input.value=v;},get value(){return input.value;}});
+};}
+// on the Bank view: which files work, and why you upload a statement instead of linking the bank
+if(typeof renderBooksBank==='function'){const _rbb=renderBooksBank;renderBooksBank=function(){
+  const h=_rbb.apply(this,arguments);if(!BOOKS.schema.acct)return h;
+  return h+'<div class="card bank-why"><div class="card-title"><div class="card-title-dot"></div>Files that work</div>'
+    +'<div class="card-sub">From your bank’s website, download your statement as a <b>CSV</b> (spreadsheet) or an <b>OFX / QFX</b> (sometimes called “Quicken” or “Money”). Once a month is plenty.</div>'
+    +'<div class="card-sub" style="margin-top:8px;"><b>Why upload instead of linking your bank?</b> Live bank connections are run by companies that charge for every account, every month. That would roughly double the price of the Hub. A monthly upload takes a minute and keeps it at $10.</div></div>';
+};}
+
+// ─── founding businesses and "give a month, get a month" ───
+const FOUND={info:null};
+async function loadFounding(){
+  if(!BIZ.id)return;
+  try{const r=await sb('rpc/ohb_founding_info',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});FOUND.info=(Array.isArray(r)?r[0]:r)||null;}catch(e){FOUND.info=null;}
+}
+function foundingLineHTML(){
+  const f=FOUND.info;if(!f||!f.number||f.number>(f.limit||100))return'';
+  return '<div class="found-line"><span aria-hidden="true">🌾</span> <b>Founding business #'+f.number+'.</b> Your $10 a month never goes up, for as long as you keep your Hub.</div>';
+}
+if(typeof planCardHTML==='function'){const _pch=planCardHTML;planCardHTML=function(){
+  const h=_pch.apply(this,arguments);const line=foundingLineHTML();
+  return line?h.replace('<div class="card-title-dot"></div>Your Plan</div>','<div class="card-title-dot"></div>Your Plan</div>'+line):h;};}
+if(typeof loadPlan==='function'){const _lpF=loadPlan;loadPlan=async function(){await loadFounding().catch(()=>{});return _lpF.apply(this,arguments);};}
+
+// referral links: ?ref=CODE on the Hub or The People's Voices, remembered until the new business is set up
+const REF={code:'',from:null,mine:null};
+function refFromUrl(){
+  let c=(new URLSearchParams(location.search).get('ref')||'').trim().toUpperCase();
+  if(c&&/^[A-Z0-9]{4,10}$/.test(c)){try{localStorage.setItem('ohb_ref',c);}catch(e){}}
+  else{try{c=(localStorage.getItem('ohb_ref')||'').toUpperCase();}catch(e){c='';}}
+  REF.code=/^[A-Z0-9]{4,10}$/.test(c)?c:'';return REF.code;
+}
+async function refBanner(){
+  if(isDemo()||!refFromUrl())return;
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/ohb_referrer_info',{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({p_code:REF.code})});
+    const j=await r.json();REF.from=(Array.isArray(j)?j[0]:j)||null;
+  }catch(e){REF.from=null;}
+  if(!REF.from||!REF.from.name)return;
+  const msg='<b>'+esc(REF.from.name)+'</b> sent you here. Start your Hub, and once your first payment goes through, you both get a month free.';
+  ['inviteBanner','setupRefNote'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.innerHTML.trim())el.innerHTML='<div class="invite-box ref-box">'+msg+'</div>';});
+}
+async function recordReferral(){
+  if(isDemo()||!REF.code||!BIZ.id)return;
+  try{
+    const r=await sb('rpc/ohb_record_referral',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_code:REF.code})});
+    const res=(Array.isArray(r)?r[0]:r)||{};
+    if(res.ok)toast('Thanks for coming by way of '+res.name+'. You’ll both get a free month after your first payment.');
+  }catch(e){console.warn('referral',e.message);}
+  try{localStorage.removeItem('ohb_ref');}catch(e){}
+  REF.code='';
+}
+if(typeof createBusiness==='function'){const _cb=createBusiness;createBusiness=async function(){
+  const before=BIZ.id;await _cb.apply(this,arguments);
+  if(BIZ.id&&BIZ.id!==before)await recordReferral();
+};}
+async function loadMyReferrals(){
+  try{const r=await sb('rpc/ohb_my_referrals',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});REF.mine=(Array.isArray(r)?r[0]:r)||null;}catch(e){REF.mine=null;}
+  return REF.mine;
+}
+function refLink(code){return PUBLIC_SITE+'/?tab=business&pick=hub&ref='+encodeURIComponent(code);}
+function refCardHTML(){
+  return '<div class="card" id="refBox"><div class="card-title"><div class="card-title-dot"></div>Give a Month, Get a Month</div>'
+    +'<div class="card-sub">Know another Michigan business owner? Send them your link. When they start their Hub and their first $10 payment goes through, you <b>both</b> get a month free.</div>'
+    +'<div id="refBody"><div class="bk-empty">Loading…</div></div></div>';
+}
+async function renderRefCard(){
+  const el=document.getElementById('refBody');if(!el)return;
+  const m=await loadMyReferrals();
+  if(!m||!m.code){el.innerHTML='<div class="bk-sub">Your link shows up here once the Hub’s latest update is switched on.</div>';return;}
+  const link=refLink(m.code);const biz=(BIZ.row&&BIZ.row.name)||'my business';
+  const text='I run '+biz+' on the Operations Hub: books, pay, scheduling and invoices for $10 a month, built for Michigan. Start with 3 free months, and we both get another month free: '+link;
+  const sent=m.sent||[];
+  el.innerHTML='<div class="invite-made"><input class="period-input" readonly value="'+esc(link)+'" onclick="this.select()" aria-label="Your link">'
+    +'<div class="bk-actions"><button class="btn-green" onclick="copyText(\''+esc(link)+'\',\'Your link is copied\')">Copy my link</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;" href="sms:?&body='+encodeURIComponent(text)+'">💬 Text it</a>'
+    +'<a class="btn-secondary" style="text-decoration:none;" href="mailto:?subject='+encodeURIComponent('The Operations Hub')+'&body='+encodeURIComponent(text)+'">✉️ Email it</a></div></div>'
+    +(sent.length?'<div class="log-section-title" style="margin-top:12px;">Businesses you’ve sent</div>'+sent.map(s=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(s.name)+'</div><div class="bk-sub">Joined '+esc(prettyDate(isoLocal(s.created_at)))+'</div></div>'
+      +(s.status==='credited'?'<span class="st-pill ok">Free month added</span>':s.status==='void'?'<span class="st-pill">Didn’t start</span>':'<span class="st-pill">Waiting for their first payment</span>')+'</div>').join(''):'')
+    +(m.from&&m.from.name?'<div class="bk-sub" style="margin-top:10px;">You came by way of <b>'+esc(m.from.name)+'</b>'+(m.from.status==='credited'?'. Your free month was added.':'. Your free month is added after your first payment.')+'</div>':'');
+}
+
+// ─── Settings: Getting Paid, moving over from QuickBooks or Wave, and referrals ───
+function switchCardHTML(){
+  return '<div class="card" id="switchBox"><div class="card-title"><div class="card-title-dot"></div>Moving From QuickBooks or Wave?</div>'
+    +'<div class="card-sub">Bring your history, your customers and who still owes you over in a few minutes. Nothing in your old program changes.</div>'
+    +'<div class="bk-actions"><button class="btn-secondary" onclick="openSwitch(\'qb\')">From QuickBooks</button><button class="btn-secondary" onclick="openSwitch(\'wave\')">From Wave</button><button class="btn-secondary" onclick="openSwitch(\'other\')">From a spreadsheet</button></div></div>';
+}
+if(typeof renderSettings==='function'){const _rsG=renderSettings;renderSettings=async function(){
+  await _rsG.apply(this,arguments);
+  const el=document.getElementById('settingsBody');if(!el||currentProfile?.role!=='Steward'||document.getElementById('gpBox'))return;
+  await loadGP().catch(()=>{});
+  if(document.getElementById('gpBox'))return;
+  const plan=document.getElementById('planCard');
+  const html=gpCardHTML()+switchCardHTML();
+  if(plan){plan.insertAdjacentHTML('beforebegin',html);}else el.insertAdjacentHTML('beforeend',html);
+  const after=document.getElementById('planCard')||document.getElementById('switchBox');
+  if(after&&!document.getElementById('refBox'))after.insertAdjacentHTML('afterend',refCardHTML());
+  renderRefCard();
+};}
+// a plan card redrawn later (when billing finishes loading) keeps its founding line; the cards around it stay put
+
+// ─── the demo shows all of this too ───
+if(typeof DEMO_SCHEMA!=='undefined'){
+  Object.assign(DEMO_SCHEMA.ohb_invoices||{},{share_token:['text','@uuid'],sent_at:['text',null],viewed_at:['text',null],last_reminded_at:['text',null],reminder_count:['num',0],auto_remind:['bool',true],carried_over:['bool',false]});
+  Object.assign(DEMO_SCHEMA.ohb_transactions||{},{import_key:['text',null]});
+}
+if(typeof demoRpc==='function'){const _dr=demoRpc;demoRpc=function(fn,args){
+  if(fn==='ohb_founding_info')return demoJSON({number:7,limit:100,left:61});
+  if(fn==='ohb_founding_left')return demoJSON(61);
+  if(fn==='ohb_my_referrals')return demoJSON({code:'DEMO42',sent:[{name:'Riverside Café',status:'credited',created_at:new Date(Date.now()-40*864e5).toISOString()},{name:'Hilltop Farm',status:'pending',created_at:new Date(Date.now()-9*864e5).toISOString()}],from:null});
+  if(fn==='ohb_referrer_info')return demoJSON(null);
+  if(fn==='ohb_record_referral')return demoJSON({ok:false,reason:'demo'});
+  return _dr(fn,args);
+};}
+if(typeof demoSeed==='function'){const _ds=demoSeed;demoSeed=function(type){
+  _ds(type);
+  const cfg=DEMO_BIZ[type]||DEMO_BIZ.other;const biz=demoTable('ohb_businesses')[0];if(!biz)return;
+  demoTable('ohb_settings').push(demoRow('ohb_settings',{business_id:biz.id,key:'get_paid',value:{card:'https://square.link/u/demo-pay',venmo:cfg.name.replace(/[^A-Za-z]/g,''),checkTo:cfg.name,checkMail:'',zelle:'',paypal:'',cashapp:'',other:'',autoRemind:true,replyTo:'you@demo.example'}}));
+  const acc=demoTable('ohb_settings').find(r=>r.key==='accountant');if(acc)acc.value.cash={amount:null,date:'',cushion:1500,outlook:0};
+  const inv=demoTable('ohb_invoices').find(v=>v.number==='INV-1002');
+  if(inv)Object.assign(inv,{sent_at:new Date(Date.now()-20*864e5).toISOString(),viewed_at:new Date(Date.now()-18*864e5).toISOString(),reminder_count:1,last_reminded_at:new Date(Date.now()-5*864e5).toISOString()});
+};}
+// in the demo, the Pay now page is built from the made-up invoice itself
+if(typeof invcLink==='function'){const _il=invcLink;invcLink=function(v){
+  if(!isDemo()||!v)return _il(v);
+  const g=gp();const data={business:{name:HUB.bizName,county:(BIZ.row&&BIZ.row.county)||''},pay:g,invoice:v};
+  let enc='';try{enc=btoa(unescape(encodeURIComponent(JSON.stringify(data))));}catch(e){return'';}
+  return siteOrigin()+'/invoice.html?demo=1#'+enc;
+};}
+
+// remember a referral link, and say who sent them
+document.addEventListener('DOMContentLoaded',function(){try{refBanner();}catch(e){}});
+
+// ─── looks ───
+(function(){const st=document.createElement('style');st.textContent=`
+.gp-strip{background:#f6faf7;border:1px solid #cfe5d6;border-radius:8px;padding:10px 12px;margin:12px 0 4px;font-size:14px;line-height:1.55;}
+.gp-line{margin-bottom:2px;}
+.gp-check{display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:13.5px;cursor:pointer;}
+.sw-how ol{margin:0 0 8px;padding-left:20px;line-height:1.6;font-size:14.5px;}
+.sw-pick{display:inline-block;cursor:pointer;margin-top:6px;}
+.sw-accts{max-height:340px;overflow-y:auto;border:1px solid #e5dece;border-radius:8px;background:#fff;}
+.sw-acct{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #f0ece2;flex-wrap:wrap;}
+.sw-acct .bk-main{min-width:160px;flex:1;}
+.sw-acct.off .bk-payee{color:#888;}
+.sw-ctl{display:flex;gap:6px;flex-wrap:wrap;}
+.sw-sel{width:auto;max-width:210px;padding:6px 8px;font-size:13px;}
+.cf-hero{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;font-size:14.5px;line-height:1.5;}
+.cf-hero.ok{background:#eef7f1;color:#1a4a2a;}
+.cf-hero.bad{background:#fdf0ef;color:#7a1f16;}
+.cf-ico{font-size:18px;line-height:1.2;}
+.cf-table{border:1px solid #e5dece;border-radius:8px;overflow:hidden;background:#fff;}
+.cf-row{display:grid;grid-template-columns:1.2fr .9fr .9fr 2fr;gap:8px;align-items:center;padding:8px 10px;font-size:13.5px;list-style:none;cursor:pointer;}
+.cf-row::-webkit-details-marker{display:none;}
+.cf-head{background:#f6f2e8;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:#666;cursor:default;}
+.cf-week{border-top:1px solid #f0ece2;}
+.cf-week.below{background:#fff7f6;}
+.cf-week[open] summary{background:#faf8f3;}
+.cf-in{color:var(--green);}
+.cf-out{color:var(--red);}
+.cf-end{display:flex;align-items:center;gap:8px;min-width:0;}
+.cf-bar{height:10px;border-radius:0 4px 4px 0;background:var(--green-light);flex:0 0 auto;max-width:50%;}
+.cf-bar.low,.cf-bar.neg{background:var(--red);}
+.cf-flag{color:var(--red);font-size:12px;font-weight:700;white-space:nowrap;}
+.cf-items{padding:4px 12px 10px 18px;font-size:13px;}
+.cf-item{display:flex;justify-content:space-between;gap:10px;padding:2px 0;}
+.cf-how{margin-top:10px;font-size:13.5px;color:#444;}
+.cf-how summary{cursor:pointer;font-weight:700;color:var(--green-dark);}
+.cf-how ul{line-height:1.6;padding-left:20px;}
+.cf-dash{border-left:4px solid var(--red);}
+.found-line{background:#fff8e7;border:1px solid #f0d27a;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:14px;color:#5a4500;line-height:1.5;}
+.ref-box{background:#fff8e7!important;color:#5a4500!important;}
+.bank-why .card-sub{margin-bottom:0;}
+@media(max-width:560px){.cf-row{grid-template-columns:1fr 1fr 1fr;}.cf-row .cf-end{grid-column:1/-1;}.cf-head span:last-child{display:none;}}
+`;document.head.appendChild(st);})();
 
 // ═══════════════════════════════════════════════════════
 // DEMO MODE — operations-hub.html?demo
