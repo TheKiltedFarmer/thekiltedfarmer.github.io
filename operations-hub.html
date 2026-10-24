@@ -703,6 +703,7 @@ details[open]>summary.card-title::after{content:'▴';}
 .onb-signed{margin-top:16px;background:#f6fbf8;border-left:3px solid var(--green);padding:10px 12px;border-radius:6px;font-size:13px;color:var(--green-dark);}
 .onb-task{display:flex;gap:12px;align-items:flex-start;padding:10px 4px;border-top:1px solid var(--cream-dark);cursor:pointer;}
 .tabs-tip{display:flex;gap:12px;align-items:flex-start;border-left:4px solid var(--green);}
+.biz-switch-lbl{display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:14px;cursor:pointer;}
 .tabs-tip-ico{font-size:26px;line-height:1;flex-shrink:0;margin-top:2px;}
 .tabs-tip .bk-actions{flex-wrap:wrap;}
 .tabs-warn{background:var(--cream-dark);border-left:3px solid var(--tan,#A67C52);border-radius:6px;padding:8px 10px;margin:10px 0 4px;font-size:13.5px;line-height:1.5;}
@@ -7143,9 +7144,28 @@ function applyRoleAccess(){
 function renderBizSwitcher(){
   const w=document.getElementById('bizSwitchWrap');if(!w)return;
   if(BIZ.list.length<2){w.innerHTML='';return;}
-  w.innerHTML='<select class="biz-switch" onchange="switchBusiness(this.value)">'+BIZ.list.map(m=>'<option value="'+m.business_id+'"'+(m.business_id===BIZ.id?' selected':'')+'>'+esc(m.ohb_businesses.name)+'</option>').join('')+'</select>';
+  w.innerHTML='<label class="biz-switch-lbl" title="Switch to another of your businesses"><span aria-hidden="true">⇄</span><select class="biz-switch" aria-label="Switch business" onchange="switchBusiness(this.value)">'+BIZ.list.map(m=>'<option value="'+m.business_id+'"'+(m.business_id===BIZ.id?' selected':'')+'>'+esc(m.ohb_businesses.name)+'</option>').join('')+'</select></label>';
 }
 function switchBusiness(id){try{localStorage.setItem(BIZ_KEY,id);}catch(e){}location.href=location.pathname;}
+const LEAVE_REASONS={
+  last_owner:'You’re the only owner, and other people use this Hub. Make someone else an owner first (Settings → People & Logins), or remove their logins.',
+  plan_running:'Its plan is still running, so your card could be charged. Open it and cancel under Settings → Your Plan first.',
+  not_member:'You’re not in that business anymore.',
+  signed_out:'Please sign in again.'
+};
+async function leaveBusiness(id){
+  const m=BIZ.list.find(x=>x.business_id===id);if(!m)return;
+  const name=m.ohb_businesses.name;
+  if(!confirm('Take “'+name+'” off your list?\n\nYou won’t see it in your Hub anymore. Nothing in it is deleted.'))return;
+  try{
+    const r=await sb('rpc/ohb_leave_business',{method:'POST',body:JSON.stringify({p_biz:id})});
+    const d=Array.isArray(r)?r[0]:r;
+    if(!d||!d.ok){toast(LEAVE_REASONS[d&&d.reason]||'Couldn’t take it off your list. Please try again.',true);return;}
+    BIZ.list=BIZ.list.filter(x=>x.business_id!==id);
+    if(id===BIZ.id){switchBusiness(BIZ.list[0].business_id);return;}
+    toast('“'+name+'” is off your list.');renderBizSwitcher();renderSettings();
+  }catch(e){toast(/PGRST202|could not find the function/i.test(e.message)?'This needs the Hub’s latest update. Please let The People’s Voices know.':'Didn’t work: '+e.message,true);}
+}
 async function loadTeamMembers(){
   members=[];memberCounter=10;
   try{
@@ -7405,7 +7425,9 @@ async function renderSettings(){
     +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Turn them on and read them in the <b>Bids &amp; Alerts</b> tab.</div>'
     +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Businesses</div><div class="card-sub">Run more than one? Each has its own Hub, kept completely separate.</div>'
-    +BIZ.list.map(m=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(m.ohb_businesses.name)+'</div><div class="bk-sub">'+esc(m.ohb_businesses.county)+' County · '+esc({owner:'Owner',manager:'Manager',member:'Team'}[m.role])+'</div></div>'+(m.business_id===BIZ.id?'<span class="ck-badge">Open</span>':'<button class="receipt-btn" onclick="switchBusiness(\''+m.business_id+'\')">Open</button>')+'</div>').join('')
+    +BIZ.list.map(m=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(m.ohb_businesses.name)+'</div><div class="bk-sub">'+esc(m.ohb_businesses.county)+' County · '+esc({owner:'Owner',manager:'Manager',member:'Team'}[m.role])+'</div></div>'+(m.business_id===BIZ.id?'<span class="ck-badge">Open</span>':'<button class="receipt-btn" onclick="switchBusiness(\''+m.business_id+'\')">Open</button>')
+      +(BIZ.list.length>1?'<button class="remove-btn" title="Take it off my list" aria-label="Take '+esc(m.ohb_businesses.name)+' off my list" onclick="leaveBusiness(\''+m.business_id+'\')">×</button>':'')+'</div>').join('')
+    +(BIZ.list.length>1?'<div class="bk-sub" style="margin-top:6px;">Made one to try things out? Tap × to take it off your list. Nothing in it is deleted.</div>':'')
     +'<div class="bk-actions"><button class="btn-secondary" onclick="showSetup()">+ Set up another business</button></div></div>';
   el.innerHTML=h;
   renderJobRows();loadPeople();renderServicesCard();
@@ -7593,6 +7615,8 @@ function planState(){
   const end=b&&b.current_period_end?new Date(b.current_period_end):null;
   const daysTo=d=>{if(!d)return null;const day=x=>Date.UTC(x.getFullYear(),x.getMonth(),x.getDate());return Math.round((day(d)-day(new Date()))/864e5);};
   if(st==='comped')return{kind:'comped'};
+  // canceled in Stripe but still running until the end of what's paid for (or the free months)
+  if((st==='trialing'||st==='active')&&b.cancel_at){const ca=new Date(b.cancel_at);if(ca>new Date())return{kind:'ending',end:ca,left:daysTo(ca)};return{kind:'paused'};}
   if(st==='trialing')return{kind:'trialing',end,left:daysTo(end)};
   if(st==='active')return{kind:'active',renews:end};
   if(st==='past_due')return{kind:'past_due'};
@@ -8906,6 +8930,7 @@ if(typeof demoSeed==='function'){const _dsA=demoSeed;demoSeed=function(type){
 function tpvCountyIdSafe(c){return String(c||'').toLowerCase().replace(/[^a-z]/g,'');}
 if(typeof demoRpc==='function'){const _drA=demoRpc;demoRpc=function(fn,args){
   if(fn==='tpv_my_business')return demoJSON(DEMO.alerts?[DEMO.alerts]:[]);
+  if(fn==='ohb_leave_business'){DEMO.db.ohb_members=demoTable('ohb_members').filter(r=>!(r.business_id===args.p_biz&&r.user_id===DEMO.uid));return demoJSON({ok:true});}
   if(fn==='ohb_turn_on_services'){if(DEMO.alerts){DEMO.alerts.status='active';DEMO.alerts.services=['watch','bids'];if(args.p_watch_for)DEMO.alerts.watch_for=args.p_watch_for;if(args.p_trade)DEMO.alerts.trade=args.p_trade;}return demoJSON({ok:true,id:9001,services:['watch','bids'],waiting:[]});}
   if(fn==='tpv_business_update'){if(DEMO.alerts){DEMO.alerts.watch_for=args.p_watch_for||null;DEMO.alerts.trade=args.p_trade||null;}return demoJSON('ok');}
   if(fn==='tpv_explainer_request'){if(DEMO.alerts)DEMO.alerts.explainers.unshift({id:Date.now(),created_at:new Date().toISOString(),status:'new',question:args.p_question||args.p_rule_url||'A rule you sent',rule_url:args.p_rule_url});return demoJSON('ok');}
@@ -8938,6 +8963,27 @@ if(typeof loadPlan==='function'){const _lpComp=loadPlan;loadPlan=async function(
   }catch(e){}
   return r;
 };}
+
+// ─── keep the plan in step with Stripe ───
+// A plan canceled (or changed) in Stripe itself shows up here: the Hub asks Stripe directly
+// when Settings opens, when someone comes back from Stripe, and when the plan hasn't been checked in a while.
+const PLAN_CHECK={at:0};
+async function planCheckStripe(force){
+  if((typeof isDemo==='function'&&isDemo())||!isStewardUser()||!BIZ.id)return false;
+  const b=PLAN.billing;if(!b||b.status==='comped'||!(b.stripe_subscription||b.stripe_customer))return false;
+  if(!force&&Date.now()-PLAN_CHECK.at<5*60*1000)return false;
+  PLAN_CHECK.at=Date.now();
+  try{const r=await hubFn('hub-money',{action:'plan_check',business_id:BIZ.id});return !!(r.ok&&r.data&&r.data.changed);}catch(e){return false;}
+}
+async function planRecheck(force){if(await planCheckStripe(force)){await loadPlan();renderPlanBanner();planGate();}}
+if(typeof syncPlanFromStripe==='function'){const _spS=syncPlanFromStripe;syncPlanFromStripe=async function(){
+  const a=await _spS.apply(this,arguments);const b=await planCheckStripe(true);return a||b;};}
+if(typeof planSelfCheck==='function'){const _pscS=planSelfCheck;planSelfCheck=async function(){
+  await _pscS.apply(this,arguments);
+  try{const b=PLAN.billing;if(b&&b.stripe_customer&&b.status!=='comped'&&(!b.updated_at||Date.now()-new Date(b.updated_at).getTime()>3*3600*1000))await planRecheck(true);}catch(e){}
+};}
+if(typeof renderSettings==='function'){const _rsS=renderSettings;renderSettings=async function(){
+  const r=await _rsS.apply(this,arguments);planRecheck(false).catch(()=>{});return r;};}
 
 // ═══════════════════════════════════════════════════════
 // DEMO MODE — operations-hub.html?demo
