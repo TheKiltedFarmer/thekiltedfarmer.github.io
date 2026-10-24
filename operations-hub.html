@@ -858,6 +858,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
   <div class="tab" onclick="switchTab('log',this)">Revenue & Expenses</div>
   <div class="tab" onclick="switchTab('books',this)">Books</div>
   <div class="tab" id="invcTab" onclick="switchTab('invoices',this)">Invoices</div>
+  <div class="tab" id="alertsTab" onclick="switchTab('alerts',this)">Bids &amp; Alerts</div>
   <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
   <div class="tab" onclick="switchTab('schedule',this)">Schedule</div>
   <div class="tab" onclick="switchTab('team',this)">Team</div>
@@ -1037,6 +1038,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
 
 <!-- ─── INVOICES ─── -->
 <div class="tab-content" id="tab-invoices"><div style="margin-top:8px;" id="invcBody"></div></div>
+<div class="tab-content" id="tab-alerts"><div style="margin-top:8px;" id="alertsBody"></div></div>
 
 <!-- ─── TIME CLOCK ─── -->
 <div class="tab-content" id="tab-timeclock">
@@ -1530,6 +1532,7 @@ function switchTab(id,el){
   if(id==='team'||id==='timeclock'){loadCurrentPeriodHours().then(()=>{renderTeam();renderClock();calculate();});}
   if(id==='admin')adminLoadUsers();
   if(id==='settings')renderSettings();
+  if(id==='alerts')renderAlertsTab();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
@@ -7035,6 +7038,7 @@ const HIDEABLE_TABS=[
   ['log','Revenue & Expenses','Log sales, scan receipts and bring in card-reader sales.'],
   ['books','Books','Bookkeeping, bank statements, budgets, taxes, bills and Cash ahead.'],
   ['invoices','Invoices','Estimates, invoices and their Pay now pages.'],
+  ['alerts','Bids & Alerts','Public bids and grants, local government alerts and rule explainers.'],
   ['timeclock','Time Clock','Clocking in and out, and the hours pay is figured from.'],
   ['schedule','Schedule','Shifts, time off and shift trades.'],
   ['team','Team','People, pay rules, paid sick time and new-hire paperwork.'],
@@ -7104,7 +7108,7 @@ function applyTeamAccess(){
   const show=(k,on)=>{const t=tab(k);if(t)t.style.display=(on&&!hid.includes(k))?'':'none';};
   show('books',st);show('invoices',st);show('history',st||a.see_pay);show('log',st||a.log);show('inventory',st||a.inventory);
   show('ingredients',!!s.recipes&&(st||a.recipes));
-  show('timeclock',true);show('schedule',true);show('team',true);
+  show('timeclock',true);show('schedule',true);show('team',true);show('alerts',st);
   document.body.classList.toggle('team-limited',teamLimited());
   // if the open tab just got hidden, go back to the dashboard
   const act=document.querySelector('.tab.active');if(act&&act.style.display==='none')goTab('dashboard');
@@ -7347,7 +7351,7 @@ async function renderStartHere(){
     [rev,'Log a sale','Revenue & Expenses',"goTab('log')",'log'],
     [exp,'Scan a receipt','Revenue & Expenses → Scan Receipts',"goTab('log')",'log'],
     [!!(BOOKS.acct&&BOOKS.acct.pay&&BOOKS.acct.pay.workers),'Check your pay rules','Team → Pay Rules',"goTab('team')",'team'],
-    [svc.signed,'Turn on your included services','Watch alerts and the Bid & grant finder, from The People’s Voices',"openPVServices()"],
+    [svc.signed,'Turn on Bids & Alerts','Public bids, grants and local alerts, included with your Hub',"goTab('alerts')",'alerts'],
     [bank,'Bring in a bank statement','Books → Bank',"goTab('books');setTimeout(()=>setBooksView('bank'),300)",'books']
   ].filter(x=>!x[4]||!tabHidden(x[4]));
   const done=steps.filter(s=>s[0]).length;
@@ -7398,7 +7402,7 @@ async function renderSettings(){
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
   h+=planCardHTML();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
-    +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Sign up there with the same email you use here ('+esc((currentUser&&currentUser.email)||'')+') so we can match them up.</div>'
+    +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Turn them on and read them in the <b>Bids &amp; Alerts</b> tab.</div>'
     +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Businesses</div><div class="card-sub">Run more than one? Each has its own Hub, kept completely separate.</div>'
     +BIZ.list.map(m=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(m.ohb_businesses.name)+'</div><div class="bk-sub">'+esc(m.ohb_businesses.county)+' County · '+esc({owner:'Owner',manager:'Manager',member:'Team'}[m.role])+'</div></div>'+(m.business_id===BIZ.id?'<span class="ck-badge">Open</span>':'<button class="receipt-btn" onclick="switchBusiness(\''+m.business_id+'\')">Open</button>')+'</div>').join('')
@@ -7511,7 +7515,7 @@ async function renderServicesCard(){
     const per=x.id==='explainer';const s=st.on[x.id];const l=per?['Send one anytime','done']:(label[s]||['Not on yet','off']);
     return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(x.name)+'</div><div class="bk-sub" style="white-space:normal;">'+esc(x.blurb||'')+'</div></div><span class="svc-pill '+l[1]+'">'+esc(l[0])+'</span></div>';
   }).join('')
-    +'<div class="bk-actions"><button class="btn-green" onclick="openPVServices()">'+(st.signed?'Manage on The People’s Voices':'Turn them on')+' ↗</button></div>';
+    +'<div class="bk-actions"><button class="btn-green" onclick="goTab(\'alerts\')">'+(st.signed?'Open Bids &amp; Alerts':'Turn them on')+'</button></div>';
 }
 
 // ─── the 3-month free trial ───
@@ -7660,7 +7664,7 @@ function planCardHTML(){
   const fmtD=d=>new Date(d).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const manage=()=>'';
   let body='';
-  if(p.kind==='comped')body='<b>Free for you.</b> Thanks for helping get the Hub off the ground.';
+  if(p.kind==='comped')body='<b>Free for you,</b> courtesy of The People’s Voices. Thanks for helping get the Hub off the ground.';
   else if(p.kind==='trialing')body='<b>Free'+(p.end?' until '+esc(fmtD(p.end)):' for your first 3 months')+'.</b> After that, '+esc(price)+' is charged automatically to the card you added. Cancel before then and you won’t be charged at all.'+manage('Manage billing or cancel');
   else if(p.kind==='active')body='<b>Active</b> · '+esc(price)+(p.renews?', renews '+esc(fmtD(p.renews)):'')+'. Watch alerts, the Bid & grant finder and rule explainers are included.'+manage('Manage billing or cancel');
   else if(p.kind==='past_due')body='<b>Your last payment didn’t go through.</b> Your Hub keeps working while Stripe retries the card.'+manage('Update your card');
@@ -7758,6 +7762,7 @@ function tourSteps(){
     {tab:'log',t:'Revenue & Expenses: money in and out',b:'<ul><li><b>Log a sale</b>: amount, where it came from, who worked it.</li><li><b>Scan a receipt</b>: take a photo and the Hub reads the store, date and total for you.</li><li>Use Square or another card reader? <b>Import</b> its sales file. The Hub adds each day’s sales, tips, sales tax and card fees, and skips anything it already has.</li></ul>'},
     {tab:'books',t:'Books: your bookkeeping, done as you go',b:'<ul><li>Every sale and expense lands here, sorted into categories. Select several to fix a category or delete them at once.</li><li><b>Bank</b>: upload your bank statement once a month and the Hub matches each line to what’s already logged, so nothing gets missed.</li><li><b>Bills</b>: rent, insurance, licenses and renewals, with reminders before they’re due.</li><li><b>Taxes</b>: estimated quarterly taxes, Michigan sales tax with due dates, and a year-end package for your tax preparer.</li><li><b>Cash ahead</b>: what’s coming in and going out for the next 13 weeks, so a tight week never sneaks up on you.</li><li>Coming from QuickBooks or Wave? <b>Bring over</b> your history, customers and who owes you in a few minutes.</li></ul>'},
     {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder. Every invoice gets a <b>Pay now</b> page with your own card link, PayPal, Venmo or check details, and the Hub can send late reminders for you.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
+    {tab:'alerts',t:'Bids & Alerts: included with your Hub',b:'<ul><li>Turn on <b>Watch alerts</b> and the <b>Bid &amp; grant finder</b> right here, with nothing extra to pay.</li><li>Each Monday, public bids and grants that fit your line of work show up here and in your email.</li><li>Got a new rule or permit requirement? Send it and get a plain-language explanation back.</li></ul>'},
     {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared, and download the payroll file for your payroll service.':'set the commission rate, how tips are shared, and download the payroll file.')+'</li><li><b>Michigan Paid Sick Time</b>: the Hub tracks what each employee has earned (1 hour per 30 worked), what they’ve used, and what’s left, and pays sick hours at their regular rate.</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
     {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
     {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
@@ -8714,6 +8719,225 @@ document.addEventListener('DOMContentLoaded',function(){try{refBanner();}catch(e
 .bank-why .card-sub{margin-bottom:0;}
 @media(max-width:560px){.cf-row{grid-template-columns:1fr 1fr 1fr;}.cf-row .cf-end{grid-column:1/-1;}.cf-head span:last-child{display:none;}}
 `;document.head.appendChild(st);})();
+
+// ═══════════════════════════════════════════════════════
+// BIDS & ALERTS — the services that come with the Hub, turned on and read right here
+// Watch alerts, the Bid & grant finder and rule explainers run on The People's Voices
+// (same accounts, same database). This tab turns them on for this business, keeps what
+// was sent, and takes rule explainer requests, so nobody has to leave the Hub.
+// ═══════════════════════════════════════════════════════
+const AL={rows:undefined,logs:[],svc:[],open:null};
+const AL_REASONS={
+  signed_out:'Please sign in again.',
+  not_steward:'Only an owner or manager can turn these on.',
+  political:'Please confirm this business isn’t a campaign, party, PAC or lobbying firm.',
+  no_plan:'These come with a running Hub. Start your free months first under Settings → Your Plan.',
+  no_email:'Your login needs an email address for these to reach you.',
+  none_ready:'These are starting soon. Check back in a few days.',
+  not_found:'This business wasn’t found. Try reloading the page.'
+};
+function alMine(){
+  const name=String((BIZ.row&&BIZ.row.name)||'').trim().toLowerCase();
+  return (AL.rows||[]).filter(r=>String(r.business_name||'').trim().toLowerCase()===name);
+}
+function alLive(){return alMine().find(r=>r.status==='active')||null;}
+function alSvcName(id){const s=(AL.svc||[]).find(x=>x.id===id)||(typeof PV_FALLBACK!=='undefined'?PV_FALLBACK.find(x=>x.id===id):null);return s?s.name:({watch:'Watch alerts',bids:'Bid & grant finder',explainer:'Rule explainers',roundup:'Weekly roundup'}[id]||id);}
+async function loadAlerts(){
+  let rows;
+  try{rows=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});}catch(e){rows=null;}
+  AL.rows=Array.isArray(rows)?rows:(rows==null?null:[]);
+  try{AL.svc=await sb('business_services?select=id,name,status,sort&order=sort.asc');}catch(e){AL.svc=[];}
+  AL.logs=[];
+  const ids=alMine().map(r=>r.id).filter(x=>x!=null);
+  if(ids.length){
+    const q='&status=eq.sent&signup_id=in.('+ids.join(',')+')&order=sent_at.desc&limit=24';
+    try{AL.logs=await sb('business_alert_log?select=id,signup_id,service,sent_at,subject,items,html'+q);}
+    catch(e){try{AL.logs=await sb('business_alert_log?select=id,signup_id,service,sent_at,subject,items'+q);}catch(x){AL.logs=[];}}
+  }
+}
+const alWhen=t=>{try{return new Date(t).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(e){return '';}};
+// an email shown inside the Hub: no scripts can run in it, links open in a new tab
+function alFrame(html,title){
+  const doc='<base target="_blank">'+String(html||'');
+  return '<iframe class="al-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="'+esc(title||'Email')+'" srcdoc="'+esc(doc)+'" onload="alFit(this)"></iframe>';
+}
+function alFit(f){try{const d=f.contentDocument;if(d&&d.documentElement)f.style.height=Math.min(4000,Math.max(160,d.documentElement.scrollHeight+8))+'px';}catch(e){}}
+function alExplainText(t){
+  return String(t||'').split(/\n+/).map(l=>l.trim()).filter(Boolean).map(l=>/^[-•]\s+/.test(l)?'<li>'+esc(l.replace(/^[-•]\s+/,''))+'</li>':(l.length<60&&!/[.!?:]$/.test(l)?'<div class="al-h">'+esc(l)+'</div>':'<p>'+esc(l)+'</p>')).join('').replace(/(<li>.*?<\/li>)+/g,m=>'<ul>'+m+'</ul>');
+}
+function alertsHTML(){
+  const name=esc((BIZ.row&&BIZ.row.name)||'your business');
+  const email=esc((currentUser&&currentUser.email)||'');
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Bids &amp; Alerts</div>'
+    +'<div class="card-sub">Included with your Hub, from The People’s Voices: public bids and grants that fit '+name+', a heads-up when your city or county takes up something that affects you, and plain-language explanations of new rules. They come by email, and everything sent is kept here too.</div></div>';
+  if(AL.rows===null)return h+'<div class="card"><div class="bk-empty">Bids &amp; Alerts aren’t switched on for the Hub yet. Please check back soon.</div></div>';
+  const live=alLive(),mine=alMine();
+  const waiting=(AL.svc||[]).filter(s=>['watch','bids'].includes(s.id)&&s.status==='soon').map(s=>s.name);
+  if(!live){
+    const prev=mine[0]||{};const paused=mine.some(r=>r.status==='paused');
+    h+='<div class="card" id="alOnBox"><div class="card-title"><div class="card-title-dot"></div>'+(paused?'Your alerts are paused':'Turn them on')+'</div>'
+      +'<div class="card-sub">'+(paused?'Turn them back on whenever you’re ready. ':'Two quick questions and you’re set. ')+'They come with your Hub, so there’s nothing extra to pay. Emails go to <b>'+email+'</b>.</div>'
+      +'<div class="txn-grid"><div class="txn-full"><label for="alWatch">What should we watch for?</label><textarea id="alWatch" class="period-input st-area" rows="3" placeholder="Your street, your line of work, licenses, zoning, road work, a project near you…">'+esc(prev.watch_for||'')+'</textarea></div>'
+      +'<div class="txn-full"><label for="alTrade">Your line of work, for bids and grants</label><input id="alTrade" class="period-input" value="'+esc(prev.trade||'')+'" placeholder="Catering, landscaping, cleaning, retail…"></div></div>'
+      +'<label class="onb-task"><input type="checkbox" id="alNotPol"><div><div class="bk-payee">This business isn’t a political campaign, party, PAC or lobbying firm</div><div class="bk-sub">They can’t use these, to keep The People’s Voices independent.</div></div></label>'
+      +(waiting.length?'<div class="bk-sub" style="margin-top:6px;">'+esc(listWords(waiting))+(waiting.length>1?' are':' is')+' starting soon and will switch on when ready.</div>':'')
+      +'<div class="bk-actions"><button class="btn-green" id="alOnBtn" onclick="alTurnOn(this)">'+(paused?'Turn them back on':'Turn them on')+'</button></div></div>';
+    return h+alExplainCard(null);
+  }
+  // on: what's running
+  const has=s=>(live.services||[]).includes(s);
+  const pill=(on,txt)=>'<span class="svc-pill '+(on?'done':'off')+'">'+txt+'</span>';
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>What’s on</div>'
+    +[['watch','A heads-up when a meeting agenda, local decision or news story mentions what you’re watching, plus a Monday roundup of your county.'],['bids','Each Monday: public bids and grants that fit your line of work, from Michigan cities, counties and the state, and federal and national grant sites.']]
+      .map(([k,d])=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(alSvcName(k))+'</div><div class="bk-sub" style="white-space:normal;">'+esc(d)+'</div></div>'
+        +(has(k)?pill(true,'On'):waiting.includes(alSvcName(k))?pill(false,'Starting soon'):'<button class="receipt-btn" onclick="alTurnOn(this)">Turn on</button>')+'</div>').join('')
+    +'<div class="bk-sub" style="margin-top:8px;">Emails go to <b>'+esc(live.email||email)+'</b>.</div>'
+    +'<details class="cf-how"><summary>Change what we watch for</summary>'
+    +'<div class="txn-grid" style="margin-top:8px;"><div class="txn-full"><label for="alWatch2">What we watch for</label><textarea id="alWatch2" class="period-input st-area" rows="3">'+esc(live.watch_for||'')+'</textarea></div>'
+    +'<div class="txn-full"><label for="alTrade2">Your line of work, for bids and grants</label><input id="alTrade2" class="period-input" value="'+esc(live.trade||'')+'"></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="alSaveWatch('+(+live.id||0)+',this)">Save</button></div></details></div>';
+  // this week's bids
+  const bids=(AL.logs||[]).find(l=>l.service==='bids');
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Bids &amp; Grants'+(bids?' · '+esc(alWhen(bids.sent_at)):'')+'</div>';
+  if(!has('bids'))h+='<div class="bk-empty">Turn on the Bid &amp; grant finder above to get a list here every Monday.</div>';
+  else if(!bids)h+='<div class="bk-empty">Your first list comes Monday morning'+(live.trade?', looking for work in '+esc(live.trade):'')+'. It shows up here and in your email.</div>';
+  else if(bids.html)h+='<div class="bk-sub" style="margin-bottom:8px;">'+esc(bids.subject||'')+'</div>'+alFrame(bids.html,'Bids and grants');
+  else h+='<div class="bk-sub">'+esc(bids.subject||'')+' · sent to your email on '+esc(alWhen(bids.sent_at))+'. From now on, each list is kept here too.</div>';
+  h+='</div>';
+  // everything sent
+  const logs=AL.logs||[];
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Recent Alerts</div>'
+    +(logs.length?logs.map(l=>'<div class="bk-row"'+(l.html?' onclick="alOpen('+(+l.id)+')"':' style="cursor:default;"')+'><div class="bk-main"><div class="bk-payee">'+esc(l.subject||alSvcName(l.service))+'</div>'
+      +'<div class="bk-sub">'+esc(alSvcName(l.service))+' · '+esc(alWhen(l.sent_at))+(l.items?' · '+l.items+' item'+(l.items===1?'':'s'):'')+'</div></div>'+(l.html?'<span class="onb-go">›</span>':'')+'</div>').join('')
+      :'<div class="bk-empty">Nothing sent yet. Alerts start within a day or so, when something you’re watching comes up.</div>')+'</div>';
+  return h+alExplainCard(live);
+}
+function alExplainCard(live){
+  const ex=[];alMine().forEach(r=>(r.explainers||[]).forEach(e=>{if(!ex.some(x=>x.id===e.id))ex.push(e);}));
+  ex.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  const st={new:'Being written',drafted:'Being checked',sent:'Sent',declined:'Couldn’t do this one'};
+  return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Explain a Rule</div>'
+    +'<div class="card-sub">Got a new ordinance, permit requirement or state rule? Send it and get back what it is, what changes for a business like yours, and what to do, in plain language. A person checks every one before it’s sent. Usually back within a day. It’s an explanation, not legal advice.</div>'
+    +'<div class="txn-grid"><div class="txn-full"><label for="alRuleUrl">Link to the rule</label><input id="alRuleUrl" class="period-input" type="url" placeholder="https://…"></div>'
+    +'<div class="txn-full"><label for="alRuleText">Or paste it here</label><textarea id="alRuleText" class="period-input st-area" rows="3"></textarea></div>'
+    +'<div class="txn-full"><label for="alRuleQ">What do you want to know? (optional)</label><input id="alRuleQ" class="period-input" placeholder="Do I need a permit for my food truck at the market?"></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="alExplain(this)">Send it</button></div>'
+    +(ex.length?'<div class="log-section-title" style="margin-top:14px;">Your rules</div>'+ex.map(e=>'<div class="al-ex">'
+      +'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(e.question||e.rule_url||'A rule you sent')+'</div><div class="bk-sub">'+esc(alWhen(e.created_at))+'</div></div><span class="svc-pill '+(e.status==='sent'?'done':e.status==='declined'?'off':'req')+'">'+esc(st[e.status]||e.status)+'</span></div>'
+      +(e.status==='sent'&&e.final_text?'<details class="cf-how"><summary>Read it</summary><div class="al-text">'+alExplainText(e.final_text)+'</div></details>':'')+'</div>').join(''):'')
+    +'</div>'
+    +'<div class="bk-sub" style="text-align:center;margin:6px 0 18px;"><a href="'+PV_SERVICES_URL+'" target="_blank" rel="noopener">See these on The People’s Voices ↗</a></div>';
+}
+async function renderAlertsTab(){
+  const el=document.getElementById('alertsBody');if(!el)return;
+  if(!(typeof isStewardUser==='function'&&isStewardUser())){el.innerHTML='<div class="card"><div class="bk-empty">Owners and managers can see this.</div></div>';return;}
+  if(AL.rows===undefined)el.innerHTML='<div class="card"><div class="bk-empty">Loading…</div></div>';
+  await loadAlerts();
+  el.innerHTML=alertsHTML();
+}
+async function alTurnOn(btn){
+  const box=document.getElementById('alNotPol');
+  const watch=((document.getElementById('alWatch')||document.getElementById('alWatch2')||{}).value||'').trim();
+  const trade=((document.getElementById('alTrade')||document.getElementById('alTrade2')||{}).value||'').trim();
+  if(box&&!box.checked){toast(AL_REASONS.political,true);box.focus();return;}
+  const label=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Turning on…';}
+  try{
+    const r=await sb('rpc/ohb_turn_on_services',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_watch_for:watch||null,p_trade:trade||null,p_not_political:true})});
+    const d=Array.isArray(r)?r[0]:r;
+    if(!d||!d.ok){toast(AL_REASONS[d&&d.reason]||'Couldn’t turn them on. Please try again.',true);return;}
+    const wasOn=(AL.logs||[]).length>0;
+    toast(wasOn?'They’re back on.':'They’re on! '+((d.services||[]).includes('bids')?'Your first bids list comes Monday morning.':'Alerts start when something you’re watching comes up.'));
+    await renderAlertsTab();
+    try{renderStartHere();}catch(e){}
+  }catch(e){
+    toast(/could not find the function|PGRST202|schema cache/i.test(e.message)?'This needs the Hub’s latest update. Please let The People’s Voices know.':'Didn’t turn on: '+e.message,true);
+  }finally{if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent=label;}}
+}
+async function alSaveWatch(id,btn){
+  if(!id)return;
+  const watch=(document.getElementById('alWatch2').value||'').trim(),trade=(document.getElementById('alTrade2').value||'').trim();
+  btn.disabled=true;
+  try{await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:id,p_watch_for:watch,p_trade:trade})});toast('Saved. The next alerts use this.');await renderAlertsTab();}
+  catch(e){toast('Didn’t save: '+e.message,true);btn.disabled=false;}
+}
+async function alExplain(btn){
+  const url=(document.getElementById('alRuleUrl').value||'').trim(),text=(document.getElementById('alRuleText').value||'').trim(),q=(document.getElementById('alRuleQ').value||'').trim();
+  if(!url&&!text){toast('Paste the rule, or a link to it',true);return;}
+  if(url&&!/^https?:\/\//i.test(url)){toast('The link should start with https://',true);return;}
+  btn.disabled=true;btn.textContent='Sending…';
+  try{
+    await sb('rpc/tpv_explainer_request',{method:'POST',body:JSON.stringify({p_business:(BIZ.row&&BIZ.row.name)||'',p_email:(currentUser&&currentUser.email)||'',p_rule_url:url||null,p_rule_text:text||null,p_question:q||null})});
+    toast('Sent! Your explanation usually comes back within a day, by email and here.');
+    await renderAlertsTab();
+  }catch(e){toast('Didn’t send: '+e.message,true);btn.disabled=false;btn.textContent='Send it';}
+}
+function alOpen(id){
+  const l=(AL.logs||[]).find(x=>+x.id===+id);if(!l||!l.html)return;
+  growthModal(l.subject||alSvcName(l.service),'<div class="bk-sub" style="margin-bottom:8px;">'+esc(alSvcName(l.service))+' · '+esc(alWhen(l.sent_at))+'</div>'+alFrame(l.html,l.subject),true);
+}
+
+// ─── the demo shows a business that already has them on ───
+const AL_DEMO_TRADE={food:'catering and food service',farm:'produce and farm products',retail:'retail goods and supplies',trades:'landscaping and snow removal',salon:'salon services',cleaning:'commercial cleaning',other:'general services'};
+function alDemoBidsHTML(trade,county){
+  const it=[
+    ['A county senior meal program','Catering for weekday meal sites, January through June','RFP · due in 3 weeks'],
+    ['A city parks department','Vendors for summer concerts and festivals','Vendor sign-up · due next month'],
+    ['A state small business program','Matching grants up to $25,000 for downtown storefront improvements','Grant · rolling'],
+    ['A national food access fund','Grants for small producers selling at farmers markets','Grant · due in 6 weeks']
+  ];
+  return '<div style="font-family:Arial,sans-serif;color:#222;padding:4px 2px;"><div style="font-size:12px;color:#8a6000;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">Sample list (demo)</div>'
+    +'<div style="font-size:19px;font-weight:bold;color:#1B4332;margin:4px 0 10px;">Bids &amp; grants for '+esc(trade)+' in '+esc(county)+' County</div>'
+    +it.map(([who,what,when])=>'<div style="border:1px solid #e5dece;border-radius:8px;padding:10px 12px;margin-bottom:8px;"><div style="font-weight:bold;">'+esc(what)+'</div><div style="font-size:13px;color:#555;margin-top:2px;">'+esc(who)+' · '+esc(when)+'</div><div style="margin-top:6px;"><a href="https://thepeoplesvoices.org/?tab=business" style="color:#1a5c8a;font-size:13px;">See the posting ›</a></div></div>').join('')
+    +'<div style="font-size:12px;color:#888;margin-top:8px;">In your real Hub, this is the list we emailed you Monday, with links to each posting.</div></div>';
+}
+if(typeof demoSeed==='function'){const _dsA=demoSeed;demoSeed=function(type){
+  _dsA(type);
+  const biz=demoTable('ohb_businesses')[0];if(!biz)return;
+  const trade=AL_DEMO_TRADE[type]||AL_DEMO_TRADE.other,ago=d=>new Date(Date.now()-d*864e5).toISOString();
+  demoTable('business_services').push({id:'watch',name:'Watch alerts',status:'available',sort:1},{id:'bids',name:'Bid & grant finder',status:'available',sort:2},{id:'explainer',name:'Plain-language rule explainer',status:'available',sort:3});
+  DEMO.alerts={id:9001,business_name:biz.name,services:['watch','bids'],status:'active',county:tpvCountyIdSafe(biz.county),email:'you@demo.example',watch_for:'Main St, food truck permits, farmers market rules',trade,created_at:ago(30),
+    recent:[],explainers:[{id:501,created_at:ago(12),status:'sent',question:'Do I need a temporary food license for a weekend festival?',rule_url:null,
+      final_text:'What it is\nA temporary food license covers food sold at a short event, like a festival or fair.\nWhat changes for a business like yours\n- If you already hold a license for your kitchen, you may still need one for each event where you serve food on site.\n- The local health department issues them, usually for a small fee per event.\nWhat to do\n- Call the health department at least two weeks before the event and ask which license applies.\nThis is a sample answer for the demo.'}]};
+  demoTable('business_alert_log').push(
+    {id:701,signup_id:9001,service:'bids',sent_at:ago(5),subject:'4 bids & grants for '+trade,items:4,status:'sent',html:alDemoBidsHTML(trade,biz.county||'Jackson')},
+    {id:702,signup_id:9001,service:'roundup',sent_at:ago(5),subject:'Your week in '+(biz.county||'Jackson')+' County',items:5,status:'sent',html:'<div style="font-family:Arial,sans-serif;padding:4px;"><div style="font-size:12px;color:#8a6000;font-weight:700;">SAMPLE (DEMO)</div><p>Your Monday roundup: what your city and county decided last week, and what’s coming up this week.</p></div>'},
+    {id:703,signup_id:9001,service:'watch',sent_at:ago(2),subject:'2 new mentions of what you’re watching',items:2,status:'sent',html:'<div style="font-family:Arial,sans-serif;padding:4px;"><div style="font-size:12px;color:#8a6000;font-weight:700;">SAMPLE (DEMO)</div><p><b>Main St:</b> the city council takes up sidewalk repairs on Tuesday.</p><p><b>Food truck permits:</b> the planning commission is looking at new rules next month.</p></div>'});
+};}
+function tpvCountyIdSafe(c){return String(c||'').toLowerCase().replace(/[^a-z]/g,'');}
+if(typeof demoRpc==='function'){const _drA=demoRpc;demoRpc=function(fn,args){
+  if(fn==='tpv_my_business')return demoJSON(DEMO.alerts?[DEMO.alerts]:[]);
+  if(fn==='ohb_turn_on_services'){if(DEMO.alerts){DEMO.alerts.status='active';DEMO.alerts.services=['watch','bids'];if(args.p_watch_for)DEMO.alerts.watch_for=args.p_watch_for;if(args.p_trade)DEMO.alerts.trade=args.p_trade;}return demoJSON({ok:true,id:9001,services:['watch','bids'],waiting:[]});}
+  if(fn==='tpv_business_update'){if(DEMO.alerts){DEMO.alerts.watch_for=args.p_watch_for||null;DEMO.alerts.trade=args.p_trade||null;}return demoJSON('ok');}
+  if(fn==='tpv_explainer_request'){if(DEMO.alerts)DEMO.alerts.explainers.unshift({id:Date.now(),created_at:new Date().toISOString(),status:'new',question:args.p_question||args.p_rule_url||'A rule you sent',rule_url:args.p_rule_url});return demoJSON('ok');}
+  return _drA(fn,args);
+};}
+
+// ─── looks ───
+(function(){const st=document.createElement('style');st.textContent=`
+.al-frame{width:100%;min-height:160px;border:1px solid #e5dece;border-radius:8px;background:#fff;display:block;}
+.al-ex{border-top:1px solid var(--cream-dark);}
+.al-ex .bk-row{border:none;}
+.al-text{font-size:14.5px;line-height:1.6;margin-top:6px;}
+.al-text .al-h{font-weight:700;color:var(--green-dark);margin:10px 0 2px;}
+.al-text p{margin:0 0 6px;}.al-text ul{margin:0 0 6px;padding-left:20px;}
+`;document.head.appendChild(st);})();
+
+// ─── a free Hub, given by The People’s Voices to this owner's email ───
+// When a business has no plan yet (or its plan ran out), the owner's Hub checks once whether a
+// free Hub is waiting for them. If so, it's switched on and no card is asked for.
+if(typeof loadPlan==='function'){const _lpComp=loadPlan;loadPlan=async function(){
+  const r=await _lpComp.apply(this,arguments);
+  try{
+    if((typeof isDemo==='function'&&isDemo())||!BIZ.id||!BIZ.member||BIZ.member.role!=='owner')return r;
+    const k=planState().kind;
+    if(!['needs_sub','paused','open'].includes(k)||PLAN._compTried===BIZ.id)return r;
+    PLAN._compTried=BIZ.id;
+    const res=await sb('rpc/ohb_claim_comp',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});
+    const d=Array.isArray(res)?res[0]:res;
+    if(d&&d.ok){await _lpComp.apply(this,arguments);toast('🎁 Your Hub is free, courtesy of The People’s Voices. Welcome!');}
+  }catch(e){}
+  return r;
+};}
 
 // ═══════════════════════════════════════════════════════
 // DEMO MODE — operations-hub.html?demo
