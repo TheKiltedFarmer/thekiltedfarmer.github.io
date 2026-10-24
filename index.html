@@ -1216,7 +1216,7 @@ function Spinner() {
 
 function Toast({msg,onDone}) {
   useEffect(()=>{const t=setTimeout(onDone,3000);return()=>clearTimeout(t);},[]);
-  return h('div',{style:{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#1a1a2e',color:'#f0c040',padding:'12px 24px',borderRadius:8,fontFamily:"'Playfair Display',serif",fontSize:14,zIndex:9999,boxShadow:'0 4px 20px rgba(0,0,0,.3)',whiteSpace:'nowrap'}},msg);
+  return h('div',{style:{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#1a1a2e',color:'#f0c040',padding:'12px 24px',borderRadius:8,fontFamily:"'Playfair Display',serif",fontSize:14,zIndex:9999,boxShadow:'0 4px 20px rgba(0,0,0,.3)',width:'max-content',maxWidth:'calc(100vw - 32px)',boxSizing:'border-box',textAlign:'center',lineHeight:1.4}},msg);
 }
 
 function Tag({bg,color,children}) {
@@ -12422,9 +12422,9 @@ const PRICE_COMPARE = [
   {what:'Public bids', ours:'Bid & grant finder: $5 a month, grants included',
    theirs:['BidNet Direct alerts for Michigan (MITN): $108 a year for 200+ agencies, $396 a year statewide'],
    free:'Free MITN registration, if you log in and check every day.'},
-  {what:'Grants', ours:'Included in the same $5 Bid & grant finder',
+  {what:'Grants', ours:'Included in the same $5 Bid & grant finder, with Michigan state programs alongside federal and national ones, and public bids from Michigan cities and counties',
    theirs:['GrantWatch: $249 a year, or $49 month to month', 'Instrumentl: from about $299 a month'],
-   free:'Searching Grants.gov and each state agency\'s page yourself.'},
+   free:'Hello Alice is free and matches businesses with national grant programs and funding offers. Ours adds Michigan programs and the bids your own city and county post. You can also search Grants.gov and each state agency\'s page yourself.'},
   {what:'Watching local meetings', ours:'Watch alerts: $5 a month',
    theirs:['Government-monitoring firms are built for big companies and quote prices privately'],
    free:'Some cities email every agenda they post, unsorted, one city at a time.'},
@@ -12441,7 +12441,8 @@ const PRICE_SOURCES = [
   ['Wave payment fees (Wave Help Center)','https://support.waveapps.com/hc/en-us/articles/218323823'],
   ['Gusto prices (2026 guide)','https://www.hireinsouth.com/post/gusto-pricing'],
   ['BidNet Direct / MITN plans (City of Portage FAQ)','https://portagemi.gov/DocumentCenter/View/7696/BidNet-Direct-FAQ'],
-  ['GrantWatch and Instrumentl prices (GrantWatch comparison, Oct 2026)','https://www.grantwatch.com/grant-database-comparison.php']
+  ['GrantWatch and Instrumentl prices (GrantWatch comparison, Oct 2026)','https://www.grantwatch.com/grant-database-comparison.php'],
+  ['Hello Alice (free small business platform)','https://helloalice.com']
 ];
 function PriceCompare() {
   const [open, setOpen] = useState(false);
@@ -12593,13 +12594,14 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     const send = (svcs, notes)=>sb.rpc('tpv_business_signup', {p_business:form.business, p_contact:form.contact, p_email:form.email, p_phone:form.phone,
       p_county:form.county, p_services:svcs, p_watch_for:picked.watch ? form.watchFor : null, p_notes:notes, p_not_political:form.notPolitical,
       p_trade:picked.bids ? form.trade : null});
-    let {data, error} = await send(services, form.notes);
-    // If the database doesn't know the Hub as a service yet, keep the sign-up and note the Hub request instead.
+    // The Hub is set up in the Hub itself, so the sign-up records the other services and notes that they want the Hub.
+    // (Without the note, a Hub pick would vanish: the sign-up list only keeps the services it knows.)
     const hubId = hubSvc && hubSvc.id;
-    if(error && hubId && services.includes(hubId) && !/schema cache|could not find the function/i.test(error.message)) {
-      const rest = services.filter(x=>x !== hubId);
-      if(rest.length) ({data, error} = await send(rest, ((form.notes || '').trim() + ' | Wants the Operations Hub.').replace(/^ \| /,'')));
-    }
+    const wantsHub = !!(hubId && services.includes(hubId));
+    const rest = services.filter(x=>x !== hubId);
+    const notes = wantsHub ? ((form.notes || '').trim() + ' | Wants the Operations Hub.').replace(/^ \| /,'') : form.notes;
+    let data = 'ok', error = null;
+    if(rest.length) ({data, error} = await send(rest, notes));
     setSending(false);
     if(error) { setErr((error.code === 'PGRST202' || /could not find the function/i.test(error.message)) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : 'Something went wrong: ' + error.message + ' Please email hello@thepeoplesvoices.org if it keeps happening.'); return; }
     setDone(shown.filter(s=>services.includes(s.id)));
@@ -12839,10 +12841,41 @@ function BusinessAdmin({list, onToast, onChanged}) {
   const [saving, setSaving] = useState(null);
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null);     // {title, html}
+  // Free Hubs, given by email
+  const [comps, setComps] = useState(null);        // null loading, false not switched on
+  const [compForm, setCompForm] = useState({email:'', note:''});
+  const loadComps = async()=>{
+    const {data, error} = await sb.rpc('tpv_comp_list');
+    setComps(error ? false : (Array.isArray(data) ? data : []));
+  };
+  useEffect(()=>{ loadComps(); },[]);
+  const compFor = email=>(comps || []).find(c=>c.email === String(email || '').trim().toLowerCase());
+  const giveHub = async(email, note)=>{
+    const key = 'comp:' + email;
+    setBusy(key);
+    const {data, error} = await sb.rpc('tpv_comp_hub', {p_email:email, p_note:note || null});
+    setBusy(null);
+    if(error) { onToast && onToast(/could not find the function|PGRST202/i.test(error.message) ? '❌ Run tpv_free_hubs.sql in Supabase first.' : '❌ ' + error.message); return false; }
+    const d = data || {};
+    onToast && onToast(d.status === 'applied' ? '🎁 ' + d.business + '’s Hub is free from now on.'
+      : d.status === 'paying' ? d.business + ' pays through Stripe. Cancel their subscription in Stripe first, then give the free Hub again.'
+      : '🎁 Saved. The first Hub ' + email + ' sets up will be free, with no card asked for.');
+    loadComps();
+    return true;
+  };
+  const takeBack = async(c)=>{
+    if(!window.confirm('Take back the free Hub for ' + c.email + '? ' + (c.business ? c.business + ' will be offered the usual 3 free months with a card. Nothing of theirs is deleted.' : 'They haven\'t set it up yet.'))) return;
+    setBusy('comp:' + c.email);
+    const {error} = await sb.rpc('tpv_comp_remove', {p_email:c.email});
+    setBusy(null);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    onToast && onToast('Taken back.');
+    loadComps();
+  };
   const loadSignups = async()=>{
     const [{data, error}, lg] = await Promise.all([
       sb.from('business_signups').select('*').order('created_at',{ascending:false}).limit(300),
-      sb.from('business_alert_log').select('*').order('sent_at',{ascending:false}).limit(400),
+      sb.from('business_alert_log').select('id,signup_id,service,sent_at,subject,items,status,error').order('sent_at',{ascending:false}).limit(400),
     ]);
     setSignups(error ? [] : (data || []));
     setLogs(lg && !lg.error ? (lg.data || []) : []);
@@ -12933,14 +12966,41 @@ function BusinessAdmin({list, onToast, onChanged}) {
               kinds.map(k=>small(BIZ_KIND_LABEL[k], ()=>doPreview(r, k), r.id + k)),
               r.status === 'active' && h('span',{style:{fontSize:12,color:'#888',marginLeft:6}},'Send now:'),
               r.status === 'active' && kinds.map(k=>small(BIZ_KIND_LABEL[k], ()=>doSend(r, k), r.id + 'send' + k, true))),
-            h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}},
+            h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6,alignItems:'center'}},
               Object.keys(SIGNUP_STATUS).filter(s=>s !== r.status).map(s=>h('button',{key:s,onClick:()=>setStatus(r, s),
-                style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#333'}}, 'Mark ' + SIGNUP_STATUS[s][0].toLowerCase()))));
+                style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#333'}}, 'Mark ' + SIGNUP_STATUS[s][0].toLowerCase())),
+              comps !== false && (compFor(r.email)
+                ? h('span',{style:{background:'#eef7f1',color:'#1a6b3c',fontSize:11.5,fontWeight:700,padding:'3px 9px',borderRadius:10}}, '🎁 Free Hub' + (compFor(r.email).business ? '' : ' waiting'))
+                : h('button',{onClick:()=>giveHub(r.email, r.business_name),disabled:busy==='comp:' + r.email,
+                    style:{background:'#fff',border:'1px solid #1a6b3c',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#1a6b3c'}},
+                    busy==='comp:' + r.email ? '...' : '🎁 Give a free Hub'))));
         }),
       h('div',{style:{fontSize:12,color:'#888',marginTop:8,lineHeight:1.5}},
         'Mark a business active once it\'s paying; alerts start on the next hourly run (heads-ups daily, roundups and bids on Mondays). ',
         'Active businesses are counted (as a number, never by name) on the Who Funds Us page.')),
 
+    h('div',{style:card},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:15,color:'#1a1a2e',marginBottom:6}},'🎁 Admin: free Hubs'),
+      h('div',{style:{fontSize:13,color:'#555',lineHeight:1.55,marginBottom:10}},
+        'Give an Operations Hub for free, for as long as you like, by the email they sign in with. Already running a Hub? It’s free from that moment. Not yet? The first business they set up is free, with no card asked for. Free Hubs come with Bids & Alerts, and they don’t use up a founding spot.'),
+      comps === false ? h('div',{style:{fontSize:13,color:'#8a6000'}},'Run tpv_free_hubs.sql in Supabase to switch this on.')
+      : h(Fragment,null,
+          h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-start'}},
+            h('div',{style:{flex:'2 1 200px'}}, inp(compForm.email, v=>setCompForm(f=>({...f, email:v})), 'Their sign-in email', {marginBottom:0})),
+            h('div',{style:{flex:'2 1 160px'}}, inp(compForm.note, v=>setCompForm(f=>({...f, note:v})), 'Who they are (just for you)', {marginBottom:0})),
+            h('button',{onClick:async()=>{ const e = compForm.email.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { onToast && onToast('Enter the email they sign in with.'); return; } if(await giveHub(e, compForm.note.trim())) setCompForm({email:'', note:''}); },
+              disabled:!!(busy && String(busy).startsWith('comp:')),
+              style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:6,padding:'8px 14px',fontSize:13,cursor:'pointer',fontFamily:PD,fontWeight:700,flex:'0 0 auto'}},'Give a free Hub')),
+          comps === null ? h('div',{style:{marginTop:10}}, h(Spinner))
+          : comps.length > 0 && h('div',{style:{marginTop:10}},
+              comps.map(c=>h('div',{key:c.email,style:{borderTop:'1px solid #efe6cf',padding:'8px 0',display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap',fontSize:13.5}},
+                h('div',{style:{minWidth:0}},
+                  h('strong',{style:{color:'#1a1a2e'}}, c.business || c.note || c.email),
+                  h('div',{style:{fontSize:12.5,color:'#666'}}, c.email,
+                    c.business ? (c.status === 'comped' ? ' · free since ' + shortDate(c.claimed_at || c.created_at) : ' · their plan changed since; give it again to make it free')
+                      : c.owns ? ' · not free yet: ' + c.owns + ' pays through Stripe. Cancel that in Stripe, then give it again.' : ' · waiting for them to set up their Hub')),
+                h('button',{onClick:()=>takeBack(c),disabled:busy==='comp:' + c.email,
+                  style:{background:'#fff',border:'1px solid #ddd',borderRadius:14,padding:'4px 11px',fontSize:12,cursor:'pointer',color:'#a33'}},'Take back')))))),
     h(ExplainerQueue,{onToast}),
     h(BidSourcesAdmin,{onToast}),
 
