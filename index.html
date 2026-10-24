@@ -12506,6 +12506,37 @@ function HubReferralBanner(){
   return h('div',{style:{background:'#fff8e7',border:'1px solid #f0d48a',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#5a4500',lineHeight:1.6}},
     '🤝 ', h('strong',null, from.name), from.county ? ' in ' + from.county + ' County' : '', ' sent you. Start your Operations Hub below, and once your first payment goes through, you both get a month free.');
 }
+// Services bought on their own are paid through Stripe (the hub-money function). Paying switches them on.
+async function hubMoney(body){
+  try{
+    const {data, error} = await sb.functions.invoke('hub-money', {body});
+    if(error){ let j = null; try { j = error.context && error.context.json ? await error.context.json() : null; } catch(e) {} return j || {error:'unreachable', message:error.message}; }
+    return data || {};
+  }catch(e){ return {error:'unreachable', message:String((e && e.message) || e)}; }
+}
+const svcMonthly = s=>{ const m = String((s && s.price_label) || '').match(/\$\s*(\d+(?:\.\d{1,2})?)\s*(?:a\s+|per\s+|\/\s*)?(?:month|mo)\b/i); return m ? parseFloat(m[1]) : 0; };
+const PAID_SVC = (function(){ try { const q = new URLSearchParams(window.location.search); return q.get('paid') === 'svc' ? (q.get('session_id') || '') : null; } catch(e) { return null; } })();
+function StartSubscription({email, signupId, services, onToast, compact}){
+  const [busy, setBusy] = useState(false);
+  const [fallback, setFallback] = useState(null);   // Ko-fi links, if Stripe isn't set up
+  const monthly = (services || []).reduce((a, s)=>a + (s.status === 'available' ? svcMonthly(s) : 0), 0);
+  const go = async()=>{
+    setBusy(true);
+    const r = await hubMoney(signupId ? {action:'service_checkout', signup_id:signupId} : {action:'service_checkout', email});
+    if(r && r.url) { window.location.href = r.url; return; }
+    setBusy(false);
+    if(r && r.error === 'already_active') { onToast && onToast('✓ That one is already on.'); return; }
+    if(r && r.error === 'nothing_to_pay') { onToast && onToast('✓ Nothing to pay for that one right now.'); return; }
+    const kofi = (services || []).filter(s=>s.status === 'available' && s.pay_url);
+    if(kofi.length) { setFallback(kofi); return; }
+    onToast && onToast('Online payment isn\'t ready yet. Please email hello@thepeoplesvoices.org and we\'ll get you started.');
+  };
+  if(fallback) return h('div',null, fallback.map(x=>h('a',{key:x.id,href:x.pay_url,target:'_blank',rel:'noopener',
+    style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},'Start ' + x.name + ' →')));
+  return h('button',{onClick:go,disabled:busy,
+    style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:8,padding:compact?'7px 14px':'10px 18px',fontFamily:PD,fontWeight:700,fontSize:compact?13:14,cursor:'pointer'}},
+    busy ? 'Opening Stripe…' : 'Start my subscription' + (monthly ? ' · $' + (Math.round(monthly * 100) / 100) + ' a month' : '') + ' →');
+}
 // The Operations Hub's row in business_services is shown as a link, not a sign-up box.
 // A small, dismissible doorway on the home feed for local business owners
 function BizDoorway({profile, onOpen}){
@@ -12559,6 +12590,17 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   useEffect(()=>{ loadMine(); },[user && user.id]);
   // Arriving to start the Hub trial: go straight to the sign-up form once it's on the page
   useEffect(()=>{ if(TPV_PICK_HUB && Array.isArray(list)) scrollTo(formRef); },[Array.isArray(list)]);
+  // back from paying in Stripe: switch the service on now (the daily check is the backup)
+  const [paidMsg, setPaidMsg] = useState(null);
+  useEffect(()=>{
+    if(PAID_SVC === null) return;
+    (async()=>{
+      const r = PAID_SVC ? await hubMoney({action:'service_confirm', session_id:PAID_SVC}) : {error:'bad_session'};
+      setPaidMsg(r && r.ok ? {ok:true, business:r.business} : {ok:false, why:r && r.error});
+      if(r && r.ok) { onToast && onToast('✓ You\'re all set. It\'s on!'); loadMine(); }
+      try { const u = new URL(window.location.href); u.searchParams.delete('paid'); u.searchParams.delete('session_id'); window.history.replaceState(null, '', u.pathname + u.search); } catch(e) {}
+    })();
+  },[]);
   useEffect(()=>{
     if(user && !form.email) setForm(f=>({...f, email:user.email || '', contact:(profile && profile.display_name) || f.contact}));
   },[user && user.id]);
@@ -12634,6 +12676,10 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('button',{className:'tpv-link',onClick:()=>onNavigate && onNavigate('funding'),
           style:{background:'none',border:'none',padding:0,color:'#1a5c8a',cursor:'pointer',textDecoration:'underline',fontSize:13,fontFamily:LB}},'See where the money goes →'))),
 
+    paidMsg && h('div',{style:{background:paidMsg.ok?'#eef7f1':'#fff8e7',border:'1px solid ' + (paidMsg.ok?'#a8e6c0':'#f0d48a'),borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:paidMsg.ok?'#1a4a2a':'#5a4500',lineHeight:1.6}},
+      paidMsg.ok
+        ? h(Fragment,null, h('strong',null,'Thank you! '), (paidMsg.business ? paidMsg.business + '\'s' : 'Your') + ' service is on. Heads-ups start with the next relevant meeting or story, and bids and roundups come Monday mornings. Sign in with the same email any time to change what we watch for.')
+        : h(Fragment,null, h('strong',null,'Almost there. '), paidMsg.why === 'not_paid' ? 'Stripe hasn\'t finished the payment yet. It switches on by itself as soon as it does, usually within a few minutes.' : 'We couldn\'t confirm the payment from here, but if it went through, your service switches on by itself within a day. Questions? hello@thepeoplesvoices.org')),
     h(HubReferralBanner),
     h(PriceCompare),
 
@@ -12642,7 +12688,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
       'Watch alerts, the Bid & grant finder and rule explainers come with your Hub, so there\'s nothing extra to pay. Sign up below with the same email you use for the Hub and we\'ll switch them on.'),
 
     // ── The business's own services, when signed in with the email they used
-    mine.length > 0 && h(MyBusinessPanel,{mine, onToast, onChanged:loadMine, onExplain:()=>{ setShowExplain(true); scrollTo(explainRef); }}),
+    mine.length > 0 && h(MyBusinessPanel,{mine, menu:shown, onToast, onChanged:loadMine, onExplain:()=>{ setShowExplain(true); scrollTo(explainRef); }}),
 
     list === undefined && h('div',{style:{textAlign:'center',padding:30}}, h(Spinner)),
     list === null && h('div',{style:card},
@@ -12680,12 +12726,12 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
               done.some(x=>!isHubService(x)) && h('div',{style:{marginTop:6}},'Watch alerts and the Bid & grant finder come with your Hub, so there\'s nothing extra to pay for them.'),
               h('a',{href:HUB_SETUP_URL,style:{display:'inline-block',marginTop:10,background:'#1a6b3c',color:'#fff',textDecoration:'none',borderRadius:8,padding:'10px 18px',fontFamily:PD,fontWeight:700,fontSize:14}},'Set up my Hub →')),
             !done.some(isHubService) && h('div',null,
-              done.filter(x=>x.status === 'available' && x.pay_url && !isHubService(x)).length
-                ? h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'Last step: start your subscription below. Your service begins as soon as it goes through, and you can cancel any time.')
-                : h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'You\'re all set. Sign in here with the same email any time to see your alerts and change what we watch for.'),
-              done.filter(x=>x.status === 'available' && x.pay_url && !isHubService(x)).map(x=>h('a',{key:x.id,href:x.pay_url,target:'_blank',rel:'noopener',
-                style:{display:'inline-block',marginRight:8,marginBottom:6,background:KOFI_BLUE,color:'#1a1a2e',textDecoration:'none',borderRadius:8,padding:'9px 15px',fontFamily:PD,fontWeight:700,fontSize:13.5}},
-                'Start ' + x.name + ' →'))),
+              done.some(x=>x.status === 'available' && !isHubService(x) && (svcMonthly(x) || x.pay_url))
+                ? h(Fragment,null,
+                    h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'Last step: start your subscription. It switches on the moment your payment goes through, with nothing to wait for. Cancel any time.'),
+                    h(StartSubscription,{email:form.email.trim(), services:done.filter(x=>!isHubService(x)), onToast}),
+                    h('div',{style:{fontSize:12.5,color:'#777',marginTop:8}},'Secure checkout by Stripe. Card, Apple Pay or Google Pay.'))
+                : h('div',{style:{fontSize:14,color:'#444',lineHeight:1.6,marginBottom:10}},'You\'re on the list. We\'ll email you the moment it starts. Sign in here with the same email any time to see your services.')),
             h('button',{onClick:()=>setDone(null),style:{display:'block',marginTop:6,background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},'Sign up another business'))
         : h('div',null,
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e',marginBottom:4}},'Sign up'),
@@ -12725,12 +12771,21 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
 }
 
 // ── "Your services": what a business sees about its own sign-ups ──────────────
-function MyBusinessPanel({mine, onToast, onChanged, onExplain}) {
+function MyBusinessPanel({mine, onToast, onChanged, onExplain, menu}) {
   return h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'16px 18px',marginBottom:14,fontFamily:LB}},
     h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a4a2a',marginBottom:6}},'💼 Your services'),
-    mine.map(b=>h(MyBusinessRow,{key:b.id, b, onToast, onChanged, onExplain})));
+    mine.map(b=>h(MyBusinessRow,{key:b.id, b, onToast, onChanged, onExplain, menu})));
 }
-function MyBusinessRow({b, onToast, onChanged, onExplain}) {
+function MyBusinessRow({b, onToast, onChanged, onExplain, menu}) {
+  const [portalBusy, setPortalBusy] = useState(false);
+  const openPortal = async()=>{
+    setPortalBusy(true);
+    const r = await hubMoney({action:'service_portal', signup_id:b.id});
+    if(r && r.url) { window.location.href = r.url; return; }
+    setPortalBusy(false);
+    onToast && onToast('Couldn\'t open billing right now. Please email hello@thepeoplesvoices.org.');
+  };
+  const myMenu = (menu || []).filter(s=>(b.services || []).includes(s.id) && !isHubService(s));
   const [watch, setWatch] = useState(b.watch_for || '');
   const [trade, setTrade] = useState(b.trade || '');
   const [saving, setSaving] = useState(false);
@@ -12753,9 +12808,14 @@ function MyBusinessRow({b, onToast, onChanged, onExplain}) {
     has('hub') && h('div',{style:{fontSize:13,color:'#1a4a2a',margin:'2px 0 4px'}},
       b.status === 'new' ? 'Operations Hub: watch your email for your sign-up code.' : h('span',null,'Operations Hub: ', h('a',{href:'/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'open your Hub →'))),
     h('div',{style:{fontSize:13,color:'#666',margin:'2px 0 8px'}},
-      b.status === 'new' ? 'We\'ll be in touch to get you started. Alerts begin once your service is active.'
-      : b.status === 'paused' ? 'Paused. Reply to any alert email, or email hello@thepeoplesvoices.org, to pick back up.'
+      b.status === 'new' ? (myMenu.some(s=>s.status === 'available') ? 'Start your subscription to switch it on. It starts the moment your payment goes through.' : 'You\'re on the list. We\'ll email you the moment it starts.')
+      : b.status === 'paused' ? (b.billing ? 'Paused because a payment didn\'t go through. Update your card under Manage billing and it picks right back up.' : 'Paused. Reply to any alert email, or email hello@thepeoplesvoices.org, to pick back up.')
+      : b.hub ? 'Included with your Operations Hub. Alerts go to the email you signed up with.'
       : 'Alerts go to the email you signed up with.'),
+    b.status === 'new' && myMenu.some(s=>s.status === 'available') && h('div',{style:{margin:'0 0 10px'}}, h(StartSubscription,{signupId:b.id, services:myMenu, onToast, compact:true})),
+    b.billing && b.status !== 'new' && h('button',{onClick:openPortal,disabled:portalBusy,
+      style:{background:'none',border:'none',padding:0,margin:'0 0 8px',color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},
+      portalBusy ? 'Opening Stripe…' : 'Manage billing or cancel →'),
     has('watch') && h('label',{style:{display:'block',marginBottom:8}},
       bizLabel('What we watch for'),
       h('textarea',{value:watch,onChange:e=>setWatch(e.target.value),rows:2,placeholder:'Separate with commas: your street, your line of work, licenses...',style:{...bizInput,resize:'vertical'}})),
@@ -12976,7 +13036,7 @@ function BusinessAdmin({list, onToast, onChanged}) {
                     busy==='comp:' + r.email ? '...' : '🎁 Give a free Hub'))));
         }),
       h('div',{style:{fontSize:12,color:'#888',marginTop:8,lineHeight:1.5}},
-        'Mark a business active once it\'s paying; alerts start on the next hourly run (heads-ups daily, roundups and bids on Mondays). ',
+        'Businesses that pay through Stripe, and Hub businesses, switch on by themselves. New means they haven\'t paid yet; Mark active is only for someone paying another way. Alerts start on the next hourly run (heads-ups daily, roundups and bids on Mondays). ',
         'Active businesses are counted (as a number, never by name) on the Who Funds Us page.')),
 
     h('div',{style:card},
