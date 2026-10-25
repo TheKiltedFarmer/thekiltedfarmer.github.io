@@ -823,6 +823,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
       <div class="txn-full"><label>County</label><select id="suCounty" class="period-select"></select></div>
     </div>
     <label class="txn-pool"><input type="checkbox" id="suMI"> This business operates in Michigan</label>
+    <label class="txn-pool"><input type="checkbox" id="suNotPol"> This business isn’t a political campaign, party, PAC or lobbying firm (they can’t use the Hub, to keep The People’s Voices independent)</label>
     <label class="su-label">What kind of business?</label>
     <div id="suTypes" class="preset-grid"></div>
     <div class="txn-grid" style="margin-top:14px;">
@@ -7330,11 +7331,13 @@ async function createBusiness(){
   if(owner.length<2){err.textContent='Enter your name';return;}
   if(!county){err.textContent='Pick the county your business is in';return;}
   if(!document.getElementById('suMI').checked){err.textContent='The Hub is for Michigan businesses. Check the box to confirm yours is one.';return;}
+  const np=document.getElementById('suNotPol');if(np&&!np.checked){err.textContent='Please confirm this business isn’t a campaign, party, PAC or lobbying firm.';return;}
   if(!pilot&&!(PLAN.cfg&&PLAN.cfg.open_signup)){err.textContent='Enter the sign-up code you were given';return;}
   if(!document.getElementById('suAgree').checked){err.textContent='Please read and agree to the Terms of Service and Privacy notes.';return;}
   const style=document.getElementById('suStyle').value==='shared'?'shared':'hourly';
   const settings=presetSettings(SU_TYPE,style);settings.ct=style==='shared'?Math.max(0,Math.min(50,parseFloat(v('suCT'))||0)):0;
   settings.terms={version:TERMS_VERSION,at:new Date().toISOString(),by:owner};
+  settings.notPolitical={at:new Date().toISOString(),by:owner};
   const btn=document.getElementById('suBtn');btn.disabled=true;btn.textContent='Setting up…';
   try{
     const r=await sb('rpc/ohb_create_business',{method:'POST',body:JSON.stringify({p_name:name,p_type:SU_TYPE,p_county:county,p_owner_name:owner,p_settings:settings,p_pilot_code:pilot})});
@@ -7422,7 +7425,7 @@ async function renderSettings(){
     +'<div class="bk-actions"><button class="btn-green" onclick="createInvite()">Make invite link</button></div><div id="invResult"></div><div id="stInvites"></div></div>';
   h+=planCardHTML();
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Included With Your Hub</div>'
-    +'<div class="card-sub">These come from <a href="https://thepeoplesvoices.org/?tab=business" target="_blank" rel="noopener">The People’s Voices</a> and are part of your Hub, with nothing extra to pay. Turn them on and read them in the <b>Bids &amp; Alerts</b> tab.</div>'
+    +'<div class="card-sub">These come from The People’s Voices and are part of your Hub, with nothing extra to pay and nothing to sign up for. They switch on by themselves; read them and change what they watch for in the <b>Bids &amp; Alerts</b> tab.</div>'
     +'<div id="stServices"><div class="bk-empty">Checking…</div></div></div>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Your Businesses</div><div class="card-sub">Run more than one? Each has its own Hub, kept completely separate.</div>'
     +BIZ.list.map(m=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(m.ohb_businesses.name)+'</div><div class="bk-sub">'+esc(m.ohb_businesses.county)+' County · '+esc({owner:'Owner',manager:'Manager',member:'Team'}[m.role])+'</div></div>'+(m.business_id===BIZ.id?'<span class="ck-badge">Open</span>':'<button class="receipt-btn" onclick="switchBusiness(\''+m.business_id+'\')">Open</button>')
@@ -7518,7 +7521,7 @@ const PV_SERVICES_URL='https://thepeoplesvoices.org/?tab=business&hub=1';
 const PV_FALLBACK=[{id:'watch',name:'Watch alerts',blurb:'An email when a meeting agenda, local decision or news story mentions what matters to your business.'},
   {id:'bids',name:'Bid & grant finder',blurb:'Public bids and small-business grants matched to your line of work, every week.'},
   {id:'explainer',name:'Plain-language rule explainer',blurb:'Send a new ordinance, rule or permit requirement and get back what changes for you.'}];
-function openPVServices(){window.open(PV_SERVICES_URL,'_blank','noopener');}
+function openPVServices(){goTab('alerts');}   // everything about them now lives in the Bids & Alerts tab
 async function pvServiceStatus(){
   let list=[],mine=[];
   try{list=(await sb('business_services?select=id,name,blurb,price_label,status,sort,pay_url&order=sort.asc'))
@@ -8758,7 +8761,9 @@ const AL_REASONS={
   no_plan:'These come with a running Hub. Start your free months first under Settings → Your Plan.',
   no_email:'Your login needs an email address for these to reach you.',
   none_ready:'These are starting soon. Check back in a few days.',
-  not_found:'This business wasn’t found. Try reloading the page.'
+  not_found:'This business wasn’t found. Try reloading the page.',
+  needs_update:'This needs the Hub’s latest update. Please let The People’s Voices know.',
+  error:'Something went wrong. Please try again in a minute.'
 };
 function alMine(){
   const name=String((BIZ.row&&BIZ.row.name)||'').trim().toLowerCase();
@@ -8798,14 +8803,16 @@ function alertsHTML(){
   const live=alLive(),mine=alMine();
   const waiting=(AL.svc||[]).filter(s=>['watch','bids'].includes(s.id)&&s.status==='soon').map(s=>s.name);
   if(!live){
-    const prev=mine[0]||{};const paused=mine.some(r=>r.status==='paused');
-    h+='<div class="card" id="alOnBox"><div class="card-title"><div class="card-title-dot"></div>'+(paused?'Your alerts are paused':'Turn them on')+'</div>'
-      +'<div class="card-sub">'+(paused?'Turn them back on whenever you’re ready. ':'Two quick questions and you’re set. ')+'They come with your Hub, so there’s nothing extra to pay. Emails go to <b>'+email+'</b>.</div>'
-      +'<div class="txn-grid"><div class="txn-full"><label for="alWatch">What should we watch for?</label><textarea id="alWatch" class="period-input st-area" rows="3" placeholder="Your street, your line of work, licenses, zoning, road work, a project near you…">'+esc(prev.watch_for||'')+'</textarea></div>'
-      +'<div class="txn-full"><label for="alTrade">Your line of work, for bids and grants</label><input id="alTrade" class="period-input" value="'+esc(prev.trade||'')+'" placeholder="Catering, landscaping, cleaning, retail…"></div></div>'
-      +'<label class="onb-task"><input type="checkbox" id="alNotPol"><div><div class="bk-payee">This business isn’t a political campaign, party, PAC or lobbying firm</div><div class="bk-sub">They can’t use these, to keep The People’s Voices independent.</div></div></label>'
-      +(waiting.length?'<div class="bk-sub" style="margin-top:6px;">'+esc(listWords(waiting))+(waiting.length>1?' are':' is')+' starting soon and will switch on when ready.</div>':'')
-      +'<div class="bk-actions"><button class="btn-green" id="alOnBtn" onclick="alTurnOn(this)">'+(paused?'Turn them back on':'Turn them on')+'</button></div></div>';
+    const paused=mine.some(r=>r.status==='paused');
+    const why=AL.auto&&AL.auto.reason;
+    let msg,btn='';
+    if(paused){msg='<b>Bids &amp; Alerts are off.</b> Turn them back on whenever you like; nothing to fill in.';btn='<button class="btn-green" id="alOnBtn" onclick="alTurnOn(this)">Turn them back on</button>';}
+    else if(why==='no_plan')msg='<b>They switch on by themselves</b> as soon as your plan starts (Settings → Your Plan). There’s nothing to sign up for.';
+    else if(why==='none_ready')msg='<b>Starting soon.</b> They’ll switch on by themselves when they’re ready. There’s nothing to sign up for.';
+    else if(why==='not_steward')msg='An owner or manager of '+name+' can switch these on.';
+    else if(why){msg='<b>They didn’t switch on just now.</b> '+esc(AL_REASONS[why]||'Please try again in a minute.');btn='<button class="btn-green" id="alOnBtn" onclick="alTurnOn(this)">Try again</button>';}
+    else msg='Switching them on…';
+    h+='<div class="card" id="alOnBox"><div class="card-sub" style="margin:0;">'+msg+'</div>'+(btn?'<div class="bk-actions">'+btn+'</div>':'')+'</div>';
     return h+alExplainCard(null);
   }
   // on: what's running
@@ -8815,7 +8822,7 @@ function alertsHTML(){
     +[['watch','A heads-up when a meeting agenda, local decision or news story mentions what you’re watching, plus a Monday roundup of your county.'],['bids','Each Monday: public bids and grants that fit your line of work, from Michigan cities, counties and the state, and federal and national grant sites.']]
       .map(([k,d])=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(alSvcName(k))+'</div><div class="bk-sub" style="white-space:normal;">'+esc(d)+'</div></div>'
         +(has(k)?pill(true,'On'):waiting.includes(alSvcName(k))?pill(false,'Starting soon'):'<button class="receipt-btn" onclick="alTurnOn(this)">Turn on</button>')+'</div>').join('')
-    +'<div class="bk-sub" style="margin-top:8px;">Emails go to <b>'+esc(live.email||email)+'</b>.</div>'
+    +'<div class="bk-sub" style="margin-top:8px;">Emails go to <b>'+esc(live.email||email)+'</b>. <a href="#" onclick="alTurnOff(this);return false;">Turn off Bids &amp; Alerts</a></div>'
     +'<details class="cf-how"><summary>Change what we watch for</summary>'
     +'<div class="txn-grid" style="margin-top:8px;"><div class="txn-full"><label for="alWatch2">What we watch for</label><textarea id="alWatch2" class="period-input st-area" rows="3">'+esc(live.watch_for||'')+'</textarea></div>'
     +'<div class="txn-full"><label for="alTrade2">Your line of work, for bids and grants</label><input id="alTrade2" class="period-input" value="'+esc(live.trade||'')+'"></div></div>'
@@ -8849,21 +8856,46 @@ function alExplainCard(live){
     +(ex.length?'<div class="log-section-title" style="margin-top:14px;">Your rules</div>'+ex.map(e=>'<div class="al-ex">'
       +'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(e.question||e.rule_url||'A rule you sent')+'</div><div class="bk-sub">'+esc(alWhen(e.created_at))+'</div></div><span class="svc-pill '+(e.status==='sent'?'done':e.status==='declined'?'off':'req')+'">'+esc(st[e.status]||e.status)+'</span></div>'
       +(e.status==='sent'&&e.final_text?'<details class="cf-how"><summary>Read it</summary><div class="al-text">'+alExplainText(e.final_text)+'</div></details>':'')+'</div>').join(''):'')
-    +'</div>'
-    +'<div class="bk-sub" style="text-align:center;margin:6px 0 18px;"><a href="'+PV_SERVICES_URL+'" target="_blank" rel="noopener">See these on The People’s Voices ↗</a></div>';
+    +'</div>';
 }
 async function renderAlertsTab(){
   const el=document.getElementById('alertsBody');if(!el)return;
   if(!(typeof isStewardUser==='function'&&isStewardUser())){el.innerHTML='<div class="card"><div class="bk-empty">Owners and managers can see this.</div></div>';return;}
   if(AL.rows===undefined)el.innerHTML='<div class="card"><div class="bk-empty">Loading…</div></div>';
   await loadAlerts();
+  if(!alLive()&&!alMine().length){const r=await alAutoOn();if(r&&r.ok)toast('Bids & Alerts are on, included with your Hub.');}
   el.innerHTML=alertsHTML();
 }
+// what a new Hub business is watched for, by kind of business (changed any time in the tab)
+const AL_DEFAULTS={
+  food:['food, health department, food truck, farmers market, zoning','food production, catering and food service'],
+  farm:['farm, agriculture, farmers market, drain, zoning','farm products, produce and agriculture'],
+  retail:['retail, downtown, parking, sign permit, zoning','retail goods and supplies'],
+  trades:['road work, construction, contractor, snow removal, zoning','landscaping, construction and contracting'],
+  salon:['salon, cosmetology, business license, zoning','salon and personal care services'],
+  cleaning:['cleaning, janitorial, business license','cleaning and janitorial services'],
+  other:['small business, business license, zoning','']
+};
+function alDefaults(){return AL_DEFAULTS[(BIZ.row&&BIZ.row.business_type)||'other']||AL_DEFAULTS.other;}
+// Bids & Alerts come with the Hub: they switch on by themselves the first time an owner or manager
+// opens the Hub (or this tab), with nothing to sign up for. Turned off on purpose? They stay off.
+async function alAutoOn(){
+  if((typeof isDemo==='function'&&isDemo())||!BIZ.id||!(typeof isStewardUser==='function'&&isStewardUser()))return null;
+  if(AL.autoTried===BIZ.id)return AL.auto;
+  AL.autoTried=BIZ.id;
+  if(AL.rows===undefined)await loadAlerts();
+  if(AL.rows===null||alMine().length)return null;     // not switched on for the Hub yet, or already has them (on or off)
+  const [watch,trade]=alDefaults();
+  try{
+    const r=await sb('rpc/ohb_turn_on_services',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_watch_for:watch||null,p_trade:trade||null,p_not_political:true})});
+    AL.auto=(Array.isArray(r)?r[0]:r)||{ok:false};
+  }catch(e){AL.auto={ok:false,reason:/could not find the function|PGRST202|schema cache/i.test(e.message)?'needs_update':'error'};}
+  if(AL.auto.ok)await loadAlerts();
+  return AL.auto;
+}
 async function alTurnOn(btn){
-  const box=document.getElementById('alNotPol');
-  const watch=((document.getElementById('alWatch')||document.getElementById('alWatch2')||{}).value||'').trim();
-  const trade=((document.getElementById('alTrade')||document.getElementById('alTrade2')||{}).value||'').trim();
-  if(box&&!box.checked){toast(AL_REASONS.political,true);box.focus();return;}
+  const watch=((document.getElementById('alWatch2')||{}).value||'').trim()||(alMine()[0]&&alMine()[0].watch_for)||alDefaults()[0];
+  const trade=((document.getElementById('alTrade2')||{}).value||'').trim()||(alMine()[0]&&alMine()[0].trade)||alDefaults()[1];
   const label=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Turning on…';}
   try{
     const r=await sb('rpc/ohb_turn_on_services',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_watch_for:watch||null,p_trade:trade||null,p_not_political:true})});
@@ -8876,6 +8908,15 @@ async function alTurnOn(btn){
   }catch(e){
     toast(/could not find the function|PGRST202|schema cache/i.test(e.message)?'This needs the Hub’s latest update. Please let The People’s Voices know.':'Didn’t turn on: '+e.message,true);
   }finally{if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent=label;}}
+}
+async function alTurnOff(a){
+  if(!confirm('Turn off Bids & Alerts for '+((BIZ.row&&BIZ.row.name)||'this business')+'? The emails stop. You can turn them back on here any time.'))return;
+  try{
+    const r=await sb('rpc/ohb_services_off',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});
+    const d=Array.isArray(r)?r[0]:r;
+    if(!d||!d.ok){toast('Couldn’t turn them off. Please try again.',true);return;}
+    toast('Turned off. The emails stop now.');await renderAlertsTab();
+  }catch(e){toast(/could not find the function|PGRST202/i.test(e.message)?AL_REASONS.needs_update:'Didn’t work: '+e.message,true);}
 }
 async function alSaveWatch(id,btn){
   if(!id)return;
@@ -8930,6 +8971,7 @@ if(typeof demoSeed==='function'){const _dsA=demoSeed;demoSeed=function(type){
 function tpvCountyIdSafe(c){return String(c||'').toLowerCase().replace(/[^a-z]/g,'');}
 if(typeof demoRpc==='function'){const _drA=demoRpc;demoRpc=function(fn,args){
   if(fn==='tpv_my_business')return demoJSON(DEMO.alerts?[DEMO.alerts]:[]);
+  if(fn==='ohb_services_off'){if(DEMO.alerts)DEMO.alerts.status='paused';return demoJSON({ok:true});}
   if(fn==='ohb_leave_business'){DEMO.db.ohb_members=demoTable('ohb_members').filter(r=>!(r.business_id===args.p_biz&&r.user_id===DEMO.uid));return demoJSON({ok:true});}
   if(fn==='ohb_turn_on_services'){if(DEMO.alerts){DEMO.alerts.status='active';DEMO.alerts.services=['watch','bids'];if(args.p_watch_for)DEMO.alerts.watch_for=args.p_watch_for;if(args.p_trade)DEMO.alerts.trade=args.p_trade;}return demoJSON({ok:true,id:9001,services:['watch','bids'],waiting:[]});}
   if(fn==='tpv_business_update'){if(DEMO.alerts){DEMO.alerts.watch_for=args.p_watch_for||null;DEMO.alerts.trade=args.p_trade||null;}return demoJSON('ok');}
@@ -8984,6 +9026,24 @@ if(typeof planSelfCheck==='function'){const _pscS=planSelfCheck;planSelfCheck=as
 };}
 if(typeof renderSettings==='function'){const _rsS=renderSettings;renderSettings=async function(){
   const r=await _rsS.apply(this,arguments);planRecheck(false).catch(()=>{});return r;};}
+
+// ─── on opening the Hub ───
+if(typeof enterApp==='function'){const _eaA=enterApp;enterApp=async function(){
+  const r=await _eaA.apply(this,arguments);
+  try{
+    const want=(new URLSearchParams(location.search).get('tab')||'').toLowerCase();
+    if(want&&BIZ.id){const t=document.querySelector('.tab[onclick*="\''+want+'\'"]');if(t&&t.style.display!=='none'){setTimeout(()=>goTab(want),300);}
+      try{const u=new URL(location.href);u.searchParams.delete('tab');history.replaceState(null,'',u.pathname+u.search);}catch(e){}}
+  }catch(e){}
+  // Bids & Alerts come with the Hub: switch them on, once, for a running Hub
+  setTimeout(async()=>{try{
+    const k=planState().kind;
+    if(!['trialing','active','past_due','comped','ending'].includes(k))return;
+    const res=await alAutoOn();
+    if(res&&res.ok)toast('Bids & Alerts are on, included with your Hub. See them in the Bids & Alerts tab.');
+  }catch(e){}},1500);
+  return r;
+};}
 
 // ═══════════════════════════════════════════════════════
 // DEMO MODE — operations-hub.html?demo
