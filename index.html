@@ -12577,6 +12577,17 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const [sample, setSample] = useState(null);       // which card's sample is open
   const formRef = useRef(null), explainRef = useRef(null);
   const admin = isFullAdmin(profile);
+  // Already running an Operations Hub? Its services come with it and switch on by themselves: no sign-up here.
+  const [hubMember, setHubMember] = useState(TPV_FROM_HUB);
+  const [showFormAnyway, setShowFormAnyway] = useState(false);
+  useEffect(()=>{
+    if(!user) return;
+    (async()=>{ try {
+      const {data, error} = await sb.from('ohb_members').select('role').eq('user_id', user.id).in('role', ['owner','manager']).limit(1);
+      if(!error && Array.isArray(data) && data.length) setHubMember(true);
+    } catch(e) {} })();
+  },[user && user.id]);
+  const hubOn = hubMember && !showFormAnyway;
   const load = async()=>{
     const {data, error} = await sb.from('business_services').select('*').order('sort',{ascending:true});
     setList(error ? null : (data || []));
@@ -12683,9 +12694,14 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     h(HubReferralBanner),
     h(PriceCompare),
 
-    TPV_FROM_HUB && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
-      h('strong',null,'Coming from the Operations Hub? '),
-      'Watch alerts, the Bid & grant finder and rule explainers come with your Hub, so there\'s nothing extra to pay. Sign up below with the same email you use for the Hub and we\'ll switch them on.'),
+    hubMember && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:4}},'🏪 You have the Operations Hub'),
+      'Watch alerts, the Bid & grant finder and rule explainers come with it and switch on by themselves. There\'s nothing to sign up for here. See your bids and alerts, and change what we watch for, in your Hub.',
+      h('div',{style:{marginTop:10,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}},
+        h('a',{href:'/operations-hub.html?tab=alerts',style:{background:'#1a6b3c',color:'#fff',textDecoration:'none',borderRadius:8,padding:'9px 16px',fontFamily:PD,fontWeight:700,fontSize:14}},'Open Bids & Alerts in my Hub →'),
+        !TPV_FROM_HUB && h('button',{onClick:()=>{ setShowFormAnyway(!showFormAnyway); if(!showFormAnyway) scrollTo(formRef); },
+          style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13,fontFamily:LB}},
+          showFormAnyway ? 'Hide the sign-up form' : 'Signing up a different business?'))),
 
     // ── The business's own services, when signed in with the email they used
     mine.length > 0 && h(MyBusinessPanel,{mine, menu:shown, onToast, onChanged:loadMine, onExplain:()=>{ setShowExplain(true); scrollTo(explainRef); }}),
@@ -12701,22 +12717,24 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a1a2e'}}, s.name),
         h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e'}}, s.price_label)),
       h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}}, s.blurb),
-      isHubService(s) && !TPV_FROM_HUB && h(HubPerks),
+      isHubService(s) && !hubMember && h(HubPerks),
       h('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
         pill(s),
-        !(TPV_FROM_HUB && isHubService(s)) && h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
+        hubOn && (s.id === 'watch' || s.id === 'bids')
+          ? h('a',{href:'/operations-hub.html?tab=alerts',style:{background:'#eef7f1',color:'#1a6b3c',textDecoration:'none',fontSize:12.5,fontWeight:700,padding:'6px 12px',borderRadius:14,fontFamily:LB}},'✓ Included with your Hub')
+          : !(hubMember && isHubService(s)) && h('button',{onClick:()=>choose(s.id),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
           s.id === 'explainer' ? 'Send us a rule' : s.status === 'available' ? 'Sign up' : 'Sign up early'),
         h('button',{onClick:()=>setSample(sample === s.id ? null : s.id),'aria-expanded':sample === s.id,
           style:{background:'#fff',color:'#1a1a2e',border:'1.5px solid #1a1a2e',borderRadius:7,padding:'7px 13px',fontFamily:PD,fontWeight:700,fontSize:13,cursor:'pointer'}},
           sample === s.id ? 'Hide the sample' : 'See a sample'),
-        isHubService(s) && !TPV_FROM_HUB && h('a',{href:HUB_DEMO_URL,target:'_blank',rel:'noopener',
+        isHubService(s) && !hubMember && h('a',{href:HUB_DEMO_URL,target:'_blank',rel:'noopener',
           style:{background:'#f0c040',color:'#1a1a2e',textDecoration:'none',borderRadius:7,padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13}},'Try the live demo →'),
         isHubService(s) && h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontFamily:LB,fontSize:13}},
-          TPV_FROM_HUB ? 'Back to your Hub →' : 'Already have it? Open the Hub →')),
+          hubMember ? 'Open your Hub →' : 'Already have it? Open the Hub →')),
       sample === s.id && h(ServiceSample,{id:s.id}))),
 
     // ── Sign-up form (ongoing services)
-    Array.isArray(list) && signupServices.length > 0 && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
+    Array.isArray(list) && signupServices.length > 0 && !hubOn && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
       done
         ? h('div',{style:{fontFamily:LB}},
             h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
