@@ -6032,7 +6032,7 @@ const POS={preview:null};
 function posCardHTML(){
   return '<div class="card pos-card"><div class="card-title"><div class="card-title-dot"></div>Import sales from your card reader</div>'
     +'<div class="card-sub">Using Square, Clover, SumUp or another card reader? Download its sales report as a CSV and bring it in. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
-    +' Square: <b>Reports → Sales summary or Transactions → Export → CSV</b>. For stock, also export <b>Item sales</b>.</div>'
+    +' Square: <b>Reports → Transactions → pick your dates → Export → Transactions CSV</b> (a whole year at once is fine). For stock, also export <b>Item sales</b>.</div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import a sales CSV</button></div>'
     +'<input type="file" id="posFile" accept=".csv,text/csv" style="display:none;" onchange="onPosFile(this)"></div>';
 }
@@ -6081,15 +6081,48 @@ function posSummaryFrom(name,rows){
   if(!days.length)return null;
   return{start,end,days};
 }
+// Square's "Sales summary" also comes as one label per line ("Net sales","$1,234.00"): totals only, no days.
+function posVerticalSummary(name,rows){
+  const map={};
+  rows.forEach(r=>{const k=posH(r&&r[0]);if(k&&r.length>=2&&String(r[1]==null?'':r[1]).trim()!=='')map[k]=r[1];});
+  if(!('net sales' in map)||!('gross sales' in map))return null;
+  const m=String(name).match(/(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/);
+  const v=k=>k in map?posMoney(map[k]):0;
+  return{start:m?m[1]:'',end:m?m[2]:'',net:v('net sales'),gross:v('gross sales'),returns:Math.abs(v('returns')),
+    tax:v('taxes')||v('tax'),tip:v('tips'),fee:Math.abs(v('fees')),
+    n:parseInt(String(map['total sales transactions']||map['sales transactions']||'').replace(/\D/g,''))||0};
+}
+const POS_HOW='<ol style="margin:6px 0 10px;padding-left:20px;line-height:1.7;"><li>In your Square Dashboard, open <b>Reports → Transactions</b>.</li><li>Set the dates you want. A whole year at once is fine.</li><li>Tap <b>Export</b>, then <b>Transactions CSV</b>.</li><li>Come back here and tap <b>Import a sales CSV</b>.</li></ol>'
+  +'<div class="bk-sub">Each sale lands on its own day and in the right pay week, with tips, sales tax and card fees kept separate. Weeks you already logged by hand are skipped, so nothing counts twice.</div>';
+function posHelp(title,html){
+  const m=posModal();document.getElementById('posTitle').textContent=title;
+  document.getElementById('posBody').innerHTML=html+'<div class="txn-actions"><button class="btn-green" onclick="document.getElementById(\'posModal\').classList.remove(\'open\');const f=document.getElementById(\'posFile\');if(f)f.click();">Choose the file</button></div>';
+  m.classList.add('open');
+}
 function posHandleRows(name,rows){
+  const vs=posVerticalSummary(name,rows);
+  if(vs){
+    const span=vs.start&&vs.end?Math.round((parseISO(vs.end)-parseISO(vs.start))/864e5)+1:0;
+    if(span>=1&&span<=7){
+      POS.preview={name,kind:'sales',days:[{date:vs.end,who:'',net:vs.net,tax:vs.tax,tip:vs.tip,fee:vs.fee,n:vs.n}],refunds:0,skipped:0,
+        summary:{start:vs.start,end:vs.end},src:'possum:'+vs.start+'_'+vs.end,cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+      return posPrepThenShow();
+    }
+    return posHelp('That’s a summary, not day by day',
+      '<p style="margin:0 0 8px;">This is Square’s <b>Sales summary</b>'+(vs.start?' for '+esc(prettyDate(vs.start))+' – '+esc(prettyDate(vs.end)):'')+': <b>'+fmt(vs.net)+'</b> in net sales'+(vs.n?' from '+vs.n.toLocaleString()+' sales':'')+'. '
+      +'It only has the total, not which day each sale happened, so the Hub can’t put them in the right pay weeks.</p>'
+      +(vs.returns>Math.max(10000,Math.abs(vs.net))?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">Square also shows <b>'+fmt(vs.gross)+'</b> in gross sales and <b>'+fmt(vs.returns)+'</b> in returns. That usually means one sale was typed in wrong and refunded. The day-by-day file will show it, and the Hub flags days like that so you can leave them out.</span></div>':'')
+      +'<p style="margin:8px 0 2px;"><b>Get the day-by-day file instead (about a minute):</b></p>'+POS_HOW);
+  }
   const sum=posSummaryFrom(name,rows);
   if(sum){
     POS.preview={name,kind:'sales',days:sum.days,refunds:0,skipped:0,summary:sum,src:'possum:'+(sum.start||'')+'_'+sum.end,
       cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
-    return posShowSales();
+    return posPrepThenShow();
   }
   const d=posDetect(rows);
-  if(!d){toast('Couldn’t find dates and sales in that file. It needs to be a CSV export of your sales.',true);return;}
+  if(!d){return posHelp('That file doesn’t have sales by day','<p style="margin:0 0 8px;">The Hub needs a file with a <b>date</b> on each sale. From Square:</p>'+POS_HOW
+    +'<p class="bk-sub" style="margin-top:8px;">Clover, SumUp and other card readers have a similar transactions or sales export. Any CSV with a date and an amount on each line works.</p>');}
   if(d.kind==='items'){
     // Square's Item Sales export lists every sale as an "item". If most are "Custom Amount"
     // it isn't stock, it's the day's sales: total them up as sales instead.
@@ -6134,8 +6167,26 @@ function posSalesPreview(name,rows,d){
   const days=Object.values(byKey).sort((a,b)=>a.date<b.date?-1:1);
   if(!days.length){toast('No sales found in that file',true);return;}
   POS.preview={name,kind:'sales',days,refunds,skipped,cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+  posPrepThenShow();
+}
+// Before the preview: weeks already logged by hand (so they don't count twice), and days far bigger than usual
+async function posPrepThenShow(){
+  const p=POS.preview;if(!p)return;
+  p.manual={};p.skipManual=true;p.odd=[];p.skipOdd=true;
+  try{
+    const labels=[...new Set(p.days.map(g=>getWeekLabel(parseISO(g.date))))];
+    for(let i=0;i<labels.length;i+=40){
+      const chunk=labels.slice(i,i+40).map(l=>'"'+String(l).replace(/"/g,'')+'"').join(',');
+      const rows=await sb('ohb_revenue_entries?select=period_label,amount,source&import_key=is.null&period_label=in.('+encodeURIComponent(chunk)+')');
+      (rows||[]).forEach(r=>{if(/tip/i.test(r.source||''))return;p.manual[r.period_label]=(p.manual[r.period_label]||0)+(+r.amount||0);});
+    }
+  }catch(e){p.manual={};}
+  const nets=p.days.map(g=>Math.abs(g.net)).filter(x=>x>0).sort((a,b)=>a-b);
+  const med=nets.length?nets[Math.floor(nets.length/2)]:0;
+  if(p.days.length>2)p.odd=p.days.filter(g=>Math.abs(g.net)>Math.max(2500,med*10)).map(g=>g.date+'|'+(g.who||''));
   posShowSales();
 }
+const posManualWeeks=p=>Object.keys(p.manual||{}).filter(l=>Math.abs(p.manual[l])>0.004);
 function posModal(){
   let m=document.getElementById('posModal');if(m)return m;
   m=document.createElement('div');m.className='modal-overlay';m.id='posModal';m.onclick=e=>{if(e.target===m)m.classList.remove('open');};
@@ -6150,7 +6201,11 @@ function posShowSales(){
     +'<div class="bk-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">'
     +[['Sales',t('net'),'var(--green)'],['Sales tax',t('tax')],['Tips',t('tip')],['Card fees',t('fee'),'var(--red)']].map(([l,v,c])=>'<div class="bk-stat"><div class="bk-stat-l">'+l+'</div><div class="bk-stat-v"'+(c?' style="color:'+c+';"':'')+'>'+fmt(v)+'</div></div>').join('')+'</div>'
     +'<div class="txn-grid"><div><label>File the sales under</label><select class="period-select" onchange="POS.preview.cat=this.value">'+INCOME_CATS.filter(c=>!/tip/i.test(c)).map(c=>'<option'+(c===p.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div></div>'
-    +(p.summary?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">This is a <b>summary</b>'+(p.summary.start?' for '+esc(prettyDate(p.summary.start))+' – '+esc(prettyDate(p.summary.end)):'')+', with no day-by-day detail. It goes in as one entry per person, dated '+esc(prettyDate(p.summary.end))+', so it all lands in that pay week. For sales spread over the right weeks, export <b>Item sales</b> from Square instead. Don’t import both for the same dates, or sales count twice.</span></div>':'')
+    +(p.summary?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">This is a <b>summary</b>'+(p.summary.start?' for '+esc(prettyDate(p.summary.start))+' – '+esc(prettyDate(p.summary.end)):'')+', with no day-by-day detail. It goes in as one entry per person, dated '+esc(prettyDate(p.summary.end))+', so it all lands in that pay week. For sales spread over the right weeks, export <b>Transactions</b> from Square instead (Reports → Transactions → Export → Transactions CSV). Don’t import both for the same dates, or sales count twice.</span></div>':'')
+    +(posManualWeeks(p).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipManual?'checked ':'')+'onchange="POS.preview.skipManual=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Skip the '+posManualWeeks(p).length+' week'+(posManualWeeks(p).length===1?'':'s')+' you already logged by hand</b> ('+fmt(posManualWeeks(p).reduce((a,l)=>a+p.manual[l],0))+' entered already), so those sales don’t count twice. Uncheck to bring them in too.</span></label>':'')
+    +((p.odd||[]).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipOdd?'checked ':'')+'onchange="POS.preview.skipOdd=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Leave out '+(p.odd.length===1?'a day that looks':p.odd.length+' days that look')+' like a mistake:</b> '
+      +p.odd.slice(0,4).map(k=>{const g=p.days.find(x=>x.date+'|'+(x.who||'')===k);return esc(prettyDate(g.date))+' ('+(g.net<0?'−':'')+fmt(Math.abs(g.net))+')';}).join(', ')+(p.odd.length>4?'…':'')
+      +'. That’s far more than a usual day. A sale typed in wrong and refunded on another day does this. Check it in Square, and uncheck if it’s real.</span></label>':'')
     +'<div class="bk-sub" style="margin:8px 0;">Becomes '+p.days.length+(p.summary?' entr'+(p.days.length===1?'y':'ies'):' daily entr'+(p.days.length===1?'y':'ies'))
     +(p.days.some(g=>g.who)?', split by who made the sale (so market commission goes to the right person)':'')+'. '
     +(t('tax')?'Sales tax is kept out of your income and tracked for your sales tax return. ':'')
@@ -6165,7 +6220,9 @@ function posShowSales(){
 async function posImportSales(){
   const p=POS.preview;if(!p)return;const btn=document.getElementById('posGo');btn.disabled=true;btn.textContent='Importing…';
   const src=p.src||'pos';const revs=[],exps=[];
-  p.days.forEach(g=>{
+  const skipWeeks=new Set(p.skipManual?posManualWeeks(p):[]),skipOdd=new Set(p.skipOdd?(p.odd||[]):[]);
+  let leftOut=0;
+  p.days.filter(g=>{const out=skipWeeks.has(getWeekLabel(parseISO(g.date)))||skipOdd.has(g.date+'|'+(g.who||''));if(out)leftOut++;return !out;}).forEach(g=>{
     const label=getWeekLabel(parseISO(g.date));const tag=src+':'+g.date+':'+(g.who||'all');
     if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
     if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:'Card reader',worked_by:g.who||null}});
@@ -6203,7 +6260,7 @@ async function posImportSales(){
     }
     const skipped=revs.length+exps.length-newRevs.length-nf;
     document.getElementById('posModal').classList.remove('open');
-    toast(newRevs.length+' sales entries'+(nf?' and '+nf+' fee entries':'')+' imported'+(skipped?' · '+skipped+' were already here':''));
+    toast(newRevs.length+' sales entries'+(nf?' and '+nf+' fee entries':'')+' imported'+(skipped?' · '+skipped+' were already here':'')+(leftOut?' · '+leftOut+' day'+(leftOut===1?'':'s')+' left out':''));
     POS.preview=null;BOOKS.stale=true;
     try{await loadRevLogEntries();loadExpensesFromDB();}catch(e){}
     refreshDashboard();
