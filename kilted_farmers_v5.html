@@ -1455,8 +1455,17 @@ let PVS={mine:null,list:null,open:null};
 async function loadPVServices(){
   const el=document.getElementById('pvServicesBody');if(!el)return;
   el.innerHTML='<div class="bk-empty">Checking your services…</div>';
-  try{PVS.mine=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});if(!Array.isArray(PVS.mine))PVS.mine=PVS.mine?[PVS.mine]:[];}
-  catch(e){PVS.mine=null;PVS.err=e.message;}
+  // the farm's own sign-up, for any Steward (falls back to the old per-login view before the update is run)
+  PVS.kf=true;
+  try{PVS.mine=await sb('rpc/kf_services',{method:'POST',body:'{}'});}
+  catch(e){PVS.kf=false;try{PVS.mine=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});}catch(x){PVS.mine=null;PVS.err=x.message;}}
+  if(PVS.mine!==null&&!Array.isArray(PVS.mine))PVS.mine=PVS.mine?[PVS.mine]:[];
+  // They come with the Hub: switch them on by themselves, once, unless someone turned them off on purpose
+  if(PVS.kf&&Array.isArray(PVS.mine)&&!PVS.mine.some(b=>b.status==='active'||b.status==='paused')&&!PVS.autoTried){
+    PVS.autoTried=true;
+    const r=await pvTurnOn(true);
+    if(r&&r.ok){try{PVS.mine=await sb('rpc/kf_services',{method:'POST',body:'{}'});}catch(e){}toast('Grants & Alerts are on for The Kilted Farmers.');}
+  }
   try{PVS.list=(await sb('business_services?select=id,name,blurb,price_label,status,sort&order=sort.asc')).filter(x=>x.status==='available'&&!/hub/.test(x.id));}catch(e){PVS.list=[];}
   renderPVServices();
 }
@@ -1467,16 +1476,17 @@ function renderPVServices(){
   const live=PVS.mine.filter(b=>b.status!=='canceled');
   if(!live.length){
     const list=(PVS.list&&PVS.list.length)?PVS.list:[{id:'watch',name:'Watch alerts',blurb:'An email when a meeting agenda, local decision or news story mentions what matters to your business.'},{id:'bids',name:'Bid & grant finder',blurb:'Every Monday: public bids and small-business grants that fit your line of work.'},{id:'explainer',name:'Plain-language rule explainer',blurb:'Send a new ordinance, rule or permit requirement and get back what changes for you.'}];
-    el.innerHTML='<div class="card-sub">This login isn’t signed up for any services yet. Sign up on The People’s Voices with the same email you use here ('+esc((currentUser&&currentUser.email)||'your Hub email')+') and they’ll show up on this tab.</div>'
+    const why=PVS.why;
+    el.innerHTML='<div class="card-sub">'+(why==='none_ready'?'These are starting soon and will switch on by themselves.':why==='needs_update'?'Grants &amp; Alerts need the Hub’s latest update (tpv_hub_update.sql). Once it’s run, they switch on here by themselves.':'These come with your Hub. Tap below and they switch on right away, with nothing to sign up for.')+'</div>'
       +list.map(x=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(x.name)+'</div><div class="bk-sub" style="white-space:normal;">'+esc(x.blurb||'')+'</div></div>'+(x.price_label?'<span class="svc-pill">'+esc(x.price_label)+'</span>':'')+'</div>').join('')
-      +'<div class="bk-actions"><a class="btn-green" style="text-decoration:none;display:inline-block;" href="'+PV_BIZ_URL+'" target="_blank" rel="noopener">Turn them on ↗</a> <button class="btn-secondary" onclick="loadPVServices()">↻ Check again</button></div>';
+      +'<div class="bk-actions"><button class="btn-green" onclick="pvTurnOn(false,this)">Turn them on</button> <button class="btn-secondary" onclick="loadPVServices()">↻ Check again</button></div>';
     return;
   }
   el.innerHTML=live.map((b,bi)=>{
     const st=PV_STATUS[b.status]||PV_STATUS.new;const has=s=>(b.services||[]).includes(s);
     let h='<div class="card" style="margin:0 0 12px;"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;"><div class="bk-payee" style="font-size:16px;">'+esc(b.business_name||'Your business')+'</div>'
       +'<span class="svc-pill" style="background:'+st[2]+';color:'+st[1]+';">'+st[0]+'</span></div>';
-    h+='<div class="bk-sub" style="white-space:normal;margin:4px 0 10px;">'+(b.status==='new'?'Requested. Alerts start once it’s switched on.':b.status==='paused'?'Paused. Email hello@thepeoplesvoices.org to pick back up.':'Alerts go to the email you signed up with, and show up here too.')+'</div>';
+    h+='<div class="bk-sub" style="white-space:normal;margin:4px 0 10px;">'+(b.status==='new'?'Requested. Alerts start once it’s switched on.':b.status==='paused'?'Off. <button class="link-btn" onclick="pvTurnOn(false,this)">Turn them back on</button>':'On. Alerts go to '+esc(b.email||'your email')+', and show up here too.')+'</div>';
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+['watch','bids'].map(s=>'<span class="svc-pill'+(has(s)?' done':'')+'">'+(has(s)?'✓ ':'')+PV_NAMES[s]+'</span>').join('')+'<span class="svc-pill done">✓ Rule explainers</span></div>';
     if(has('watch'))h+='<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">What we watch for</label><textarea id="pvWatch'+bi+'" rows="2" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;" placeholder="Separate with commas: your street, your line of work, licenses...">'+esc(b.watch_for||'')+'</textarea>';
     if(has('bids'))h+='<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Your line of work (for bids and grants)</label><input id="pvTrade'+bi+'" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;background:#fff;" value="'+esc(b.trade||'')+'" placeholder="Handmade pasta, catering, farmers market vendor...">';
@@ -1493,15 +1503,52 @@ function renderPVServices(){
           +'<div class="bk-sub">'+esc(fmtD(e.created_at))+' · '+(e.status==='sent'?'<button class="link-btn" onclick="PVS.open='+(open?'null':'\''+esc(k)+'\'')+';renderPVServices()">'+(open?'Hide':'Read it')+'</button>':e.status==='declined'?'We couldn’t do this one':'Being written')+'</div>'
           +(open&&e.final_text?'<div style="white-space:pre-wrap;background:var(--cream,#faf7f0);border-radius:8px;padding:10px 12px;margin-top:6px;font-size:14px;line-height:1.55;">'+esc(e.final_text)+'</div>':'')+'</div>';}).join('');
     }
-    h+='<div class="bk-actions"><a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="'+PV_BIZ_URL+'" target="_blank" rel="noopener">Send a rule to explain, or change services ↗</a></div></div>';
+    h+='<div class="card-title" style="font-size:15px;margin-top:14px;"><div class="card-title-dot"></div>Explain a rule</div>'
+      +'<div class="bk-sub" style="white-space:normal;margin-bottom:8px;">Got a new ordinance, permit requirement or state rule? Send it and get back what it is, what changes for you and what to do, in plain language. A person checks every one. It’s an explanation, not legal advice.</div>'
+      +'<input id="pvRuleUrl'+bi+'" placeholder="Link to the rule (https://…)" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;">'
+      +'<textarea id="pvRuleText'+bi+'" rows="2" placeholder="Or paste the rule here" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;"></textarea>'
+      +'<input id="pvRuleQ'+bi+'" placeholder="What do you want to know? (optional)" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:9px 11px;border:1.5px solid var(--cream-dark,#e5dccb);border-radius:8px;font-family:inherit;font-size:14px;">'
+      +'<div class="bk-actions" style="margin-top:0;"><button class="btn-green" onclick="pvExplain('+bi+',this)">Send it</button></div>'
+      +(b.status==='active'?'<div class="bk-sub" style="margin-top:10px;"><button class="link-btn" onclick="pvTurnOff()">Turn off Grants &amp; Alerts</button></div>':'')+'</div>';
     return h;
   }).join('')+'<div class="bk-actions"><button class="btn-secondary" onclick="loadPVServices()">↻ Refresh</button></div>';
+}
+// what the farm is watched for at first (change it any time on this tab)
+const PV_DEFAULT_WATCH='food, health department, farmers market, food truck, Concord, zoning';
+const PV_DEFAULT_TRADE='food production, catering and food service';
+async function pvTurnOn(quiet,btn){
+  const b=(PVS.mine||[]).find(x=>x.status!=='canceled')||{};
+  if(btn){btn.disabled=true;btn.textContent='Turning on…';}
+  let d=null;
+  try{const r=await sb('rpc/kf_services_on',{method:'POST',body:JSON.stringify({p_watch_for:b.watch_for||PV_DEFAULT_WATCH,p_trade:b.trade||PV_DEFAULT_TRADE})});d=(Array.isArray(r)?r[0]:r)||{ok:false};}
+  catch(e){d={ok:false,reason:/could not find the function|PGRST202|schema cache/i.test(e.message)?'needs_update':'error',message:e.message};}
+  PVS.why=d.ok?null:d.reason;
+  if(quiet)return d;
+  if(d.ok)toast('Grants & Alerts are on.');else toast(d.reason==='needs_update'?'This needs the Hub’s latest update (tpv_hub_update.sql).':d.reason==='none_ready'?'These are starting soon.':'Didn’t turn on: '+(d.message||d.reason),true);
+  loadPVServices();return d;
+}
+async function pvTurnOff(){
+  if(!confirm('Turn off Grants & Alerts for The Kilted Farmers? The emails stop. You can turn them back on here any time.'))return;
+  try{await sb('rpc/kf_services_off',{method:'POST',body:'{}'});toast('Turned off. The emails stop now.');loadPVServices();}
+  catch(e){toast('Didn’t work: '+e.message,true);}
+}
+async function pvExplain(bi,btn){
+  const v=id=>((document.getElementById(id)||{}).value||'').trim();
+  const url=v('pvRuleUrl'+bi),text=v('pvRuleText'+bi),q=v('pvRuleQ'+bi);
+  if(!url&&!text){toast('Paste the rule, or a link to it',true);return;}
+  if(url&&!/^https?:\/\//i.test(url)){toast('The link should start with https://',true);return;}
+  btn.disabled=true;btn.textContent='Sending…';
+  try{
+    await sb('rpc/tpv_explainer_request',{method:'POST',body:JSON.stringify({p_business:'The Kilted Farmers',p_email:(currentUser&&currentUser.email)||'',p_rule_url:url||null,p_rule_text:text||null,p_question:q||null})});
+    toast('Sent! Your explanation usually comes back within a day, by email and here.');loadPVServices();
+  }catch(e){toast('Didn’t send: '+e.message,true);btn.disabled=false;btn.textContent='Send it';}
 }
 async function savePVBusiness(bi){
   const b=(PVS.mine||[]).filter(x=>x.status!=='canceled')[bi];if(!b)return;
   const w=document.getElementById('pvWatch'+bi),t=document.getElementById('pvTrade'+bi);
   try{
-    await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:b.id,p_watch_for:w?w.value:(b.watch_for||''),p_trade:t?t.value:(b.trade||'')})});
+    if(PVS.kf)await sb('rpc/kf_services_update',{method:'POST',body:JSON.stringify({p_watch_for:w?w.value:(b.watch_for||''),p_trade:t?t.value:(b.trade||'')})});
+    else await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:b.id,p_watch_for:w?w.value:(b.watch_for||''),p_trade:t?t.value:(b.trade||'')})});
     toast('Saved. Your next alert will use these.');loadPVServices();
   }catch(e){toast('Didn’t save: '+e.message,true);}
 }
