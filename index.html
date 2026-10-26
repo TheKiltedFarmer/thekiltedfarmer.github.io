@@ -11096,11 +11096,13 @@ function CountyPickerLanding({onPick, profile}) {
 
       // For local business owners
       h('div',{style:{background:'rgba(240,192,64,.08)',border:'1px solid rgba(240,192,64,.35)',borderRadius:8,padding:'16px 18px',marginBottom:18}},
-        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'🏪 Run a small business in Michigan?'),
-        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:10}},
-          'The Operations Hub does your books, budgets, pay, scheduling, inventory and invoices, built for Michigan’s rules. Every invoice gets a Pay now button, and your history comes over from QuickBooks or Wave in a few minutes. $10 a month after 3 free months, with local government alerts and a grant finder included. ',
+        h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}},'🏪 Built for Michigan small businesses'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:SOFT,lineHeight:1.6,marginBottom:8}},
+          'The Operations Hub already knows Michigan: the 6% sales tax and Treasury’s due dates, the Earned Sick Time Act, minimum wage and tip rules, and the state’s new-hire paperwork. It watches what your city and county are deciding, and finds Michigan bids and grants every week. Books, budgets, pay, scheduling, inventory and invoices, all in one place. ',
+          '3 months free, then $10 a month. ',
           foundingLeft > 0 ? foundingSentence(foundingLeft) + ' ' : '',
           'Sign up yourself in minutes, nobody to call.'),
+        h('div',{style:{fontFamily:"'Lora',serif",fontSize:13,color:GOLD,lineHeight:1.6,marginBottom:10}}, '💰 ' + HUB_SAVINGS_LINE),
         h('div',{style:{display:'flex',gap:10,flexWrap:'wrap'}},
           h('a',{href:'/?tab=business',style:{background:GOLD,color:'#1a1a2e',textDecoration:'none',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13.5}},'See what’s included →'),
           h('a',{href:'/operations-hub.html?demo',target:'_blank',rel:'noopener',style:{color:GOLD,fontFamily:"'Lora',serif",fontSize:13.5,alignSelf:'center'}},'Try the demo')),
@@ -12250,7 +12252,7 @@ async function bizFn(body) {
 
 // The Hub's card shows even before its row is added to business_services.
 const HUB_SERVICE_FALLBACK = {id:'hub', name:'Operations Hub', price_label:'3 months free, then $10 a month', status:'available', sort:0, pay_url:'/operations-hub.html',
-  blurb:'Books, budgets, pay, scheduling, inventory, invoices and paperwork for small Michigan businesses. Bring your history over from QuickBooks or Wave in a few minutes. Bring in your Square or card-reader sales, scan receipts, and match your bank statement (CSV, OFX or QFX files). Send invoices and estimates with a Pay now button for your own Square, Stripe, PayPal, Venmo, Cash App or Zelle, and friendly reminders go out on their own when one is late. See your cash 13 weeks ahead, with payday, bills and sales tax counted. Schedule shifts with time-off requests and shift trades, track stock and make batches from recipes, figure pay by shared hours, commission or hourly with a minimum-wage floor and a legal tip pool, track Michigan sales tax and bill due dates, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
+  blurb:'Made for Michigan small businesses, with the state\'s rules built in. Books, budgets, pay, scheduling, inventory, invoices and paperwork in one place. Bring your history over from QuickBooks or Wave in a few minutes. Bring in your Square or card-reader sales, scan receipts, and match your bank statement (CSV, OFX or QFX files). Send invoices and estimates with a Pay now button for your own Square, Stripe, PayPal, Venmo, Cash App or Zelle, and friendly reminders go out on their own when one is late. See your cash 13 weeks ahead, with payday, bills and sales tax counted. Schedule shifts with time-off requests and shift trades, track stock and make batches from recipes, figure pay by shared hours, commission or hourly with a minimum-wage floor and a legal tip pool, track Michigan sales tax and bill due dates, sign up new hires, and get a year-end package for your tax preparer. It works out what everyone is owed; a payroll service still files payroll taxes and sends the pay. Watch alerts, the Bid & grant finder and rule explainers are included.'};
 
 // ── "See a sample": what each service actually looks like, before anyone pays ──
 const SAMPLE_KINDS = [{id:'food', label:'Food truck'}, {id:'hardware', label:'Hardware store'}, {id:'salon', label:'Hair salon'}];
@@ -12444,6 +12446,29 @@ const PRICE_SOURCES = [
   ['GrantWatch and Instrumentl prices (GrantWatch comparison, Oct 2026)','https://www.grantwatch.com/grant-database-comparison.php'],
   ['Hello Alice (free small business platform)','https://helloalice.com']
 ];
+// What a typical small business saves with the Hub, from the posted prices in PRICE_COMPARE:
+// QuickBooks Online Essentials ($85 a month = $1,020 a year) plus GrantWatch ($249 a year) is about $1,270 a year,
+// against the Hub at $10 a month ($120 a year). Checked October 2026; update with PRICE_COMPARE.
+const HUB_SAVINGS = {them:1270, us:120, save:1150};
+const HUB_SAVINGS_LINE = 'Michigan businesses using the Hub save about $' + HUB_SAVINGS.save.toLocaleString() + ' a year compared to QuickBooks and a grant database: $' + HUB_SAVINGS.us + ' a year instead of about $' + HUB_SAVINGS.them.toLocaleString() + '.';
+// What makes the Hub Michigan's own (every item is something it actually does)
+const HUB_MICHIGAN = [
+  ['🧾','Michigan sales tax','The 6% rate, tracked by filing period, with Treasury\'s due dates.'],
+  ['🤒','Paid sick time','The Earned Sick Time Act counted for each person: 40 or 72 hours, carryover and all.'],
+  ['💵','Pay done right','Michigan minimum wage, overtime and a legal tip pool, every week.'],
+  ['📝','New hires','The W-4, MI-W4, I-9 and Michigan new-hire report on each person\'s checklist, so nothing gets missed.'],
+  ['🏛️','Your local government','A heads-up when your city, township or county takes up something that affects you.'],
+  ['📋','Michigan bids & grants','Every Monday: work your city, county and the state are putting out to bid, and grants that fit.']
+];
+function HubMichigan({compact}) {
+  return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'14px 16px',marginBottom:14,fontFamily:LB}},
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:'10px 16px'}},
+      HUB_MICHIGAN.map(([ico, t, d])=>h('div',{key:t,style:{display:'flex',gap:10,alignItems:'flex-start'}},
+        h('span',{style:{fontSize:20,lineHeight:1.2,flexShrink:0},'aria-hidden':true}, ico),
+        h('div',{style:{fontSize:13.5,color:'#444',lineHeight:1.5}}, h('strong',{style:{color:'#1a1a2e',display:'block',fontFamily:PD,fontSize:14.5}}, t), d)))),
+    h('div',{style:{marginTop:12,paddingTop:10,borderTop:'1px solid #efe9dc',fontSize:14,color:'#1a4a2a',lineHeight:1.55}},
+      h('strong',null,'💰 '), HUB_SAVINGS_LINE, ' ', h('span',{style:{color:'#777',fontSize:12.5}},'Based on their posted prices; see How our prices compare below.')));
+}
 function PriceCompare() {
   const [open, setOpen] = useState(false);
   const cell = {background:'#fff',border:'1px solid #efe9dc',borderRadius:8,padding:'10px 12px',marginBottom:8,fontFamily:LB,fontSize:13.5,color:'#333',lineHeight:1.55};
@@ -12453,7 +12478,7 @@ function PriceCompare() {
       h('span',null,'How our prices compare'), h('span',null, open ? '▲' : '▼')),
     open && h('div',{style:{background:'#faf8f3',border:'1px solid #e5dece',borderTop:'none',borderRadius:'0 0 10px 10px',padding:'12px 12px 6px'}},
       h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#1a4a2a',background:'#eef7f1',borderRadius:8,padding:'9px 12px',marginBottom:10,lineHeight:1.55}},
-        h('strong',null,'Example: '),'a food business using QuickBooks Essentials and GrantWatch pays about $106 a month. The Operations Hub, with bids, grants, Watch alerts and rule explainers included, is $10.'),
+        h('strong',null,'Example: '),'QuickBooks Online Essentials and a GrantWatch subscription come to about $' + HUB_SAVINGS.them.toLocaleString() + ' a year. The Operations Hub, with bids, grants, Watch alerts and rule explainers included, is $' + HUB_SAVINGS.us + ' a year, a savings of about $' + HUB_SAVINGS.save.toLocaleString() + '.'),
       PRICE_COMPARE.map(r=>h('div',{key:r.what,style:cell},
         h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14.5,color:'#1a1a2e',marginBottom:4}}, r.what),
         h('div',null, h('strong',{style:{color:'#1a6b3c'}},'Ours: '), r.ours),
@@ -12547,8 +12572,8 @@ function BizDoorway({profile, onOpen}){
   return h('div',{style:{background:'#eef7f1',border:'1px solid #b9dcc5',borderRadius:10,padding:'12px 14px',marginBottom:14,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}},
     h('span',{style:{fontSize:22,flexShrink:0}},'🏪'),
     h('div',{style:{flex:'1 1 240px',minWidth:0,fontFamily:"'Lora',serif",fontSize:13.5,color:'#1a4a2a',lineHeight:1.55}},
-      h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:'#1a1a2e'}}, isBiz ? 'Run your business from here too' : 'Run a small business in Michigan?'),
-      ' The Operations Hub does your books, budgets, pay, scheduling, inventory and invoices for $10 a month after 3 free months, with local alerts and a grant finder included. Coming from QuickBooks or Wave? It brings your history over. Try the demo, no account needed.'),
+      h('strong',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,color:'#1a1a2e'}}, isBiz ? 'Run your business from here too' : 'Built for Michigan small businesses'),
+      ' Books, pay, scheduling and invoices that already know Michigan’s sales tax, sick time and wage rules, plus what your city and county are deciding. ' + HUB_SAVINGS_LINE + ' Try the demo, no account needed.'),
     h('div',{style:{display:'flex',gap:8,alignItems:'center',flexShrink:0}},
       h('button',{onClick:onOpen,style:{background:'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},'See what’s included →'),
       h('button',{onClick:hide,'aria-label':'Hide this',title:'Hide this',style:{background:'none',border:'none',color:'#7a9a85',fontSize:18,cursor:'pointer',padding:'2px 6px'}},'×')));
@@ -12678,9 +12703,9 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
 
   return h('div',null,
     h('div',{style:{marginBottom:14}},
-      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Services for local businesses'),
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#1a1a2e',marginBottom:6}},'Built for Michigan small businesses'),
       h('div',{style:{fontFamily:LB,fontSize:14,color:'#444',lineHeight:1.6}},
-        'Tools that save you time keeping up with local government. What businesses pay for them covers the cost of running The People\'s Voices, so it stays free for everyone.'),
+        'Tools made for the way business works here: Michigan\'s rules built in, your own city and county watched for you, and Michigan bids and grants found every week. What businesses pay for them covers the cost of running The People\'s Voices, so it stays free for everyone.'),
       h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6,marginTop:8,background:'#faf8f3',borderRadius:8,padding:'9px 12px'}},
         h('strong',{style:{color:'#1a1a2e'}},'What you\'re buying is the service, nothing else. '),
         'No ads, no sponsorships, no say in what the site shows. Everyone pays the same posted price, and every business gets the same 3 free months of the Operations Hub. Prices are kept low on purpose: most of the work is automated, and the point is to cover costs, not to make a profit. ',
@@ -12692,7 +12717,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         ? h(Fragment,null, h('strong',null,'Thank you! '), (paidMsg.business ? paidMsg.business + '\'s' : 'Your') + ' service is on. Heads-ups start with the next relevant meeting or story, and bids and roundups come Monday mornings. Sign in with the same email any time to change what we watch for.')
         : h(Fragment,null, h('strong',null,'Almost there. '), paidMsg.why === 'not_paid' ? 'Stripe hasn\'t finished the payment yet. It switches on by itself as soon as it does, usually within a few minutes.' : 'We couldn\'t confirm the payment from here, but if it went through, your service switches on by itself within a day. Questions? hello@thepeoplesvoices.org')),
     h(HubReferralBanner),
-    h(PriceCompare),
+    !hubMember && h(HubMichigan),
 
     hubMember && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'14px 16px',marginBottom:14,fontFamily:LB,fontSize:14,color:'#1a4a2a',lineHeight:1.6}},
       h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:4}},'🏪 You have the Operations Hub'),
@@ -12732,6 +12757,8 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
         isHubService(s) && h('a',{href:s.pay_url || '/operations-hub.html',target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontFamily:LB,fontSize:13}},
           hubMember ? 'Open your Hub →' : 'Already have it? Open the Hub →')),
       sample === s.id && h(ServiceSample,{id:s.id}))),
+
+    h(PriceCompare),
 
     // ── Sign-up form (ongoing services)
     Array.isArray(list) && signupServices.length > 0 && !hubOn && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
@@ -21503,7 +21530,7 @@ function App() {
           'Who funds us? Every dollar, out in the open →'),
         h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('business'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
           style:{background:'none',border:'none',padding:0,color:'#c8d0dc',fontSize:12.5,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
-          'Services for local businesses →')),
+          'For Michigan businesses →')),
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
         h('span',{style:{marginLeft:8}},
