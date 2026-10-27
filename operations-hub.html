@@ -1070,6 +1070,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
   </div>
   <div id="onbTeam"></div>
   <div id="payRules"></div>
+  <div id="payChecks"></div>
 </div>
 
 <!-- ─── INGREDIENTS ─── -->
@@ -3304,9 +3305,9 @@ function taxPicture(y){
   let payroll=null;
   if(labor>0&&workers==='employees'){
     const wages={};contractors.forEach(p=>{wages[p.name]=p.total;});
-    payroll=employerTaxes(wages);
+    payroll=employerTaxes(wages,y);
     ded.push({name:'Salaries & wages (employees)',ref:ref('9','26'),amount:labor,note:contractors.length+' people · W-2s'});
-    ded.push({name:'Employer payroll taxes (estimate)',ref:ref('14','23'),amount:payroll.total,note:'Social Security/Medicare match, federal & Michigan unemployment'});
+    ded.push({name:'Employer payroll taxes'+(payroll.exact?'':' (estimate)'),ref:ref('14','23'),amount:payroll.total,note:'Social Security/Medicare match, federal & Michigan unemployment'});
   }else if(labor>0&&workers==='contractors')ded.push({name:'Contract labor (Contributor pay)',ref:ref('20','11'),amount:labor,note:contractors.length+' people'});
   const trips=(BOOKS.miles||[]).filter(m=>String(m.trip_date).slice(0,4)===String(y));
   const miles=trips.reduce((s,m)=>s+(parseFloat(m.miles)||0),0);
@@ -3883,14 +3884,14 @@ function renderBooksTaxes(){
   if(tp.workers==='employees'){
     const wagesTot=tp.contractors.reduce((s,p)=>s+p.total,0);
     h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Employees &amp; Payroll</div>'
-      +'<div class="card-sub">Contributors are on payroll: their pay is wages (W-2), their own taxes are withheld by the payroll service, and the business adds its share of Social Security/Medicare plus unemployment tax. Send the payroll service the <b>Payroll CSV</b> each week.</div>';
+      +'<div class="card-sub">Contributors are on payroll: their pay is wages (W-2), their own taxes are held back from each paycheck (Team → Paychecks), and the business adds its share of Social Security/Medicare plus unemployment tax.</div>';
     if(!tp.contractors.length)h+='<div class="bk-empty">No employee pay in '+y+' yet.</div>';
     tp.contractors.forEach(p=>{
       const docs=['task:w4','task:miw4','task:i9','task:newhire'].filter(k=>onbRow(p.name,k)).length;
       h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(p.name)+'</div><div class="bk-sub">'+p.hours.toFixed(1)+' hrs over '+p.weeks+' weeks · hiring paperwork '+(docs===4?'<b style="color:var(--green);">complete</b>':'<b style="color:var(--tan);">'+docs+' of 4</b>')+'</div></div><div class="bk-amt">'+fmt(p.total)+'</div></div>';
     });
-    if(tp.payroll)h+='<div class="tp-grid" style="margin-top:12px;"><span>Gross wages</span><b>'+fmt(wagesTot)+'</b><span>Employer taxes (est.)</span><b>'+fmt(tp.payroll.total)+'</b></div>'
-      +'<div class="bk-sub" style="margin-top:6px;">Estimate: 7.65% Social Security/Medicare match, 0.6% federal unemployment on each person’s first $7,000, and about 2.7% Michigan unemployment on their first $9,500. Your payroll service will have the exact numbers.</div>';
+    if(tp.payroll)h+='<div class="tp-grid" style="margin-top:12px;"><span>Gross wages</span><b>'+fmt(wagesTot)+'</b><span>Employer taxes'+(tp.payroll.exact?'':' (est.)')+'</span><b>'+fmt(tp.payroll.total)+'</b></div>'
+      +'<div class="bk-sub" style="margin-top:6px;">'+(tp.payroll.exact?'Figured from each paycheck: the business’s Social Security/Medicare match, federal unemployment on each person’s first $7,000, and Michigan unemployment on their first $9,500.':'Estimate: 7.65% Social Security/Medicare match, 0.6% federal unemployment on each person’s first $7,000, and Michigan unemployment on their first $9,500.')+'</div>';
     h+='<div class="bk-actions"><button class="btn-secondary" onclick="payrollCSV('+y+')">⬇ Payroll CSV</button></div></div>';
   }else if(tp.workers==='members'){
     h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Trial Members</div><div class="card-sub">As trial LLC members, Contributors get K-1s like the Stewards, and nothing is withheld. Add them to the ownership split in Tax Setup once the operating agreement is amended. Their pay below is a draw, not an expense.</div>'
@@ -3979,7 +3980,7 @@ function printTaxPackage(){
     +(pays.length?'<h2>3. Estimated tax payments</h2>'+tbl(['Date','Who','To','Amount'],pays):'')
     +(tp.workers==='employees'
       ?'<h2>'+(pays.length?4:3)+'. Employees (W-2 wages)</h2>'+(tp.contractors.length?tbl(['Name','Hours','Gross wages'],tp.contractors.map(p=>[esc(p.name),p.hours.toFixed(1),fmt(p.total)])):'<p class="muted">None.</p>')
-        +(tp.payroll?'<p class="muted">Employer payroll taxes (estimate): '+fmt(tp.payroll.total)+'. Use the payroll service’s year-end reports (W-2/W-3, 941s, Michigan UIA) for exact figures.</p>':'')
+        +(tp.payroll?'<p class="muted">Employer payroll taxes'+(tp.payroll.exact?'':' (estimate)')+': '+fmt(tp.payroll.total)+'. The quarterly 941s, Michigan UIA reports and W-2 worksheet are in Team → Payroll Tax Reports.</p>':'')
       :'<h2>'+(pays.length?4:3)+'. Contributors paid (contract labor)</h2>'+(contractors.length?tbl(['Name','Hours','1099-NEC (≥'+fmt(th).replace('.00','')+')','W-9','Paid'],contractors):'<p class="muted">None.</p>'))
     +'<h2>Vehicle</h2><p>'+(a.vehicle==='mileage'?'Standard mileage: '+Math.round(tp.miles).toLocaleString()+' business miles × '+tp.rate+'¢ = <b>'+fmt(tp.miles*tp.rate/100)+'</b> ('+tp.trips.length+' trips logged; full log in the mileage CSV).'+(tp.fuelSkipped?' Fuel receipts of '+fmt(tp.fuelSkipped)+' are excluded.':''):'Actual expense method — fuel and vehicle costs are in the worksheet.')+'</p>'
     +'<h2>Equipment</h2>'+(tp.bigEquipment.length?tbl(['Date','Item','Cost'],tp.bigEquipment.map(r=>[esc(prettyDate(r.date)),esc(r.payee||'Equipment'),fmt(r.amount)]))+'<p class="muted">Items over $2,500 go on Form 4562 (Section 179 or bonus depreciation). Smaller items are expensed under the de minimis safe harbor.</p>':'<p class="muted">No single equipment purchase over $2,500.</p>')
@@ -4267,10 +4268,10 @@ const ONB_BASE_TASKS=[
 ];
 const ONB_HIRE_TASKS={
  employees:[
-  {key:'task:w4',title:'Federal W-4 collected',hint:'Give it to the payroll service. Don’t store it in the Hub'},
-  {key:'task:miw4',title:'Michigan MI-W4 collected',hint:'Same: payroll service or locked file'},
+  {key:'task:w4',title:'Federal W-4 collected',hint:'Copy its boxes into Team → Withholding Forms. Keep the signed form on paper or in a locked file'},
+  {key:'task:miw4',title:'Michigan MI-W4 collected',hint:'Same: copy its boxes into Withholding Forms, keep the signed form locked up'},
   {key:'task:i9',title:'I-9 completed',hint:'They fill Section 1 by day one; you check their original ID in person and finish Section 2 by their 3rd work day. Keep it on paper'},
-  {key:'task:newhire',title:'Reported as a new hire to Michigan',hint:'Within 20 days of their first day. Many payroll services do this for you'}],
+  {key:'task:newhire',title:'Reported as a new hire to Michigan',hint:'Within 20 days of their first day, online through Michigan’s New Hire Reporting site'}],
  contractors:[{key:'task:w9',title:'W-9 collected',hint:'Keep it on paper or in tax software, not in the Hub'},{key:'task:ica',title:'Contractor agreement signed',hint:'Written terms for the work and pay'}],
  members:[{key:'task:oa',title:'Signed onto the operating agreement',hint:'Amended to add them as a trial member'}]
 };
@@ -4842,7 +4843,7 @@ const EMPLOYER_STEPS=[
  ['ein','Federal EIN','The LLC’s employer ID number from the IRS (you likely already have one).'],
  ['mitax','Registered with Michigan Treasury for income tax withholding','Done online with Michigan Treasury’s business registration.'],
  ['uia','Michigan unemployment (UIA) employer account','Through MiWAM. New employers usually start around 2.7% on the first $9,500 of each person’s wages.'],
- ['payroll','Payroll service set up','Handles withholding, deposits, quarterly filings and W-2s. Feed it the Payroll CSV each week.'],
+ ['payroll','Payroll accounts ready','An EFTPS account for federal deposits, Michigan Treasury Online for state withholding, and MiWAM for unemployment. The Hub’s Paychecks section figures what goes into each one.'],
  ['comp','Workers’ comp policy','Required once you have 3 employees at one time, or 1 working 35+ hours a week for 13 weeks.'],
  ['posters','Labor law posters up at work','Federal and Michigan workplace posters are free from the U.S. Department of Labor and Michigan LEO.']
 ];
@@ -4872,6 +4873,7 @@ function payRatesHTML(r,canEdit){
       :'<div class="bk-empty">Add your team in the table above, then set their rates here.</div>');
 }
 function renderPayRules(){
+  if(typeof renderPaychecks==='function')renderPaychecks();
   const el=document.getElementById('payRules');if(!el)return;
   if(typeof teamLimited==='function'&&teamLimited()){el.innerHTML='';return;}
   if(!BOOKS.schema.checked){el.innerHTML='';return;}
@@ -4895,7 +4897,7 @@ function renderPayRules(){
     const done=EMPLOYER_STEPS.filter(s=>steps[s[0]]).length;
     h+='<div class="card"><div class="ck-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Becoming an Employer</div><span class="ck-badge">'+done+' of '+EMPLOYER_STEPS.length+'</span></div>'
       +'<div class="card-sub">One-time setup before the first paycheck. Each new person also needs a W-4, MI-W4, I-9 and a new-hire report. Those are on each person’s onboarding checklist above.</div>'
-      +'<div class="ck-item"><span class="ck-ico">i</span><span class="ck-text"><b>City income tax.</b> '+esc(MI_CITY_TAX.length+' Michigan cities')+' have their own income tax: '+esc(MI_CITY_TAX.join(', '))+'. If your business is in one of them, or your people live in one, you may need to withhold city tax too. Tell your payroll service the city; it handles the withholding and filing. <a href="/hub-help.html#city-tax" target="_blank" rel="noopener">More</a></span></div>'
+      +'<div class="ck-item"><span class="ck-ico">i</span><span class="ck-text"><b>City income tax.</b> '+esc(MI_CITY_TAX.length+' Michigan cities')+' have their own income tax: '+esc(MI_CITY_TAX.join(', '))+'. If your business is in one of them, or your people live in one, you may need to withhold city tax too. Pick your city in <b>Payroll Setup</b> below and the Hub withholds it from each paycheck. <a href="/hub-help.html#city-tax" target="_blank" rel="noopener">More</a></span></div>'
       +EMPLOYER_STEPS.map(([k,t,d])=>'<label class="onb-task"><input type="checkbox"'+(steps[k]?' checked':'')+(ok?'':' disabled')+' onchange="toggleEmployerStep(\''+k+'\',this.checked)"><div><div class="bk-payee">'+esc(t)+'</div><div class="bk-sub">'+esc(d)+(steps[k]?' · done '+esc(prettyDate(steps[k])):'')+'</div></div></label>').join('')
       +'<div class="bk-actions"><button class="btn-secondary" onclick="payrollCSV('+y+')">⬇ Payroll CSV ('+y+')</button></div></div>';
   }
@@ -4903,19 +4905,458 @@ function renderPayRules(){
 }
 async function payrollCSV(y){
   if(typeof loadSickRows==='function'){await loadSickRows(true);BOOKS._weeks=null;}
-  const rows=[['Week','Week ends','Employee','Pool hrs','Commission hrs','Hourly hrs','Total hrs','Overtime hrs','Commission','Hourly pay','Shared pool','Min-wage top-up','Overtime premium','Paid sick hrs','Sick pay','Wages','Tips','Gross pay (wages + tips)','Regular rate']];
+  const pr={};prRuns().forEach(r=>{pr[r.label+'|'+normName(r.name)]=r;});
+  const rows=[['Week','Week ends','Payday','Employee','Pool hrs','Commission hrs','Hourly hrs','Total hrs','Overtime hrs','Commission','Hourly pay','Shared pool','Min-wage top-up','Overtime premium','Paid sick hrs','Sick pay','Wages','Tips','Gross pay (wages + tips)','Regular rate','Federal income tax','Social Security','Medicare','Michigan income tax','City income tax','Take-home pay']];
   computeWeeks().filter(w=>w.end.slice(0,4)===String(y)).forEach(w=>{
-    (w.res?w.res.people:[]).filter(p=>!p.owner&&(p.hours>0||p.sickH>0)).forEach(p=>rows.push([w.label,w.end,p.name,p.kitchenH.toFixed(2),p.marketH.toFixed(2),p.hourlyH.toFixed(2),p.hours.toFixed(2),p.otHours.toFixed(2),
-      p.commission.toFixed(2),p.hourly.toFixed(2),p.share.toFixed(2),p.topup.toFixed(2),p.ot.toFixed(2),(p.sickH||0).toFixed(2),(p.sick||0).toFixed(2),(p.pay-(p.tips||0)).toFixed(2),(p.tips||0).toFixed(2),p.pay.toFixed(2),(p.hours?((p.pay-p.ot-(p.tips||0)-(p.sick||0))/p.hours):0).toFixed(2)]));
+    (w.res?w.res.people:[]).filter(p=>!p.owner&&(p.hours>0||p.sickH>0)).forEach(p=>{
+      const r=pr[w.label+'|'+normName(p.name)];const t=k=>r&&r.tables?r[k].toFixed(2):'';
+      rows.push([w.label,w.end,r?r.payDate:'',p.name,p.kitchenH.toFixed(2),p.marketH.toFixed(2),p.hourlyH.toFixed(2),p.hours.toFixed(2),p.otHours.toFixed(2),
+      p.commission.toFixed(2),p.hourly.toFixed(2),p.share.toFixed(2),p.topup.toFixed(2),p.ot.toFixed(2),(p.sickH||0).toFixed(2),(p.sick||0).toFixed(2),(p.pay-(p.tips||0)).toFixed(2),(p.tips||0).toFixed(2),p.pay.toFixed(2),(p.hours?((p.pay-p.ot-(p.tips||0)-(p.sick||0))/p.hours):0).toFixed(2),
+      t('fed'),t('ss'),t('med'),t('mi'),t('city'),t('net')]);
+    });
   });
   if(rows.length===1){toast('No employee hours in '+y+' yet',true);return;}
   downloadCSV(fileSlug()+'-payroll-'+y+'.csv',rows);
 }
-function employerTaxes(wagesByPerson){
+function employerTaxes(wagesByPerson,y){
+  // real figures from the paychecks when the year's tax tables are in the Hub
+  if(y&&prTables(+y)){
+    const R=prRuns().filter(r=>r.tables&&r.end.slice(0,4)===String(y));
+    if(R.length){const fica=c2(prSum(R,'erSS')+prSum(R,'erMed')),futa=prSum(R,'futa'),uia=prSum(R,'uia');return{fica,futa,uia,total:c2(fica+futa+uia),exact:true};}
+  }
+  const ur=(typeof prCfg==='function'?+prCfg().uiaRate:2.7)/100;
   let fica=0,futa=0,uia=0;
-  Object.values(wagesByPerson).forEach(w=>{fica+=w*0.0765;futa+=Math.min(w,7000)*0.006;uia+=Math.min(w,9500)*0.027;});
+  Object.values(wagesByPerson).forEach(w=>{fica+=w*0.0765;futa+=Math.min(w,7000)*0.006;uia+=Math.min(w,9500)*ur;});
   return{fica,futa,uia,total:fica+futa+uia};
 }
+
+// ═══════════════════════════════════════════════════════
+// PAYCHECKS — withholding, pay stubs and payroll tax reports
+// The Hub figures every number. The business still sends the paychecks,
+// makes the tax deposits and files the returns (or hands these to someone who does).
+// ═══════════════════════════════════════════════════════
+// Tax tables, one entry per year. Update each January from IRS Pub 15-T
+// (Percentage Method Tables for Automated Payroll Systems, annual) and
+// Michigan Treasury's withholding guide (Form 446).
+// Each bracket row: [wage at least, tentative amount, percent].
+const PR_TAX={
+  2026:{
+    ssBase:184500,ssRate:6.2,medRate:1.45,addlMedOver:200000,addlMedRate:0.9,
+    futaBase:7000,futaRate:0.6,uiaBase:9500,
+    miRate:4.25,miExempt:5900,
+    w4Adj:{mfj:12900,other:8600},
+    fed:{
+      mfj:{std:[[0,0,0],[19300,0,10],[44100,2480,12],[120100,11600,22],[230700,35932,24],[422850,82048,32],[531750,116896,35],[788000,206583.5,37]],
+           chk:[[0,0,0],[16100,0,10],[28500,1240,12],[66500,5800,22],[121800,17966,24],[217875,41024,32],[272325,58448,35],[400450,103291.75,37]]},
+      single:{std:[[0,0,0],[7500,0,10],[19900,1240,12],[57900,5800,22],[113200,17966,24],[209275,41024,32],[263725,58448,35],[648100,192979.25,37]],
+              chk:[[0,0,0],[8050,0,10],[14250,620,12],[33250,2900,22],[60900,8983,24],[108938,20512,32],[136163,29224,35],[328350,96489.63,37]]},
+      hoh:{std:[[0,0,0],[15550,0,10],[33250,1770,12],[83000,7740,22],[121250,16155,24],[217300,39207,32],[271750,56631,35],[656150,191171,37]],
+           chk:[[0,0,0],[12075,0,10],[20925,885,12],[45800,3870,22],[64925,8077.5,24],[112950,19603.5,32],[140175,28315.5,35],[332375,95585.5,37]]}
+    }
+  }
+};
+// Michigan cities with an income tax: resident %, nonresident %, yearly exemption per person.
+// Starting values from the cities' published rates. Each business can correct its own city's numbers.
+const MI_CITY_RATES={
+  'Albion':[1,0.5,600],'Battle Creek':[1,0.5,750],'Benton Harbor':[1,0.5,750],'Big Rapids':[1,0.5,600],
+  'Detroit':[2.4,1.2,600],'East Lansing':[1,0.5,600],'Flint':[1,0.5,600],'Grand Rapids':[1.5,0.75,600],
+  'Grayling':[1,0.5,3000],'Hamtramck':[1,0.5,600],'Highland Park':[2,1,600],'Hudson':[1,0.5,1000],
+  'Ionia':[1,0.5,700],'Jackson':[1,0.5,600],'Lansing':[1,0.5,600],'Lapeer':[1,0.5,600],
+  'Muskegon':[1,0.5,600],'Muskegon Heights':[1,0.5,600],'Pontiac':[1,0.5,600],'Port Huron':[1,0.5,600],
+  'Portland':[1,0.5,1000],'Saginaw':[1,0.5,1000],'Springfield':[1,0.5,750],'Walker':[1,0.5,600]
+};
+const PR_STATUS={single:'Single or married filing separately',mfj:'Married filing jointly',hoh:'Head of household'};
+const PR_PERIODS=52;   // the Hub pays weekly
+const PR={week:null,q:null,yr:null};
+
+function prCfg(){
+  const saved=(BOOKS.acct&&BOOKS.acct.payroll)||{};
+  const p=Object.assign({lagDays:5,city:'',cityRates:null,uiaRate:2.7},saved);
+  p.people=Object.assign({},saved.people||{});
+  if(p.city&&!p.cityRates){const d=MI_CITY_RATES[p.city];p.cityRates=d?{res:d[0],non:d[1],ex:d[2]}:null;}
+  return p;
+}
+function prVersions(name){
+  const ppl=prCfg().people;const k=Object.keys(ppl).find(n=>normName(n)===normName(name));
+  if(!k)return[];const e=ppl[k]||{};
+  const v=Array.isArray(e.versions)?e.versions:(e.fed||e.mi||e.city?[{from:'',fed:e.fed,mi:e.mi,city:e.city}]:[]);
+  return v.slice().sort((a,b)=>(a.from||'')<(b.from||'')?-1:1);
+}
+// the forms in effect on a payday (latest version when no date is given)
+function prPerson(name,dateISO){
+  const v=prVersions(name);if(!v.length)return null;
+  if(!dateISO)return v[v.length-1];
+  let hit=null;v.forEach(x=>{if((x.from||'')<=dateISO)hit=x;});
+  return hit;
+}
+function prTables(y){return PR_TAX[y]||null;}
+function prPayDate(endISO){const d=parseISO(endISO);if(!d)return endISO;d.setDate(d.getDate()+(parseInt(prCfg().lagDays,10)||0));return isoLocal(d);}
+function prQuarter(iso){return Math.floor((+iso.slice(5,7)-1)/3)+1;}
+const c2=n=>Math.round((+n||0)*100)/100;
+
+// Federal income tax: IRS Pub 15-T Worksheet 1A (Form W-4 from 2020 or later)
+function prFederal(gross,f,T){
+  if(!T)return null;
+  f=f||{};
+  if(f.exempt)return 0;
+  const status=PR_STATUS[f.status]?f.status:'single';
+  const step2=!!f.step2;
+  const annual=gross*PR_PERIODS+(+f.other||0);                       // 1c + 1d = 1e
+  const adj=(+f.ded||0)+(step2?0:(status==='mfj'?T.w4Adj.mfj:T.w4Adj.other));   // 1f + 1g = 1h
+  const adjusted=Math.max(0,annual-adj);                             // 1i
+  const rows=T.fed[status][step2?'chk':'std'];
+  let row=rows[0];rows.forEach(r=>{if(adjusted>=r[0])row=r;});
+  const tentative=(row[1]+(adjusted-row[0])*row[2]/100)/PR_PERIODS;  // 2h
+  const afterCredits=Math.max(0,tentative-(+f.dep||0)/PR_PERIODS);   // 3c
+  return c2(afterCredits+(+f.extra||0));                             // 4b
+}
+// Michigan: 4.25% of wages after exemptions (Form 446 annualized method)
+function prMichigan(gross,m,T){
+  if(!T)return null;
+  m=m||{};
+  if(m.exempt)return 0;
+  const taxable=Math.max(0,gross-(+m.ex||0)*T.miExempt/PR_PERIODS);
+  return c2(taxable*T.miRate/100+(+m.extra||0));
+}
+function prCityShare(c){c=c||{};return c.resident?1:Math.min(1,Math.max(0,(c.pct==null||c.pct===''?100:+c.pct)/100));}
+// City: resident rate on all pay, or nonresident rate on the share of work done in the city
+function prCity(gross,c,cfg){
+  if(!cfg.city||!cfg.cityRates)return 0;
+  c=c||{};
+  if(c.exempt)return 0;
+  const r=cfg.cityRates;const resident=!!c.resident;
+  const share=prCityShare(c);
+  const taxable=Math.max(0,gross*share-(+c.ex||0)*(+r.ex||0)/PR_PERIODS);
+  return c2(taxable*(resident?+r.res:+r.non)/100+(+c.extra||0));
+}
+
+// Every paycheck, oldest first, with year-to-date totals. Cached alongside the weeks.
+function prRuns(){
+  const weeks=computeWeeks();
+  if(BOOKS._prFor===weeks&&BOOKS._pr)return BOOKS._pr;
+  const cfg=prCfg();const out=[];const ytd={};
+  const employees=payRules().workers==='employees';
+  if(employees)weeks.forEach(w=>{
+    const payDate=prPayDate(w.end);const yr=+payDate.slice(0,4);const T=prTables(yr);
+    (w.res?w.res.people:[]).filter(p=>!p.owner&&(+p.pay||0)>0).forEach(p=>{
+      const key=normName(p.name)+'|'+yr;
+      const Y=ytd[key]||(ytd[key]={gross:0,ssWages:0,medWages:0,futaWages:0,uiaWages:0,fed:0,ss:0,med:0,mi:0,city:0,net:0,tips:0});
+      const gross=c2(p.pay);const tips=c2(p.tips||0);const pp=prPerson(p.name,payDate)||{};
+      const r={label:w.label,end:w.end,payDate,yr,q:prQuarter(payDate),month:+payDate.slice(5,7),name:p.name,
+        hours:+p.hours||0,otHours:+p.otHours||0,sickH:+p.sickH||0,
+        commission:c2(p.commission),hourly:c2(p.hourly),share:c2(p.share),topup:c2(p.topup),ot:c2(p.ot),sick:c2(p.sick||0),
+        tips,gross,wages:c2(gross-tips),onFile:{fed:!!(pp.fed&&pp.fed.onFile),mi:!!(pp.mi&&pp.mi.onFile)},tables:!!T};
+      if(T){
+        const ssWages=Math.max(0,Math.min(gross,T.ssBase-Y.ssWages));
+        r.ssWages=c2(ssWages);r.ss=c2(ssWages*T.ssRate/100);
+        r.medWages=gross;
+        const over=Math.max(0,Y.medWages+gross-T.addlMedOver)-Math.max(0,Y.medWages-T.addlMedOver);
+        r.addlMed=c2(over*T.addlMedRate/100);r.med=c2(gross*T.medRate/100+r.addlMed);
+        r.fed=prFederal(gross,pp.fed,T);r.mi=prMichigan(gross,pp.mi,T);r.city=prCity(gross,pp.city,cfg);
+        r.cityWages=r.city>0?c2(gross*prCityShare(pp.city)):0;
+        r.cityName=cfg.city||'';
+        r.net=c2(gross-r.fed-r.ss-r.med-r.mi-r.city);
+        // employer's own share
+        r.erSS=r.ss;r.erMed=c2(gross*T.medRate/100);
+        r.futaWages=c2(Math.max(0,Math.min(gross,T.futaBase-Y.futaWages)));r.futa=c2(r.futaWages*T.futaRate/100);
+        r.uiaWages=c2(Math.max(0,Math.min(gross,T.uiaBase-Y.uiaWages)));r.uia=c2(r.uiaWages*(+cfg.uiaRate||0)/100);
+        Y.ssWages+=r.ssWages;Y.medWages+=gross;Y.futaWages+=r.futaWages;Y.uiaWages+=r.uiaWages;
+        Y.fed+=r.fed;Y.ss+=r.ss;Y.med+=r.med;Y.mi+=r.mi;Y.city+=r.city;Y.net+=r.net;
+      }
+      Y.gross+=gross;Y.tips+=tips;
+      r.ytd=Object.fromEntries(Object.entries(Y).map(([k,v])=>[k,c2(v)]));
+      out.push(r);
+    });
+  });
+  BOOKS._prFor=weeks;BOOKS._pr=out;return out;
+}
+const prSum=(rows,k)=>c2(rows.reduce((s,r)=>s+(+r[k]||0),0));
+function prPeople(){
+  const set=new Map();
+  (typeof members!=='undefined'?members:[]).filter(m=>m.name&&!ownerOf(m.name)&&m.role!=='Steward').forEach(m=>set.set(normName(m.name),m.name));
+  prRuns().forEach(r=>{if(!set.has(normName(r.name)))set.set(normName(r.name),r.name);});
+  return[...set.values()];
+}
+function prCanSee(){return payRules().workers==='employees'&&!(typeof teamLimited==='function'&&teamLimited());}
+
+// ─── Team tab: Paychecks card ───
+function renderPaychecks(){
+  const el=document.getElementById('payChecks');if(!el)return;
+  if(!BOOKS.schema||!BOOKS.schema.checked||!prCanSee()){el.innerHTML='';return;}
+  const st=isStewardUser();const ok=BOOKS.schema.acct;const cfg=prCfg();
+  const runs=prRuns();
+  const weeks=[...new Set(runs.map(r=>r.label))].reverse();
+  if(!PR.week||!weeks.includes(PR.week))PR.week=weeks[0]||null;
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Paychecks</div>'
+    +'<div class="card-sub">Each week the Hub works out what to hold back from everyone’s pay: federal, Michigan'+(cfg.city?' and '+esc(cfg.city):'')+' income tax, Social Security and Medicare. It makes a pay stub for each person. You still write the checks or send the direct deposits, and send the taxes in (see <b>Payroll Tax Reports</b> below).</div>';
+  if(!weeks.length)h+='<div class="bk-empty">No paychecks yet. Once your team logs hours, each week’s paychecks show up here.</div>';
+  else{
+    const rows=runs.filter(r=>r.label===PR.week);const r0=rows[0];
+    h+='<div class="txn-grid"><div class="txn-full"><label>Week worked</label><select class="period-select" onchange="PR.week=this.value;renderPaychecks()">'
+      +weeks.map(l=>'<option value="'+esc(l)+'"'+(l===PR.week?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select></div></div>'
+      +'<div class="bk-sub" style="margin:8px 0 4px;">Payday: <b>'+esc(prettyDate(r0.payDate))+'</b>'+(r0.tables?'':' · <b style="color:var(--tan);">Withholding isn’t figured for '+r0.yr+' paydays.</b> The Hub’s tax tables start in 2026.')+'</div>';
+    rows.forEach(r=>{
+      const held=r.tables?c2(r.fed+r.ss+r.med+r.mi+r.city):null;
+      const warn=r.tables&&(!r.onFile.fed||!r.onFile.mi)?' · <b style="color:var(--tan);">no '+(!r.onFile.fed&&!r.onFile.mi?'W-4 or MI-W4':!r.onFile.fed?'W-4':'MI-W4')+' entered</b>':'';
+      h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(r.name)+'</div><div class="bk-sub">'+r.hours.toFixed(2)+' hrs · gross '+fmt(r.gross)
+        +(r.tables?' · taxes held '+fmt(held):'')+warn+'</div></div>'
+        +'<div class="bk-amt">'+(r.tables?fmt(r.net):fmt(r.gross))+'</div>'
+        +'<button class="btn-secondary" style="margin-left:8px;padding:6px 10px;" onclick="prStub('+JSON.stringify(r.name).replace(/"/g,'&quot;')+')">Stub</button></div>';
+    });
+    if(r0.tables){
+      const held=prSum(rows,'fed')+prSum(rows,'ss')+prSum(rows,'med')+prSum(rows,'mi')+prSum(rows,'city');
+      const er=prSum(rows,'erSS')+prSum(rows,'erMed');const unemp=prSum(rows,'futa')+prSum(rows,'uia');
+      h+='<div class="tp-grid" style="margin-top:12px;">'
+        +'<span>Total gross pay</span><b>'+fmt(prSum(rows,'gross'))+'</b><span>Take-home (net) pay</span><b>'+fmt(prSum(rows,'net'))+'</b>'
+        +'<span>Held from paychecks</span><b>'+fmt(held)+'</b><span>Business’s share of SS &amp; Medicare</span><b>'+fmt(er)+'</b>'
+        +'<span>Unemployment (federal + Michigan)</span><b>'+fmt(unemp)+'</b><span><b>Set aside for taxes</b></span><b>'+fmt(c2(held+er+unemp))+'</b></div>'
+        +'<div class="bk-sub" style="margin-top:6px;">The money held from paychecks isn’t the business’s. Move it to a separate account on payday so it’s there when the deposits are due.</div>';
+    }
+    h+='<div class="bk-actions"><button class="btn-secondary" onclick="prStub()">🖨 Print all stubs for this week</button></div>';
+  }
+  h+='</div>';
+
+  // withholding forms
+  const people=prPeople();
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Withholding Forms</div>'
+    +'<div class="card-sub">Copy the boxes from each person’s federal W-4, Michigan MI-W4'+(cfg.city?' and '+esc(cfg.city)+' city W-4':'')+' here. Keep the signed forms themselves on paper or in a locked file. The Hub never asks for a Social Security number. Until someone’s W-4 is entered, the IRS says to withhold as if they’re single with no adjustments, so that’s what the Hub does.</div>';
+  if(!people.length)h+='<div class="bk-empty">Add your team in Team Members above.</div>';
+  people.forEach(n=>{
+    const p=prPerson(n)||{};const f=p.fed||{},m=p.mi||{},c=p.city||{};
+    const since=p.from&&prVersions(n).length>1?' · since '+esc(prettyDate(p.from)):'';
+    const fedTxt=f.onFile?(f.exempt?'Exempt from federal withholding':PR_STATUS[f.status||'single']+(f.step2?', two jobs box checked':'')+(+f.dep?', credits '+fmt(f.dep):'')+(+f.extra?', extra '+fmt(f.extra)+'/check':'')):'<b style="color:var(--tan);">No W-4 yet</b>';
+    const miTxt=m.onFile?(m.exempt?'exempt':(+m.ex||0)+' exemption'+((+m.ex||0)===1?'':'s')):'<b style="color:var(--tan);">no MI-W4 yet</b>';
+    const cityTxt=cfg.city?' · '+esc(cfg.city)+': '+(c.exempt?'exempt':c.resident?'lives in the city':'nonresident'+(c.pct!=null&&c.pct!==''&&+c.pct!==100?' ('+(+c.pct)+'% of work in the city)':'')):'';
+    h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(n)+'</div><div class="bk-sub">Federal: '+fedTxt+' · Michigan: '+miTxt+cityTxt+since+'</div></div>'
+      +(st&&ok?'<button class="btn-secondary" style="padding:6px 10px;" onclick="prEditPerson('+JSON.stringify(n).replace(/"/g,'&quot;')+')">Edit</button>':'')+'</div>';
+  });
+  h+='</div>';
+
+  // payroll setup
+  const cr=cfg.cityRates||{res:'',non:'',ex:''};
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Payroll Setup</div>'
+    +'<div class="card-sub">A few things the Hub needs to get each paycheck right.</div>'
+    +'<div class="txn-grid">'
+    +'<div><label>Payday is this many days after the week ends</label><input id="prLag" class="period-input" type="number" min="0" max="30" inputmode="numeric" value="'+esc(cfg.lagDays)+'"'+(st&&ok?'':' disabled')+'></div>'
+    +'<div><label>Michigan unemployment rate %</label><input id="prUia" class="period-input" type="number" step="0.01" min="0" inputmode="decimal" value="'+esc(cfg.uiaRate)+'"'+(st&&ok?'':' disabled')+'></div>'
+    +'<div class="txn-full"><label>Your business is in a city with an income tax</label><select id="prCity" class="period-select" onchange="prCityPick(this.value)"'+(st&&ok?'':' disabled')+'><option value="">No, it isn’t</option>'
+    +Object.keys(MI_CITY_RATES).map(c=>'<option'+(c===cfg.city?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div>'
+    +'<div id="prCityRates" class="txn-full" style="'+(cfg.city?'':'display:none;')+'"><div class="txn-grid">'
+    +'<div><label>Resident rate %</label><input id="prCityRes" class="period-input" type="number" step="0.01" inputmode="decimal" value="'+esc(cr.res)+'"'+(st&&ok?'':' disabled')+'></div>'
+    +'<div><label>Nonresident rate %</label><input id="prCityNon" class="period-input" type="number" step="0.01" inputmode="decimal" value="'+esc(cr.non)+'"'+(st&&ok?'':' disabled')+'></div>'
+    +'<div><label>Exemption per person, per year</label><input id="prCityEx" class="period-input" type="number" step="1" inputmode="numeric" value="'+esc(cr.ex)+'"'+(st&&ok?'':' disabled')+'></div>'
+    +'</div><div class="bk-sub" style="margin-top:4px;">Filled in from the city’s published rates. Check them against your city’s withholding guide and fix any that changed.</div></div>'
+    +'</div>'
+    +'<div class="bk-sub" style="margin-top:8px;">New Michigan employers usually start at 2.7% unemployment. Use the rate on your MiWAM notice once you have one.</div>'
+    +(st&&ok?'<div class="bk-actions"><button class="btn-green" onclick="prSaveSetup()">Save payroll setup</button></div>':'')+'</div>';
+
+  h+=prReportsHTML(runs);
+  el.innerHTML=h;
+}
+function prCityPick(c){
+  const box=document.getElementById('prCityRates');if(!box)return;
+  box.style.display=c?'':'none';
+  const d=MI_CITY_RATES[c];
+  if(d){document.getElementById('prCityRes').value=d[0];document.getElementById('prCityNon').value=d[1];document.getElementById('prCityEx').value=d[2];}
+}
+async function prSaveSetup(){
+  const cur=prCfg();
+  const city=document.getElementById('prCity').value;
+  const num=id=>{const v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;};
+  const lag=parseInt(document.getElementById('prLag').value,10);
+  if(isNaN(lag)||lag<0||lag>30){toast('Payday should be 0 to 30 days after the week ends',true);return;}
+  let cityRates=null;
+  if(city){
+    const res=num('prCityRes'),non=num('prCityNon'),ex=num('prCityEx');
+    if(res==null||non==null||ex==null||res<0||non<0||ex<0||res>5||non>5){toast('Check the city’s rates and exemption',true);return;}
+    cityRates={res,non,ex};
+  }
+  const uia=num('prUia');if(uia==null||uia<0||uia>15){toast('Check the unemployment rate',true);return;}
+  const next={lagDays:lag,city,cityRates,uiaRate:uia,people:cur.people};
+  if(await saveAcct({payroll:next})){BOOKS._pr=null;renderPaychecks();}
+}
+function prEditPerson(name){
+  const cfg=prCfg();const p=prPerson(name)||{};const f=p.fed||{},m=p.mi||{},c=p.city||{};
+  const v=x=>x==null?'':esc(x);
+  const had=prVersions(name).length>0;
+  let h='<div class="card-sub">Copy the boxes from '+esc(name)+'’s forms. Leave a box blank if they left it blank.</div>'
+    +'<div class="txn-grid" style="margin-top:10px;"><div class="txn-full"><label>Use these for paydays starting</label><input id="pfFrom" class="period-input" type="date" value="'+(had?todayISO():'')+'">'
+    +'<div class="bk-sub" style="margin-top:4px;">'+(had?'Paychecks before this date keep the forms that were in effect then, so checks already paid don’t change.':'Leave it blank to use these forms for every payday.')+'</div></div></div>'
+    +'<div class="bk-payee" style="margin:14px 0 6px;">Federal W-4</div>'
+    +'<label class="onb-task" style="margin-bottom:8px;"><input type="checkbox" id="pfOn"'+(f.onFile?' checked':'')+'><div><div class="bk-payee">I have their W-4 (2020 or newer)</div><div class="bk-sub">Unchecked, the Hub withholds as single with no adjustments, as the IRS requires.</div></div></label>'
+    +'<div class="txn-grid">'
+    +'<div class="txn-full"><label>Step 1(c): filing status</label><select id="pfStatus" class="period-select">'+Object.entries(PR_STATUS).map(([k,l])=>'<option value="'+k+'"'+((f.status||'single')===k?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+    +'<div class="txn-full"><label class="onb-task" style="text-transform:none;letter-spacing:0;font-size:13px;"><input type="checkbox" id="pfStep2"'+(f.step2?' checked':'')+'> Step 2(c) box checked (two jobs)</label></div>'
+    +'<div><label>Step 3: credits total ($ per year)</label><input id="pfDep" class="period-input" type="number" min="0" step="1" inputmode="numeric" value="'+v(f.dep)+'"></div>'
+    +'<div><label>Step 4(a): other income ($ per year)</label><input id="pfOther" class="period-input" type="number" min="0" step="1" inputmode="numeric" value="'+v(f.other)+'"></div>'
+    +'<div><label>Step 4(b): deductions ($ per year)</label><input id="pfDed" class="period-input" type="number" min="0" step="1" inputmode="numeric" value="'+v(f.ded)+'"></div>'
+    +'<div><label>Step 4(c): extra per paycheck ($)</label><input id="pfExtra" class="period-input" type="number" min="0" step="0.01" inputmode="decimal" value="'+v(f.extra)+'"></div>'
+    +'<div class="txn-full"><label class="onb-task" style="text-transform:none;letter-spacing:0;font-size:13px;"><input type="checkbox" id="pfExempt"'+(f.exempt?' checked':'')+'> They wrote “Exempt” on the W-4</label></div>'
+    +'</div>'
+    +'<div class="bk-payee" style="margin:16px 0 6px;">Michigan MI-W4</div>'
+    +'<label class="onb-task" style="margin-bottom:8px;"><input type="checkbox" id="pmOn"'+(m.onFile?' checked':'')+'><div><div class="bk-payee">I have their MI-W4</div><div class="bk-sub">Unchecked, the Hub withholds with no exemptions.</div></div></label>'
+    +'<div class="txn-grid">'
+    +'<div><label>Line 6: exemptions</label><input id="pmEx" class="period-input" type="number" min="0" step="1" inputmode="numeric" value="'+v(m.ex)+'"></div>'
+    +'<div><label>Line 7: extra per paycheck ($)</label><input id="pmExtra" class="period-input" type="number" min="0" step="0.01" inputmode="decimal" value="'+v(m.extra)+'"></div>'
+    +'<div class="txn-full"><label class="onb-task" style="text-transform:none;letter-spacing:0;font-size:13px;"><input type="checkbox" id="pmExempt"'+(m.exempt?' checked':'')+'> They claimed exempt (line 8)</label></div>'
+    +'</div>';
+  if(cfg.city){
+    h+='<div class="bk-payee" style="margin:16px 0 6px;">'+esc(cfg.city)+' city income tax</div>'
+      +'<div class="txn-grid">'
+      +'<div class="txn-full"><label class="onb-task" style="text-transform:none;letter-spacing:0;font-size:13px;"><input type="checkbox" id="pcRes"'+(c.resident?' checked':'')+'> They live in '+esc(cfg.city)+'</label></div>'
+      +'<div><label>City exemptions</label><input id="pcEx" class="period-input" type="number" min="0" step="1" inputmode="numeric" value="'+v(c.ex)+'"></div>'
+      +'<div><label>% of their work done in the city</label><input id="pcPct" class="period-input" type="number" min="0" max="100" step="1" inputmode="numeric" placeholder="100" value="'+v(c.pct)+'"></div>'
+      +'<div><label>Extra per paycheck ($)</label><input id="pcExtra" class="period-input" type="number" min="0" step="0.01" inputmode="decimal" value="'+v(c.extra)+'"></div>'
+      +'<div class="txn-full"><label class="onb-task" style="text-transform:none;letter-spacing:0;font-size:13px;"><input type="checkbox" id="pcExempt"'+(c.exempt?' checked':'')+'> Exempt from city withholding</label></div>'
+      +'</div><div class="bk-sub" style="margin-top:4px;">People who live in the city pay the resident rate on all their pay. Everyone else pays the nonresident rate on the work they do inside the city.</div>';
+  }
+  h+='<div class="txn-actions" style="margin-top:16px;"><button class="btn-secondary" onclick="closeOnbModal()">Cancel</button><button class="btn-green" onclick="prSavePerson('+JSON.stringify(name).replace(/"/g,'&quot;')+')">Save</button></div>';
+  document.getElementById('onbModalTitle').textContent='Withholding for '+name;
+  document.getElementById('onbModalBody').innerHTML=h;
+  document.getElementById('onbModal').classList.add('open');
+  document.getElementById('onbModalBody').scrollTop=0;
+}
+async function prSavePerson(name){
+  const g=id=>document.getElementById(id);
+  const n=id=>{const el=g(id);if(!el)return null;const x=parseFloat(el.value);return isNaN(x)?null:Math.max(0,x);};
+  const ck=id=>!!(g(id)&&g(id).checked);
+  const p={
+    fed:{onFile:ck('pfOn'),status:g('pfStatus').value,step2:ck('pfStep2'),dep:n('pfDep'),other:n('pfOther'),ded:n('pfDed'),extra:n('pfExtra'),exempt:ck('pfExempt')},
+    mi:{onFile:ck('pmOn'),ex:n('pmEx'),extra:n('pmExtra'),exempt:ck('pmExempt')}
+  };
+  if(!p.fed.onFile)p.fed={onFile:false};
+  if(!p.mi.onFile)p.mi={onFile:false};
+  if(g('pcRes')){
+    const pct=n('pcPct');
+    p.city={resident:ck('pcRes'),ex:n('pcEx'),pct:pct==null?null:Math.min(100,pct),extra:n('pcExtra'),exempt:ck('pcExempt')};
+  }else{const old=prPerson(name);if(old&&old.city)p.city=old.city;}
+  const from=(g('pfFrom')&&g('pfFrom').value)||'';
+  const versions=prVersions(name).filter(x=>(x.from||'')!==from);
+  versions.push(Object.assign({from},p));
+  versions.sort((a,b)=>(a.from||'')<(b.from||'')?-1:1);
+  const cur=prCfg();const people=Object.assign({},cur.people);
+  Object.keys(people).forEach(k=>{if(normName(k)===normName(name))delete people[k];});
+  people[name]={versions};
+  const next=Object.assign({},(BOOKS.acct&&BOOKS.acct.payroll)||{},{people});
+  if(await saveAcct({payroll:next})){BOOKS._pr=null;closeOnbModal();renderPaychecks();}
+}
+
+// ─── pay stubs ───
+function prStub(name){
+  const runs=prRuns();
+  const rows=runs.filter(r=>r.label===PR.week&&(!name||normName(r.name)===normName(name)));
+  if(!rows.length){toast('No paycheck for that week',true);return;}
+  const w=window.open('','_blank');if(!w){toast('Allow pop-ups to print',true);return;}
+  const line=(l,a,b)=>'<tr><td>'+l+'</td><td class="n">'+(a==null?'':fmt(a))+'</td><td class="n">'+(b==null?'':fmt(b))+'</td></tr>';
+  const stub=r=>{
+    const y=r.ytd;
+    const earn=[['Hourly pay',r.hourly],['Commission',r.commission],['Shared pool',r.share],['Minimum-wage top-up',r.topup],['Overtime premium',r.ot],['Paid sick time',r.sick],['Tips',r.tips]].filter(x=>Math.abs(x[1])>=0.005);
+    let s='<div class="stub"><div class="hd"><div><div class="biz">'+esc(HUB.legalName||HUB.bizName)+'</div><div class="muted">'+esc(HUB.place||'')+'</div></div>'
+      +'<div style="text-align:right;"><div class="biz">Pay stub</div><div class="muted">Payday '+esc(prettyDate(r.payDate))+'</div></div></div>'
+      +'<div class="who"><b>'+esc(r.name)+'</b><span class="muted">Week worked: '+esc(r.label)+' · '+r.hours.toFixed(2)+' hours'+(r.otHours?' ('+r.otHours.toFixed(2)+' overtime)':'')+(r.sickH?' · '+r.sickH.toFixed(2)+' sick hours':'')+'</span></div>'
+      +'<table><tr><th>Earnings</th><th class="n">This check</th><th class="n">Year to date</th></tr>'
+      +earn.map(x=>line(x[0],x[1],null)).join('')
+      +'<tr class="tot"><td>Gross pay</td><td class="n">'+fmt(r.gross)+'</td><td class="n">'+fmt(y.gross)+'</td></tr></table>';
+    if(r.tables){
+      s+='<table><tr><th>Taxes held</th><th class="n">This check</th><th class="n">Year to date</th></tr>'
+        +line('Federal income tax',r.fed,y.fed)+line('Social Security',r.ss,y.ss)+line('Medicare',r.med,y.med)
+        +line('Michigan income tax',r.mi,y.mi)+(r.cityName||r.city?line(esc(r.cityName||'City')+' income tax',r.city,y.city):'')
+        +'<tr class="tot"><td>Take-home pay</td><td class="n">'+fmt(r.net)+'</td><td class="n">'+fmt(y.net)+'</td></tr></table>';
+    }else s+='<p class="muted">Withholding isn’t figured for '+r.yr+' paydays in the Hub.</p>';
+    s+='<p class="muted small">Questions about this stub? Ask '+esc(HUB.legalName||HUB.bizName)+'.</p></div>';
+    return s;
+  };
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Pay stubs — '+esc(PR.week)+'</title><style>'
+    +'body{font-family:Georgia,serif;color:#1a1a1a;margin:24px;}.stub{border:1px solid #bbb;border-radius:8px;padding:18px 20px;margin:0 auto 22px;max-width:640px;page-break-inside:avoid;}'
+    +'.hd{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #1a1a1a;padding-bottom:10px;margin-bottom:10px;}.biz{font-weight:700;font-size:16px;}'
+    +'.who{display:flex;flex-direction:column;gap:2px;margin-bottom:10px;}.muted{color:#666;font-size:12px;}.small{font-size:11px;margin-top:10px;}'
+    +'table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px;}th{text-align:left;border-bottom:1px solid #999;padding:4px 0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}'
+    +'td{padding:3px 0;border-bottom:1px solid #eee;}.n{text-align:right;font-variant-numeric:tabular-nums;}.tot td{font-weight:700;border-top:1px solid #999;border-bottom:none;}'
+    +'@media print{body{margin:0;}.stub{border-color:#999;}}</style></head><body>'+rows.map(stub).join('')+'<script>setTimeout(()=>print(),300)<\/script></body></html>');
+  w.document.close();
+}
+
+// ─── payroll tax reports ───
+function prReportsHTML(runs){
+  const fig=runs.filter(r=>r.tables);
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Payroll Tax Reports</div>';
+  if(!fig.length)return h+'<div class="card-sub">Once you have paychecks, the numbers for your quarterly and year-end payroll filings show up here.</div></div>';
+  const qs=[...new Set(fig.map(r=>r.yr+'-Q'+r.q))].sort().reverse();
+  if(!PR.q||!qs.includes(PR.q))PR.q=qs[0];
+  const yrs=[...new Set(fig.map(r=>r.yr))].sort((a,b)=>b-a);
+  if(!PR.yr||!yrs.includes(PR.yr))PR.yr=yrs[0];
+  const [qy,qq]=[+PR.q.slice(0,4),+PR.q.slice(6)];
+  const Q=fig.filter(r=>r.yr===qy&&r.q===qq);const cfg=prCfg();
+  const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const mons=[1,2,3].map(i=>(qq-1)*3+i);
+  const ssW=prSum(Q,'ssWages');const ssTips=c2(Q.reduce((s,r)=>s+Math.min(r.tips,r.ssWages),0));
+  const ssWagesOnly=c2(ssW-ssTips);
+  const medW=prSum(Q,'medWages');const addlW=c2(Q.reduce((s,r)=>s+(r.addlMed>0?r.addlMed/0.009:0),0));
+  const fed=prSum(Q,'fed');const l5a=c2(ssWagesOnly*0.124),l5b=c2(ssTips*0.124),l5c=c2(medW*0.029),l5d=prSum(Q,'addlMed');
+  const line6=c2(fed+l5a+l5b+l5c+l5d);
+  const actual=c2(prSum(Q,'fed')+prSum(Q,'ss')+prSum(Q,'erSS')+prSum(Q,'med')+prSum(Q,'erMed'));
+  const line7=c2(actual-line6);
+  const monthLiab=m=>{const R=Q.filter(r=>r.month===m);return c2(prSum(R,'fed')+prSum(R,'ss')+prSum(R,'erSS')+prSum(R,'med')+prSum(R,'erMed'));};
+  const g=(l,v)=>'<span>'+l+'</span><b>'+v+'</b>';
+  h+='<div class="card-sub">The numbers for each payroll filing, figured from your paychecks by payday. File them yourself online, or hand this page to whoever files for you.</div>'
+    +'<div class="txn-grid"><div class="txn-full"><label>Quarter</label><select class="period-select" onchange="PR.q=this.value;renderPaychecks()">'
+    +qs.map(q=>'<option'+(q===PR.q?' selected':'')+'>'+q+'</option>').join('')+'</select></div></div>'
+    +'<div class="bk-payee" style="margin-top:14px;">Federal: Form 941 for '+esc(PR.q.replace('-Q',' quarter '))+'</div>'
+    +'<div class="tp-grid">'+g('Line 1: employees paid',new Set(Q.map(r=>normName(r.name))).size)+g('Line 2: wages, tips &amp; other pay',fmt(prSum(Q,'gross')))
+    +g('Line 3: federal income tax held',fmt(fed))+g('Line 5a: Social Security wages',fmt(ssWagesOnly))
+    +g('Line 5b: Social Security tips',fmt(ssTips))+g('Line 5c: Medicare wages &amp; tips',fmt(medW))
+    +(l5d?g('Line 5d: subject to Additional Medicare',fmt(addlW)):'')+g('Line 5e: total Social Security &amp; Medicare',fmt(c2(l5a+l5b+l5c+l5d)))
+    +g('Line 6: total taxes before adjustments',fmt(line6))
+    +(line7?g('Line 7: fractions of cents',(line7<0?'−':'')+fmt(Math.abs(line7))):'')
+    +g('Line 12: total taxes after adjustments',fmt(actual))
+    +mons.map(m=>g('Line 16: '+MON[m-1],fmt(monthLiab(m)))).join('')+'</div>'
+    +'<div class="bk-sub" style="margin-top:6px;">New employers deposit federal payroll taxes monthly, by the 15th of the next month, through EFTPS. If the whole quarter comes to less than $2,500, you can pay it with the 941 instead. Line 7 squares up the pennies from rounding each paycheck, so line 12 matches the monthly amounts.</div>';
+  const mi=prSum(Q,'mi');
+  h+='<div class="bk-payee" style="margin-top:14px;">Michigan income tax withheld</div><div class="tp-grid">'
+    +mons.map(m=>g(MON[m-1],fmt(prSum(Q.filter(r=>r.month===m),'mi')))).join('')+g('Quarter total',fmt(mi))+'</div>'
+    +'<div class="bk-sub" style="margin-top:6px;">Send it through Michigan Treasury Online on the schedule Treasury gave you (monthly or quarterly, Form 5080).</div>';
+  const cityQ=prSum(Q,'city');
+  if(cfg.city||cityQ)h+='<div class="bk-payee" style="margin-top:14px;">'+esc(cfg.city||'City')+' income tax withheld</div><div class="tp-grid">'
+    +mons.map(m=>g(MON[m-1],fmt(prSum(Q.filter(r=>r.month===m),'city')))).join('')+g('Quarter total',fmt(cityQ))+'</div>'
+    +'<div class="bk-sub" style="margin-top:6px;">Pay it to the city on its schedule, with its annual reconciliation by the end of February.</div>';
+  // UIA quarterly wage report
+  const byP={};Q.forEach(r=>{const k=normName(r.name);const p=byP[k]||(byP[k]={name:r.name,gross:0,uiaWages:0,uia:0});p.gross+=r.gross;p.uiaWages+=r.uiaWages;p.uia+=r.uia;});
+  const P=Object.values(byP);
+  h+='<div class="bk-payee" style="margin-top:14px;">Michigan unemployment: quarterly wage report</div>'
+    +P.map(p=>'<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(p.name)+'</div><div class="bk-sub">Taxable wages '+fmt(p.uiaWages)+' · tax '+fmt(p.uia)+'</div></div><div class="bk-amt">'+fmt(p.gross)+'</div></div>').join('')
+    +'<div class="tp-grid" style="margin-top:6px;">'+g('Total wages',fmt(prSum(Q,'gross')))+g('Taxable wages',fmt(prSum(Q,'uiaWages')))+g('Unemployment tax at '+(+cfg.uiaRate)+'%',fmt(prSum(Q,'uia')))+'</div>'
+    +'<div class="bk-sub" style="margin-top:6px;">File and pay through MiWAM by the 25th of the month after the quarter ends.</div>'
+    +'<div class="bk-actions"><button class="btn-secondary" onclick="prQuarterCSV()">⬇ Quarter detail (CSV)</button></div>';
+  // year-end
+  const Y=fig.filter(r=>r.yr===PR.yr);
+  h+='<div class="bk-payee" style="margin-top:18px;">Year-end</div>'
+    +'<div class="txn-grid"><div class="txn-full"><label>Year</label><select class="period-select" onchange="PR.yr=+this.value;renderPaychecks()">'
+    +yrs.map(y=>'<option'+(y===PR.yr?' selected':'')+'>'+y+'</option>').join('')+'</select></div></div>'
+    +'<div class="tp-grid" style="margin-top:8px;">'+g('Form 940: wages up to $7,000 each',fmt(prSum(Y,'futaWages')))+g('Form 940: federal unemployment tax',fmt(prSum(Y,'futa')))
+    +g('Michigan withheld (Form 5081)',fmt(prSum(Y,'mi')))+(cfg.city||prSum(Y,'city')?g(esc(cfg.city||'City')+' withheld',fmt(prSum(Y,'city'))):'')+'</div>'
+    +'<div class="bk-sub" style="margin-top:6px;">W-2s go to each person and to the Social Security Administration by January 31. The W-2 worksheet has every box filled in for each person; type them into SSA’s free Business Services Online, or give the file to whoever does your W-2s.</div>'
+    +'<div class="bk-actions"><button class="btn-secondary" onclick="prW2CSV()">⬇ W-2 worksheet (CSV)</button></div></div>';
+  return h;
+}
+function prQuarterCSV(){
+  const [qy,qq]=[+PR.q.slice(0,4),+PR.q.slice(6)];
+  const rows=[['Payday','Week worked','Employee','Hours','Gross pay','Tips','Federal income tax','Social Security wages','Social Security','Medicare','Michigan income tax','City income tax','Take-home pay','Employer Social Security','Employer Medicare','FUTA wages','FUTA','Michigan UIA wages','Michigan UIA']];
+  prRuns().filter(r=>r.tables&&r.yr===qy&&r.q===qq).forEach(r=>rows.push([r.payDate,r.label,r.name,r.hours.toFixed(2),r.gross.toFixed(2),r.tips.toFixed(2),r.fed.toFixed(2),r.ssWages.toFixed(2),r.ss.toFixed(2),r.med.toFixed(2),r.mi.toFixed(2),r.city.toFixed(2),r.net.toFixed(2),r.erSS.toFixed(2),r.erMed.toFixed(2),r.futaWages.toFixed(2),r.futa.toFixed(2),r.uiaWages.toFixed(2),r.uia.toFixed(2)]));
+  downloadCSV(fileSlug()+'-payroll-'+PR.q.toLowerCase()+'.csv',rows);
+}
+function prW2CSV(){
+  const y=PR.yr;const cfg=prCfg();const by={};
+  prRuns().filter(r=>r.tables&&r.yr===y).forEach(r=>{
+    const k=normName(r.name);const p=by[k]||(by[k]={name:r.name,gross:0,fed:0,ssWages:0,ss:0,med:0,mi:0,city:0,cityWages:0,tips:0,ssTips:0,ot:0});
+    p.gross+=r.gross;p.fed+=r.fed;p.ssWages+=r.ssWages;p.ss+=r.ss;p.med+=r.med;p.mi+=r.mi;p.city+=r.city;p.cityWages+=r.cityWages;p.tips+=r.tips;p.ssTips+=Math.min(r.tips,r.ssWages);p.ot+=r.ot;
+  });
+  const rows=[['Employee','Box 1 wages, tips, other pay','Box 2 federal income tax','Box 3 Social Security wages','Box 4 Social Security tax','Box 5 Medicare wages & tips','Box 6 Medicare tax','Box 7 Social Security tips','Box 15 state','Box 16 state wages','Box 17 state income tax','Box 18 local wages','Box 19 local income tax','Box 20 locality','Tips paid through payroll (for the tips deduction)','Overtime premium paid (for the overtime deduction)']];
+  Object.values(by).forEach(p=>{const f=n=>c2(n).toFixed(2);
+    rows.push([p.name,f(p.gross),f(p.fed),f(p.ssWages-p.ssTips),f(p.ss),f(p.gross),f(p.med),f(p.ssTips),'MI',f(p.gross),f(p.mi),p.city?f(p.cityWages):'',p.city?f(p.city):'',p.city?(cfg.city||''):'',f(p.tips),f(p.ot)]);});
+  if(rows.length===1){toast('No paychecks in '+y,true);return;}
+  downloadCSV(fileSlug()+'-w2-worksheet-'+y+'.csv',rows);
+}
+
 
 function jobSelect(idAttr,val,onchange){
   if(!BOOKS.schema.pay)return'';
@@ -7847,12 +8288,12 @@ function tourSteps(){
     {tab:'books',t:'Books: your bookkeeping, done as you go',b:'<ul><li>Every sale and expense lands here, sorted into categories. Select several to fix a category or delete them at once.</li><li><b>Bank</b>: upload your bank statement once a month and the Hub matches each line to what’s already logged, so nothing gets missed.</li><li><b>Bills</b>: rent, insurance, licenses and renewals, with reminders before they’re due.</li><li><b>Taxes</b>: estimated quarterly taxes, Michigan sales tax with due dates, and a year-end package for your tax preparer.</li><li><b>Cash ahead</b>: what’s coming in and going out for the next 13 weeks, so a tight week never sneaks up on you.</li><li>Coming from QuickBooks or Wave? <b>Bring over</b> your history, customers and who owes you in a few minutes.</li></ul>'},
     {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder. Every invoice gets a <b>Pay now</b> page with your own card link, PayPal, Venmo or check details, and the Hub can send late reminders for you.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
     {tab:'alerts',t:'Bids & Alerts: included with your Hub',b:'<ul><li>Turn on <b>Watch alerts</b> and the <b>Bid &amp; grant finder</b> right here, with nothing extra to pay.</li><li>Each Monday, public bids and grants that fit your line of work show up here and in your email.</li><li>Got a new rule or permit requirement? Send it and get a plain-language explanation back.</li></ul>'},
-    {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared, and download the payroll file for your payroll service.':'set the commission rate, how tips are shared, and download the payroll file.')+'</li><li><b>Michigan Paid Sick Time</b>: the Hub tracks what each employee has earned (1 hour per 30 worked), what they’ve used, and what’s left, and pays sick hours at their regular rate.</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
+    {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared.':'set the commission rate and how tips are shared.')+'</li><li><b>Paychecks</b>: each week the Hub figures everyone’s federal, Michigan and city withholding, Social Security and Medicare, and makes pay stubs. <b>Payroll Tax Reports</b> has the numbers for your 941s, Michigan and unemployment filings, and W-2s.</li><li><b>Michigan Paid Sick Time</b>: the Hub tracks what each employee has earned (1 hour per 30 worked), what they’ve used, and what’s left, and pays sick hours at their regular rate.</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
     {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
     {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
     {tab:'inventory',t:'Inventory',b:'<ul><li>Track what’s on hand with quick <b>+ / −</b> buttons, or <b>Count everything</b> at once.</li><li>Set a reorder point and the Hub builds your <b>shopping list</b>.</li><li>Edit as a table to change many items at once, or import a spreadsheet.</li>'+(s.recipes?'<li>Add a <b>recipe</b> to anything you make. <b>Make a batch</b> uses up the ingredients, adds the finished goods, and shows your cost per item.</li>':'')+'</ul>'},
     {tab:'settings',t:'Settings: make it yours',b:'<ul><li>Your business details, your jobs and how each is paid, and your sales and expense categories.</li><li><b>What your team can see</b>: decide whether your team sees everyone’s schedule, logs sales, counts inventory, or sees the week’s numbers.</li><li><b>Tabs you use</b>: hide the ones you don’t need, like Time Clock and Schedule if it’s just you.</li><li><b>People & logins</b>: invite your team and choose who’s a manager.</li><li><b>Getting paid</b>: how customers pay you, and automatic reminders.</li><li><b>Your plan</b>: billing, and <b>Download all my data</b> any time. Send another business your link and you both get a free month.</li></ul>'},
-    {t:'What the Hub does, and what it doesn’t',b:'<ul><li>✅ It keeps your records, does the math (pay, overtime, minimum wage, tips, sales tax, quarterly estimates), and reminds you what’s due.</li><li>➡️ It doesn’t file taxes or send paychecks. Hand the <b>payroll file</b> to your payroll service and the <b>year-end package</b> to your tax preparer.</li><li>📬 Included with your Hub: Watch alerts on local government and the Bid & grant finder, from The People’s Voices. Turn them on from <b>Start here</b> on the Dashboard.</li></ul>'},
+    {t:'What the Hub does, and what it doesn’t',b:'<ul><li>✅ It keeps your records, does the math (pay, overtime, minimum wage, tips, sales tax, quarterly estimates), and reminds you what’s due.</li><li>➡️ It figures every paycheck’s withholding and makes pay stubs and payroll tax reports, but it doesn’t move money or file for you. You send the paychecks and the tax deposits, or hand the reports to whoever files for you. The <b>year-end package</b> goes to your tax preparer.</li><li>📬 Included with your Hub: Watch alerts on local government and the Bid & grant finder, from The People’s Voices. Turn them on from <b>Start here</b> on the Dashboard.</li></ul>'},
     {t:'You’re all set',b:'<p>Start with the <b>Start here</b> checklist on your Dashboard: add your team, log a sale, and scan a receipt.</p><p>The <b>Help</b> button in the corner reopens this tour. For more detail, see the <a href="/hub-help.html" target="_blank" rel="noopener">Help page</a>.</p>'}
   ].filter(x=>!x.tab||(()=>{const t=document.querySelector('.tab[onclick*="\''+x.tab+'\'"]');return !t||t.style.display!=='none';})());
 }
