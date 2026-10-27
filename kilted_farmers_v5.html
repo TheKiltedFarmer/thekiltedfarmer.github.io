@@ -7101,7 +7101,7 @@ function repEventRow(e){
   if(e.status==='settled')right='<div class="bk-amt in">'+fmt(e.sales)+'</div>'+(repOwes(e)>0?'<div class="bk-sub" style="color:var(--red);font-weight:700;">owes '+fmt(repOwes(e))+'</div>':'<div class="bk-sub">paid up</div>');
   else right='<div class="bk-amt">'+bags+' <small style="font-family:inherit;font-weight:400;font-size:12px;color:var(--mid);">bags</small></div>';
   return '<div class="bk-row" onclick="openRepEvent(\''+e.id+'\')"><div class="rp-date"><span>'+esc((parseISO(e.event_date)||new Date()).toLocaleDateString('en-US',{month:'short'}))+'</span><b>'+((parseISO(e.event_date)||new Date()).getDate())+'</b></div>'
-    +'<div class="bk-main"><div class="bk-payee">'+esc(e.name)+'</div><div class="bk-sub">'+esc(r.name)+(e.city?' · '+esc(e.city):'')+(e.zone==='far'?' · farther out':'')+'</div>'
+    +'<div class="bk-main"><div class="bk-payee">'+(e.kind==='direct'?'Kitchen pickup · ':'')+esc(e.name)+'</div><div class="bk-sub">'+esc(r.name)+(e.kind==='direct'?' · for orders they’ll deliver':(e.city?' · '+esc(e.city):'')+(e.zone==='far'?' · farther out':''))+'</div>'
     +'<div style="margin-top:3px;"><span class="'+st[1]+'">'+st[0]+'</span>'+(pre.length?' <span class="rp-chip green">'+pre.length+' pre-order'+(pre.length===1?'':'s')+'</span>':'')+'</div></div>'
     +'<div style="text-align:right;">'+right+'</div></div>';
 }
@@ -7134,12 +7134,12 @@ function closeRepModal(){const m=document.getElementById('repModal');if(m)m.clas
 async function openRepEvent(id){
   const e=REPS.events.find(x=>x.id===id);if(!e)return;REPS.open=e;
   const m=repModal(),r=repById(e.rep_id),st=REP_STATUS[e.status]||['',''];
-  document.getElementById('repMTitle').textContent=e.name;
+  document.getElementById('repMTitle').textContent=(e.kind==='direct'?'Kitchen pickup · ':'')+e.name;
   let h='<div class="rp-meta"><span class="'+st[1]+'">'+st[0]+'</span> <b>'+esc(r.name)+'</b>'+(r.phone?' · <a href="tel:'+esc(String(r.phone).replace(/[^\d+]/g,''))+'">'+esc(r.phone)+'</a>':'')
     +'<div class="bk-sub">'+esc(prettyDate(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?' · '+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</div>'
     +(e.rep_note?'<div class="rp-note">“'+esc(e.rep_note)+'”</div>':'')+'</div>';
   const pre=repPreorders(e.id),need=repPreorderNeeds(pre);
-  if(pre.length&&e.status!=='settled')h+='<div class="rp-pre">Pre-ordered: '+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
+  if(pre.length&&e.status!=='settled')h+='<div class="rp-pre">'+(e.kind==='direct'?'For '+pre.length+' customer order'+(pre.length===1?'':'s')+': ':'Pre-ordered: ')+''+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
   if(e.status==='requested')h+=repHandoverHTML(e);
   else if(e.status==='out'||e.status==='returning')h+=repSettleHTML(e);
   else if(e.status==='settled')h+=repSettledHTML(e);
@@ -7360,16 +7360,27 @@ async function repSetStatus(id,st){
 }
 
 // ─── pre-orders ───
+function repOrderRow(o){
+  const how=o.fulfillment==='delivery'?' · deliver to '+esc(o.address||'?'):o.fulfillment==='pickup'?' · picks up from rep':'';
+  return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';
+}
 function repOrdersHTML(){
-  const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&e.event_date>=now&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));
-  if(!evs.length)return '<div class="bk-empty">No pre-orders for upcoming events. Reps share their own order link, and orders show up here and with the rep.</div>';
-  const all=repPreorderNeeds(evs.flatMap(e=>repPreorders(e.id)));
-  let h='<div class="rp-pre" style="margin-top:0;"><b>Reserved across upcoming rep events:</b> '+Object.values(all).map(n=>n.qty+' '+esc(n.name)).join(', ')+'</div>';
+  const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&(e.event_date>=now||e.kind==='direct')&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  const open=REPS.preorders.filter(o=>!o.event_id&&o.fulfillment&&o.fulfillment!=='event'&&(o.status==='new'||o.status==='confirmed'));
+  if(!evs.length&&!open.length)return '<div class="bk-empty">No open orders. Reps share their own order link, and orders show up here and with the rep.</div>';
+  const all=repPreorderNeeds(evs.flatMap(e=>repPreorders(e.id)).concat(open));
+  let h='<div class="rp-pre" style="margin-top:0;"><b>Reserved across reps right now:</b> '+Object.values(all).map(n=>n.qty+' '+esc(n.name)).join(', ')+'</div>';
+  if(open.length){
+    const byRep={};open.forEach(o=>{(byRep[o.rep_id]=byRep[o.rep_id]||[]).push(o);});
+    Object.entries(byRep).forEach(([rid,list])=>{
+      h+='<div class="bk-date">Direct orders · '+esc(repById(rid).name)+' <span style="text-transform:none;letter-spacing:0;font-weight:400;">· the rep hasn’t asked for this pasta yet</span></div>'+list.map(repOrderRow).join('');
+    });
+  }
   evs.forEach(e=>{
     const list=repPreorders(e.id),need=repPreorderNeeds(list);
-    h+='<div class="bk-date">'+esc(e.name)+' · '+esc(prettyDate(e.event_date))+' · '+esc(repById(e.rep_id).name)+'</div>'
-      +'<div class="bk-sub" style="margin-bottom:4px;">Set aside: '+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
-    list.forEach(o=>{h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';});
+    h+='<div class="bk-date">'+(e.kind==='direct'?'Kitchen pickup · '+esc(prettyDate(e.event_date)):esc(e.name)+' · '+esc(prettyDate(e.event_date)))+' · '+esc(repById(e.rep_id).name)+'</div>'
+      +'<div class="bk-sub" style="margin-bottom:4px;">'+(e.kind==='direct'?'Pack: ':'Set aside: ')+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>'
+      +list.map(repOrderRow).join('');
   });
   return h;
 }
@@ -7646,6 +7657,20 @@ create table if not exists kf_rep_preorders (
 );
 create index if not exists kf_rep_preorders_event_idx on kf_rep_preorders(event_id);
 
+-- Direct orders: customers order any time; the rep delivers it or they pick it up from the rep (no shipping)
+alter table kf_reps add column if not exists direct_orders boolean not null default true;
+alter table kf_rep_events add column if not exists kind text not null default 'event';
+alter table kf_rep_preorders add column if not exists fulfillment text not null default 'event';
+alter table kf_rep_preorders add column if not exists address text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'kf_rep_events_kind_chk') then
+    alter table kf_rep_events add constraint kf_rep_events_kind_chk check (kind in ('event','direct'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'kf_rep_preorders_fulfillment_chk') then
+    alter table kf_rep_preorders add constraint kf_rep_preorders_fulfillment_chk check (fulfillment in ('event','delivery','pickup'));
+  end if;
+end $$;
+
 -- Link products to Inventory items when the Inventory tab is set up
 do $$
 begin
@@ -7852,6 +7877,8 @@ begin
   update kf_rep_events set status = 'cancelled'
   where id = p_id and rep_id = kf_my_rep_id() and status = 'requested';
   if not found then raise exception 'Only events that haven''t been handed over yet can be cancelled here'; end if;
+  -- orders that were waiting on this kitchen pickup go back to the rep's open orders
+  update kf_rep_preorders set event_id = null where event_id = p_id and fulfillment <> 'event';
 end $$;
 
 -- After the event: how many bags are coming back
@@ -7878,7 +7905,7 @@ begin
   if not found then raise exception 'That order isn''t yours'; end if;
 end $$;
 
--- Public order page: a rep's products, prices and upcoming events
+-- Public order page: a rep's products, prices, upcoming events, and whether they take direct orders
 create or replace function kf_rep_public(p_code text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare r kf_reps; cfg jsonb := kf_rep_cfg();
@@ -7888,6 +7915,7 @@ begin
   return jsonb_build_object(
     'ok', true,
     'rep', jsonb_build_object('first_name', split_part(r.name, ' ', 1), 'city', r.city),
+    'direct_orders', r.direct_orders,
     'line_names', cfg->'line_names',
     'products', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'line', p.line, 'description', p.description,
         'price', coalesce((cfg->'prices'->>p.line)::numeric, 0)) order by p.sort_order, p.line, p.name)
@@ -7895,29 +7923,39 @@ begin
     'far_add', coalesce((cfg->>'far_add')::numeric, 0),
     'events', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'name', e.name, 'event_date', e.event_date,
         'start_time', e.start_time, 'place', e.place, 'city', e.city, 'zone', e.zone) order by e.event_date)
-      from kf_rep_events e where e.rep_id = r.id and e.status in ('requested', 'out')
+      from kf_rep_events e where e.rep_id = r.id and e.kind = 'event' and e.status in ('requested', 'out')
         and e.event_date >= current_date and e.show_on_order_page), '[]'::jsonb)
   );
 end $$;
 
--- Public order page: place a pre-order (paid at pickup)
-create or replace function kf_rep_place_preorder(p_code text, p_event uuid, p_name text, p_contact text, p_items jsonb, p_note text)
+-- Public order page: place an order, paid to the rep at pickup or delivery.
+-- p_fulfillment: 'event' (pick up at one of the rep's events), 'delivery' (rep brings it), 'pickup' (from the rep)
+drop function if exists kf_rep_place_preorder(text, uuid, text, text, jsonb, text);
+create or replace function kf_rep_place_preorder(p_code text, p_event uuid, p_name text, p_contact text, p_items jsonb, p_note text,
+  p_fulfillment text default 'event', p_address text default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   r kf_reps; ev kf_rep_events; cfg jsonb := kf_rep_cfg(); l jsonb; pr kf_rep_products; q int; price numeric;
-  items jsonb := '[]'::jsonb; total numeric := 0; n int := 0; oid uuid;
+  items jsonb := '[]'::jsonb; total numeric := 0; n int := 0; oid uuid; f text := coalesce(nullif(p_fulfillment, ''), 'event'); z text := 'local';
 begin
   select * into r from kf_reps where code = lower(trim(p_code)) and status = 'active';
   if r.id is null then raise exception 'This order link isn''t active'; end if;
-  select * into ev from kf_rep_events where id = p_event and rep_id = r.id
-    and status in ('requested', 'out') and event_date >= current_date and show_on_order_page;
-  if ev.id is null then raise exception 'Pick an upcoming event'; end if;
+  if f not in ('event', 'delivery', 'pickup') then raise exception 'Pick how you''ll get your pasta'; end if;
+  if f = 'event' then
+    select * into ev from kf_rep_events where id = p_event and rep_id = r.id and kind = 'event'
+      and status in ('requested', 'out') and event_date >= current_date and show_on_order_page;
+    if ev.id is null then raise exception 'Pick an upcoming event'; end if;
+    z := ev.zone;
+  else
+    if not r.direct_orders then raise exception 'This rep is only taking orders for events right now'; end if;
+    if f = 'delivery' and coalesce(trim(p_address), '') = '' then raise exception 'Tell us where to bring it'; end if;
+  end if;
   if coalesce(trim(p_name), '') = '' then raise exception 'Enter your name'; end if;
   if coalesce(trim(p_contact), '') = '' then raise exception 'Enter a phone number or email so we can reach you'; end if;
   if jsonb_typeof(p_items) <> 'array' then raise exception 'Pick some pasta'; end if;
-  if (select count(*) from kf_rep_preorders where event_id = ev.id and created_at > now() - interval '1 hour') >= 60 then
-    raise exception 'Lots of orders just came in for this event. Try again in a little while';
+  if (select count(*) from kf_rep_preorders where rep_id = r.id and created_at > now() - interval '1 hour') >= 60 then
+    raise exception 'Lots of orders just came in. Try again in a little while';
   end if;
   for l in select * from jsonb_array_elements(p_items) loop
     q := least(greatest(coalesce((l->>'qty')::int, 0), 0), 25);
@@ -7926,25 +7964,62 @@ begin
     if pr.id is null then continue; end if;
     n := n + 1; exit when n > 30;
     price := coalesce((cfg->'prices'->>pr.line)::numeric, 0)
-      + case when ev.zone = 'far' then coalesce((cfg->>'far_add')::numeric, 0) else 0 end;
+      + case when z = 'far' then coalesce((cfg->>'far_add')::numeric, 0) else 0 end;
     items := items || jsonb_build_array(jsonb_build_object('product_id', pr.id, 'name', pr.name, 'line', pr.line, 'qty', q, 'price', price));
     total := total + q * price;
   end loop;
   if jsonb_array_length(items) = 0 then raise exception 'Pick at least one bag'; end if;
-  insert into kf_rep_preorders (rep_id, event_id, customer_name, customer_contact, items, total, note)
-  values (r.id, ev.id, left(trim(p_name), 80), left(trim(p_contact), 120), items, total, left(p_note, 500))
+  insert into kf_rep_preorders (rep_id, event_id, customer_name, customer_contact, items, total, note, fulfillment, address)
+  values (r.id, ev.id, left(trim(p_name), 80), left(trim(p_contact), 120), items, total, left(p_note, 500), f,
+    case when f = 'delivery' then left(trim(p_address), 200) end)
   returning id into oid;
-  return jsonb_build_object('id', oid, 'total', total, 'event', ev.name, 'event_date', ev.event_date, 'place', ev.place, 'city', ev.city);
+  return jsonb_build_object('id', oid, 'total', total, 'fulfillment', f, 'event', ev.name, 'event_date', ev.event_date, 'place', ev.place, 'city', ev.city);
+end $$;
+
+-- Rep: turn direct orders on or off for their link
+create or replace function kf_rep_set_direct(p_on boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update kf_reps set direct_orders = coalesce(p_on, true) where user_id = auth.uid();
+  if not found then raise exception 'No rep account found'; end if;
+end $$;
+
+-- Rep: ask the kitchen for the pasta to fill a group of direct orders. Works like booking an event.
+create or replace function kf_rep_request_direct(p_order_ids uuid[], p_date date, p_note text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare rid uuid; eid uuid; cfg jsonb := kf_rep_cfg(); o record; cnt int;
+begin
+  select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
+  if rid is null then raise exception 'Your rep account isn''t active'; end if;
+  if p_date is null or p_date < current_date then raise exception 'Pick the day you''ll pick up from the kitchen'; end if;
+  select count(*) into cnt from kf_rep_preorders where id = any(p_order_ids) and rep_id = rid and event_id is null
+    and fulfillment <> 'event' and status in ('new', 'confirmed');
+  if coalesce(cnt, 0) = 0 then raise exception 'Choose at least one open order'; end if;
+  insert into kf_rep_events (rep_id, name, event_date, zone, kind, status, show_on_order_page, rep_note)
+  values (rid, 'Direct orders (' || cnt || ')', p_date, 'local', 'direct', 'requested', false, left(p_note, 1000))
+  returning id into eid;
+  update kf_rep_preorders set event_id = eid, status = case when status = 'new' then 'confirmed' else status end
+  where id = any(p_order_ids) and rep_id = rid and event_id is null and fulfillment <> 'event' and status in ('new', 'confirmed');
+  for o in
+    select (i->>'product_id')::uuid pid, sum((i->>'qty')::int) q
+    from kf_rep_preorders po, jsonb_array_elements(po.items) i
+    where po.event_id = eid group by 1
+  loop
+    insert into kf_rep_event_lines (event_id, product_id, product_name, line, unit_price, qty_requested, qty_out)
+    select eid, p.id, p.name, p.line, coalesce((cfg->'prices'->>p.line)::numeric, 0), o.q, o.q
+    from kf_rep_products p where p.id = o.pid;
+  end loop;
+  return eid;
 end $$;
 
 grant execute on function kf_rep_cfg() to anon, authenticated;
 grant execute on function kf_rep_public(text) to anon, authenticated;
-grant execute on function kf_rep_place_preorder(text, uuid, text, text, jsonb, text) to anon, authenticated;
+grant execute on function kf_rep_place_preorder(text, uuid, text, text, jsonb, text, text, text) to anon, authenticated;
 do $$
 declare f text;
 begin
   foreach f in array array['kf_rep_apply(text, text, text, text)','kf_rep_book_event(jsonb, jsonb)','kf_rep_cancel_event(uuid)',
-      'kf_rep_report_back(uuid, jsonb)','kf_rep_preorder_status(uuid, text)','kf_my_rep_id()','kf_is_active_rep()','kf_is_team()','kf_is_steward()'] loop
+      'kf_rep_report_back(uuid, jsonb)','kf_rep_preorder_status(uuid, text)','kf_rep_set_direct(boolean)','kf_rep_request_direct(uuid[], date, text)','kf_my_rep_id()','kf_is_active_rep()','kf_is_team()','kf_is_steward()'] loop
     execute format('revoke execute on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);
   end loop;
