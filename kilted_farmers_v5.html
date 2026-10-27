@@ -7362,7 +7362,8 @@ async function repSetStatus(id,st){
 // ─── pre-orders ───
 function repOrderRow(o){
   const how=o.fulfillment==='delivery'?' · deliver to '+esc(o.address||'?'):o.fulfillment==='pickup'?' · picks up from rep':'';
-  return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';
+  const paid=o.paid?' <span class="rp-chip green">Paid'+(o.paid_method?' · '+esc(o.paid_method):'')+'</span>':o.paid_claim?' <span class="rp-chip tan">Says paid · '+esc(o.paid_claim)+'</span>':'';
+  return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+paid+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';
 }
 function repOrdersHTML(){
   const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&(e.event_date>=now||e.kind==='direct')&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));
@@ -7393,7 +7394,7 @@ function repSetupHTML(){
   let last=null;
   REPS.products.forEach(p=>{
     if(p.line!==last){last=p.line;h+='<div class="bk-date">'+esc(repLineName(p.line))+' · '+fmt(repPrice(p.line,'local'))+' local · '+fmt(repPrice(p.line,'far'))+' farther out</div>';}
-    h+='<div class="bk-row" onclick="openRepProduct(\''+p.id+'\')"><div class="bk-main"><div class="bk-payee">'+esc(p.name)+(p.active?'':' <span class="rp-chip">Hidden</span>')+'</div><div class="bk-sub">'+(p.description?esc(p.description):'')+(p.inv_item_id?(p.description?' · ':'')+'linked to Inventory':'')+'</div></div><div class="bk-sub">Edit</div></div>';
+    h+='<div class="bk-row" onclick="openRepProduct(\''+p.id+'\')">'+(p.photo_url?'<img src="'+esc(p.photo_url)+'" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.remove()">':'')+'<div class="bk-main"><div class="bk-payee">'+esc(p.name)+(p.active?'':' <span class="rp-chip">Hidden</span>')+'</div><div class="bk-sub">'+(p.description?esc(p.description):'')+(p.inv_item_id?(p.description?' · ':'')+'linked to Inventory':'')+'</div></div><div class="bk-sub">Edit</div></div>';
   });
   h+='<div class="bk-actions"><button class="btn-green" onclick="openRepProduct()">+ Add a pasta</button></div>';
   h+='<div class="rp-h">Commission and prices</div>'+(stew?'':'<div class="bk-sub">Only Stewards can change these.</div>');
@@ -7425,15 +7426,18 @@ async function openRepProduct(id){
   document.getElementById('repMBody').innerHTML='<label class="rp-lbl">Name</label><input id="rppName" class="period-input" style="width:100%;" value="'+esc(p?p.name:'')+'" placeholder="Lemon Pepper Fettuccine">'
     +'<label class="rp-lbl">Price group</label><select id="rppLine" class="period-select" style="width:100%;">'+REP_LINE_KEYS.map(k=>'<option value="'+k+'"'+(p&&p.line===k?' selected':'')+'>'+esc(repLineName(k))+' · '+fmt(repPrice(k,'local'))+'</option>').join('')+'</select>'
     +'<label class="rp-lbl">Short description (customers see it)</label><input id="rppDesc" class="period-input" style="width:100%;" value="'+esc(p&&p.description||'')+'" placeholder="Optional">'
+    +'<label class="rp-lbl">Photo link (customers see it)</label><input id="rppPhoto" class="period-input" style="width:100%;" value="'+esc(p&&p.photo_url||'')+'" placeholder="https://… (right-click the photo on your Square site → Copy Image Address)">'
+    +'<label class="rp-lbl">Recipes &amp; details link</label><input id="rppInfo" class="period-input" style="width:100%;" value="'+esc(p&&p.info_url||'')+'" placeholder="https://… the product page on your Square site">'
     +'<label class="rp-lbl">Inventory item</label><select id="rppInv" class="period-select" style="width:100%;"><option value="">Not linked</option>'+REPS.inv.map(i=>'<option value="'+i.id+'"'+(p&&p.inv_item_id===i.id?' selected':'')+'>'+esc(i.name)+' ('+(+i.on_hand||0)+' on hand)</option>').join('')+'</select>'
     +'<div class="rp-grid" style="margin-top:4px;"><div><label class="rp-lbl">Sort order</label><input id="rppSort" class="period-input" type="number" value="'+(p?+p.sort_order||0:REPS.products.length)+'"></div>'
     +'<div><label class="rp-lbl">Reps can take it</label><select id="rppActive" class="period-select"><option value="1"'+(!p||p.active?' selected':'')+'>Yes</option><option value="0"'+(p&&!p.active?' selected':'')+'>Hidden</option></select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="repSaveProduct()">Save</button>'+(p?'<button class="btn-secondary danger" onclick="repDeleteProduct()">Delete</button>':'')+'</div>';
   m.classList.add('open');
 }
+function repUrl(v){v=String(v||'').trim();if(!v)return null;if(!/^https?:\/\//i.test(v))v='https://'+v;return v.replace(/^http:/i,'https:');}
 async function repSaveProduct(){
   const p=REPS.editProd,name=document.getElementById('rppName').value.trim();if(!name){toast('Give it a name',true);return;}
-  const b={name,line:document.getElementById('rppLine').value,description:document.getElementById('rppDesc').value.trim()||null,inv_item_id:document.getElementById('rppInv').value||null,sort_order:parseInt(document.getElementById('rppSort').value)||0,active:document.getElementById('rppActive').value==='1'};
+  const b={name,line:document.getElementById('rppLine').value,description:document.getElementById('rppDesc').value.trim()||null,photo_url:repUrl(document.getElementById('rppPhoto').value),info_url:repUrl(document.getElementById('rppInfo').value),inv_item_id:document.getElementById('rppInv').value||null,sort_order:parseInt(document.getElementById('rppSort').value)||0,active:document.getElementById('rppActive').value==='1'};
   try{if(p)await sb('kf_rep_products?id=eq.'+p.id,{method:'PATCH',body:JSON.stringify(b)});else await sb('kf_rep_products',{method:'POST',body:JSON.stringify(b)});
     closeRepModal();toast('Saved');await loadReps();drawReps();}catch(x){toast(x.message,true);}
 }
@@ -7662,6 +7666,19 @@ alter table kf_reps add column if not exists direct_orders boolean not null defa
 alter table kf_rep_events add column if not exists kind text not null default 'event';
 alter table kf_rep_preorders add column if not exists fulfillment text not null default 'event';
 alter table kf_rep_preorders add column if not exists address text;
+-- Paying ahead: customers pay the rep directly (Venmo, Cash App, PayPal); each rep decides if it's required
+alter table kf_reps add column if not exists venmo text;
+alter table kf_reps add column if not exists cashapp text;
+alter table kf_reps add column if not exists paypal text;
+alter table kf_reps add column if not exists require_prepay boolean not null default false;
+alter table kf_rep_preorders add column if not exists paid boolean not null default false;
+alter table kf_rep_preorders add column if not exists paid_method text;
+alter table kf_rep_preorders add column if not exists paid_at timestamptz;
+alter table kf_rep_preorders add column if not exists paid_claim text;
+-- Product photos and a link to the full description and recipes (for example the product page on the Square site)
+alter table kf_rep_products add column if not exists photo_url text;
+alter table kf_rep_products add column if not exists info_url text;
+
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'kf_rep_events_kind_chk') then
     alter table kf_rep_events add constraint kf_rep_events_kind_chk check (kind in ('event','direct'));
@@ -7916,8 +7933,11 @@ begin
     'ok', true,
     'rep', jsonb_build_object('first_name', split_part(r.name, ' ', 1), 'city', r.city),
     'direct_orders', r.direct_orders,
+    'pay', jsonb_strip_nulls(jsonb_build_object('venmo', nullif(r.venmo, ''), 'cashapp', nullif(r.cashapp, ''), 'paypal', nullif(r.paypal, ''))),
+    'require_prepay', r.require_prepay and coalesce(nullif(r.venmo, ''), nullif(r.cashapp, ''), nullif(r.paypal, '')) is not null,
     'line_names', cfg->'line_names',
     'products', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'line', p.line, 'description', p.description,
+        'photo_url', p.photo_url, 'info_url', p.info_url,
         'price', coalesce((cfg->'prices'->>p.line)::numeric, 0)) order by p.sort_order, p.line, p.name)
       from kf_rep_products p where p.active), '[]'::jsonb),
     'far_add', coalesce((cfg->>'far_add')::numeric, 0),
@@ -7973,7 +7993,47 @@ begin
   values (r.id, ev.id, left(trim(p_name), 80), left(trim(p_contact), 120), items, total, left(p_note, 500), f,
     case when f = 'delivery' then left(trim(p_address), 200) end)
   returning id into oid;
-  return jsonb_build_object('id', oid, 'total', total, 'fulfillment', f, 'event', ev.name, 'event_date', ev.event_date, 'place', ev.place, 'city', ev.city);
+  return jsonb_build_object('id', oid, 'total', total, 'fulfillment', f, 'event', ev.name, 'event_date', ev.event_date, 'place', ev.place, 'city', ev.city,
+    'pay', jsonb_strip_nulls(jsonb_build_object('venmo', nullif(r.venmo, ''), 'cashapp', nullif(r.cashapp, ''), 'paypal', nullif(r.paypal, ''))),
+    'require_prepay', r.require_prepay and coalesce(nullif(r.venmo, ''), nullif(r.cashapp, ''), nullif(r.paypal, '')) is not null);
+end $$;
+
+-- Customer: "I sent it" — tells the rep which app to check. Only the rep can mark an order paid.
+create or replace function kf_rep_preorder_claim(p_code text, p_id uuid, p_method text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_method not in ('Venmo', 'Cash App', 'PayPal') then raise exception 'Unknown payment app'; end if;
+  update kf_rep_preorders o set paid_claim = p_method
+  from kf_reps r where o.id = p_id and r.id = o.rep_id and r.code = lower(trim(p_code)) and not o.paid and o.status <> 'cancelled';
+end $$;
+
+-- Rep: mark an order paid (or not)
+create or replace function kf_rep_preorder_paid(p_id uuid, p_paid boolean, p_method text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update kf_rep_preorders set paid = coalesce(p_paid, false),
+    paid_method = case when p_paid then left(coalesce(nullif(p_method, ''), paid_claim, 'Paid'), 40) end,
+    paid_at = case when p_paid then now() end,
+    status = case when p_paid and status = 'new' then 'confirmed' else status end
+  where id = p_id and rep_id = kf_my_rep_id();
+  if not found then raise exception 'That order isn''t yours'; end if;
+end $$;
+
+-- Rep: payment handles and whether customers must pay ahead
+create or replace function kf_rep_set_payments(p_venmo text, p_cashapp text, p_paypal text, p_require boolean) returns kf_reps
+language plpgsql security definer set search_path = public as $$
+declare r kf_reps; v text; c text; pp text;
+begin
+  v := nullif(regexp_replace(btrim(coalesce(p_venmo, '')), '^@|\\s', '', 'g'), '');
+  c := nullif(regexp_replace(btrim(coalesce(p_cashapp, '')), '^\\$|\\s', '', 'g'), '');
+  pp := nullif(regexp_replace(regexp_replace(btrim(coalesce(p_paypal, '')), '^(https?://)?(www\\.)?paypal\\.me/', '', 'i'), '\\s|/$', '', 'g'), '');
+  if coalesce(p_require, false) and v is null and c is null and pp is null then
+    raise exception 'Add at least one way to pay you before requiring payment ahead';
+  end if;
+  update kf_reps set venmo = left(v, 40), cashapp = left(c, 40), paypal = left(pp, 60), require_prepay = coalesce(p_require, false)
+  where user_id = auth.uid() returning * into r;
+  if r.id is null then raise exception 'No rep account found'; end if;
+  return r;
 end $$;
 
 -- Rep: turn direct orders on or off for their link
@@ -7992,14 +8052,16 @@ begin
   select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
   if rid is null then raise exception 'Your rep account isn''t active'; end if;
   if p_date is null or p_date < current_date then raise exception 'Pick the day you''ll pick up from the kitchen'; end if;
-  select count(*) into cnt from kf_rep_preorders where id = any(p_order_ids) and rep_id = rid and event_id is null
-    and fulfillment <> 'event' and status in ('new', 'confirmed');
+  select count(*) into cnt from kf_rep_preorders po where id = any(p_order_ids) and rep_id = rid and event_id is null
+    and fulfillment <> 'event' and status in ('new', 'confirmed')
+    and (po.paid or not (select require_prepay from kf_reps where id = rid));
   if coalesce(cnt, 0) = 0 then raise exception 'Choose at least one open order'; end if;
   insert into kf_rep_events (rep_id, name, event_date, zone, kind, status, show_on_order_page, rep_note)
   values (rid, 'Direct orders (' || cnt || ')', p_date, 'local', 'direct', 'requested', false, left(p_note, 1000))
   returning id into eid;
-  update kf_rep_preorders set event_id = eid, status = case when status = 'new' then 'confirmed' else status end
-  where id = any(p_order_ids) and rep_id = rid and event_id is null and fulfillment <> 'event' and status in ('new', 'confirmed');
+  update kf_rep_preorders po set event_id = eid, status = case when status = 'new' then 'confirmed' else status end
+  where id = any(p_order_ids) and rep_id = rid and event_id is null and fulfillment <> 'event' and status in ('new', 'confirmed')
+    and (po.paid or not (select require_prepay from kf_reps where id = rid));
   for o in
     select (i->>'product_id')::uuid pid, sum((i->>'qty')::int) q
     from kf_rep_preorders po, jsonb_array_elements(po.items) i
@@ -8015,11 +8077,12 @@ end $$;
 grant execute on function kf_rep_cfg() to anon, authenticated;
 grant execute on function kf_rep_public(text) to anon, authenticated;
 grant execute on function kf_rep_place_preorder(text, uuid, text, text, jsonb, text, text, text) to anon, authenticated;
+grant execute on function kf_rep_preorder_claim(text, uuid, text) to anon, authenticated;
 do $$
 declare f text;
 begin
   foreach f in array array['kf_rep_apply(text, text, text, text)','kf_rep_book_event(jsonb, jsonb)','kf_rep_cancel_event(uuid)',
-      'kf_rep_report_back(uuid, jsonb)','kf_rep_preorder_status(uuid, text)','kf_rep_set_direct(boolean)','kf_rep_request_direct(uuid[], date, text)','kf_my_rep_id()','kf_is_active_rep()','kf_is_team()','kf_is_steward()'] loop
+      'kf_rep_report_back(uuid, jsonb)','kf_rep_preorder_status(uuid, text)','kf_rep_set_direct(boolean)','kf_rep_preorder_paid(uuid, boolean, text)','kf_rep_set_payments(text, text, text, boolean)','kf_rep_request_direct(uuid[], date, text)','kf_my_rep_id()','kf_is_active_rep()','kf_is_team()','kf_is_steward()'] loop
     execute format('revoke execute on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);
   end loop;
