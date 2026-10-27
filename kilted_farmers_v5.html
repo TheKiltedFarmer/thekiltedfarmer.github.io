@@ -714,6 +714,48 @@ details[open]>summary.card-title::after{content:'▴';}
 
 .svc-pill{font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;white-space:nowrap;background:var(--cream-dark);color:var(--mid);}
 .svc-pill.done{background:#e6f4ec;color:var(--green);}
+
+/* ─── Reps ─── */
+.rp-badge{display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;vertical-align:1px;}
+.rp-stats{grid-template-columns:repeat(4,1fr);}
+@media(max-width:620px){.rp-stats{grid-template-columns:1fr 1fr;}}
+.rp-chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:var(--cream-dark);color:var(--mid);white-space:nowrap;}
+.rp-chip.blue{background:#e6f0f7;color:var(--blue);}
+.rp-chip.green{background:#e6f4ec;color:var(--green-dark);}
+.rp-chip.tan{background:#f6ede2;color:#7a5530;}
+.rp-chip.red{background:#fdeceb;color:var(--red);}
+.rp-date{width:44px;flex-shrink:0;text-align:center;background:#e6f4ec;border-radius:8px;padding:4px 0;color:var(--green-dark);}
+.rp-date span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700;}
+.rp-date b{display:block;font-family:'Playfair Display',serif;font-size:18px;line-height:1.1;}
+.rp-meta{margin-bottom:10px;}
+.rp-note{background:var(--cream);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--mid);margin:6px 0;font-style:italic;}
+.rp-pre{background:#e6f4ec;color:var(--green-dark);border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0;}
+.rp-h{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;margin:16px 0 4px;}
+.rp-lines{border-top:1px solid var(--cream-dark);}
+.rp-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--cream-dark);}
+.rp-num{width:84px;text-align:center;font-weight:700;}
+.rp-add{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.rp-add .period-select{flex:1;min-width:150px;}
+.rp-add .btn-secondary{padding:7px 14px;}
+.rp-total{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--green-dark);color:#fff;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px;}
+.rp-total:empty{display:none;}
+.rp-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:10px 0 4px;font-weight:600;}
+.rp-zone{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+.rp-zone label{font-size:12px;color:var(--mid);font-weight:600;}
+.rp-money,.rp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.rp-money .period-input,.rp-money .period-select,.rp-grid .period-input,.rp-grid .period-select{width:100%;}
+@media(max-width:520px){.rp-money,.rp-grid{grid-template-columns:1fr 1fr;}}
+.rp-sum{background:var(--cream);border-radius:10px;padding:8px 12px;margin-top:10px;}
+.rp-sum div{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:14px;}
+.rp-sum .rp-owe{color:var(--red);border-top:1px solid var(--rule);margin-top:4px;padding-top:6px;}
+.rp-rep{border:1px solid var(--rule);border-radius:10px;padding:12px;margin-top:8px;}
+.rp-rep-top{display:flex;justify-content:space-between;gap:10px;}
+.btn-secondary.danger:hover{background:#fdeceb;}
+
+.rp-w9{background:#fdf6ec;border:1px solid #ecd9bd;border-radius:10px;padding:10px 12px;font-size:13px;color:#6d4d2c;margin-bottom:10px;}
+.rp-w9-ok{display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:700;color:var(--green-dark);cursor:pointer;}
+.rp-w9-ok input{width:18px;height:18px;accent-color:var(--green);}
+.rp-w9line{margin-top:4px;}
 </style>
 </head>
 <body>
@@ -762,6 +804,7 @@ details[open]>summary.card-title::after{content:'▴';}
   <div class="tab" onclick="switchTab('team',this)">Team</div>
   <div class="tab" onclick="switchTab('ingredients',this)">Ingredients</div>
   <div class="tab" id="invTab" onclick="switchTab('inventory',this)">Inventory</div>
+  <div class="tab" id="repsTab" onclick="switchTab('reps',this)">Reps<span class="rp-badge" id="repsBadge"></span></div>
   <div class="tab" onclick="switchTab('history',this)">History</div>
   <div class="tab" id="servicesTab" style="display:none;" onclick="switchTab('services',this)">Grants &amp; Alerts</div>
   <div class="tab" id="adminTab" style="display:none;" onclick="switchTab('admin',this)">Admin</div>
@@ -1016,6 +1059,9 @@ details[open]>summary.card-title::after{content:'▴';}
 
 <!-- ─── INVENTORY ─── -->
 <div class="tab-content" id="tab-inventory"><div style="margin-top:8px;" id="invBody"></div></div>
+
+<!-- REPS -->
+<div class="tab-content" id="tab-reps"><div style="margin-top:8px;" id="repsBody"></div></div>
 
 <!-- ─── HISTORY ─── -->
 <div class="tab-content" id="tab-history">
@@ -1364,7 +1410,7 @@ function signOut(){
   try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
   if(dashInterval)clearInterval(dashInterval);
   BOOKS.rows=[];BOOKS.schema.checked=false;BOOKS.stale=true;BOOKS.acct={};BOOKS.bank=[];BOOKS.miles=[];BOOKS.raw=null;BOOKS._weeks=null;
-  ONB.rows=[];window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
+  ONB.rows=[];REPS.loaded=false;REPS.reps=[];REPS.events=[];REPS.preorders=[];{const rb=document.getElementById('repsBadge');if(rb)rb.style.display='none';}window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
   ['onbBanner','onbMine','onbTeam','payRules','booksCheckup','booksBody'].forEach(i=>{const el=document.getElementById(i);if(el)el.innerHTML='';});
   const lb=document.getElementById('loginBtn');if(lb){lb.disabled=false;lb.textContent='Sign In';}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('active',t.id==='tab-dashboard'));document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
@@ -1441,6 +1487,7 @@ function switchTab(id,el){
   if(id==='team'||id==='timeclock'){loadCurrentPeriodHours().then(()=>{renderTeam();renderClock();calculate();});}
   if(id==='admin')adminLoadUsers();
   if(id==='services')loadPVServices();
+  if(id==='reps')renderReps();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
@@ -2207,8 +2254,8 @@ function parseISO(s){if(!s)return null;const m=String(s).match(/^(\d{4})-(\d{2})
 function prettyDate(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
 function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
 
-let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Other Expense'];
-let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Tips','Other'];
+let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Rep Commissions','Other Expense'];
+let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Rep Sales','Tips','Other'];
 const MOVEMENT_CATS=['Member Distribution','Owner Contribution','Loan','Transfer']; // money that moves but isn't profit or loss
 let COGS_CATS=['Ingredients','Packaging'];
 const PAY_METHODS=['Card','Cash','Check','Square','Venmo / PayPal','Bank Transfer','Other'];
@@ -3294,6 +3341,7 @@ const TAX_LINES={
   'Repairs & Maintenance':{p:'11',c:'21',n:'Repairs & maintenance'},
   'Bank & Card Fees':{p:'20',c:'27a',n:'Bank & card fees'},
   'Meals':{p:'20',c:'24b',n:'Meals (50% deductible)',factor:0.5},
+  'Rep Commissions':{p:'20',c:'10',n:'Commissions paid to pasta reps'},
   'Other Expense':{p:'20',c:'27a',n:'Other expenses'}
 };
 function taxPicture(y){
@@ -3440,6 +3488,7 @@ function computeCheckup(){
     const need=yearPayouts(y).list.filter(p=>!p.owner&&p.total>=th*0.75&&!w9[p.name]);
     if(need.length)items.push({lvl:'todo',text:'Get a W-9 from '+need.map(p=>p.name).join(', ')+' (paid near or over '+fmt(th).replace('.00','')+' this year)',btn:'Taxes',fn:"setBooksView('taxes')"});
   }
+  if(s.acct){const th=threshold1099(y),w9=acct().w9||{};const rn=repPayouts(y).filter(p=>p.total>=th*0.75&&!w9[p.name]);if(rn.length)items.push({lvl:'todo',text:'Get a W-9 from pasta rep'+(rn.length>1?'s ':' ')+rn.map(p=>p.name).join(', ')+' (commission near or over '+fmt(th).replace('.00','')+' this year)',btn:'Taxes',fn:"setBooksView('taxes')"});}
   const big=ytd.filter(r=>r.dir==='out'&&r.category==='Equipment'&&r.amount>=2500);
   if(big.length)items.push({lvl:'info',text:big.length+' equipment purchase'+(big.length===1?'':'s')+' over $2,500 — keep '+(big.length===1?'its':'their')+' receipts; '+(big.length===1?'it':'they')+' go on Form 4562 at tax time'});
   const ct=ctFund();
@@ -3927,6 +3976,7 @@ function renderBooksTaxes(){
   });
   h+='</div>';
   }
+  h+=repTaxCardHTML(y,a,setupOk);
   if(tp.draws.length&&!tp.single)h+='<div class="card"><div class="bk-sub">Owner pay-outs this year ('+tp.draws.map(d=>esc(d.name)+' '+fmt(d.total)).join(', ')+') are draws, not expenses. They don’t lower the profit.</div></div>';
   // mileage
   const trips=tp.trips.slice().sort((t1,t2)=>t1.trip_date<t2.trip_date?1:-1);
@@ -4000,6 +4050,7 @@ function printTaxPackage(){
       ?'<h2>'+(pays.length?4:3)+'. Employees (W-2 wages)</h2>'+(tp.contractors.length?tbl(['Name','Hours','Gross wages'],tp.contractors.map(p=>[esc(p.name),p.hours.toFixed(1),fmt(p.total)])):'<p class="muted">None.</p>')
         +(tp.payroll?'<p class="muted">Employer payroll taxes (estimate): '+fmt(tp.payroll.total)+'. Use the payroll service’s year-end reports (W-2/W-3, 941s, Michigan UIA) for exact figures.</p>':'')
       :'<h2>'+(pays.length?4:3)+'. Contributors paid (contract labor)</h2>'+(contractors.length?tbl(['Name','Hours','1099-NEC (≥'+fmt(th).replace('.00','')+')','W-9','Paid'],contractors):'<p class="muted">None.</p>'))
+    +repTaxPrintHTML(y,tbl)
     +'<h2>Vehicle</h2><p>'+(a.vehicle==='mileage'?'Standard mileage: '+Math.round(tp.miles).toLocaleString()+' business miles × '+tp.rate+'¢ = <b>'+fmt(tp.miles*tp.rate/100)+'</b> ('+tp.trips.length+' trips logged; full log in the mileage CSV).'+(tp.fuelSkipped?' Fuel receipts of '+fmt(tp.fuelSkipped)+' are excluded.':''):'Actual expense method — fuel and vehicle costs are in the worksheet.')+'</p>'
     +'<h2>Equipment</h2>'+(tp.bigEquipment.length?tbl(['Date','Item','Cost'],tp.bigEquipment.map(r=>[esc(prettyDate(r.date)),esc(r.payee||'Equipment'),fmt(r.amount)]))+'<p class="muted">Items over $2,500 go on Form 4562 (Section 179 or bonus depreciation). Smaller items are expensed under the de minimis safe harbor.</p>':'<p class="muted">No single equipment purchase over $2,500.</p>')
     +'<h2>Common Table fund</h2><p>Set aside in '+y+': '+fmt(ct.earned)+' · Spent from it: '+fmt(ct.spent)+' · All-time balance: <b>'+fmt(ctFund().balance)+'</b>. This is part of the LLC’s profit (already counted above), held for shared reinvestment.</p>'
@@ -5125,6 +5176,7 @@ async function autoInit(){
   await step('expenses',loadExpensesFromDB);
   await step('recipes',loadRecipeList);
   await step('dashboard',refreshDashboard);
+  await step('reps',repsBadgeLoad);
   if(dashInterval)clearInterval(dashInterval);
   dashInterval=setInterval(refreshDashboard,60000);
   loadOnboarding(true);
@@ -5805,7 +5857,7 @@ async function openInvItem(id,focusStock){
   if(it){
     let moves=[];try{moves=await sb('kf_inv_moves?item_id=eq.'+it.id+'&order=created_at.desc&limit=30');}catch(e){}
     const box=document.getElementById('invHist');if(!box)return;
-    const lab=Object.fromEntries(INV_REASONS);
+    const lab=Object.assign(Object.fromEntries(INV_REASONS),{rep_out:'Out with a rep',rep_back:'Back from a rep'});
     box.innerHTML='<div class="bk-stat-l" style="margin-top:10px;">History</div>'+(moves.length?moves.map(mv=>'<div class="inv-hist-row"><span>'+esc(prettyDate(String(mv.move_date||mv.created_at).slice(0,10)))+' · '+esc(lab[mv.reason]||mv.reason)+(mv.by_name?' · '+esc(mv.by_name):'')+(mv.note?' · '+esc(mv.note):'')+'</span><b class="'+(+mv.change<0?'out':'in')+'">'+(+mv.change>0?'+':'')+qty(mv.change)+'</b></div>').join(''):'<div class="bk-sub">No changes logged yet.</div>');
   }
 }
@@ -6959,6 +7011,952 @@ document.addEventListener('DOMContentLoaded',function(){
   restoreSession();
 });
 
+
+// ─── Pasta reps: people who sell our pasta at their own events on commission ───
+const REPS={loaded:false,missing:false,mode:'events',reps:[],events:[],products:[],preorders:[],cfg:null,inv:[],open:null,showDeclined:false,showAllSettled:false};
+const REP_LINE_KEYS=['handmade','extruded','traditional'];
+const REP_STATUS={requested:['Get ready','rp-chip blue'],out:['Out with rep','rp-chip green'],returning:['Count to check','rp-chip tan'],settled:['Settled','rp-chip'],cancelled:['Cancelled','rp-chip red']};
+function repLineName(k){return (REPS.cfg&&REPS.cfg.line_names&&REPS.cfg.line_names[k])||k;}
+function repPrice(line,zone){const c=REPS.cfg||{};return r2((+((c.prices||{})[line])||0)+(zone==='far'?(+c.far_add||0):0));}
+function repById(id){return REPS.reps.find(r=>r.id===id)||{name:'(removed rep)'};}
+function repYM(s){return String(s||'').slice(0,7);}
+function repSignupLink(){return location.href.split('#')[0].split('?')[0].replace(/[^/]*$/,'')+'reps.html';}
+function repOrderLink(r){return repSignupLink()+'?r='+encodeURIComponent(r.code||'');}
+function repMonth(repId,k){
+  const ev=REPS.events.filter(e=>e.rep_id===repId&&e.status==='settled'&&repYM(e.event_date)===k);
+  const sales=r2(ev.reduce((a,e)=>a+(+e.sales||0),0)),commission=r2(ev.reduce((a,e)=>a+(+e.commission||0),0));
+  return{ev,sales,commission};
+}
+function repOwes(e){return e.status==='settled'?r2(Math.max(0,(+e.sales||0)-(+e.commission||0)-(e.money_in!=null?+e.money_in:0))):0;}
+function repEstCommission(ev,sales){
+  const c=REPS.cfg||{},base=(+c.base_rate||25)/100,top=(+c.top_rate||30)/100,th=+c.threshold||0;
+  const prior=REPS.events.filter(e=>e.rep_id===ev.rep_id&&e.id!==ev.id&&e.status==='settled'&&repYM(e.event_date)===repYM(ev.event_date)&&e.event_date<=ev.event_date).reduce((a,e)=>a+(+e.sales||0),0);
+  const below=Math.max(0,Math.min(sales,th-prior));return r2(below*base+(sales-below)*top);
+}
+function repPreorders(eid){return REPS.preorders.filter(o=>o.event_id===eid&&o.status!=='cancelled');}
+function repPreorderNeeds(list){const need={};list.forEach(o=>(o.items||[]).forEach(i=>{const k=i.product_id||i.name;need[k]=need[k]||{name:i.name,qty:0};need[k].qty+=(+i.qty||0);}));return need;}
+
+async function loadReps(){
+  try{
+    const [cfg,reps,events,products,pre]=await Promise.all([
+      sb('rpc/kf_rep_cfg',{method:'POST',body:'{}'}),
+      sbAll('kf_reps?order=applied_at.desc'),
+      sbAll('kf_rep_events?select=*,kf_rep_event_lines(*)&order=event_date.desc,created_at.desc'),
+      sbAll('kf_rep_products?order=sort_order.asc,line.asc,name.asc'),
+      sbAll('kf_rep_preorders?order=created_at.desc')
+    ]);
+    REPS.cfg=cfg[0]||{};REPS.reps=reps;REPS.products=products;REPS.preorders=pre;
+    REPS.events=events.map(e=>Object.assign(e,{lines:(e.kf_rep_event_lines||[]).sort((a,b)=>(+b.unit_price)-(+a.unit_price)||String(a.product_name).localeCompare(b.product_name))}));
+    REPS.loaded=true;REPS.missing=false;
+  }catch(e){if(tableMissing(e)){REPS.missing=true;}else toast('Reps didn’t load: '+e.message,true);}
+  repsBadge();
+}
+async function loadRepInv(){try{REPS.inv=await sbAll('kf_inv_items?active=eq.true&order=name.asc');}catch(e){REPS.inv=[];}}
+async function repsBadgeLoad(){
+  try{
+    const [p,e]=await Promise.all([sb('kf_reps?status=eq.pending&select=id'),sb('kf_rep_events?status=in.(requested,returning)&select=id')]);
+    const el=document.getElementById('repsBadge');if(el){const n=p.length+e.length;el.textContent=n||'';el.style.display=n?'inline-block':'none';}
+  }catch(x){}
+}
+function repsBadge(){
+  const el=document.getElementById('repsBadge');if(!el||!REPS.loaded)return;
+  const n=REPS.reps.filter(r=>r.status==='pending').length+REPS.events.filter(e=>e.status==='requested'||e.status==='returning').length;
+  el.textContent=n||'';el.style.display=n?'inline-block':'none';
+}
+async function renderReps(){
+  const el=document.getElementById('repsBody');if(!el)return;
+  if(!REPS.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading reps…</div></div>';
+  await loadReps();drawReps();
+}
+function drawReps(){
+  const el=document.getElementById('repsBody');if(!el)return;
+  if(REPS.missing){el.innerHTML=repsSetupHTML();return;}
+  const active=REPS.reps.filter(r=>r.status==='active').length,pending=REPS.reps.filter(r=>r.status==='pending').length;
+  const outBags=REPS.events.filter(e=>e.status==='out'||e.status==='returning').reduce((a,e)=>a+e.lines.reduce((x,l)=>x+(+l.qty_out||0),0),0);
+  const owed=r2(REPS.events.reduce((a,e)=>a+repOwes(e),0));
+  let h='<div class="bk-summary rp-stats">'
+    +'<div class="bk-stat"><div class="bk-stat-l">Active reps</div><div class="bk-stat-v">'+active+'</div>'+(pending?'<div class="bk-stat-s"><button class="link-btn" onclick="repMode(\'reps\')">'+pending+' waiting to be approved →</button></div>':'')+'</div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Bags out now</div><div class="bk-stat-v">'+outBags+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Reps owe us</div><div class="bk-stat-v" style="color:'+(owed>0?'var(--red)':'var(--green)')+';">'+fmt(owed)+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">This month</div><div class="bk-stat-v">'+fmt(REPS.events.filter(e=>e.status==='settled'&&repYM(e.event_date)===repYM(todayISO())).reduce((a,e)=>a+(+e.sales||0),0))+'</div><div class="bk-stat-s">rep sales settled</div></div></div>';
+  h+='<div class="card"><div class="seg">'+[['events','Events'],['reps','Reps'+(pending?' ('+pending+')':'')],['orders','Pre-orders'],['setup','Pasta & pay']].map(([k,l])=>'<button class="'+(REPS.mode===k?'active':'')+'" onclick="repMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
+  h+=({events:repEventsHTML,reps:repRepsHTML,orders:repOrdersHTML,setup:repSetupHTML}[REPS.mode]||repEventsHTML)();
+  h+='</div>';
+  el.innerHTML=h;
+}
+function repMode(m){REPS.mode=m;drawReps();}
+function repsSetupHTML(){
+  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for Reps</div>'
+    +'<div class="card-sub">The rep program needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once. It also makes sure only the Kilted Farmers team can open these books.</div>'
+    +'<pre>'+esc(REPS_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(REPS_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
+    +'<button class="btn-secondary" onclick="REPS.missing=false;renderReps();">Recheck</button></div></div>';
+}
+
+// ─── events board ───
+function repEventRow(e){
+  const r=repById(e.rep_id),st=REP_STATUS[e.status]||['','rp-chip'];
+  const pre=repPreorders(e.id),bags=e.lines.reduce((a,l)=>a+(+(e.status==='requested'?l.qty_requested:l.qty_out)||0),0);
+  let right='';
+  if(e.status==='settled')right='<div class="bk-amt in">'+fmt(e.sales)+'</div>'+(repOwes(e)>0?'<div class="bk-sub" style="color:var(--red);font-weight:700;">owes '+fmt(repOwes(e))+'</div>':'<div class="bk-sub">paid up</div>');
+  else right='<div class="bk-amt">'+bags+' <small style="font-family:inherit;font-weight:400;font-size:12px;color:var(--mid);">bags</small></div>';
+  return '<div class="bk-row" onclick="openRepEvent(\''+e.id+'\')"><div class="rp-date"><span>'+esc((parseISO(e.event_date)||new Date()).toLocaleDateString('en-US',{month:'short'}))+'</span><b>'+((parseISO(e.event_date)||new Date()).getDate())+'</b></div>'
+    +'<div class="bk-main"><div class="bk-payee">'+esc(e.name)+'</div><div class="bk-sub">'+esc(r.name)+(e.city?' · '+esc(e.city):'')+(e.zone==='far'?' · farther out':'')+'</div>'
+    +'<div style="margin-top:3px;"><span class="'+st[1]+'">'+st[0]+'</span>'+(pre.length?' <span class="rp-chip green">'+pre.length+' pre-order'+(pre.length===1?'':'s')+'</span>':'')+'</div></div>'
+    +'<div style="text-align:right;">'+right+'</div></div>';
+}
+function repEventsHTML(){
+  const by=s=>REPS.events.filter(e=>e.status===s);
+  const asc=(a,b)=>a.event_date.localeCompare(b.event_date);
+  const ready=by('requested').sort(asc),out=by('out').sort(asc),back=by('returning').sort(asc);
+  const settled=by('settled'),owing=settled.filter(e=>repOwes(e)>0);
+  let h='';
+  const sec=(t,sub,list)=>'<div class="bk-date">'+t+(sub?' <span style="text-transform:none;letter-spacing:0;font-weight:400;">· '+sub+'</span>':'')+'</div>'+list.map(repEventRow).join('');
+  if(!REPS.events.length)return '<div class="bk-empty">No rep events yet. When an approved rep books one, it shows up here so you can get their pasta ready.<br><br>Share the sign-up page: <button class="link-btn" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">copy link</button></div>';
+  if(back.length)h+=sec('Counts to check in','rep sent their count',back);
+  if(ready.length)h+=sec('Get pasta ready','hand it over at pickup',ready);
+  if(out.length)h+=sec('Out with reps','',out);
+  if(owing.length)h+=sec('Settled, money still owed','',owing);
+  const done=settled.filter(e=>repOwes(e)<=0);
+  if(done.length){h+=sec('Settled','',REPS.showAllSettled?done:done.slice(0,10));if(done.length>10&&!REPS.showAllSettled)h+='<div class="bk-foot"><button class="link-btn" onclick="REPS.showAllSettled=true;drawReps()">Show all '+done.length+'</button></div>';}
+  const canc=by('cancelled');if(canc.length)h+='<div class="bk-foot"><span>'+canc.length+' cancelled</span></div>';
+  return h;
+}
+
+function repModal(){
+  let m=document.getElementById('repModal');if(m)return m;
+  m=document.createElement('div');m.className='modal-overlay';m.id='repModal';
+  m.onclick=e=>{if(e.target===m)closeRepModal();};
+  m.innerHTML='<div class="modal" style="max-width:600px;"><button class="modal-close" onclick="closeRepModal()">×</button><div class="modal-title" id="repMTitle"></div><div id="repMBody"></div></div>';
+  document.body.appendChild(m);return m;
+}
+function closeRepModal(){const m=document.getElementById('repModal');if(m)m.classList.remove('open');REPS.open=null;}
+async function openRepEvent(id){
+  const e=REPS.events.find(x=>x.id===id);if(!e)return;REPS.open=e;
+  const m=repModal(),r=repById(e.rep_id),st=REP_STATUS[e.status]||['',''];
+  document.getElementById('repMTitle').textContent=e.name;
+  let h='<div class="rp-meta"><span class="'+st[1]+'">'+st[0]+'</span> <b>'+esc(r.name)+'</b>'+(r.phone?' · <a href="tel:'+esc(String(r.phone).replace(/[^\d+]/g,''))+'">'+esc(r.phone)+'</a>':'')
+    +'<div class="bk-sub">'+esc(prettyDate(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?' · '+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</div>'
+    +(e.rep_note?'<div class="rp-note">“'+esc(e.rep_note)+'”</div>':'')+'</div>';
+  const pre=repPreorders(e.id),need=repPreorderNeeds(pre);
+  if(pre.length&&e.status!=='settled')h+='<div class="rp-pre">Pre-ordered: '+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
+  if(e.status==='requested')h+=repHandoverHTML(e);
+  else if(e.status==='out'||e.status==='returning')h+=repSettleHTML(e);
+  else if(e.status==='settled')h+=repSettledHTML(e);
+  else h+='<div class="bk-empty">This event was cancelled.</div>';
+  document.getElementById('repMBody').innerHTML=h;m.classList.add('open');
+  if(e.status==='out'||e.status==='returning')repSettleCalc();
+  if(e.status==='requested'){repHandCalc();if(!REPS.inv.length)loadRepInv();}
+}
+function repHandoverHTML(e){
+  const rr=repById(e.rep_id);
+  let h=rr.w9_on_file?'':'<div class="rp-w9"><b>No W-9 on file for '+esc(rr.name)+' yet.</b> Get a filled-out W-9 before handing over pasta, so you can send them a 1099 at tax time. Keep the form itself on paper or in your tax software.'
+    +'<label class="rp-w9-ok"><input type="checkbox" id="rpW9"> I got their W-9 today</label></div>';
+  h+='<div class="rp-h">What goes out</div><div class="bk-sub" style="margin-bottom:6px;">Requested amounts are filled in. Change them to what you actually hand over.</div>'
+    +'<div class="rp-zone"><label>Price zone</label><select id="rpZone" class="period-select" onchange="repHandCalc()"><option value="local"'+(e.zone==='local'?' selected':'')+'>Local · regular prices</option><option value="far"'+(e.zone==='far'?' selected':'')+'>Farther out · +'+fmt(REPS.cfg.far_add)+' a bag</option></select></div>';
+  h+='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">asked for '+l.qty_requested+' · <span class="rp-up" data-line="'+esc(l.line)+'">'+fmt(l.unit_price)+'</span></div></div>'
+    +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" data-id="'+l.id+'" value="'+(+l.qty_out||0)+'" oninput="repHandCalc()"></div>').join('')+'</div>';
+  const left=REPS.products.filter(p=>p.active&&!e.lines.some(l=>l.product_id===p.id));
+  if(left.length)h+='<div class="rp-add"><select id="rpAddProd" class="period-select"><option value="">+ Add another pasta…</option>'+left.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select><input id="rpAddQty" class="period-input rp-num" type="number" inputmode="numeric" min="1" placeholder="How many"><button class="btn-secondary" onclick="repAddLine()">Add</button></div>';
+  h+='<div class="rp-total" id="rpHandTotal"></div>'
+    +'<label class="rp-lbl">Note to the rep (they’ll see it)</label><input id="rpTeamNote" class="period-input" style="width:100%;" value="'+esc(e.team_note||'')+'" placeholder="Optional">'
+    +'<div class="bk-actions"><button class="btn-green" onclick="repHandOver()">Hand it over</button><button class="btn-secondary" onclick="repSaveRequested()">Save for later</button><button class="btn-secondary danger" onclick="repCancelEvent()">Cancel event</button></div>'
+    +'<div class="bk-sub" style="margin-top:8px;">Handing over takes these bags out of Inventory for any pasta linked to an inventory item.</div>';
+  return h;
+}
+function repHandCalc(){
+  const e=REPS.open;if(!e)return;const z=(document.getElementById('rpZone')||{}).value||e.zone;
+  let bags=0,val=0;
+  document.querySelectorAll('#repMBody .rp-up').forEach(s=>{s.textContent=fmt(repPrice(s.dataset.line,z));});
+  e.lines.forEach(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');const q=Math.max(0,parseInt(i&&i.value)||0);bags+=q;val+=q*repPrice(l.line,z);});
+  const t=document.getElementById('rpHandTotal');if(t)t.innerHTML='<span>'+bags+' bags</span><b>'+fmt(val)+' if it all sells</b>';
+}
+function repHandValues(){
+  const e=REPS.open,z=(document.getElementById('rpZone')||{}).value||e.zone;
+  return{z,lines:e.lines.map(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');return{l,q:Math.max(0,parseInt(i&&i.value)||0),price:repPrice(l.line,z)};})};
+}
+async function repAddLine(){
+  const e=REPS.open,pid=document.getElementById('rpAddProd').value,q=Math.max(0,parseInt(document.getElementById('rpAddQty').value)||0);
+  if(!pid||!q){toast('Pick a pasta and how many',true);return;}
+  const p=REPS.products.find(x=>x.id===pid),z=(document.getElementById('rpZone')||{}).value||e.zone;
+  try{await repSaveRequested(true);await sb('kf_rep_event_lines',{method:'POST',body:JSON.stringify({event_id:e.id,product_id:p.id,product_name:p.name,line:p.line,unit_price:repPrice(p.line,z),qty_requested:0,qty_out:q})});await loadReps();drawReps();openRepEvent(e.id);}
+  catch(x){toast(x.message,true);}
+}
+async function repSaveRequested(quiet){
+  const e=REPS.open;if(!e)return;const v=repHandValues();
+  try{
+    for(const x of v.lines)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_out:x.q,unit_price:x.price})});
+    await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({zone:v.z,team_note:(document.getElementById('rpTeamNote').value||'').trim()||null})});
+    if(quiet===true)return;
+    toast('Saved');await loadReps();drawReps();openRepEvent(e.id);
+  }catch(x){if(quiet===true)throw x;toast(x.message,true);}
+}
+async function repInvItems(ids){
+  ids=[...new Set(ids.filter(Boolean))];if(!ids.length)return{};
+  try{const rows=await sb('kf_inv_items?id=in.('+ids.join(',')+')');return Object.fromEntries(rows.map(r=>[r.id,r]));}catch(e){return{};}
+}
+function repProdInv(pid){const p=REPS.products.find(x=>x.id===pid);return p&&p.inv_item_id;}
+async function repHandOver(){
+  const e=REPS.open;if(!e)return;const v=repHandValues(),r=repById(e.rep_id);
+  const total=v.lines.reduce((a,x)=>a+x.q,0);if(!total){toast('Nothing is going out. Enter some bags or cancel the event.',true);return;}
+  if(!r.w9_on_file){const ok=document.getElementById('rpW9');if(!ok||!ok.checked){toast('Get '+r.name.split(' ')[0]+'’s W-9 first, then tick the box',true);return;}if(!(await repSetW9(r.id,true,true)))return;}
+  if(!confirm('Hand '+total+' bags to '+r.name+' for '+e.name+'?'))return;
+  try{
+    for(const x of v.lines)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_out:x.q,unit_price:x.price})});
+    await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'out',zone:v.z,out_at:new Date().toISOString(),out_by:currentProfile&&currentProfile.name||null,team_note:(document.getElementById('rpTeamNote').value||'').trim()||null})});
+    const items=await repInvItems(v.lines.map(x=>repProdInv(x.l.product_id)));
+    for(const x of v.lines){const it=items[repProdInv(x.l.product_id)];if(it&&x.q)try{await invMove(it,-x.q,'rep_out','Out with '+r.name+' · '+e.name);}catch(err){console.warn('inventory',err);}}
+    INV.loaded=false;toast(total+' bags out with '+r.name.split(' ')[0]);closeRepModal();await loadReps();drawReps();
+  }catch(x){toast('Didn’t save: '+x.message,true);}
+}
+async function repCancelEvent(){
+  const e=REPS.open;if(!e||!confirm('Cancel '+e.name+'? '+repById(e.rep_id).name+' will see it as cancelled.'))return;
+  try{await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});closeRepModal();await loadReps();drawReps();toast('Cancelled');}catch(x){toast(x.message,true);}
+}
+
+function repSettleHTML(e){
+  const reported=e.status==='returning';
+  let h='<div class="rp-h">What came back</div><div class="bk-sub" style="margin-bottom:6px;">'+(reported?'Filled in with the rep’s count. Check it against what they dropped off.':'The rep hasn’t sent a count yet. Enter what came back.')+'</div>';
+  h+='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">took '+l.qty_out+' · '+fmt(l.unit_price)+(reported&&l.qty_back_reported!=null?' · rep says '+l.qty_back_reported+' back':'')+'</div></div>'
+    +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" max="'+l.qty_out+'" data-id="'+l.id+'" value="'+(l.qty_back_reported!=null?l.qty_back_reported:0)+'" oninput="repSettleCalc()"></div>').join('')+'</div>';
+  h+='<div class="rp-total" id="rpSetTotal"></div>'
+    +'<div class="rp-h">Money from the rep</div>'
+    +'<div class="rp-money"><div><label class="rp-lbl">Received</label><input id="rpMoney" class="period-input" type="number" inputmode="decimal" step="0.01" min="0"></div>'
+    +'<div><label class="rp-lbl">How</label><select id="rpMethod" class="period-select">'+['Cash','Check','Venmo','Zelle','Card','Not yet'].map(m=>'<option>'+m+'</option>').join('')+'</select></div>'
+    +'<div><label class="rp-lbl">Date</label><input id="rpMoneyDate" class="period-input" type="date" value="'+todayISO()+'"></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="repSettle()">Settle up</button><button class="btn-secondary" onclick="repSettleAllBack()">Everything came back</button></div>'
+    +'<div class="bk-sub" style="margin-top:8px;">Settling adds the sales to your revenue and the rep’s commission to expenses for the week of the event, and puts unsold bags back in Inventory.</div>';
+  return h;
+}
+function repSettleValues(){
+  const e=REPS.open;return e.lines.map(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');let b=Math.max(0,parseInt(i&&i.value)||0);if(b>(+l.qty_out||0))b=+l.qty_out||0;return{l,back:b,sold:(+l.qty_out||0)-b};});
+}
+function repSettleCalc(){
+  const e=REPS.open;if(!e)return;const v=repSettleValues();
+  const sold=v.reduce((a,x)=>a+x.sold,0),sales=r2(v.reduce((a,x)=>a+x.sold*(+x.l.unit_price||0),0)),com=repEstCommission(e,sales),owe=r2(sales-com);
+  const t=document.getElementById('rpSetTotal');
+  if(t)t.innerHTML='<span>'+sold+' sold · '+fmt(sales)+'</span><span>'+repById(e.rep_id).name.split(' ')[0]+' keeps ~'+fmt(com)+'</span><b>owes '+fmt(owe)+'</b>';
+  const m=document.getElementById('rpMoney');if(m&&!m.dataset.touched){m.value=owe.toFixed(2);m.oninput=()=>{m.dataset.touched='1';};}
+}
+function repSettleAllBack(){document.querySelectorAll('#repMBody .rp-num').forEach(i=>{i.value=i.max;});const m=document.getElementById('rpMoney');if(m)delete m.dataset.touched;repSettleCalc();}
+async function repBookRevenue(e,r,sales){
+  const label=getWeekLabel(parseISO(e.event_date));
+  const full={amount:sales,source:'Rep Sales',reported_by:currentProfile&&currentProfile.name||'',notes:'Rep: '+r.name+' · '+e.name,period_label:label,txn_date:e.event_date,payment_method:'Cash',payee:r.name};
+  try{return (await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(full)}))[0];}
+  catch(x){if(!/column/i.test(x.message))throw x;const {txn_date,payment_method,payee,...min}=full;return (await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(min)}))[0];}
+}
+async function repBookCommission(e,r,amount){
+  const label=getWeekLabel(parseISO(e.event_date)),pid=await getOrCreatePeriodId(label);
+  const full={period_id:pid,name:'Rep commission · '+r.name,amount,category:'Rep Commissions',vendor:r.name,txn_date:e.event_date,payment_method:'Kept from sales',receipt_url:'',notes:e.name};
+  try{return (await sb('kf_expenses',{method:'POST',body:JSON.stringify(full)}))[0];}
+  catch(x){if(!/column/i.test(x.message))throw x;return (await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:full.name,amount,receipt_url:''})}))[0];}
+}
+// Commission for a month is figured in date order, so settling one event can change another's. Keep the books in step.
+async function repSyncMonth(repId,date){
+  const k=repYM(date),from=k+'-01',d=parseISO(from);d.setMonth(d.getMonth()+1);const to=isoLocal(d);
+  const rows=await sb('kf_rep_events?rep_id=eq.'+repId+'&status=eq.settled&event_date=gte.'+from+'&event_date=lt.'+to+'&select=id,name,event_date,commission,commission_booked,expense_id,sales');
+  for(const x of rows){
+    const c=r2(x.commission||0);if(x.commission_booked!=null&&r2(x.commission_booked)===c)continue;
+    if(x.expense_id){try{await sb('kf_expenses?id=eq.'+x.expense_id,{method:'PATCH',body:JSON.stringify({amount:c})});}catch(err){console.warn('commission sync',err);continue;}}
+    else if(c>0){const ex=await repBookCommission(x,repById(repId),c);await sb('kf_rep_events?id=eq.'+x.id,{method:'PATCH',body:JSON.stringify({expense_id:ex&&ex.id||null})});}
+    await sb('kf_rep_events?id=eq.'+x.id,{method:'PATCH',body:JSON.stringify({commission_booked:c})});
+  }
+}
+async function repSettle(){
+  const e=REPS.open;if(!e)return;const r=repById(e.rep_id),v=repSettleValues();
+  const sales=r2(v.reduce((a,x)=>a+x.sold*(+x.l.unit_price||0),0));
+  const method=document.getElementById('rpMethod').value,mv=document.getElementById('rpMoney').value;
+  const money=method==='Not yet'||mv===''?null:r2(mv);
+  if(!confirm('Settle '+e.name+': '+fmt(sales)+' in sales'+(money!=null?', '+fmt(money)+' received':', money not in yet')+'?'))return;
+  try{
+    for(const x of v)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_back:x.back})});
+    await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'settled',sales,settled_at:new Date().toISOString(),settled_by:currentProfile&&currentProfile.name||null,
+      money_in:money,money_in_date:money!=null?(document.getElementById('rpMoneyDate').value||todayISO()):null,money_method:money!=null?method:null})});
+    const fresh=(await sb('kf_rep_events?id=eq.'+e.id+'&select=*'))[0]||{};
+    const items=await repInvItems(v.map(x=>repProdInv(x.l.product_id)));
+    for(const x of v){const it=items[repProdInv(x.l.product_id)];if(it&&x.back)try{await invMove(it,x.back,'rep_back','Back from '+r.name+' · '+e.name);}catch(err){console.warn('inventory',err);}}
+    if(sales>0){
+      const rev=await repBookRevenue(e,r,sales);const com=r2(fresh.commission||0);
+      const ex=com>0?await repBookCommission(e,r,com):null;
+      await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({revenue_id:rev&&rev.id||null,expense_id:ex&&ex.id||null,commission_booked:com})});
+    }
+    await repSyncMonth(e.rep_id,e.event_date);
+    INV.loaded=false;BOOKS.stale=true;try{refreshDashboard();}catch(x){}
+    toast('Settled: '+fmt(sales)+' in sales recorded');closeRepModal();await loadReps();drawReps();
+  }catch(x){toast('Didn’t finish settling: '+x.message,true);await loadReps();drawReps();}
+}
+function repSettledHTML(e){
+  const owe=r2((+e.sales||0)-(+e.commission||0)),r=repById(e.rep_id);
+  let h='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">took '+l.qty_out+' · back '+(l.qty_back||0)+' · '+fmt(l.unit_price)+'</div></div><b>'+((+l.qty_out||0)-(+l.qty_back||0))+' sold</b></div>').join('')+'</div>';
+  h+='<div class="rp-sum"><div><span>Sales</span><b>'+fmt(e.sales)+'</b></div><div><span>'+esc(r.name.split(' ')[0])+'’s commission</span><b>'+fmt(e.commission)+'</b></div><div><span>Owed to us</span><b>'+fmt(owe)+'</b></div>'
+    +'<div><span>Received</span><b>'+(e.money_in!=null?fmt(e.money_in)+(e.money_method?' · '+esc(e.money_method):'')+(e.money_in_date?' · '+esc(prettyDate(e.money_in_date)):''):'Not yet')+'</b></div>'
+    +(repOwes(e)>0?'<div class="rp-owe"><span>Still owed</span><b>'+fmt(repOwes(e))+'</b></div>':'')+'</div>';
+  h+='<div class="rp-h">Record money received</div><div class="rp-money"><div><label class="rp-lbl">Total received</label><input id="rpMoney" class="period-input" type="number" inputmode="decimal" step="0.01" min="0" value="'+(e.money_in!=null?r2(e.money_in).toFixed(2):owe.toFixed(2))+'"></div>'
+    +'<div><label class="rp-lbl">How</label><select id="rpMethod" class="period-select">'+['Cash','Check','Venmo','Zelle','Card'].map(m=>'<option'+(m===e.money_method?' selected':'')+'>'+m+'</option>').join('')+'</select></div>'
+    +'<div><label class="rp-lbl">Date</label><input id="rpMoneyDate" class="period-input" type="date" value="'+esc(e.money_in_date||todayISO())+'"></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="repSaveMoney()">Save</button>'+(isStewardUser()?'<button class="btn-secondary danger" onclick="repReopen()">Reopen the count</button>':'')+'</div>'
+    +'<div class="bk-sub" style="margin-top:8px;">Settled by '+esc(e.settled_by||'the team')+' on '+esc(prettyDate(String(e.settled_at||'').slice(0,10)))+'. Sales and commission are in the books for the week of '+esc(prettyDate(e.event_date))+'.</div>';
+  return h;
+}
+async function repSaveMoney(){
+  const e=REPS.open;if(!e)return;const v=document.getElementById('rpMoney').value;
+  try{await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({money_in:v===''?null:r2(v),money_method:document.getElementById('rpMethod').value,money_in_date:document.getElementById('rpMoneyDate').value||todayISO()})});
+    toast('Saved');await loadReps();drawReps();openRepEvent(e.id);}catch(x){toast(x.message,true);}
+}
+async function repReopen(){
+  const e=REPS.open;if(!e)return;
+  if(!confirm('Reopen '+e.name+'? This takes its sales and commission back out of the books and the returned bags back out of Inventory, so you can count again.'))return;
+  try{
+    if(e.revenue_id)await sb('kf_revenue_entries?id=eq.'+e.revenue_id,{method:'DELETE'});
+    if(e.expense_id)await sb('kf_expenses?id=eq.'+e.expense_id,{method:'DELETE'});
+    const r=repById(e.rep_id),items=await repInvItems(e.lines.map(l=>repProdInv(l.product_id)));
+    for(const l of e.lines){const it=items[repProdInv(l.product_id)];if(it&&+l.qty_back)try{await invMove(it,-(+l.qty_back),'rep_out','Reopened count · '+r.name+' · '+e.name);}catch(err){console.warn(err);}}
+    for(const l of e.lines)await sb('kf_rep_event_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({qty_back_reported:l.qty_back,qty_back:null})});
+    await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'returning',sales:null,commission:null,commission_booked:null,revenue_id:null,expense_id:null,settled_at:null,settled_by:null,money_in:null,money_in_date:null,money_method:null})});
+    await repSyncMonth(e.rep_id,e.event_date);
+    INV.loaded=false;BOOKS.stale=true;try{refreshDashboard();}catch(x){}
+    toast('Reopened');await loadReps();drawReps();openRepEvent(e.id);
+  }catch(x){toast(x.message,true);}
+}
+
+// ─── reps ───
+function repRepsHTML(){
+  const order={pending:0,active:1,paused:2,declined:3};
+  const list=REPS.reps.filter(r=>REPS.showDeclined||r.status!=='declined').sort((a,b)=>order[a.status]-order[b.status]||String(a.name).localeCompare(b.name));
+  const k=repYM(todayISO()),yr=k.slice(0,4),c=REPS.cfg;
+  let h='<div class="bk-actions" style="margin-top:0;margin-bottom:6px;"><button class="btn-secondary" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">Copy rep sign-up link</button></div>';
+  if(!list.length)h+='<div class="bk-empty">No reps yet. Send people the sign-up link. Applications land here for you to approve.</div>';
+  let last=null;
+  list.forEach(r=>{
+    if(r.status!==last){last=r.status;h+='<div class="bk-date">'+({pending:'Waiting for approval',active:'Active',paused:'Paused',declined:'Declined'}[r.status])+'</div>';}
+    const m=repMonth(r.id,k),owes=r2(REPS.events.filter(e=>e.rep_id===r.id).reduce((a,e)=>a+repOwes(e),0));
+    const ytd=r2(REPS.events.filter(e=>e.rep_id===r.id&&e.status==='settled'&&String(e.event_date).slice(0,4)===yr).reduce((a,e)=>a+(+e.commission||0),0));
+    const rate=m.sales>=(+c.threshold||0)&&m.sales>0?c.top_rate:c.base_rate;
+    h+='<div class="rp-rep"><div class="rp-rep-top"><div><b>'+esc(r.name)+'</b><div class="bk-sub">'+[r.city,r.phone?'<a href="tel:'+esc(String(r.phone).replace(/[^\d+]/g,''))+'">'+esc(r.phone)+'</a>':'',r.email?'<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>':''].filter(Boolean).join(' · ')+'</div></div>';
+    if(r.status==='active')h+='<div style="text-align:right;"><div class="bk-amt in">'+fmt(m.sales)+'</div><div class="bk-sub">this month · '+rate+'%</div></div>';
+    h+='</div>';
+    if(r.status==='pending'||r.status==='declined')h+=(r.about?'<div class="rp-note">“'+esc(r.about)+'”</div>':'')+'<div class="bk-sub">Applied '+esc(prettyDate(String(r.applied_at||'').slice(0,10)))+'</div>';
+    if(r.status==='active')h+='<div class="bk-sub">'+fmt(ytd)+' commission so far in '+yr+(owes>0?' · <span style="color:var(--red);font-weight:700;">owes '+fmt(owes)+'</span>':'')+' · order link <button class="link-btn" onclick="copyText(\''+esc(repOrderLink(r))+'\',\'Order link copied\')">copy</button></div>';
+    if(r.status!=='declined'){const th=threshold1099(+yr);
+      h+='<div class="bk-sub rp-w9line">'+(r.w9_on_file?'<span style="color:var(--green);font-weight:700;">✓ W-9 on file</span>'+(r.w9_date?' since '+esc(prettyDate(r.w9_date)):'')+' · <button class="link-btn" onclick="repSetW9(\''+r.id+'\',false)">undo</button>'
+        :'<span style="color:var(--tan);font-weight:700;">W-9 needed</span> before their first pickup · <button class="link-btn" onclick="repSetW9(\''+r.id+'\',true)">mark received</button>')
+        +(ytd>=th?' · <b>1099-NEC needed for '+yr+'</b>':ytd>0?' · '+fmt(th-ytd)+' under the '+fmt(th).replace('.00','')+' 1099 line':'')+'</div>';}
+    if(r.team_note)h+='<div class="bk-sub">Note: '+esc(r.team_note)+'</div>';
+    h+='<div class="bk-actions" style="margin-top:8px;">';
+    if(r.status==='pending')h+='<button class="btn-green" onclick="repSetStatus(\''+r.id+'\',\'active\')">Approve</button><button class="btn-secondary danger" onclick="repSetStatus(\''+r.id+'\',\'declined\')">Decline</button>';
+    if(r.status==='active')h+='<button class="btn-secondary" onclick="repSetStatus(\''+r.id+'\',\'paused\')">Pause</button>';
+    if(r.status==='paused'||r.status==='declined')h+='<button class="btn-green" onclick="repSetStatus(\''+r.id+'\',\'active\')">'+(r.status==='paused'?'Reactivate':'Approve')+'</button>';
+    h+='</div></div>';
+  });
+  const nd=REPS.reps.filter(r=>r.status==='declined').length;
+  if(nd)h+='<div class="bk-foot"><button class="link-btn" onclick="REPS.showDeclined=!REPS.showDeclined;drawReps()">'+(REPS.showDeclined?'Hide':'Show')+' '+nd+' declined</button></div>';
+  return h;
+}
+async function repSetStatus(id,st){
+  const r=repById(id);let note=r.team_note||null;
+  if(st==='declined'||st==='paused'){const n=prompt((st==='declined'?'Decline ':'Pause ')+r.name+'? Add a note they’ll see (optional):',r.team_note||'');if(n===null)return;note=n.trim()||null;}
+  const body={status:st,team_note:st==='active'?null:note};if(st==='active'&&!r.approved_at)body.approved_at=new Date().toISOString();
+  try{await sb('kf_reps?id=eq.'+id,{method:'PATCH',body:JSON.stringify(body)});toast({active:r.name+' is active',declined:'Declined',paused:'Paused'}[st]);await loadReps();drawReps();}catch(x){toast(x.message,true);}
+}
+
+// ─── pre-orders ───
+function repOrdersHTML(){
+  const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&e.event_date>=now&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  if(!evs.length)return '<div class="bk-empty">No pre-orders for upcoming events. Reps share their own order link, and orders show up here and with the rep.</div>';
+  const all=repPreorderNeeds(evs.flatMap(e=>repPreorders(e.id)));
+  let h='<div class="rp-pre" style="margin-top:0;"><b>Reserved across upcoming rep events:</b> '+Object.values(all).map(n=>n.qty+' '+esc(n.name)).join(', ')+'</div>';
+  evs.forEach(e=>{
+    const list=repPreorders(e.id),need=repPreorderNeeds(list);
+    h+='<div class="bk-date">'+esc(e.name)+' · '+esc(prettyDate(e.event_date))+' · '+esc(repById(e.rep_id).name)+'</div>'
+      +'<div class="bk-sub" style="margin-bottom:4px;">Set aside: '+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
+    list.forEach(o=>{h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';});
+  });
+  return h;
+}
+
+// ─── pasta & pay settings ───
+function repSetupHTML(){
+  const c=REPS.cfg,stew=isStewardUser();
+  let h='<div class="rp-h" style="margin-top:4px;">Pasta reps can take</div>';
+  if(!REPS.products.length)h+='<div class="bk-empty">Add the pasta reps can take to events. Link each one to an Inventory item so stock goes out and comes back automatically.</div>';
+  let last=null;
+  REPS.products.forEach(p=>{
+    if(p.line!==last){last=p.line;h+='<div class="bk-date">'+esc(repLineName(p.line))+' · '+fmt(repPrice(p.line,'local'))+' local · '+fmt(repPrice(p.line,'far'))+' farther out</div>';}
+    h+='<div class="bk-row" onclick="openRepProduct(\''+p.id+'\')"><div class="bk-main"><div class="bk-payee">'+esc(p.name)+(p.active?'':' <span class="rp-chip">Hidden</span>')+'</div><div class="bk-sub">'+(p.description?esc(p.description):'')+(p.inv_item_id?(p.description?' · ':'')+'linked to Inventory':'')+'</div></div><div class="bk-sub">Edit</div></div>';
+  });
+  h+='<div class="bk-actions"><button class="btn-green" onclick="openRepProduct()">+ Add a pasta</button></div>';
+  h+='<div class="rp-h">Commission and prices</div>'+(stew?'':'<div class="bk-sub">Only Stewards can change these.</div>');
+  const f=(k,l,v,step)=>'<div><label class="rp-lbl">'+l+'</label><input id="rpc_'+k+'" class="period-input" type="number" inputmode="decimal" step="'+(step||'1')+'" min="0" value="'+esc(v)+'"'+(stew?'':' disabled')+'></div>';
+  h+='<div class="rp-grid">'+f('base_rate','Base commission %',c.base_rate)+f('top_rate','Top commission %',c.top_rate)+f('threshold','Top rate starts past ($/month)',c.threshold)
+    +REP_LINE_KEYS.map(k=>f('price_'+k,repLineName(k)+' price ($)',(c.prices||{})[k],'0.01')).join('')
+    +f('far_add','Farther out adds ($/bag)',c.far_add,'0.01')+f('local_miles','“Local” means within (miles)',c.local_miles)+'</div>';
+  h+='<div class="bk-sub" style="margin-top:6px;">Reps keep the base rate on a month’s sales up to the line, and the top rate on everything above it. Changes apply to events settled from now on.</div>';
+  if(stew)h+='<div class="bk-actions"><button class="btn-green" onclick="repSaveCfg()">Save commission and prices</button></div>';
+  h+='<div class="rp-h">Sign-up page</div><div class="bk-sub">Send this to anyone who wants to be a rep: <b>'+esc(repSignupLink())+'</b> <button class="link-btn" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">copy</button></div>';
+  return h;
+}
+async function repSaveCfg(){
+  const g=k=>{const v=document.getElementById('rpc_'+k).value;return v===''?null:+v;};
+  const val={base_rate:g('base_rate'),top_rate:g('top_rate'),threshold:g('threshold'),far_add:g('far_add'),local_miles:g('local_miles'),prices:Object.fromEntries(REP_LINE_KEYS.map(k=>[k,g('price_'+k)]))};
+  if([val.base_rate,val.top_rate,val.threshold,val.far_add,...Object.values(val.prices)].some(x=>x==null||isNaN(x))){toast('Fill in every number',true);return;}
+  if(val.base_rate>100||val.top_rate>100){toast('Commission is a percent, 0 to 100',true);return;}
+  if(val.top_rate<val.base_rate&&!confirm('The top rate is lower than the base rate. Save anyway?'))return;
+  try{
+    const cur=await sb('kf_settings?key=eq.rep_program&select=value');const merged=Object.assign({},(cur[0]&&cur[0].value)||{},val);
+    await sb('kf_settings?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'rep_program',value:merged,updated_at:new Date().toISOString()})});
+    toast('Saved');await loadReps();drawReps();
+  }catch(x){toast(x.message,true);}
+}
+async function openRepProduct(id){
+  const p=id?REPS.products.find(x=>x.id===id):null;if(!REPS.inv.length)await loadRepInv();
+  const m=repModal();REPS.open=null;REPS.editProd=p;
+  document.getElementById('repMTitle').textContent=p?p.name:'Add a pasta';
+  document.getElementById('repMBody').innerHTML='<label class="rp-lbl">Name</label><input id="rppName" class="period-input" style="width:100%;" value="'+esc(p?p.name:'')+'" placeholder="Lemon Pepper Fettuccine">'
+    +'<label class="rp-lbl">Price group</label><select id="rppLine" class="period-select" style="width:100%;">'+REP_LINE_KEYS.map(k=>'<option value="'+k+'"'+(p&&p.line===k?' selected':'')+'>'+esc(repLineName(k))+' · '+fmt(repPrice(k,'local'))+'</option>').join('')+'</select>'
+    +'<label class="rp-lbl">Short description (customers see it)</label><input id="rppDesc" class="period-input" style="width:100%;" value="'+esc(p&&p.description||'')+'" placeholder="Optional">'
+    +'<label class="rp-lbl">Inventory item</label><select id="rppInv" class="period-select" style="width:100%;"><option value="">Not linked</option>'+REPS.inv.map(i=>'<option value="'+i.id+'"'+(p&&p.inv_item_id===i.id?' selected':'')+'>'+esc(i.name)+' ('+(+i.on_hand||0)+' on hand)</option>').join('')+'</select>'
+    +'<div class="rp-grid" style="margin-top:4px;"><div><label class="rp-lbl">Sort order</label><input id="rppSort" class="period-input" type="number" value="'+(p?+p.sort_order||0:REPS.products.length)+'"></div>'
+    +'<div><label class="rp-lbl">Reps can take it</label><select id="rppActive" class="period-select"><option value="1"'+(!p||p.active?' selected':'')+'>Yes</option><option value="0"'+(p&&!p.active?' selected':'')+'>Hidden</option></select></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="repSaveProduct()">Save</button>'+(p?'<button class="btn-secondary danger" onclick="repDeleteProduct()">Delete</button>':'')+'</div>';
+  m.classList.add('open');
+}
+async function repSaveProduct(){
+  const p=REPS.editProd,name=document.getElementById('rppName').value.trim();if(!name){toast('Give it a name',true);return;}
+  const b={name,line:document.getElementById('rppLine').value,description:document.getElementById('rppDesc').value.trim()||null,inv_item_id:document.getElementById('rppInv').value||null,sort_order:parseInt(document.getElementById('rppSort').value)||0,active:document.getElementById('rppActive').value==='1'};
+  try{if(p)await sb('kf_rep_products?id=eq.'+p.id,{method:'PATCH',body:JSON.stringify(b)});else await sb('kf_rep_products',{method:'POST',body:JSON.stringify(b)});
+    closeRepModal();toast('Saved');await loadReps();drawReps();}catch(x){toast(x.message,true);}
+}
+async function repDeleteProduct(){
+  const p=REPS.editProd;if(!p||!confirm('Delete '+p.name+'? Past events keep its name. To stop reps taking it but keep it on file, set it to Hidden instead.'))return;
+  try{await sb('kf_rep_products?id=eq.'+p.id,{method:'DELETE'});closeRepModal();toast('Deleted');await loadReps();drawReps();}catch(x){toast(x.message,true);}
+}
+
+// ─── W-9s and 1099-NECs for reps ───
+// Only "W-9 on file" is tracked here. The form, with the rep's tax ID, stays on paper or in tax software.
+async function repSetW9(id,on,quiet){
+  const r=repById(id);
+  try{
+    await sb('kf_reps?id=eq.'+id,{method:'PATCH',body:JSON.stringify({w9_on_file:on,w9_date:on?todayISO():null})});
+    r.w9_on_file=on;r.w9_date=on?todayISO():null;
+    try{const w9=Object.assign({},acct().w9||{});if(on)w9[r.name]=true;else delete w9[r.name];await saveAcct({w9},true);}catch(e){console.warn('w9 books flag',e);}
+    if(!quiet){toast(on?'W-9 on file for '+r.name:'W-9 unmarked for '+r.name);drawReps();}
+    return true;
+  }catch(x){toast(/w9_/.test(x.message)?'Run the updated rep SQL once (it adds W-9 tracking), then try again':x.message,true);return false;}
+}
+// Commission each rep kept in a year, straight from the books (category "Rep Commissions")
+function repPayouts(y){
+  const by={};
+  (BOOKS.rows||[]).forEach(r=>{if(r.dir!=='out'||r.category!=='Rep Commissions'||String(r.date).slice(0,4)!==String(y))return;const k=r.payee||'Unnamed rep';const o=by[k]||(by[k]={name:k,total:0,events:0});o.total+=r.amount;o.events++;});
+  return Object.values(by).map(o=>Object.assign(o,{total:r2(o.total)})).sort((a,b)=>b.total-a.total);
+}
+function repTaxCardHTML(y,a,setupOk){
+  const list=repPayouts(y);if(!list.length)return '';
+  const th=threshold1099(y),w9=a.w9||{};
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Pasta reps &amp; 1099s</div>'
+    +'<div class="card-sub">Reps are independent contractors. The commission they keep from sales is what goes in <b>box 1 of a 1099-NEC</b>. Anyone who kept <b>'+fmt(th).replace('.00','')+' or more</b> in '+y+' gets one by January 31 (the next business day if that’s a weekend), and a copy goes to the IRS. You can file free through the IRS’s IRIS portal or with a filing service. Keep each W-9 on paper or in that software, not here.</div>';
+  REPS.taxNames=list.map(p=>p.name);
+  list.forEach((p,i)=>{
+    const need=p.total>=th;
+    h+='<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(p.name)+'</div><div class="bk-sub">'+p.events+' event'+(p.events===1?'':'s')+' · '
+      +(need?'<b style="color:var(--tan);">1099-NEC needed</b>':'under '+fmt(th).replace('.00','')+' — no 1099')+'</div></div>'
+      +'<label class="w9"><input type="checkbox" '+(w9[p.name]?'checked':'')+(setupOk?'':' disabled')+' onchange="repW9FromTaxes('+i+',this.checked)"> W-9</label>'
+      +'<div class="bk-amt">'+fmt(p.total)+'</div></div>';
+  });
+  h+='<div class="bk-actions"><button class="btn-secondary" onclick="repTaxCSV('+y+')">⬇ 1099 list (CSV)</button></div></div>';
+  return h;
+}
+async function repW9FromTaxes(i,on){
+  const name=(REPS.taxNames||[])[i];if(!name)return;
+  try{
+    await sb('kf_reps?name=eq.'+encodeURIComponent(name),{method:'PATCH',body:JSON.stringify({w9_on_file:on,w9_date:on?todayISO():null})});
+  }catch(x){if(!/w9_/.test(x.message))console.warn(x);}
+  const w9=Object.assign({},acct().w9||{});if(on)w9[name]=true;else delete w9[name];await saveAcct({w9},true);
+  const rr=REPS.reps.find(r=>r.name===name);if(rr){rr.w9_on_file=on;rr.w9_date=on?todayISO():null;}
+  toast(on?'W-9 on file for '+name:'W-9 unmarked');try{renderCheckup();}catch(e){}
+}
+async function repTaxCSV(y){
+  let reps=[];try{reps=await sbAll('kf_reps?select=name,email,phone,city,w9_on_file');}catch(e){try{reps=await sbAll('kf_reps?select=name,email,phone,city');}catch(x){}}
+  const th=threshold1099(y),w9=acct().w9||{};
+  const rows=[['Rep','Email','Phone','Town','Events','Commission kept in '+y+' (1099-NEC box 1)','1099-NEC needed','W-9 on file']];
+  repPayouts(y).forEach(p=>{const r=reps.find(x=>x.name===p.name)||{};rows.push([p.name,r.email||'',r.phone||'',r.city||'',p.events,p.total.toFixed(2),p.total>=th?'Yes':'No',(r.w9_on_file||w9[p.name])?'Yes':'No']);});
+  downloadCSV(fileSlug()+'-rep-1099s-'+y+'.csv',rows);
+}
+function repTaxPrintHTML(y,tbl){
+  const list=repPayouts(y);if(!list.length)return '';
+  const th=threshold1099(y),w9=acct().w9||{};
+  return '<h2>Pasta reps (1099-NEC, box 1: commission kept)</h2>'+tbl(['Rep','Events','1099-NEC (≥'+fmt(th).replace('.00','')+')','W-9','Commission'],list.map(p=>[esc(p.name),String(p.events),p.total>=th?'Yes':'No',w9[p.name]?'On file':'<b>Needed</b>',fmt(p.total)]))
+    +'<p class="muted">Already in the worksheet as “Commissions paid to pasta reps” (Schedule C line 10).</p>';
+}
+
+const REPS_SQL=`-- ═══════════════════════════════════════════════════════════════════
+-- THE KILTED FARMERS — PASTA REP PROGRAM
+-- Paste into the Supabase SQL Editor and hit Run. Safe to run more than once.
+--
+-- Part 1 locks every Kilted Farmers table to the Kilted Farmers team.
+--         Until now, any signed-in account in this Supabase project
+--         (including Operations Hub businesses) could reach these tables.
+--         Reps will have accounts here too, so this has to come first.
+-- Part 2 adds the rep tables: reps, products, events, counts, pre-orders.
+-- Part 3 adds the functions the rep page and the public order page use.
+-- The last result lists everyone who has team access, so you can check it.
+-- ═══════════════════════════════════════════════════════════════════
+
+-- ─── PART 1: Kilted Farmers tables are team-only ───────────────────
+create or replace function kf_is_team() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from kf_user_profiles p where p.id = auth.uid());
+$$;
+
+create or replace function kf_is_steward() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from kf_user_profiles p where p.id = auth.uid()
+    and (p.role = 'Steward' or p.name ilike 'justin%' or p.name ilike 'jessica%'));
+$$;
+
+do $$
+declare t text; p record;
+begin
+  for t in
+    select tablename from pg_tables
+    where schemaname = 'public' and tablename like 'kf\\_%'
+      and tablename not in ('kf_user_profiles', 'kf_onboarding')
+      and tablename not like 'kf\\_rep%'
+  loop
+    execute format('alter table %I enable row level security', t);
+    for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
+      execute format('drop policy %I on %I', p.policyname, t);
+    end loop;
+    execute format('create policy "team only" on %I for all to authenticated using (kf_is_team()) with check (kf_is_team())', t);
+  end loop;
+end $$;
+
+-- Logins: you can see your own row; the team sees the team; only Stewards change them
+do $$
+declare p record;
+begin
+  if to_regclass('public.kf_user_profiles') is null then return; end if;
+  execute 'alter table kf_user_profiles enable row level security';
+  for p in select policyname from pg_policies where schemaname = 'public' and tablename = 'kf_user_profiles' loop
+    execute format('drop policy %I on kf_user_profiles', p.policyname);
+  end loop;
+  execute 'create policy "own or team reads" on kf_user_profiles for select to authenticated using (id = auth.uid() or kf_is_team())';
+  execute 'create policy "stewards manage logins" on kf_user_profiles for all to authenticated using (kf_is_steward()) with check (kf_is_steward())';
+end $$;
+
+-- New-hire paperwork: your own, or a Steward's — and only for the team
+do $$
+begin
+  if to_regclass('public.kf_onboarding') is null then return; end if;
+  execute 'drop policy if exists "onboarding read" on kf_onboarding';
+  execute 'create policy "onboarding read" on kf_onboarding for select to authenticated using (kf_is_team() and (user_id = auth.uid() or kf_is_steward()))';
+  execute 'drop policy if exists "onboarding add" on kf_onboarding';
+  execute 'create policy "onboarding add" on kf_onboarding for insert to authenticated with check (kf_is_team() and (user_id = auth.uid() or kf_is_steward()))';
+  execute 'drop policy if exists "onboarding change" on kf_onboarding';
+  execute 'create policy "onboarding change" on kf_onboarding for update to authenticated using (kf_is_team() and (user_id = auth.uid() or kf_is_steward()))';
+  execute 'drop policy if exists "onboarding remove" on kf_onboarding';
+  execute 'create policy "onboarding remove" on kf_onboarding for delete to authenticated using (kf_is_steward())';
+end $$;
+
+-- ─── PART 2: rep tables ─────────────────────────────────────────────
+create table if not exists kf_reps (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique default auth.uid(),
+  name text not null,
+  email text,
+  phone text,
+  city text,
+  about text,
+  code text unique,
+  status text not null default 'pending' check (status in ('pending','active','paused','declined')),
+  team_note text,
+  applied_at timestamptz default now(),
+  approved_at timestamptz,
+  created_at timestamptz default now()
+);
+
+-- W-9 on file (the form itself stays on paper or in tax software; no tax IDs are stored here)
+alter table kf_reps add column if not exists w9_on_file boolean not null default false;
+alter table kf_reps add column if not exists w9_date date;
+
+create table if not exists kf_rep_products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  line text not null default 'handmade' check (line in ('handmade','extruded','traditional')),
+  description text,
+  inv_item_id uuid,
+  active boolean not null default true,
+  sort_order int default 0,
+  created_at timestamptz default now()
+);
+
+create table if not exists kf_rep_events (
+  id uuid primary key default gen_random_uuid(),
+  rep_id uuid not null references kf_reps(id) on delete cascade,
+  name text not null,
+  event_date date not null,
+  start_time text,
+  place text,
+  city text,
+  zone text not null default 'local' check (zone in ('local','far')),
+  status text not null default 'requested' check (status in ('requested','out','returning','settled','cancelled')),
+  show_on_order_page boolean not null default true,
+  rep_note text,
+  team_note text,
+  out_at timestamptz, out_by text,
+  returned_at timestamptz,
+  settled_at timestamptz, settled_by text,
+  sales numeric,
+  commission numeric,
+  commission_booked numeric,
+  money_in numeric,
+  money_in_date date,
+  money_method text,
+  revenue_id uuid,
+  expense_id uuid,
+  created_at timestamptz default now()
+);
+create index if not exists kf_rep_events_rep_idx on kf_rep_events(rep_id, event_date);
+
+create table if not exists kf_rep_event_lines (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references kf_rep_events(id) on delete cascade,
+  product_id uuid references kf_rep_products(id) on delete set null,
+  product_name text not null,
+  line text not null,
+  unit_price numeric not null default 0,
+  qty_requested int not null default 0,
+  qty_out int not null default 0,
+  qty_back_reported int,
+  qty_back int,
+  created_at timestamptz default now()
+);
+create index if not exists kf_rep_lines_event_idx on kf_rep_event_lines(event_id);
+
+create table if not exists kf_rep_preorders (
+  id uuid primary key default gen_random_uuid(),
+  rep_id uuid not null references kf_reps(id) on delete cascade,
+  event_id uuid references kf_rep_events(id) on delete set null,
+  customer_name text not null,
+  customer_contact text,
+  items jsonb not null default '[]',
+  total numeric not null default 0,
+  note text,
+  status text not null default 'new' check (status in ('new','confirmed','picked_up','cancelled')),
+  created_at timestamptz default now()
+);
+create index if not exists kf_rep_preorders_event_idx on kf_rep_preorders(event_id);
+
+-- Link products to Inventory items when the Inventory tab is set up
+do $$
+begin
+  if to_regclass('public.kf_inv_items') is not null and not exists (
+    select 1 from pg_constraint where conname = 'kf_rep_products_inv_item_fk') then
+    alter table kf_rep_products add constraint kf_rep_products_inv_item_fk
+      foreign key (inv_item_id) references kf_inv_items(id) on delete set null;
+  end if;
+end $$;
+
+alter table kf_reps enable row level security;
+alter table kf_rep_products enable row level security;
+alter table kf_rep_events enable row level security;
+alter table kf_rep_event_lines enable row level security;
+alter table kf_rep_preorders enable row level security;
+
+create or replace function kf_my_rep_id() returns uuid
+language sql stable security definer set search_path = public as $$
+  select id from kf_reps where user_id = auth.uid() limit 1;
+$$;
+create or replace function kf_is_active_rep() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from kf_reps where user_id = auth.uid() and status = 'active');
+$$;
+
+drop policy if exists "team manages reps" on kf_reps;
+create policy "team manages reps" on kf_reps for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "rep reads self" on kf_reps;
+create policy "rep reads self" on kf_reps for select to authenticated using (user_id = auth.uid());
+
+drop policy if exists "team manages rep products" on kf_rep_products;
+create policy "team manages rep products" on kf_rep_products for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "reps read products" on kf_rep_products;
+create policy "reps read products" on kf_rep_products for select to authenticated using (active and kf_is_active_rep());
+
+drop policy if exists "team manages rep events" on kf_rep_events;
+create policy "team manages rep events" on kf_rep_events for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "rep reads own events" on kf_rep_events;
+create policy "rep reads own events" on kf_rep_events for select to authenticated using (rep_id = kf_my_rep_id());
+
+drop policy if exists "team manages rep lines" on kf_rep_event_lines;
+create policy "team manages rep lines" on kf_rep_event_lines for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "rep reads own lines" on kf_rep_event_lines;
+create policy "rep reads own lines" on kf_rep_event_lines for select to authenticated
+  using (exists (select 1 from kf_rep_events e where e.id = event_id and e.rep_id = kf_my_rep_id()));
+
+drop policy if exists "team manages preorders" on kf_rep_preorders;
+create policy "team manages preorders" on kf_rep_preorders for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "rep reads own preorders" on kf_rep_preorders;
+create policy "rep reads own preorders" on kf_rep_preorders for select to authenticated using (rep_id = kf_my_rep_id());
+
+-- Program settings live in kf_settings under 'rep_program'; these are the defaults
+create or replace function kf_rep_cfg() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'base_rate', 25, 'top_rate', 30, 'threshold', 500,
+    'prices', jsonb_build_object('handmade', 15, 'extruded', 13, 'traditional', 8),
+    'line_names', jsonb_build_object('handmade', 'Handmade flavored', 'extruded', 'Flavored extruded', 'traditional', 'Traditional'),
+    'far_add', 2, 'local_miles', 30
+  ) || coalesce((select value from kf_settings where key = 'rep_program'), '{}'::jsonb);
+$$;
+
+-- A short code for each rep's order link, made when they apply
+create or replace function kf_rep_make_code() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare base text; c text; n int := 0;
+begin
+  if new.code is not null and new.code <> '' then return new; end if;
+  base := lower(regexp_replace(split_part(coalesce(new.name, 'rep'), ' ', 1), '[^a-zA-Z]', '', 'g'));
+  if base = '' then base := 'rep'; end if;
+  loop
+    c := base || '-' || substr(md5(random()::text || clock_timestamp()::text), 1, 4);
+    exit when not exists (select 1 from kf_reps where code = c);
+    n := n + 1; exit when n > 20;
+  end loop;
+  new.code := c;
+  return new;
+end $$;
+drop trigger if exists kf_reps_code on kf_reps;
+create trigger kf_reps_code before insert on kf_reps for each row execute function kf_rep_make_code();
+
+-- Commission: base rate on a month's sales up to the threshold, top rate on everything above it.
+-- Events count in date order, so each event's commission is exact and the month adds up.
+create or replace function kf_rep_recalc(p_rep uuid, p_month date) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  cfg jsonb := kf_rep_cfg();
+  base numeric := coalesce((cfg->>'base_rate')::numeric, 25) / 100;
+  top numeric := coalesce((cfg->>'top_rate')::numeric, 30) / 100;
+  th numeric := coalesce((cfg->>'threshold')::numeric, 500);
+  cum numeric := 0; e record; below numeric; above numeric;
+begin
+  if p_rep is null or p_month is null then return; end if;
+  for e in
+    select id, coalesce(sales, 0) s from kf_rep_events
+    where rep_id = p_rep and status = 'settled'
+      and date_trunc('month', event_date) = date_trunc('month', p_month)
+    order by event_date, settled_at nulls last, created_at, id
+  loop
+    below := greatest(0, least(e.s, th - cum));
+    above := e.s - below;
+    update kf_rep_events set commission = round(below * base + above * top, 2) where id = e.id;
+    cum := cum + e.s;
+  end loop;
+  update kf_rep_events set commission = null
+  where rep_id = p_rep and status <> 'settled' and commission is not null
+    and date_trunc('month', event_date) = date_trunc('month', p_month);
+end $$;
+
+create or replace function kf_rep_events_recalc() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then perform kf_rep_recalc(old.rep_id, old.event_date); end if;
+  if tg_op in ('INSERT', 'UPDATE') and (tg_op = 'INSERT' or old.rep_id is distinct from new.rep_id
+      or date_trunc('month', old.event_date) is distinct from date_trunc('month', new.event_date)) then
+    perform kf_rep_recalc(new.rep_id, new.event_date);
+  end if;
+  return null;
+end $$;
+drop trigger if exists kf_rep_events_commission on kf_rep_events;
+create trigger kf_rep_events_commission after insert or delete or update of status, sales, event_date, rep_id
+  on kf_rep_events for each row execute function kf_rep_events_recalc();
+
+revoke execute on function kf_rep_recalc(uuid, date) from public, anon, authenticated;
+revoke execute on function kf_rep_events_recalc() from public, anon, authenticated;
+revoke execute on function kf_rep_make_code() from public, anon, authenticated;
+
+-- ─── PART 3: what reps and customers can do ─────────────────────────
+
+-- Apply (or re-apply after a decline)
+create or replace function kf_rep_apply(p_name text, p_phone text, p_city text, p_about text) returns kf_reps
+language plpgsql security definer set search_path = public as $$
+declare r kf_reps; em text;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Enter your name'; end if;
+  select email into em from auth.users where id = auth.uid();
+  select * into r from kf_reps where user_id = auth.uid();
+  if r.id is null then
+    insert into kf_reps (user_id, name, email, phone, city, about, status)
+    values (auth.uid(), left(trim(p_name), 80), em, left(p_phone, 40), left(p_city, 80), left(p_about, 2000), 'pending')
+    returning * into r;
+  elsif r.status = 'declined' then
+    update kf_reps set name = left(trim(p_name), 80), phone = left(p_phone, 40), city = left(p_city, 80),
+      about = left(p_about, 2000), status = 'pending', applied_at = now()
+    where id = r.id returning * into r;
+  else
+    update kf_reps set name = left(trim(p_name), 80), phone = left(p_phone, 40), city = left(p_city, 80)
+    where id = r.id returning * into r;
+  end if;
+  return r;
+end $$;
+
+-- Book an event and ask for product (or change a booking that hasn't been handed over yet)
+create or replace function kf_rep_book_event(p_event jsonb, p_lines jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  rid uuid; eid uuid := nullif(p_event->>'id', '')::uuid; ev kf_rep_events;
+  cfg jsonb := kf_rep_cfg(); z text := coalesce(nullif(p_event->>'zone', ''), 'local');
+  d date := nullif(p_event->>'event_date', '')::date; l jsonb; pr kf_rep_products; q int; total_q int := 0;
+begin
+  select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
+  if rid is null then raise exception 'Your rep account isn''t active yet'; end if;
+  if coalesce(trim(p_event->>'name'), '') = '' then raise exception 'Give the event a name'; end if;
+  if d is null then raise exception 'Pick the event date'; end if;
+  if d < current_date - 1 then raise exception 'That date has already passed'; end if;
+  if z not in ('local', 'far') then raise exception 'Pick local or farther out'; end if;
+  if jsonb_typeof(p_lines) <> 'array' then raise exception 'Choose some pasta to take'; end if;
+
+  if eid is null then
+    insert into kf_rep_events (rep_id, name, event_date, start_time, place, city, zone, rep_note, show_on_order_page)
+    values (rid, left(trim(p_event->>'name'), 120), d, left(p_event->>'start_time', 40), left(p_event->>'place', 160),
+      left(p_event->>'city', 80), z, left(p_event->>'rep_note', 1000), coalesce((p_event->>'show_on_order_page')::boolean, true))
+    returning id into eid;
+  else
+    select * into ev from kf_rep_events where id = eid and rep_id = rid;
+    if ev.id is null then raise exception 'That event isn''t yours'; end if;
+    if ev.status <> 'requested' then raise exception 'This event''s pasta has already been handed over, so ask the kitchen to change it'; end if;
+    update kf_rep_events set name = left(trim(p_event->>'name'), 120), event_date = d, start_time = left(p_event->>'start_time', 40),
+      place = left(p_event->>'place', 160), city = left(p_event->>'city', 80), zone = z, rep_note = left(p_event->>'rep_note', 1000),
+      show_on_order_page = coalesce((p_event->>'show_on_order_page')::boolean, true)
+    where id = eid;
+    delete from kf_rep_event_lines where event_id = eid;
+  end if;
+
+  for l in select * from jsonb_array_elements(p_lines) loop
+    q := least(greatest(coalesce((l->>'qty')::int, 0), 0), 500);
+    if q = 0 then continue; end if;
+    select * into pr from kf_rep_products where id = (l->>'product_id')::uuid and active;
+    if pr.id is null then continue; end if;
+    insert into kf_rep_event_lines (event_id, product_id, product_name, line, unit_price, qty_requested, qty_out)
+    values (eid, pr.id, pr.name, pr.line,
+      coalesce((cfg->'prices'->>pr.line)::numeric, 0) + case when z = 'far' then coalesce((cfg->>'far_add')::numeric, 0) else 0 end,
+      q, q);
+    total_q := total_q + q;
+  end loop;
+  if total_q = 0 then raise exception 'Choose at least one bag to take'; end if;
+  return eid;
+end $$;
+
+create or replace function kf_rep_cancel_event(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update kf_rep_events set status = 'cancelled'
+  where id = p_id and rep_id = kf_my_rep_id() and status = 'requested';
+  if not found then raise exception 'Only events that haven''t been handed over yet can be cancelled here'; end if;
+end $$;
+
+-- After the event: how many bags are coming back
+create or replace function kf_rep_report_back(p_id uuid, p_lines jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare ev kf_rep_events; l jsonb; b int;
+begin
+  select * into ev from kf_rep_events where id = p_id and rep_id = kf_my_rep_id();
+  if ev.id is null then raise exception 'That event isn''t yours'; end if;
+  if ev.status not in ('out', 'returning') then raise exception 'This event isn''t waiting on a count'; end if;
+  for l in select * from jsonb_array_elements(p_lines) loop
+    b := greatest(coalesce((l->>'back')::int, 0), 0);
+    update kf_rep_event_lines set qty_back_reported = least(b, qty_out)
+    where id = (l->>'line_id')::uuid and event_id = p_id;
+  end loop;
+  update kf_rep_events set status = 'returning', returned_at = now() where id = p_id;
+end $$;
+
+create or replace function kf_rep_preorder_status(p_id uuid, p_status text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_status not in ('new', 'confirmed', 'picked_up', 'cancelled') then raise exception 'Unknown status'; end if;
+  update kf_rep_preorders set status = p_status where id = p_id and rep_id = kf_my_rep_id();
+  if not found then raise exception 'That order isn''t yours'; end if;
+end $$;
+
+-- Public order page: a rep's products, prices and upcoming events
+create or replace function kf_rep_public(p_code text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r kf_reps; cfg jsonb := kf_rep_cfg();
+begin
+  select * into r from kf_reps where code = lower(trim(p_code)) and status = 'active';
+  if r.id is null then return jsonb_build_object('ok', false); end if;
+  return jsonb_build_object(
+    'ok', true,
+    'rep', jsonb_build_object('first_name', split_part(r.name, ' ', 1), 'city', r.city),
+    'line_names', cfg->'line_names',
+    'products', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'line', p.line, 'description', p.description,
+        'price', coalesce((cfg->'prices'->>p.line)::numeric, 0)) order by p.sort_order, p.line, p.name)
+      from kf_rep_products p where p.active), '[]'::jsonb),
+    'far_add', coalesce((cfg->>'far_add')::numeric, 0),
+    'events', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'name', e.name, 'event_date', e.event_date,
+        'start_time', e.start_time, 'place', e.place, 'city', e.city, 'zone', e.zone) order by e.event_date)
+      from kf_rep_events e where e.rep_id = r.id and e.status in ('requested', 'out')
+        and e.event_date >= current_date and e.show_on_order_page), '[]'::jsonb)
+  );
+end $$;
+
+-- Public order page: place a pre-order (paid at pickup)
+create or replace function kf_rep_place_preorder(p_code text, p_event uuid, p_name text, p_contact text, p_items jsonb, p_note text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  r kf_reps; ev kf_rep_events; cfg jsonb := kf_rep_cfg(); l jsonb; pr kf_rep_products; q int; price numeric;
+  items jsonb := '[]'::jsonb; total numeric := 0; n int := 0; oid uuid;
+begin
+  select * into r from kf_reps where code = lower(trim(p_code)) and status = 'active';
+  if r.id is null then raise exception 'This order link isn''t active'; end if;
+  select * into ev from kf_rep_events where id = p_event and rep_id = r.id
+    and status in ('requested', 'out') and event_date >= current_date and show_on_order_page;
+  if ev.id is null then raise exception 'Pick an upcoming event'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Enter your name'; end if;
+  if coalesce(trim(p_contact), '') = '' then raise exception 'Enter a phone number or email so we can reach you'; end if;
+  if jsonb_typeof(p_items) <> 'array' then raise exception 'Pick some pasta'; end if;
+  if (select count(*) from kf_rep_preorders where event_id = ev.id and created_at > now() - interval '1 hour') >= 60 then
+    raise exception 'Lots of orders just came in for this event. Try again in a little while';
+  end if;
+  for l in select * from jsonb_array_elements(p_items) loop
+    q := least(greatest(coalesce((l->>'qty')::int, 0), 0), 25);
+    if q = 0 then continue; end if;
+    select * into pr from kf_rep_products where id = (l->>'product_id')::uuid and active;
+    if pr.id is null then continue; end if;
+    n := n + 1; exit when n > 30;
+    price := coalesce((cfg->'prices'->>pr.line)::numeric, 0)
+      + case when ev.zone = 'far' then coalesce((cfg->>'far_add')::numeric, 0) else 0 end;
+    items := items || jsonb_build_array(jsonb_build_object('product_id', pr.id, 'name', pr.name, 'line', pr.line, 'qty', q, 'price', price));
+    total := total + q * price;
+  end loop;
+  if jsonb_array_length(items) = 0 then raise exception 'Pick at least one bag'; end if;
+  insert into kf_rep_preorders (rep_id, event_id, customer_name, customer_contact, items, total, note)
+  values (r.id, ev.id, left(trim(p_name), 80), left(trim(p_contact), 120), items, total, left(p_note, 500))
+  returning id into oid;
+  return jsonb_build_object('id', oid, 'total', total, 'event', ev.name, 'event_date', ev.event_date, 'place', ev.place, 'city', ev.city);
+end $$;
+
+grant execute on function kf_rep_cfg() to anon, authenticated;
+grant execute on function kf_rep_public(text) to anon, authenticated;
+grant execute on function kf_rep_place_preorder(text, uuid, text, text, jsonb, text) to anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array['kf_rep_apply(text, text, text, text)','kf_rep_book_event(jsonb, jsonb)','kf_rep_cancel_event(uuid)',
+      'kf_rep_report_back(uuid, jsonb)','kf_rep_preorder_status(uuid, text)','kf_my_rep_id()','kf_is_active_rep()','kf_is_team()','kf_is_steward()'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+notify pgrst, 'reload schema';
+
+-- Who has team access now (check that everyone on the team is listed)
+select p.name as team_member, p.role, u.email
+from kf_user_profiles p left join auth.users u on u.id = p.id
+order by p.name;
+`;
 </script>
 </body>
 </html>
