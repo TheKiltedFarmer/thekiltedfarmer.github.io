@@ -808,6 +808,7 @@ async function renderOrderPage(code){
   $('hTitle').textContent='Pasta from '+first;
   $('hSub').textContent='The Kilted Farmers · handmade in Concord, MI';
   const opts=oOptions();
+  if(!O.data.products.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>The pasta menu is on its way</h2><p class="muted">The Kilted Farmers kitchen is still adding this season’s pasta. Check back soon, or reach out to '+esc(first)+' directly.</p></div>';return;}
   if(!opts.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>Not taking orders right now</h2><p class="muted">'+esc(first)+' doesn’t have an event open for orders yet. Check back soon.</p></div>';return;}
   if(!O.how||!opts.some(x=>x.key===O.how))O.how=opts.length===1?opts[0].key:null;
   drawOrderPage();
