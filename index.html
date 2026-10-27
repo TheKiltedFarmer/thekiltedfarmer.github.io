@@ -251,7 +251,7 @@ const COUNTIES = {
     description: 'Civic engagement platform for Calhoun County, MI residents.',
     primaryCity: 'Battle Creek',
     launched: '2026-05-07',
-    status: 'beta', // 'active' | 'beta' | 'coming-soon'
+    status: 'active', // 'active' | 'beta' | 'coming-soon'
     defaultZip: '49014',
     accentColor: '#f0c040',
     jurisdictions: [
@@ -279,7 +279,7 @@ const COUNTIES = {
     description: 'Civic engagement platform for Washtenaw County, MI residents.',
     primaryCity: 'Ann Arbor',
     launched: '2026-07-11',
-    status: 'beta',
+    status: 'active',
     defaultZip: '48104',
     accentColor: '#f0c040',
     jurisdictions: [
@@ -12648,6 +12648,11 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
   const signupServices = shown.filter(s=>s.id !== 'explainer' && !(TPV_FROM_HUB && isHubService(s)));
   const hubPicked = !!(hubSvc && picked[hubSvc.id]);
   const includedWithHub = s=>(hubPicked || TPV_FROM_HUB) && (s.id === 'watch' || s.id === 'bids');
+  // Picked services that are paid for now: available, priced, and not already covered by the Hub
+  const needsPay = s=>s && !isHubService(s) && s.status === 'available' && !includedWithHub(s) && (svcMonthly(s) > 0 || !!s.pay_url);
+  const payPicked = signupServices.filter(s=>picked[s.id] && needsPay(s));
+  const payMonthly = payPicked.reduce((a, s)=>a + svcMonthly(s), 0);
+  const [payNote, setPayNote] = useState('');
   const explainer = shown.find(s=>s.id === 'explainer');
   const set = (k, v)=>setForm(f=>({...f, [k]:v}));
   const scrollTo = ref=>setTimeout(()=>{ try { ref.current && ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} }, 60);
@@ -12680,6 +12685,18 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     const notes = wantsHub ? ((form.notes || '').trim() + ' | Wants the Operations Hub.').replace(/^ \| /,'') : form.notes;
     let data = 'ok', error = null;
     if(rest.length) ({data, error} = await send(rest, notes));
+    // Paid services: go straight to secure checkout, so nobody thinks they're done before paying
+    if(!error && payPicked.length && form.email.trim()) {
+      setDone(shown.filter(s=>services.includes(s.id))); setPicked({}); loadMine();
+      setPayNote('');
+      try { localStorage.setItem('ohb_prefill_email', (form.email || '').trim()); } catch(e) {}
+      const r = await hubMoney({action:'service_checkout', email:form.email.trim()});
+      if(r && r.url) { window.location.href = r.url; return; }
+      setSending(false);
+      if(r && r.error === 'already_active') { onToast && onToast('✓ That one is already on.'); return; }
+      setPayNote(r && r.error === 'nothing_to_pay' ? '' : 'Checkout didn\'t open. Tap the button below to try again.');
+      return;
+    }
     setSending(false);
     if(error) { setErr((error.code === 'PGRST202' || /could not find the function/i.test(error.message)) ? 'Sign-ups aren\'t switched on yet. Please email hello@thepeoplesvoices.org instead.' : 'Something went wrong: ' + error.message + ' Please email hello@thepeoplesvoices.org if it keeps happening.'); return; }
     setDone(shown.filter(s=>services.includes(s.id)));
@@ -12764,7 +12781,10 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
     Array.isArray(list) && signupServices.length > 0 && !hubOn && h('div',{ref:formRef,style:{...card, border:'2px solid #1a1a2e'}},
       done
         ? h('div',{style:{fontFamily:LB}},
-            h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
+            done.some(x=>needsPay(x)) && !done.some(isHubService)
+              ? h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#8a6000',marginBottom:6}},'Almost done: your subscription isn\'t started yet')
+              : h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:'#1a6b3c',marginBottom:6}},'✓ Thanks! You\'re signed up.'),
+            payNote && h('div',{style:{color:'#8a6000',fontSize:13.5,marginBottom:8}}, payNote),
             done.some(isHubService) && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'12px 14px',fontSize:14,color:'#1a4a2a',lineHeight:1.6,marginBottom:10}},
               h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,marginBottom:4}},'Next: set up your Operations Hub'),
               'Make your account with this same email, tell the Hub about your business, and add a card to start your 3 free months. You won\'t be charged until they\'re up, and the Hub walks you through everything from there. About 5 minutes.',
@@ -12785,7 +12805,7 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
             h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:12}},
               signupServices.map(s=>h('label',{key:s.id,style:{display:'flex',gap:8,alignItems:'center',fontFamily:LB,fontSize:14,color:'#333',cursor:'pointer',flexWrap:'wrap'}},
                 h('input',{type:'checkbox',checked:!!picked[s.id],onChange:e=>pick(s.id, e.target.checked),style:{width:18,height:18}}),
-                s.name, h('span',{style:{color:includedWithHub(s)?'#1a6b3c':'#888',fontSize:12.5}}, ' · ' + (includedWithHub(s) ? 'included with the Hub' : s.price_label))))),
+                s.name, h('span',{style:{color:includedWithHub(s)?'#1a6b3c':'#888',fontSize:12.5}}, ' · ' + (includedWithHub(s) ? 'included with the Hub' : s.price_label + (s.status === 'soon' && !isHubService(s) ? ' once it starts (nothing to pay until then)' : '')))))),
             field('Business name *', 'business', 'Grass Lake Hardware'),
             field('Your name', 'contact', 'Who should we ask for?'),
             field('Email *', 'email', 'you@yourbusiness.com', {type:'email', autoComplete:'email'}),
@@ -12802,7 +12822,8 @@ function BusinessServicesTab({profile, user, onToast, onNavigate}) {
               'This business isn\'t a political campaign, party, PAC or lobbying firm. (They can\'t sign up, to keep the site independent.)'),
             err && h('div',{style:{color:'#c0392b',fontSize:13,fontFamily:LB,marginBottom:8}}, '❌ ' + err),
             h('button',{onClick:submit,disabled:sending,style:{background:sending?'#999':'#1a6b3c',color:'#fff',border:'none',borderRadius:7,padding:'11px 20px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:sending?'default':'pointer'}},
-              sending ? 'Sending...' : 'Sign up'))),
+              sending ? (payPicked.length ? 'Opening secure checkout…' : 'Sending...') : payPicked.length ? 'Sign up and pay' + (payMonthly ? ' · $' + (Math.round(payMonthly * 100) / 100) + ' a month' : '') + ' →' : 'Sign up'),
+            payPicked.length > 0 && h('div',{style:{fontSize:12.5,color:'#777',marginTop:8,fontFamily:LB}},'Next you\'ll go to secure checkout by Stripe (card, Apple Pay or Google Pay). It switches on the moment your payment goes through. Cancel any time.'))),
 
     // ── Rule explainer request
     explainer && h('div',{ref:explainRef},

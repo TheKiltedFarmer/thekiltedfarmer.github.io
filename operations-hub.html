@@ -782,6 +782,53 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
   .job-row .inp:first-child{grid-column:1/-1;}
 }
 
+
+/* ─── Training ─── */
+.tr-badge{display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;vertical-align:1px;}
+.tr-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;}
+.tr-top .btn-green{padding:9px 16px;}
+.tr-mine{margin-top:14px;}
+.tr-meter{height:10px;background:var(--cream-dark);border-radius:6px;overflow:hidden;margin-bottom:6px;}
+.tr-meter i{display:block;height:100%;background:var(--green-light);border-radius:6px;transition:width .3s;}
+.tr-meter.done i{background:var(--green);}
+.tr-h{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;margin-bottom:4px;}
+.tr-ico{width:34px;height:34px;border-radius:9px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.tr-chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:var(--cream-dark);color:var(--mid);margin-right:4px;}
+.tr-chip.blue{background:#e6f0f7;color:var(--blue);}
+.tr-chip.green{background:#e6f4ec;color:var(--green-dark);}
+.tr-chip.tan{background:#f6ede2;color:#7a5530;}
+.tr-prog{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;color:var(--tan);text-align:right;white-space:nowrap;}
+.tr-prog small{display:block;font-family:inherit;font-size:10px;color:var(--mid);font-weight:400;}
+.tr-prog.done{color:var(--green);}
+.tr-person{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--cream-dark);}
+.tr-doc{font-size:15px;line-height:1.6;color:var(--ink);background:var(--cream);border-radius:10px;padding:12px 16px;margin-bottom:10px;}
+.tr-doc h4{font-family:'Playfair Display',serif;font-size:16px;color:var(--green-dark);margin:12px 0 4px;}
+.tr-doc h4:first-child{margin-top:0;}
+.tr-doc p{margin:6px 0;}
+.tr-doc ul,.tr-doc ol{margin:6px 0 6px 22px;}
+.tr-doc li{margin:3px 0;}
+.tr-doc ul.tr-check{list-style:none;margin-left:2px;}
+.tr-doc ul.tr-check li::before{content:'☐';margin-right:8px;color:var(--green);}
+.tr-img{max-width:100%;border-radius:10px;margin-bottom:10px;display:block;}
+.tr-ack{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#e6f4ec;border-radius:10px;padding:12px 14px;margin-top:12px;}
+.tr-ack .bk-sub{flex:1;min-width:180px;color:var(--green-dark);}
+.tr-done{background:#e6f4ec;color:var(--green-dark);border-radius:10px;padding:10px 14px;margin-top:12px;font-weight:700;font-size:14px;}
+.tr-who{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:14px;}
+.tr-who .ok{color:var(--green);font-weight:700;}
+.tr-who .old{color:var(--tan);font-weight:700;}
+.tr-who .no{color:var(--mid);}
+.tr-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:12px 0 5px;font-weight:600;}
+.tr-full{width:100%;}
+.tr-area{min-height:220px;font-family:inherit;line-height:1.5;resize:vertical;}
+textarea.tr-full{font-family:inherit;resize:vertical;}
+.tr-file{display:block;border:2px dashed var(--rule);border-radius:10px;padding:16px;text-align:center;cursor:pointer;margin-top:10px;color:var(--green-dark);font-weight:600;}
+.tr-file:hover{border-color:var(--green);}
+.tr-file input{display:none;}
+.tr-check-row{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:14px;cursor:pointer;}
+.tr-check-row input{width:18px;height:18px;margin-top:1px;accent-color:var(--green);flex-shrink:0;}
+.tr-status{font-size:13px;color:var(--mid);margin-top:8px;}
+#trKind{margin-top:2px;}
+@media(max-width:520px){#trKind button{font-size:12px;padding:8px 6px;white-space:normal;}}
 </style>
 </head>
 <body>
@@ -864,6 +911,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
   <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
   <div class="tab" onclick="switchTab('schedule',this)">Schedule</div>
   <div class="tab" onclick="switchTab('team',this)">Team</div>
+  <div class="tab" id="trainTab" onclick="switchTab('training',this)">Training<span class="tr-badge" id="trainBadge"></span></div>
   <div class="tab" id="ingTab" onclick="switchTab('ingredients',this)">Ingredients</div>
   <div class="tab" id="invTab" onclick="switchTab('inventory',this)">Inventory</div>
   <div class="tab" onclick="switchTab('history',this)">History</div>
@@ -1125,6 +1173,7 @@ body.team-limited .week-grid,body.team-limited .river-viz,body.team-limited .das
 </div>
 
 <!-- ─── INVENTORY ─── -->
+<div class="tab-content" id="tab-training"><div style="margin-top:8px;" id="trainBody"></div></div>
 <div class="tab-content" id="tab-inventory"><div style="margin-top:8px;" id="invBody"></div></div>
 
 <!-- ─── HISTORY ─── -->
@@ -1458,7 +1507,7 @@ function signOut(){
   try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
   if(dashInterval)clearInterval(dashInterval);
   BOOKS.rows=[];BOOKS.schema.checked=false;BOOKS.stale=true;BOOKS.acct={};BOOKS.bank=[];BOOKS.miles=[];BOOKS.raw=null;BOOKS._weeks=null;
-  ONB.rows=[];window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
+  ONB.rows=[];TR.loaded=false;TR.docs=[];TR.acks=[];{const tb=document.getElementById('trainBadge');if(tb)tb.style.display='none';}window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
   ['onbBanner','onbMine','onbTeam','payRules','booksCheckup','booksBody'].forEach(i=>{const el=document.getElementById(i);if(el)el.innerHTML='';});
   const lb=document.getElementById('loginBtn');if(lb){lb.disabled=false;lb.textContent='Sign In';}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('active',t.id==='tab-dashboard'));document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
@@ -1536,6 +1585,7 @@ function switchTab(id,el){
   if(id==='admin')adminLoadUsers();
   if(id==='settings')renderSettings();
   if(id==='alerts')renderAlertsTab();
+  if(id==='training')renderTraining();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
@@ -5550,6 +5600,7 @@ async function autoInit(){
   if(dashInterval)clearInterval(dashInterval);
   dashInterval=setInterval(refreshDashboard,60000);
   loadOnboarding(true);
+  trainingBadgeLoad();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -7543,7 +7594,8 @@ const HIDEABLE_TABS=[
   ['schedule','Schedule','Shifts, time off and shift trades.'],
   ['team','Team','People, pay rules, paid sick time and new-hire paperwork.'],
   ['inventory','Inventory','Stock counts, reorder points and batches.'],
-  ['history','History','Past weeks and what everyone was paid.']
+  ['history','History','Past weeks and what everyone was paid.'],
+  ['training','Training','SOPs, checklists and how-tos your team reads and signs off on.']
 ];
 const SOLO_TABS=['timeclock','schedule','team','history'];
 const TAB_NAME=k=>(HIDEABLE_TABS.find(x=>x[0]===k)||[k,k])[1];
@@ -7608,7 +7660,7 @@ function applyTeamAccess(){
   const show=(k,on)=>{const t=tab(k);if(t)t.style.display=(on&&!hid.includes(k))?'':'none';};
   show('books',st);show('invoices',st);show('history',st||a.see_pay);show('log',st||a.log);show('inventory',st||a.inventory);
   show('ingredients',!!s.recipes&&(st||a.recipes));
-  show('timeclock',true);show('schedule',true);show('team',true);show('alerts',st);
+  show('timeclock',true);show('schedule',true);show('team',true);show('training',true);show('alerts',st);
   document.body.classList.toggle('team-limited',teamLimited());
   // if the open tab just got hidden, go back to the dashboard
   const act=document.querySelector('.tab.active');if(act&&act.style.display==='none')goTab('dashboard');
@@ -8273,6 +8325,7 @@ function tourSteps(){
     return [
       {t:'Welcome, '+me+'!',b:'<p>This is '+name+'’s Hub. Here you clock in and out, see your schedule and your pay, and ask for time off. It takes a minute to learn.</p><p>Tap <b>Next</b> to see each part, or <b>Show me</b> to jump right to it.</p>'},
       {tab:'team',t:'Your paperwork',b:'<p>A few short pages to read and sign: how pay works, safety rules, and your contact info. You’ll find them at the top of the <b>Team</b> tab.</p><ul><li>Read each one and type your full name to sign.</li><li>You can come back to them any time.</li></ul>'},
+      {tab:'training',t:'Training',b:'<ul><li>The <b>Training</b> tab has how '+name+' does things: checklists, recipes and how-tos.</li><li>Read each one and tap <b>I’ve read this</b>. The red number shows how many are waiting for you.</li></ul>'},
       {tab:'timeclock',t:'Clocking in and out',b:'<ul><li>Open <b>Time Clock</b>, tap your name, and tap <b>Clock in</b> when you start and <b>Clock out</b> when you’re done.</li><li>Forgot? Enter your hours for the day instead.</li>'+(HUB.jobs.length>1?'<li>Pick the job you’re doing ('+HUB.jobs.map(j=>esc(j.name)).join(', ')+') so you’re paid the right way.</li>':'')+'</ul><p>Your pay comes from the hours you log, so log them the same day.</p>'},
       {tab:'schedule',t:'Your schedule',b:'<ul><li>See your shifts for this week, and use the arrows or the 📅 to look ahead.</li><li><b>Ask for time off</b>: pick the days, add a note, and your manager approves it.</li><li>Can’t make a shift? Tap it to offer it to the team. Someone can take it, and your manager signs off.</li><li><b>Add my shifts to my calendar</b> puts them on your phone.</li></ul>'},
       {tab:'dashboard',t:'Your pay',b:'<p>The <b>Dashboard</b> shows your hours and pay for the week as you go'+(a.see_pay?', along with the whole team’s':'')+'. '+(hs?'You’re paid your hourly rate, with overtime past 40 hours, and never less than Michigan’s minimum wage.':'Pay comes from the week’s shared pool, split by hours.')+'</p>'},
@@ -8289,6 +8342,7 @@ function tourSteps(){
     {tab:'invoices',t:'Invoices & estimates',b:'<ul><li>Make an estimate or invoice in a minute, pulling items from your inventory if you like.</li><li>Email it, print it, or send a friendly reminder. Every invoice gets a <b>Pay now</b> page with your own card link, PayPal, Venmo or check details, and the Hub can send late reminders for you.</li><li><b>Record a payment</b> and it shows up in your books as income. An accepted estimate turns into an invoice with one tap.</li></ul>'},
     {tab:'alerts',t:'Bids & Alerts: included with your Hub',b:'<ul><li>Turn on <b>Watch alerts</b> and the <b>Bid &amp; grant finder</b> right here, with nothing extra to pay.</li><li>Each Monday, public bids and grants that fit your line of work show up here and in your email.</li><li>Got a new rule or permit requirement? Send it and get a plain-language explanation back.</li></ul>'},
     {tab:'team',t:'Team: people, pay rates and paperwork',b:'<ul><li>Add each person in <b>Team Members</b>.</li><li><b>Pay Rules</b>: '+(hs?'set each person’s hourly rate (blank means minimum wage), choose how tips are shared.':'set the commission rate and how tips are shared.')+'</li><li><b>Paychecks</b>: each week the Hub figures everyone’s federal, Michigan and city withholding, Social Security and Medicare, and makes pay stubs. <b>Payroll Tax Reports</b> has the numbers for your 941s, Michigan and unemployment filings, and W-2s.</li><li><b>Michigan Paid Sick Time</b>: the Hub tracks what each employee has earned (1 hour per 30 worked), what they’ve used, and what’s left, and pays sick hours at their regular rate.</li><li><b>Onboarding</b>: each new hire reads and signs their paperwork on their own phone. You see who’s done, and can record a paper signature or print a packet.</li><li>To give someone their own login, go to <b>Settings → People & logins</b> and send them an invite link.</li></ul>'},
+    {tab:'training',t:'Training: SOPs your team signs off on',b:'<ul><li><b>+ Add training</b>: write a checklist right in the Hub, upload a PDF, Word file or photo, or link a video.</li><li>Your team reads each one and taps <b>I’ve read this</b>. You see who’s caught up, and a big change asks everyone to read it again.</li></ul>'},
     {tab:'timeclock',t:'Time Clock',b:'<ul><li>Your team clocks in and out on their own phones, or enters hours after the fact.</li><li>You can fix anyone’s hours if they forget.</li><li>Hours feed straight into pay, overtime and the payroll file.</li></ul>'},
     {tab:'schedule',t:'Schedule: plan weeks or months ahead',b:'<ul><li><b>+ Add shift</b>: pick the person, days and times. Use <b>Repeat it</b> to fill in the same shift for weeks or months.</li><li><b>Copy last week</b> or <b>Copy this week ahead…</b> fills future weeks in one go. Use the 📅 to jump to any week.</li><li><b>Select shifts</b> to change many at once: give them to someone else, change times, or delete them.</li><li>Time-off requests and shift trades show up here for you to approve. Warnings flag double-booking and overtime before it happens.</li><li>Print the week, or let your team add their shifts to their phone calendars.</li></ul>'},
     {tab:'inventory',t:'Inventory',b:'<ul><li>Track what’s on hand with quick <b>+ / −</b> buttons, or <b>Count everything</b> at once.</li><li>Set a reorder point and the Hub builds your <b>shopping list</b>.</li><li>Edit as a table to change many items at once, or import a spreadsheet.</li>'+(s.recipes?'<li>Add a <b>recipe</b> to anything you make. <b>Make a batch</b> uses up the ingredients, adds the finished goods, and shows your cost per item.</li>':'')+'</ul>'},
@@ -9933,6 +9987,349 @@ function demoBanner(){
     +'<div class="demo-ban-btns"><button type="button" onclick="demoSwitch()">Try another type</button><a href="'+DEMO_TRIAL_URL+'" target="_blank" rel="noopener">Start your 3 free months →</a></div>';
 }
 function demoSwitch(){location.href=location.pathname+'?demo';}
+
+
+const TR_CFG={docs:'ohb_training_docs',acks:'ohb_training_acks',bucket:'ohb-training',biz:true};
+// ─── Training: SOPs, how-tos and training the team reads and signs off on ───
+// Shared by the Kilted Farmers hub and the Operations Hub; TR_CFG says which tables and storage to use.
+const TR={loaded:false,missing:false,key:null,docs:[],acks:[],q:'',cat:'',editing:null,open:null,upload:null};
+const TR_MAX_MB=25;
+function trBiz(){return TR_CFG.biz?(typeof BIZ!=='undefined'&&BIZ.id)||null:null;}
+function trScope(){return TR_CFG.biz?'business_id=eq.'+trBiz()+'&':'';}
+function trDemo(){return typeof isDemo==='function'&&isDemo();}
+function trSteward(){try{return isStewardUser();}catch(e){return false;}}
+function trMyId(){return (typeof currentUser!=='undefined'&&currentUser&&currentUser.id)||null;}
+function trMyName(){return (typeof currentProfile!=='undefined'&&currentProfile&&currentProfile.name)||'';}
+function trFirst(n){return normName(n).split(' ')[0]||'';}
+function trSameName(a,b){a=normName(a);b=normName(b);if(!a||!b)return false;return a===b||a.split(' ')[0]===b.split(' ')[0]&&(a.indexOf(' ')<0||b.indexOf(' ')<0);}
+function trMyAck(d){const me=trMyId();return TR.acks.find(a=>a.doc_id===d.id&&(me&&a.user_id===me));}
+function trIsDone(d){const a=trMyAck(d);return !!a&&(+a.version||1)>=(+d.version||1);}
+function trTodo(){return TR.docs.filter(d=>d.active&&d.required&&!trIsDone(d));}
+// The people who should read things: the active team list (people without a login yet still show up)
+function trRoster(){
+  const list=(typeof members!=='undefined'&&Array.isArray(members)?members:[]).filter(m=>m&&m.name&&String(m.name).trim());
+  const seen=new Set();return list.filter(m=>{const k=normName(m.name);if(seen.has(k))return false;seen.add(k);return true;});
+}
+function trAckFor(d,person){
+  return TR.acks.find(a=>a.doc_id===d.id&&((person.user_id&&a.user_id===person.user_id)||trSameName(a.name,person.name)));
+}
+function trProgress(d){
+  const r=trRoster();let done=0;r.forEach(p=>{const a=trAckFor(d,p);if(a&&(+a.version||1)>=(+d.version||1))done++;});
+  return{done,total:r.length};
+}
+function trCats(){return [...new Set(TR.docs.map(d=>d.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b));}
+function trIcon(d){
+  if(d.kind==='link')return '🔗';if(d.kind==='text')return '📝';
+  const t=String(d.file_type||'')+' '+String(d.file_name||'');
+  if(/pdf/i.test(t))return '📄';if(/image|\.(png|jpe?g|gif|heic|webp)$/i.test(t))return '🖼️';if(/video|\.(mp4|mov)$/i.test(t))return '🎬';
+  if(/sheet|excel|\.xlsx?$|\.csv$/i.test(t))return '📊';if(/presentation|powerpoint|\.pptx?$/i.test(t))return '📽️';return '📎';
+}
+
+async function loadTraining(force){
+  const key=TR_CFG.biz?trBiz():'kf';
+  if(TR.loaded&&!force&&TR.key===key)return;
+  if(TR_CFG.biz&&!key){TR.docs=[];TR.acks=[];return;}
+  try{
+    const [docs,acks]=await Promise.all([
+      sbAll(TR_CFG.docs+'?'+trScope()+'order=sort_order.asc,category.asc.nullsfirst,title.asc'),
+      sbAll(TR_CFG.acks+'?'+trScope()+'select=*')
+    ]);
+    TR.docs=docs;TR.acks=acks;TR.loaded=true;TR.missing=false;TR.key=key;
+  }catch(e){if(tableMissing(e)){TR.missing=true;TR.docs=[];TR.acks=[];}else throw e;}
+  trBadge();
+}
+async function trainingBadgeLoad(){try{await loadTraining(true);}catch(e){}}
+function trBadge(){
+  const el=document.getElementById('trainBadge');if(!el)return;
+  const n=TR.missing?0:trTodo().length;el.textContent=n||'';el.style.display=n?'inline-block':'none';
+}
+async function renderTraining(){
+  const el=document.getElementById('trainBody');if(!el)return;
+  if(!TR.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading training…</div></div>';
+  try{await loadTraining(true);}catch(e){el.innerHTML='<div class="card"><div class="bk-empty">Training didn’t load: '+esc(e.message)+'</div></div>';return;}
+  drawTraining();
+}
+function drawTraining(){
+  const el=document.getElementById('trainBody');if(!el)return;
+  if(TR.missing){el.innerHTML=trSetupHTML();return;}
+  const st=trSteward(),todo=trTodo(),all=TR.docs.filter(d=>st||d.active);
+  let h='';
+  // what I still need to read
+  const req=TR.docs.filter(d=>d.active&&d.required);
+  h+='<div class="card"><div class="tr-top"><div style="flex:1;min-width:200px;"><div class="card-title"><div class="card-title-dot"></div>Training &amp; how-tos</div>'
+    +'<div class="card-sub" style="margin-bottom:0;">'+(st?'Upload your SOPs, recipes, checklists and training. The team reads them here and signs off, and you can see who’s caught up.':'How we do things here. Read each one and tap <b>I’ve read this</b> when you’re done.')+'</div></div>'
+    +(st?'<button class="btn-green" onclick="trEdit()">+ Add training</button>':'')+'</div>';
+  if(req.length){
+    const done=req.length-todo.length;
+    h+='<div class="tr-mine"><div class="tr-meter'+(todo.length?'':' done')+'"><i style="width:'+Math.round(done/req.length*100)+'%"></i></div>'
+      +'<div class="bk-sub">'+(todo.length?'You’ve signed off on <b>'+done+' of '+req.length+'</b>. '+todo.length+' to go.':'You’re all caught up. Nice work.')+'</div></div>';
+  }
+  h+='</div>';
+  if(todo.length)h+='<div class="card"><div class="tr-h">For you to read</div>'+todo.map(trRow).join('')+'</div>';
+  if(st&&req.length&&trRoster().length)h+=trTeamCardHTML(req);
+  // the whole library
+  h+='<div class="card"><div class="tr-h">'+(st?'Library':'Everything')+'</div>';
+  if(!all.length)h+='<div class="bk-empty">'+(st?'Nothing here yet. Add your first SOP: write it right here, upload a PDF, Word file or photo, or link a video.':'Nothing here yet. Your managers will add training soon.')+'</div>';
+  else{
+    const cats=trCats();
+    if(all.length>6)h+='<div class="bk-filters"><input class="period-input" type="search" placeholder="Search training…" value="'+esc(TR.q)+'" oninput="TR.q=this.value;trRedraw()">'
+      +(cats.length?'<select class="period-select" onchange="TR.cat=this.value;trRedraw()"><option value="">All topics</option>'+cats.map(c=>'<option'+(c===TR.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select>':'')+'</div>';
+    h+='<div id="trRows">'+trRows()+'</div>';
+  }
+  h+='</div>';
+  el.innerHTML=h;trBadge();
+}
+function trRedraw(){const b=document.getElementById('trRows');if(b)b.innerHTML=trRows();}
+function trRows(){
+  const st=trSteward(),q=TR.q.trim().toLowerCase();
+  const list=TR.docs.filter(d=>(st||d.active)&&(!TR.cat||d.category===TR.cat)&&(!q||[d.title,d.category,d.body,d.file_name].join(' ').toLowerCase().includes(q)));
+  if(!list.length)return '<div class="bk-empty">Nothing matches.</div>';
+  let last=null,h='';
+  list.slice().sort((a,b)=>String(a.category||'').localeCompare(String(b.category||''))||(+a.sort_order||0)-(+b.sort_order||0)||a.title.localeCompare(b.title)).forEach(d=>{
+    if((d.category||'')!==last){last=d.category||'';h+='<div class="bk-date">'+esc(last||'General')+'</div>';}
+    h+=trRow(d);
+  });
+  return h;
+}
+function trRow(d){
+  const st=trSteward(),mine=trMyAck(d),done=trIsDone(d);
+  let chip='';
+  if(!d.active)chip='<span class="tr-chip">Hidden</span>';
+  else if(d.required&&!done)chip=mine?'<span class="tr-chip tan">Updated · read again</span>':'<span class="tr-chip blue">To read</span>';
+  else if(done)chip='<span class="tr-chip green">✓ Read</span>';
+  else if(!d.required)chip='<span class="tr-chip">Reference</span>';
+  let right='';
+  if(st&&d.required&&d.active){const p=trProgress(d);if(p.total)right='<div class="tr-prog'+(p.done>=p.total?' done':'')+'">'+p.done+'/'+p.total+'<small>read</small></div>';}
+  return '<div class="bk-row" onclick="trOpen(\''+d.id+'\')"><div class="tr-ico" aria-hidden="true">'+trIcon(d)+'</div><div class="bk-main"><div class="bk-payee">'+esc(d.title)+'</div>'
+    +'<div class="bk-sub">'+chip+(d.kind==='file'&&d.file_name?' '+esc(d.file_name):'')+(+d.version>1?' · version '+d.version:'')+'</div></div>'+right+'</div>';
+}
+// who still has reading to do
+function trTeamCardHTML(req){
+  const r=trRoster();
+  const rows=r.map(p=>{const left=req.filter(d=>{const a=trAckFor(d,p);return !(a&&(+a.version||1)>=(+d.version||1));});return{p,left};});
+  const behind=rows.filter(x=>x.left.length);
+  let h='<div class="card"><div class="tr-h">Your team</div>';
+  if(!behind.length)return h+'<div class="bk-sub">Everyone has signed off on everything. 🎉</div></div>';
+  h+=rows.sort((a,b)=>b.left.length-a.left.length).map(x=>'<div class="tr-person"><div class="bk-main"><div class="bk-payee">'+esc(x.p.name)+'</div><div class="bk-sub">'
+    +(x.left.length?x.left.length+' to read: '+x.left.slice(0,3).map(d=>esc(d.title)).join(', ')+(x.left.length>3?'…':''):'All caught up')+'</div></div>'
+    +'<div class="tr-prog'+(x.left.length?'':' done')+'">'+(req.length-x.left.length)+'/'+req.length+'</div></div>').join('');
+  return h+'</div>';
+}
+function trSetupHTML(){
+  if(typeof TRAIN_SQL==='undefined')return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Training is almost ready</div><div class="card-sub">The Hub’s database needs a quick update before training can be used. We’ve been told; check back soon.</div></div>';
+  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for Training</div>'
+    +'<div class="card-sub">The training library needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once.</div>'
+    +'<pre>'+esc(TRAIN_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(TRAIN_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
+    +'<button class="btn-secondary" onclick="TR.missing=false;renderTraining();">Recheck</button></div></div>';
+}
+
+// ─── reading one ───
+function trModal(){
+  let m=document.getElementById('trModal');if(m)return m;
+  m=document.createElement('div');m.className='modal-overlay';m.id='trModal';
+  m.onclick=e=>{if(e.target===m)trClose();};
+  m.innerHTML='<div class="modal" style="max-width:680px;"><button class="modal-close" onclick="trClose()" aria-label="Close">×</button><div class="modal-title" id="trMTitle"></div><div id="trMBody"></div></div>';
+  document.body.appendChild(m);return m;
+}
+function trClose(){const m=document.getElementById('trModal');if(m)m.classList.remove('open');TR.open=null;TR.editing=null;TR.upload=null;}
+// Light formatting for written SOPs: # headings, - bullets, 1. steps, [ ] checklists, **bold**
+function trFormat(src){
+  const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(https:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const lines=String(src||'').replace(/\r/g,'').split('\n');let h='',list=null;
+  const close=()=>{if(list){h+='</'+list+'>';list=null;}};
+  lines.forEach(raw=>{
+    const l=raw.trim();let m;
+    if(!l){close();return;}
+    if((m=l.match(/^#{1,3}\s+(.*)/))){close();h+='<h4>'+inline(m[1])+'</h4>';return;}
+    if((m=l.match(/^\[( |x)\]\s*(.*)/i))){if(list!=='ul class="tr-check"'){close();h+='<ul class="tr-check">';list='ul';}h+='<li>'+inline(m[2])+'</li>';return;}
+    if((m=l.match(/^[-*•]\s+(.*)/))){if(list!=='ul'){close();h+='<ul>';list='ul';}h+='<li>'+inline(m[1])+'</li>';return;}
+    if((m=l.match(/^\d+[.)]\s+(.*)/))){if(list!=='ol'){close();h+='<ol>';list='ol';}h+='<li>'+inline(m[1])+'</li>';return;}
+    close();h+='<p>'+inline(l)+'</p>';
+  });
+  close();return h;
+}
+async function trOpen(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d)return;TR.open=d;TR.editing=null;
+  const m=trModal(),st=trSteward(),mine=trMyAck(d),done=trIsDone(d);
+  document.getElementById('trMTitle').textContent=d.title;
+  let h='<div class="bk-sub" style="margin-bottom:10px;">'+esc(d.category||'General')+(d.required?' · everyone signs off':' · reference')+(+d.version>1?' · version '+d.version:'')+(d.updated_at?' · updated '+esc(prettyDate(String(d.updated_at).slice(0,10))):'')+'</div>';
+  if(d.kind==='text')h+='<div class="tr-doc">'+(trFormat(d.body)||'<p class="bk-sub">(Nothing written yet.)</p>')+'</div>';
+  else if(d.kind==='link')h+=(d.body?'<div class="tr-doc">'+trFormat(d.body)+'</div>':'')+'<div class="bk-actions"><a class="btn-green" style="text-decoration:none;" href="'+esc(trSafeUrl(d.link_url))+'" target="_blank" rel="noopener">Open '+esc(trLinkLabel(d.link_url))+' ↗</a></div>';
+  else{
+    h+=(d.body?'<div class="tr-doc">'+trFormat(d.body)+'</div>':'')+'<div id="trPreview"></div>'
+      +'<div class="bk-actions"><button class="btn-green" onclick="trOpenFile()">Open '+esc(d.file_name||'the file')+'</button></div>';
+  }
+  if(d.active){
+    if(done)h+='<div class="tr-done">✓ You signed off on this '+esc(prettyDate(String(mine.acked_at||'').slice(0,10)))+'.</div>';
+    else h+='<div class="tr-ack"><div class="bk-sub">'+(mine?'This was updated since you last read it. Have a look at what changed.':(d.required?'When you’ve read it and understand it, sign off so '+(st?'the team':'your managers')+' know.':'Tap below once you’ve read it.'))+'</div>'
+      +'<button class="btn-green" onclick="trAck()">I’ve read this</button></div>';
+  }
+  if(st){
+    if(d.required&&d.active){
+      const r=trRoster();
+      if(r.length){
+        h+='<div class="tr-h" style="margin-top:16px;">Who’s read it</div>'+r.map(p=>{const a=trAckFor(d,p),ok=a&&(+a.version||1)>=(+d.version||1);
+          return '<div class="tr-who"><span>'+esc(p.name)+'</span><span class="'+(ok?'ok':a?'old':'no')+'">'+(ok?'✓ '+esc(prettyDate(String(a.acked_at||'').slice(0,10))):a?'Read an older version':'Not yet')+'</span></div>';}).join('');
+      }
+    }
+    h+='<div class="bk-actions" style="margin-top:14px;"><button class="btn-secondary" onclick="trEdit(\''+d.id+'\')">Edit</button>'
+      +'<button class="btn-secondary" onclick="trToggle(\''+d.id+'\')">'+(d.active?'Hide from the team':'Show to the team')+'</button>'
+      +'<button class="btn-secondary danger" onclick="trDelete(\''+d.id+'\')">Delete</button></div>';
+  }
+  document.getElementById('trMBody').innerHTML=h;m.classList.add('open');
+  if(d.kind==='file'&&/^image\//.test(d.file_type||''))trInlineImage(d);
+}
+function trSafeUrl(u){u=String(u||'').trim();return /^https?:\/\//i.test(u)?u:'#';}
+function trLinkLabel(u){u=String(u||'');if(/youtu\.?be/i.test(u))return 'the video';if(/docs\.google|drive\.google/i.test(u))return 'in Google';if(/vimeo/i.test(u))return 'the video';return 'the link';}
+async function trSignedUrl(d){
+  if(/^blob:|^data:/.test(d.file_path||''))return d.file_path;
+  if(trDemo())throw new Error('Files open in your real Hub');
+  const r=await fetch(SUPABASE_URL+'/storage/v1/object/sign/'+TR_CFG.bucket+'/'+String(d.file_path).split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})});
+  if(!r.ok)throw new Error(r.status===400||r.status===404?'That file couldn’t be found':'You don’t have access to that file');
+  const j=await r.json();const su=j.signedURL||j.signedUrl||'';
+  return /^https?:/.test(su)?su:SUPABASE_URL+'/storage/v1'+su;
+}
+async function trInlineImage(d){
+  try{const u=await trSignedUrl(d);const p=document.getElementById('trPreview');if(p&&TR.open&&TR.open.id===d.id)p.innerHTML='<img class="tr-img" src="'+esc(u)+'" alt="'+esc(d.title)+'">';}catch(e){}
+}
+async function trOpenFile(){
+  const d=TR.open;if(!d)return;
+  const w=/^blob:|^data:/.test(d.file_path||'')?null:window.open('','_blank');
+  try{const u=await trSignedUrl(d);if(w)w.location.href=u;else window.open(u,'_blank');}
+  catch(e){if(w)w.close();toast(e.message,true);}
+}
+async function trAck(){
+  const d=TR.open;if(!d)return;const mine=trMyAck(d);
+  const body={doc_id:d.id,version:+d.version||1,name:trMyName(),user_id:trMyId()};if(TR_CFG.biz)body.business_id=trBiz();
+  try{
+    if(mine)await sb(TR_CFG.acks+'?id=eq.'+mine.id,{method:'PATCH',body:JSON.stringify({version:body.version,name:body.name})});
+    else await sb(TR_CFG.acks,{method:'POST',body:JSON.stringify(body)});
+    toast('Signed off: '+d.title);await loadTraining(true);drawTraining();trOpen(d.id);
+  }catch(e){toast('Didn’t save: '+e.message,true);}
+}
+
+// ─── adding and editing (owners and managers) ───
+function trEdit(id){
+  if(!trSteward())return;
+  const d=id?TR.docs.find(x=>x.id===id):null;TR.editing=d||{};TR.open=null;TR.upload=null;
+  const kind=d?d.kind:'text',m=trModal();
+  document.getElementById('trMTitle').textContent=d?'Edit '+d.title:'Add training';
+  const cats=trCats();
+  let h='<label class="tr-lbl" for="trTitle">Title</label><input id="trTitle" class="period-input tr-full" value="'+esc(d?d.title:'')+'" placeholder="Opening checklist, Making the dough, Food safety basics…">'
+    +'<label class="tr-lbl" for="trCat">Topic</label><input id="trCat" class="period-input tr-full" list="trCatList" value="'+esc(d&&d.category||'')+'" placeholder="Kitchen, Markets, Food safety…"><datalist id="trCatList">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist>'
+    +'<label class="tr-lbl">What is it?</label><div class="seg mini" id="trKind">'+[['text','✏️ Write it here'],['file','📎 Upload a file'],['link','🔗 Link a video or page']].map(([k,l])=>'<button type="button" class="'+(kind===k?'active':'')+'" data-k="'+k+'" onclick="trKind(\''+k+'\')">'+l+'</button>').join('')+'</div>'
+    +'<div id="trKindBody"></div>'
+    +'<label class="tr-check-row"><input type="checkbox" id="trReq" '+(!d||d.required?'checked':'')+'> Everyone on the team reads it and signs off</label>';
+  if(d)h+='<label class="tr-check-row"><input type="checkbox" id="trBump"> This is a big change. Ask everyone to read it again.</label>';
+  h+='<div class="bk-actions"><button class="btn-green" id="trSave" onclick="trSave()">'+(d?'Save changes':'Add it')+'</button><button class="btn-secondary" onclick="'+(d?'trOpen(\''+d.id+'\')':'trClose()')+'">Cancel</button></div><div class="tr-status" id="trStatus"></div>';
+  document.getElementById('trMBody').innerHTML=h;m.classList.add('open');
+  TR.editKind=kind;trKind(kind);
+}
+function trKind(k){
+  TR.editKind=k;const d=TR.editing||{};
+  document.querySelectorAll('#trKind button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
+  const body=document.getElementById('trBodyTxt');const keep=body?body.value:(d.body||'');
+  let h='';
+  if(k==='text')h='<label class="tr-lbl" for="trBodyTxt">The steps</label><textarea id="trBodyTxt" class="period-input tr-full tr-area" placeholder="# Before you start\n- Wash hands and put on an apron\n- Sanitize the bench\n\n# Steps\n1. Weigh 1 kg semolina\n2. Add 10 eggs\n\n[ ] Label and date every batch">'+esc(keep)+'</textarea>'
+    +'<div class="bk-sub">Start a line with <b>#</b> for a heading, <b>-</b> for a bullet, <b>1.</b> for a step, or <b>[ ]</b> for a checklist item.</div>';
+  else if(k==='file'){
+    const cur=d.kind==='file'&&d.file_name?'<div class="bk-sub" style="margin-top:6px;">Current file: <b>'+esc(d.file_name)+'</b>. Pick a new one to replace it.</div>':'';
+    h='<label class="tr-file"><input type="file" id="trFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.rtf,.odt,.csv,image/*,video/mp4,video/quicktime" onchange="trPicked(this)"><span id="trFileLbl">📎 Choose a PDF, Word file, slides, photo or short video</span></label>'+cur
+      +'<div class="bk-sub">Up to '+TR_MAX_MB+' MB. Files stay private to your team.</div>'
+      +'<label class="tr-lbl" for="trBodyTxt">Notes (optional)</label><textarea id="trBodyTxt" class="period-input tr-full" style="min-height:70px;" placeholder="Anything to know before opening it">'+esc(keep)+'</textarea>';
+  }else h='<label class="tr-lbl" for="trLink">Link</label><input id="trLink" class="period-input tr-full" type="url" inputmode="url" value="'+esc(d.link_url||'')+'" placeholder="https://youtube.com/… or a Google Doc">'
+    +'<label class="tr-lbl" for="trBodyTxt">Notes (optional)</label><textarea id="trBodyTxt" class="period-input tr-full" style="min-height:70px;" placeholder="What to watch for">'+esc(keep)+'</textarea>';
+  document.getElementById('trKindBody').innerHTML=h;
+  if(TR.upload&&k==='file'){const l=document.getElementById('trFileLbl');if(l)l.textContent='📎 '+TR.upload.name;}
+}
+function trPicked(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(f.size>TR_MAX_MB*1024*1024){toast('That file is '+Math.round(f.size/1048576)+' MB. The limit is '+TR_MAX_MB+' MB. For longer videos, upload to YouTube (unlisted) and link it instead.',true);input.value='';return;}
+  TR.upload=f;document.getElementById('trFileLbl').textContent='📎 '+f.name;
+  const t=document.getElementById('trTitle');if(t&&!t.value.trim())t.value=f.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
+}
+async function trUpload(f){
+  if(trDemo())return URL.createObjectURL(f);
+  const safe=(f.name||'file').replace(/[^a-zA-Z0-9._-]/g,'_').slice(-60);
+  const path=(TR_CFG.biz?trBiz()+'/':'')+'doc_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+safe;
+  const send=()=>fetch(SUPABASE_URL+'/storage/v1/object/'+TR_CFG.bucket+'/'+path.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':f.type||'application/octet-stream'},body:f});
+  let res=await send();
+  if(res.status===401&&typeof silentRefresh==='function'&&await silentRefresh())res=await send();
+  if(!res.ok){let m='';try{m=(await res.json()).message||'';}catch(e){}
+    if(/bucket not found/i.test(m))throw new Error('File storage isn’t set up yet. Run the training SQL once, then try again.');
+    throw new Error('Upload failed'+(m?': '+m:' ('+res.status+')'));}
+  return path;
+}
+async function trRemoveFile(path){
+  if(!path||/^blob:|^data:/.test(path)||trDemo())return;
+  try{await fetch(SUPABASE_URL+'/storage/v1/object/'+TR_CFG.bucket,{method:'DELETE',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({prefixes:[path]})});}catch(e){}
+}
+async function trSave(){
+  const d=TR.editing||{},isNew=!d.id,k=TR.editKind;
+  const title=document.getElementById('trTitle').value.trim();if(!title){toast('Give it a title',true);return;}
+  const body=(document.getElementById('trBodyTxt')||{}).value||'';
+  const row={title,category:document.getElementById('trCat').value.trim()||null,kind:k,body:body.trim()||null,required:document.getElementById('trReq').checked,updated_at:new Date().toISOString()};
+  if(k==='text'&&!row.body){toast('Write the steps first',true);return;}
+  if(k==='link'){let u=(document.getElementById('trLink').value||'').trim();if(!u){toast('Paste the link',true);return;}if(!/^https?:\/\//i.test(u))u='https://'+u;row.link_url=u;}
+  if(k==='file'&&!TR.upload&&!(d.kind==='file'&&d.file_path)){toast('Choose a file to upload',true);return;}
+  const btn=document.getElementById('trSave'),status=document.getElementById('trStatus');btn.disabled=true;
+  let oldFile=null;
+  try{
+    if(k==='file'&&TR.upload){
+      status.textContent='Uploading '+TR.upload.name+'…';
+      row.file_path=await trUpload(TR.upload);row.file_name=TR.upload.name;row.file_type=TR.upload.type||null;
+      if(d.file_path)oldFile=d.file_path;
+    }
+    if(k!=='file'){if(d.file_path)oldFile=d.file_path;row.file_path=null;row.file_name=null;row.file_type=null;}
+    if(k!=='link')row.link_url=null;
+    const bump=!isNew&&((document.getElementById('trBump')||{}).checked||(k==='file'&&TR.upload&&d.kind==='file'));
+    if(bump)row.version=(+d.version||1)+1;
+    status.textContent='Saving…';
+    let saved;
+    if(isNew){row.created_by=trMyName()||null;if(TR_CFG.biz)row.business_id=trBiz();row.sort_order=TR.docs.length;saved=(await sb(TR_CFG.docs,{method:'POST',body:JSON.stringify(row)}))[0];}
+    else saved=(await sb(TR_CFG.docs+'?id=eq.'+d.id,{method:'PATCH',body:JSON.stringify(row)}))[0];
+    if(oldFile)trRemoveFile(oldFile);
+    TR.upload=null;toast(isNew?'Added: '+title:(bump?'Saved. Everyone will be asked to read it again.':'Saved'));
+    await loadTraining(true);drawTraining();if(saved)trOpen(saved.id);else trClose();
+  }catch(e){status.textContent='';toast(e.message,true);btn.disabled=false;}
+}
+async function trToggle(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d)return;
+  try{await sb(TR_CFG.docs+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify({active:!d.active})});toast(d.active?'Hidden from the team':'Showing to the team');await loadTraining(true);drawTraining();trOpen(id);}
+  catch(e){toast(e.message,true);}
+}
+async function trDelete(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d||!confirm('Delete “'+d.title+'”? Its sign-offs go too. To keep the record, hide it instead.'))return;
+  try{await sb(TR_CFG.docs+'?id=eq.'+id,{method:'DELETE'});trRemoveFile(d.file_path);toast('Deleted');trClose();await loadTraining(true);drawTraining();}
+  catch(e){toast(e.message,true);}
+}
+
+// Demo: training tables and a few sample SOPs, signed off by part of the made-up crew
+if(typeof DEMO_SCHEMA!=='undefined'){
+  DEMO_SCHEMA.ohb_training_docs={id:['text','@uuid'],business_id:['text',null],title:['text',null],category:['text',null],kind:['text','text'],body:['text',null],file_path:['text',null],file_name:['text',null],file_type:['text',null],link_url:['text',null],required:['bool',true],version:['num',1],active:['bool',true],sort_order:['num',0],created_by:['text',null],updated_at:['text','@now'],created_at:['text','@now']};
+  DEMO_SCHEMA.ohb_training_acks={id:['text','@uuid'],business_id:['text',null],doc_id:['text',null],user_id:['text','@uid'],name:['text',null],version:['num',1],acked_at:['text','@now']};
+}
+if(typeof demoSeed==='function'){const _dsT=demoSeed;demoSeed=function(type){
+  _dsT(type);
+  const biz=demoTable('ohb_businesses')[0];if(!biz)return;
+  const cfg=(typeof DEMO_BIZ!=='undefined'&&(DEMO_BIZ[type]||DEMO_BIZ.other))||{};const owner=cfg.owner||'You';
+  const crew=(cfg.crew||[]).map(c=>Array.isArray(c)?c[0]:c).filter(Boolean);
+  const ago=d=>new Date(Date.now()-d*864e5).toISOString();
+  const add=o=>{const r=demoRow('ohb_training_docs',Object.assign({business_id:biz.id,created_by:owner},o));demoTable('ohb_training_docs').push(r);return r;};
+  const docs=[
+    add({title:'Opening checklist',category:'Opening & closing',sort_order:0,updated_at:ago(20),body:'# When you get in\n- Unlock, lights on, alarm off\n- Wash hands and put on an apron\n- Check the fridge and freezer temps and write them on the log\n\n# Before the first customer\n1. Count the drawer and note it\n2. Wipe down every counter\n3. Check the day’s orders and the schedule\n\n[ ] Temps logged\n[ ] Drawer counted'}),
+    add({title:'Closing checklist',category:'Opening & closing',sort_order:1,updated_at:ago(20),body:'# Last hour\n- Start cleaning stations that are done for the day\n- Restock for the morning\n\n# Lock up\n1. Count the drawer and log the total\n2. Trash and recycling out\n3. Lights off, alarm on, doors checked\n\n[ ] Drawer counted\n[ ] Doors double-checked'}),
+    add({title:'How we treat customers',category:'Customer service',sort_order:2,updated_at:ago(9),version:2,body:'- Greet everyone within a few seconds, even if you’re busy\n- Use their name if you know it\n- If something went wrong, say sorry first, then fix it\n- Not sure? Ask '+owner+' instead of guessing\n\n**New:** offer a sample to anyone who’s on the fence.'})
+  ];
+  if(type==='food')docs.push(add({title:'Food safety basics',category:'Food safety',sort_order:3,updated_at:ago(14),body:'# Every shift\n- Wash hands for 20 seconds before touching food\n- Gloves on for ready-to-eat food\n- Keep cold food at 41°F or below and hot food at 135°F or above\n\n# Labels\n1. Every container gets a label: what it is and the date\n2. Use the oldest first\n3. When in doubt, throw it out'}));
+  add({title:'Our story (for when customers ask)',category:'Customer service',required:false,sort_order:4,updated_at:ago(30),body:biz.name+' started small and grew because neighbors kept coming back. Tell customers what you love about working here.'});
+  // most of the crew has read most of it; someone still has catching up to do
+  crew.forEach((n,ci)=>docs.forEach((d,di)=>{
+    if(ci===0||(ci===1&&di<2)||(ci===2&&di===0))demoTable('ohb_training_acks').push(demoRow('ohb_training_acks',{business_id:biz.id,doc_id:d.id,user_id:'crew-'+ci,name:n,version:(ci===1&&di===2)?1:d.version,acked_at:ago(8-ci)}));
+  }));
+  if(crew[1]&&docs[2])demoTable('ohb_training_acks').push(demoRow('ohb_training_acks',{business_id:biz.id,doc_id:docs[2].id,user_id:'crew-1',name:crew[1],version:1,acked_at:ago(15)}));
+};}
 
 if(DEMO.on){
   window.fetch=demoFetch;

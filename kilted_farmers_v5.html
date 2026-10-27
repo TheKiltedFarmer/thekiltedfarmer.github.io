@@ -756,6 +756,53 @@ details[open]>summary.card-title::after{content:'▴';}
 .rp-w9-ok{display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:700;color:var(--green-dark);cursor:pointer;}
 .rp-w9-ok input{width:18px;height:18px;accent-color:var(--green);}
 .rp-w9line{margin-top:4px;}
+
+/* ─── Training ─── */
+.tr-badge{display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;vertical-align:1px;}
+.tr-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;}
+.tr-top .btn-green{padding:9px 16px;}
+.tr-mine{margin-top:14px;}
+.tr-meter{height:10px;background:var(--cream-dark);border-radius:6px;overflow:hidden;margin-bottom:6px;}
+.tr-meter i{display:block;height:100%;background:var(--green-light);border-radius:6px;transition:width .3s;}
+.tr-meter.done i{background:var(--green);}
+.tr-h{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;margin-bottom:4px;}
+.tr-ico{width:34px;height:34px;border-radius:9px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.tr-chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:var(--cream-dark);color:var(--mid);margin-right:4px;}
+.tr-chip.blue{background:#e6f0f7;color:var(--blue);}
+.tr-chip.green{background:#e6f4ec;color:var(--green-dark);}
+.tr-chip.tan{background:#f6ede2;color:#7a5530;}
+.tr-prog{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;color:var(--tan);text-align:right;white-space:nowrap;}
+.tr-prog small{display:block;font-family:inherit;font-size:10px;color:var(--mid);font-weight:400;}
+.tr-prog.done{color:var(--green);}
+.tr-person{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--cream-dark);}
+.tr-doc{font-size:15px;line-height:1.6;color:var(--ink);background:var(--cream);border-radius:10px;padding:12px 16px;margin-bottom:10px;}
+.tr-doc h4{font-family:'Playfair Display',serif;font-size:16px;color:var(--green-dark);margin:12px 0 4px;}
+.tr-doc h4:first-child{margin-top:0;}
+.tr-doc p{margin:6px 0;}
+.tr-doc ul,.tr-doc ol{margin:6px 0 6px 22px;}
+.tr-doc li{margin:3px 0;}
+.tr-doc ul.tr-check{list-style:none;margin-left:2px;}
+.tr-doc ul.tr-check li::before{content:'☐';margin-right:8px;color:var(--green);}
+.tr-img{max-width:100%;border-radius:10px;margin-bottom:10px;display:block;}
+.tr-ack{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#e6f4ec;border-radius:10px;padding:12px 14px;margin-top:12px;}
+.tr-ack .bk-sub{flex:1;min-width:180px;color:var(--green-dark);}
+.tr-done{background:#e6f4ec;color:var(--green-dark);border-radius:10px;padding:10px 14px;margin-top:12px;font-weight:700;font-size:14px;}
+.tr-who{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--cream-dark);font-size:14px;}
+.tr-who .ok{color:var(--green);font-weight:700;}
+.tr-who .old{color:var(--tan);font-weight:700;}
+.tr-who .no{color:var(--mid);}
+.tr-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:12px 0 5px;font-weight:600;}
+.tr-full{width:100%;}
+.tr-area{min-height:220px;font-family:inherit;line-height:1.5;resize:vertical;}
+textarea.tr-full{font-family:inherit;resize:vertical;}
+.tr-file{display:block;border:2px dashed var(--rule);border-radius:10px;padding:16px;text-align:center;cursor:pointer;margin-top:10px;color:var(--green-dark);font-weight:600;}
+.tr-file:hover{border-color:var(--green);}
+.tr-file input{display:none;}
+.tr-check-row{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:14px;cursor:pointer;}
+.tr-check-row input{width:18px;height:18px;margin-top:1px;accent-color:var(--green);flex-shrink:0;}
+.tr-status{font-size:13px;color:var(--mid);margin-top:8px;}
+#trKind{margin-top:2px;}
+@media(max-width:520px){#trKind button{font-size:12px;padding:8px 6px;white-space:normal;}}
 </style>
 </head>
 <body>
@@ -802,9 +849,10 @@ details[open]>summary.card-title::after{content:'▴';}
   <div class="tab" onclick="switchTab('timeclock',this)">Time Clock</div>
   <div class="tab" onclick="switchTab('schedule',this)">Schedule</div>
   <div class="tab" onclick="switchTab('team',this)">Team</div>
+  <div class="tab" id="trainTab" onclick="switchTab('training',this)">Training<span class="tr-badge" id="trainBadge"></span></div>
   <div class="tab" onclick="switchTab('ingredients',this)">Ingredients</div>
   <div class="tab" id="invTab" onclick="switchTab('inventory',this)">Inventory</div>
-  <div class="tab" id="repsTab" onclick="switchTab('reps',this)">Reps<span class="rp-badge" id="repsBadge"></span></div>
+  <div class="tab" id="repsTab" onclick="switchTab('reps',this)">Highlanders<span class="rp-badge" id="repsBadge"></span></div>
   <div class="tab" onclick="switchTab('history',this)">History</div>
   <div class="tab" id="servicesTab" style="display:none;" onclick="switchTab('services',this)">Grants &amp; Alerts</div>
   <div class="tab" id="adminTab" style="display:none;" onclick="switchTab('admin',this)">Admin</div>
@@ -1059,6 +1107,9 @@ details[open]>summary.card-title::after{content:'▴';}
 
 <!-- ─── INVENTORY ─── -->
 <div class="tab-content" id="tab-inventory"><div style="margin-top:8px;" id="invBody"></div></div>
+
+<!-- TRAINING -->
+<div class="tab-content" id="tab-training"><div style="margin-top:8px;" id="trainBody"></div></div>
 
 <!-- REPS -->
 <div class="tab-content" id="tab-reps"><div style="margin-top:8px;" id="repsBody"></div></div>
@@ -1410,7 +1461,7 @@ function signOut(){
   try{localStorage.removeItem(REMEMBER_KEY);}catch(e){}
   if(dashInterval)clearInterval(dashInterval);
   BOOKS.rows=[];BOOKS.schema.checked=false;BOOKS.stale=true;BOOKS.acct={};BOOKS.bank=[];BOOKS.miles=[];BOOKS.raw=null;BOOKS._weeks=null;
-  ONB.rows=[];REPS.loaded=false;REPS.reps=[];REPS.events=[];REPS.preorders=[];{const rb=document.getElementById('repsBadge');if(rb)rb.style.display='none';}window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
+  ONB.rows=[];TR.loaded=false;TR.docs=[];TR.acks=[];REPS.loaded=false;REPS.reps=[];REPS.events=[];REPS.preorders=[];{const rb=document.getElementById('repsBadge');if(rb)rb.style.display='none';}window._weekPay=null;window._currentPeriodId=null;window._logPeriodId=null;
   ['onbBanner','onbMine','onbTeam','payRules','booksCheckup','booksBody'].forEach(i=>{const el=document.getElementById(i);if(el)el.innerHTML='';});
   const lb=document.getElementById('loginBtn');if(lb){lb.disabled=false;lb.textContent='Sign In';}
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('active',t.id==='tab-dashboard'));document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
@@ -1488,6 +1539,7 @@ function switchTab(id,el){
   if(id==='admin')adminLoadUsers();
   if(id==='services')loadPVServices();
   if(id==='reps')renderReps();
+  if(id==='training')renderTraining();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
@@ -2254,8 +2306,8 @@ function parseISO(s){if(!s)return null;const m=String(s).match(/^(\d{4})-(\d{2})
 function prettyDate(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
 function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
 
-let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Rep Commissions','Other Expense'];
-let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Rep Sales','Tips','Other'];
+let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Highlander Commissions','Other Expense'];
+let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Highlander Sales','Tips','Other'];
 const MOVEMENT_CATS=['Member Distribution','Owner Contribution','Loan','Transfer']; // money that moves but isn't profit or loss
 let COGS_CATS=['Ingredients','Packaging'];
 const PAY_METHODS=['Card','Cash','Check','Square','Venmo / PayPal','Bank Transfer','Other'];
@@ -3341,7 +3393,8 @@ const TAX_LINES={
   'Repairs & Maintenance':{p:'11',c:'21',n:'Repairs & maintenance'},
   'Bank & Card Fees':{p:'20',c:'27a',n:'Bank & card fees'},
   'Meals':{p:'20',c:'24b',n:'Meals (50% deductible)',factor:0.5},
-  'Rep Commissions':{p:'20',c:'10',n:'Commissions paid to pasta reps'},
+  'Highlander Commissions':{p:'20',c:'10',n:'Commissions paid to Pasta Highlanders'},
+  'Rep Commissions':{p:'20',c:'10',n:'Commissions paid to Pasta Highlanders'},
   'Other Expense':{p:'20',c:'27a',n:'Other expenses'}
 };
 function taxPicture(y){
@@ -3488,7 +3541,7 @@ function computeCheckup(){
     const need=yearPayouts(y).list.filter(p=>!p.owner&&p.total>=th*0.75&&!w9[p.name]);
     if(need.length)items.push({lvl:'todo',text:'Get a W-9 from '+need.map(p=>p.name).join(', ')+' (paid near or over '+fmt(th).replace('.00','')+' this year)',btn:'Taxes',fn:"setBooksView('taxes')"});
   }
-  if(s.acct){const th=threshold1099(y),w9=acct().w9||{};const rn=repPayouts(y).filter(p=>p.total>=th*0.75&&!w9[p.name]);if(rn.length)items.push({lvl:'todo',text:'Get a W-9 from pasta rep'+(rn.length>1?'s ':' ')+rn.map(p=>p.name).join(', ')+' (commission near or over '+fmt(th).replace('.00','')+' this year)',btn:'Taxes',fn:"setBooksView('taxes')"});}
+  if(s.acct){const th=threshold1099(y),w9=acct().w9||{};const rn=repPayouts(y).filter(p=>p.total>=th*0.75&&!w9[p.name]);if(rn.length)items.push({lvl:'todo',text:'Get a W-9 from Pasta Highlander'+(rn.length>1?'s ':' ')+rn.map(p=>p.name).join(', ')+' (commission near or over '+fmt(th).replace('.00','')+' this year)',btn:'Taxes',fn:"setBooksView('taxes')"});}
   const big=ytd.filter(r=>r.dir==='out'&&r.category==='Equipment'&&r.amount>=2500);
   if(big.length)items.push({lvl:'info',text:big.length+' equipment purchase'+(big.length===1?'':'s')+' over $2,500 — keep '+(big.length===1?'its':'their')+' receipts; '+(big.length===1?'it':'they')+' go on Form 4562 at tax time'});
   const ct=ctFund();
@@ -5177,6 +5230,7 @@ async function autoInit(){
   await step('recipes',loadRecipeList);
   await step('dashboard',refreshDashboard);
   await step('reps',repsBadgeLoad);
+  await step('training',trainingBadgeLoad);
   if(dashInterval)clearInterval(dashInterval);
   dashInterval=setInterval(refreshDashboard,60000);
   loadOnboarding(true);
@@ -5857,7 +5911,7 @@ async function openInvItem(id,focusStock){
   if(it){
     let moves=[];try{moves=await sb('kf_inv_moves?item_id=eq.'+it.id+'&order=created_at.desc&limit=30');}catch(e){}
     const box=document.getElementById('invHist');if(!box)return;
-    const lab=Object.assign(Object.fromEntries(INV_REASONS),{rep_out:'Out with a rep',rep_back:'Back from a rep'});
+    const lab=Object.assign(Object.fromEntries(INV_REASONS),{rep_out:'Out with a Highlander',rep_back:'Back from a Highlander'});
     box.innerHTML='<div class="bk-stat-l" style="margin-top:10px;">History</div>'+(moves.length?moves.map(mv=>'<div class="inv-hist-row"><span>'+esc(prettyDate(String(mv.move_date||mv.created_at).slice(0,10)))+' · '+esc(lab[mv.reason]||mv.reason)+(mv.by_name?' · '+esc(mv.by_name):'')+(mv.note?' · '+esc(mv.note):'')+'</span><b class="'+(+mv.change<0?'out':'in')+'">'+(+mv.change>0?'+':'')+qty(mv.change)+'</b></div>').join(''):'<div class="bk-sub">No changes logged yet.</div>');
   }
 }
@@ -7012,15 +7066,15 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 
-// ─── Pasta reps: people who sell our pasta at their own events on commission ───
+// ─── Pasta Highlanders: people who sell our pasta at their own events on commission ───
 const REPS={loaded:false,missing:false,mode:'events',reps:[],events:[],products:[],preorders:[],cfg:null,inv:[],open:null,showDeclined:false,showAllSettled:false};
 const REP_LINE_KEYS=['handmade','extruded','traditional'];
-const REP_STATUS={requested:['Get ready','rp-chip blue'],out:['Out with rep','rp-chip green'],returning:['Count to check','rp-chip tan'],settled:['Settled','rp-chip'],cancelled:['Cancelled','rp-chip red']};
+const REP_STATUS={requested:['Get ready','rp-chip blue'],out:['Out with Highlander','rp-chip green'],returning:['Count to check','rp-chip tan'],settled:['Settled','rp-chip'],cancelled:['Cancelled','rp-chip red']};
 function repLineName(k){return (REPS.cfg&&REPS.cfg.line_names&&REPS.cfg.line_names[k])||k;}
 function repPrice(line,zone){const c=REPS.cfg||{};return r2((+((c.prices||{})[line])||0)+(zone==='far'?(+c.far_add||0):0));}
-function repById(id){return REPS.reps.find(r=>r.id===id)||{name:'(removed rep)'};}
+function repById(id){return REPS.reps.find(r=>r.id===id)||{name:'(removed Highlander)'};}
 function repYM(s){return String(s||'').slice(0,7);}
-function repSignupLink(){return location.href.split('#')[0].split('?')[0].replace(/[^/]*$/,'')+'reps.html';}
+function repSignupLink(){return location.href.split('#')[0].split('?')[0].replace(/[^/]*$/,'')+'highlanders.html';}
 function repOrderLink(r){return repSignupLink()+'?r='+encodeURIComponent(r.code||'');}
 function repMonth(repId,k){
   const ev=REPS.events.filter(e=>e.rep_id===repId&&e.status==='settled'&&repYM(e.event_date)===k);
@@ -7028,10 +7082,14 @@ function repMonth(repId,k){
   return{ev,sales,commission};
 }
 function repOwes(e){return e.status==='settled'?r2(Math.max(0,(+e.sales||0)-(+e.commission||0)-(e.money_in!=null?+e.money_in:0))):0;}
+// One event's commission (same rule as the database): paid-ahead orders at the top rate,
+// the rest at the base rate until the event passes the threshold in sales
 function repEstCommission(ev,sales){
   const c=REPS.cfg||{},base=(+c.base_rate||25)/100,top=(+c.top_rate||30)/100,th=+c.threshold||0;
-  const prior=REPS.events.filter(e=>e.rep_id===ev.rep_id&&e.id!==ev.id&&e.status==='settled'&&repYM(e.event_date)===repYM(ev.event_date)&&e.event_date<=ev.event_date).reduce((a,e)=>a+(+e.sales||0),0);
-  const below=Math.max(0,Math.min(sales,th-prior));return r2(below*base+(sales-below)*top);
+  sales=Math.max(0,+sales||0);
+  const pre=Math.min(sales,REPS.preorders.filter(o=>o.event_id===ev.id&&o.paid&&o.status!=='cancelled').reduce((a,o)=>a+(+o.total||0),0));
+  const other=sales-pre,below=Math.max(0,Math.min(other,th-pre));
+  return r2(pre*top+below*base+(other-below)*top);
 }
 function repPreorders(eid){return REPS.preorders.filter(o=>o.event_id===eid&&o.status!=='cancelled');}
 function repPreorderNeeds(list){const need={};list.forEach(o=>(o.items||[]).forEach(i=>{const k=i.product_id||i.name;need[k]=need[k]||{name:i.name,qty:0};need[k].qty+=(+i.qty||0);}));return need;}
@@ -7048,7 +7106,7 @@ async function loadReps(){
     REPS.cfg=cfg[0]||{};REPS.reps=reps;REPS.products=products;REPS.preorders=pre;
     REPS.events=events.map(e=>Object.assign(e,{lines:(e.kf_rep_event_lines||[]).sort((a,b)=>(+b.unit_price)-(+a.unit_price)||String(a.product_name).localeCompare(b.product_name))}));
     REPS.loaded=true;REPS.missing=false;
-  }catch(e){if(tableMissing(e)){REPS.missing=true;}else toast('Reps didn’t load: '+e.message,true);}
+  }catch(e){if(tableMissing(e)){REPS.missing=true;}else toast('Highlanders didn’t load: '+e.message,true);}
   repsBadge();
 }
 async function loadRepInv(){try{REPS.inv=await sbAll('kf_inv_items?active=eq.true&order=name.asc');}catch(e){REPS.inv=[];}}
@@ -7065,7 +7123,7 @@ function repsBadge(){
 }
 async function renderReps(){
   const el=document.getElementById('repsBody');if(!el)return;
-  if(!REPS.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading reps…</div></div>';
+  if(!REPS.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading Highlanders…</div></div>';
   await loadReps();drawReps();
 }
 function drawReps(){
@@ -7075,19 +7133,19 @@ function drawReps(){
   const outBags=REPS.events.filter(e=>e.status==='out'||e.status==='returning').reduce((a,e)=>a+e.lines.reduce((x,l)=>x+(+l.qty_out||0),0),0);
   const owed=r2(REPS.events.reduce((a,e)=>a+repOwes(e),0));
   let h='<div class="bk-summary rp-stats">'
-    +'<div class="bk-stat"><div class="bk-stat-l">Active reps</div><div class="bk-stat-v">'+active+'</div>'+(pending?'<div class="bk-stat-s"><button class="link-btn" onclick="repMode(\'reps\')">'+pending+' waiting to be approved →</button></div>':'')+'</div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Active Highlanders</div><div class="bk-stat-v">'+active+'</div>'+(pending?'<div class="bk-stat-s"><button class="link-btn" onclick="repMode(\'reps\')">'+pending+' waiting to be approved →</button></div>':'')+'</div>'
     +'<div class="bk-stat"><div class="bk-stat-l">Bags out now</div><div class="bk-stat-v">'+outBags+'</div></div>'
-    +'<div class="bk-stat"><div class="bk-stat-l">Reps owe us</div><div class="bk-stat-v" style="color:'+(owed>0?'var(--red)':'var(--green)')+';">'+fmt(owed)+'</div></div>'
-    +'<div class="bk-stat"><div class="bk-stat-l">This month</div><div class="bk-stat-v">'+fmt(REPS.events.filter(e=>e.status==='settled'&&repYM(e.event_date)===repYM(todayISO())).reduce((a,e)=>a+(+e.sales||0),0))+'</div><div class="bk-stat-s">rep sales settled</div></div></div>';
-  h+='<div class="card"><div class="seg">'+[['events','Events'],['reps','Reps'+(pending?' ('+pending+')':'')],['orders','Pre-orders'],['setup','Pasta & pay']].map(([k,l])=>'<button class="'+(REPS.mode===k?'active':'')+'" onclick="repMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
+    +'<div class="bk-stat"><div class="bk-stat-l">Highlanders owe us</div><div class="bk-stat-v" style="color:'+(owed>0?'var(--red)':'var(--green)')+';">'+fmt(owed)+'</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">This month</div><div class="bk-stat-v">'+fmt(REPS.events.filter(e=>e.status==='settled'&&repYM(e.event_date)===repYM(todayISO())).reduce((a,e)=>a+(+e.sales||0),0))+'</div><div class="bk-stat-s">Highlander sales settled</div></div></div>';
+  h+='<div class="card"><div class="seg">'+[['events','Events'],['reps','Highlanders'+(pending?' ('+pending+')':'')],['orders','Pre-orders'],['setup','Pasta & pay']].map(([k,l])=>'<button class="'+(REPS.mode===k?'active':'')+'" onclick="repMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
   h+=({events:repEventsHTML,reps:repRepsHTML,orders:repOrdersHTML,setup:repSetupHTML}[REPS.mode]||repEventsHTML)();
   h+='</div>';
   el.innerHTML=h;
 }
 function repMode(m){REPS.mode=m;drawReps();}
 function repsSetupHTML(){
-  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for Reps</div>'
-    +'<div class="card-sub">The rep program needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once. It also makes sure only the Kilted Farmers team can open these books.</div>'
+  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for Pasta Highlanders</div>'
+    +'<div class="card-sub">The Pasta Highlanders program needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once. It also makes sure only the Kilted Farmers team can open these books.</div>'
     +'<pre>'+esc(REPS_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(REPS_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
     +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
     +'<button class="btn-secondary" onclick="REPS.missing=false;renderReps();">Recheck</button></div></div>';
@@ -7112,10 +7170,10 @@ function repEventsHTML(){
   const settled=by('settled'),owing=settled.filter(e=>repOwes(e)>0);
   let h='';
   const sec=(t,sub,list)=>'<div class="bk-date">'+t+(sub?' <span style="text-transform:none;letter-spacing:0;font-weight:400;">· '+sub+'</span>':'')+'</div>'+list.map(repEventRow).join('');
-  if(!REPS.events.length)return '<div class="bk-empty">No rep events yet. When an approved rep books one, it shows up here so you can get their pasta ready.<br><br>Share the sign-up page: <button class="link-btn" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">copy link</button></div>';
-  if(back.length)h+=sec('Counts to check in','rep sent their count',back);
+  if(!REPS.events.length)return '<div class="bk-empty">No Highlander events yet. When an approved Highlander books one, it shows up here so you can get their pasta ready.<br><br>Share the sign-up page: <button class="link-btn" onclick="copyText(repSignupLink(),\'Highlander sign-up link copied\')">copy link</button></div>';
+  if(back.length)h+=sec('Counts to check in','Highlander sent their count',back);
   if(ready.length)h+=sec('Get pasta ready','hand it over at pickup',ready);
-  if(out.length)h+=sec('Out with reps','',out);
+  if(out.length)h+=sec('Out with Highlanders','',out);
   if(owing.length)h+=sec('Settled, money still owed','',owing);
   const done=settled.filter(e=>repOwes(e)<=0);
   if(done.length){h+=sec('Settled','',REPS.showAllSettled?done:done.slice(0,10));if(done.length>10&&!REPS.showAllSettled)h+='<div class="bk-foot"><button class="link-btn" onclick="REPS.showAllSettled=true;drawReps()">Show all '+done.length+'</button></div>';}
@@ -7159,7 +7217,7 @@ function repHandoverHTML(e){
   const left=REPS.products.filter(p=>p.active&&!e.lines.some(l=>l.product_id===p.id));
   if(left.length)h+='<div class="rp-add"><select id="rpAddProd" class="period-select"><option value="">+ Add another pasta…</option>'+left.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select><input id="rpAddQty" class="period-input rp-num" type="number" inputmode="numeric" min="1" placeholder="How many"><button class="btn-secondary" onclick="repAddLine()">Add</button></div>';
   h+='<div class="rp-total" id="rpHandTotal"></div>'
-    +'<label class="rp-lbl">Note to the rep (they’ll see it)</label><input id="rpTeamNote" class="period-input" style="width:100%;" value="'+esc(e.team_note||'')+'" placeholder="Optional">'
+    +'<label class="rp-lbl">Note to the Highlander (they’ll see it)</label><input id="rpTeamNote" class="period-input" style="width:100%;" value="'+esc(e.team_note||'')+'" placeholder="Optional">'
     +'<div class="bk-actions"><button class="btn-green" onclick="repHandOver()">Hand it over</button><button class="btn-secondary" onclick="repSaveRequested()">Save for later</button><button class="btn-secondary danger" onclick="repCancelEvent()">Cancel event</button></div>'
     +'<div class="bk-sub" style="margin-top:8px;">Handing over takes these bags out of Inventory for any pasta linked to an inventory item.</div>';
   return h;
@@ -7216,16 +7274,16 @@ async function repCancelEvent(){
 
 function repSettleHTML(e){
   const reported=e.status==='returning';
-  let h='<div class="rp-h">What came back</div><div class="bk-sub" style="margin-bottom:6px;">'+(reported?'Filled in with the rep’s count. Check it against what they dropped off.':'The rep hasn’t sent a count yet. Enter what came back.')+'</div>';
-  h+='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">took '+l.qty_out+' · '+fmt(l.unit_price)+(reported&&l.qty_back_reported!=null?' · rep says '+l.qty_back_reported+' back':'')+'</div></div>'
+  let h='<div class="rp-h">What came back</div><div class="bk-sub" style="margin-bottom:6px;">'+(reported?'Filled in with the Highlander’s count. Check it against what they dropped off.':'The Highlander hasn’t sent a count yet. Enter what came back.')+'</div>';
+  h+='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">took '+l.qty_out+' · '+fmt(l.unit_price)+(reported&&l.qty_back_reported!=null?' · Highlander says '+l.qty_back_reported+' back':'')+'</div></div>'
     +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" max="'+l.qty_out+'" data-id="'+l.id+'" value="'+(l.qty_back_reported!=null?l.qty_back_reported:0)+'" oninput="repSettleCalc()"></div>').join('')+'</div>';
   h+='<div class="rp-total" id="rpSetTotal"></div>'
-    +'<div class="rp-h">Money from the rep</div>'
+    +'<div class="rp-h">Money from the Highlander</div>'
     +'<div class="rp-money"><div><label class="rp-lbl">Received</label><input id="rpMoney" class="period-input" type="number" inputmode="decimal" step="0.01" min="0"></div>'
     +'<div><label class="rp-lbl">How</label><select id="rpMethod" class="period-select">'+['Cash','Check','Venmo','Zelle','Card','Not yet'].map(m=>'<option>'+m+'</option>').join('')+'</select></div>'
     +'<div><label class="rp-lbl">Date</label><input id="rpMoneyDate" class="period-input" type="date" value="'+todayISO()+'"></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="repSettle()">Settle up</button><button class="btn-secondary" onclick="repSettleAllBack()">Everything came back</button></div>'
-    +'<div class="bk-sub" style="margin-top:8px;">Settling adds the sales to your revenue and the rep’s commission to expenses for the week of the event, and puts unsold bags back in Inventory.</div>';
+    +'<div class="bk-sub" style="margin-top:8px;">Settling adds the sales to your revenue and the Highlander’s commission to expenses for the week of the event, and puts unsold bags back in Inventory.</div>';
   return h;
 }
 function repSettleValues(){
@@ -7241,13 +7299,13 @@ function repSettleCalc(){
 function repSettleAllBack(){document.querySelectorAll('#repMBody .rp-num').forEach(i=>{i.value=i.max;});const m=document.getElementById('rpMoney');if(m)delete m.dataset.touched;repSettleCalc();}
 async function repBookRevenue(e,r,sales){
   const label=getWeekLabel(parseISO(e.event_date));
-  const full={amount:sales,source:'Rep Sales',reported_by:currentProfile&&currentProfile.name||'',notes:'Rep: '+r.name+' · '+e.name,period_label:label,txn_date:e.event_date,payment_method:'Cash',payee:r.name};
+  const full={amount:sales,source:'Highlander Sales',reported_by:currentProfile&&currentProfile.name||'',notes:'Highlander: '+r.name+' · '+e.name,period_label:label,txn_date:e.event_date,payment_method:'Cash',payee:r.name};
   try{return (await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(full)}))[0];}
   catch(x){if(!/column/i.test(x.message))throw x;const {txn_date,payment_method,payee,...min}=full;return (await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(min)}))[0];}
 }
 async function repBookCommission(e,r,amount){
   const label=getWeekLabel(parseISO(e.event_date)),pid=await getOrCreatePeriodId(label);
-  const full={period_id:pid,name:'Rep commission · '+r.name,amount,category:'Rep Commissions',vendor:r.name,txn_date:e.event_date,payment_method:'Kept from sales',receipt_url:'',notes:e.name};
+  const full={period_id:pid,name:'Highlander commission · '+r.name,amount,category:'Highlander Commissions',vendor:r.name,txn_date:e.event_date,payment_method:'Kept from sales',receipt_url:'',notes:e.name};
   try{return (await sb('kf_expenses',{method:'POST',body:JSON.stringify(full)}))[0];}
   catch(x){if(!/column/i.test(x.message))throw x;return (await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:pid,name:full.name,amount,receipt_url:''})}))[0];}
 }
@@ -7324,16 +7382,15 @@ function repRepsHTML(){
   const order={pending:0,active:1,paused:2,declined:3};
   const list=REPS.reps.filter(r=>REPS.showDeclined||r.status!=='declined').sort((a,b)=>order[a.status]-order[b.status]||String(a.name).localeCompare(b.name));
   const k=repYM(todayISO()),yr=k.slice(0,4),c=REPS.cfg;
-  let h='<div class="bk-actions" style="margin-top:0;margin-bottom:6px;"><button class="btn-secondary" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">Copy rep sign-up link</button></div>';
-  if(!list.length)h+='<div class="bk-empty">No reps yet. Send people the sign-up link. Applications land here for you to approve.</div>';
+  let h='<div class="bk-actions" style="margin-top:0;margin-bottom:6px;"><button class="btn-secondary" onclick="copyText(repSignupLink(),\'Highlander sign-up link copied\')">Copy Highlander sign-up link</button></div>';
+  if(!list.length)h+='<div class="bk-empty">No Highlanders yet. Send people the sign-up link. Applications land here for you to approve.</div>';
   let last=null;
   list.forEach(r=>{
     if(r.status!==last){last=r.status;h+='<div class="bk-date">'+({pending:'Waiting for approval',active:'Active',paused:'Paused',declined:'Declined'}[r.status])+'</div>';}
     const m=repMonth(r.id,k),owes=r2(REPS.events.filter(e=>e.rep_id===r.id).reduce((a,e)=>a+repOwes(e),0));
     const ytd=r2(REPS.events.filter(e=>e.rep_id===r.id&&e.status==='settled'&&String(e.event_date).slice(0,4)===yr).reduce((a,e)=>a+(+e.commission||0),0));
-    const rate=m.sales>=(+c.threshold||0)&&m.sales>0?c.top_rate:c.base_rate;
     h+='<div class="rp-rep"><div class="rp-rep-top"><div><b>'+esc(r.name)+'</b><div class="bk-sub">'+[r.city,r.phone?'<a href="tel:'+esc(String(r.phone).replace(/[^\d+]/g,''))+'">'+esc(r.phone)+'</a>':'',r.email?'<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>':''].filter(Boolean).join(' · ')+'</div></div>';
-    if(r.status==='active')h+='<div style="text-align:right;"><div class="bk-amt in">'+fmt(m.sales)+'</div><div class="bk-sub">this month · '+rate+'%</div></div>';
+    if(r.status==='active')h+='<div style="text-align:right;"><div class="bk-amt in">'+fmt(m.sales)+'</div><div class="bk-sub">sold this month · '+fmt(m.commission)+' earned</div></div>';
     h+='</div>';
     if(r.status==='pending'||r.status==='declined')h+=(r.about?'<div class="rp-note">“'+esc(r.about)+'”</div>':'')+'<div class="bk-sub">Applied '+esc(prettyDate(String(r.applied_at||'').slice(0,10)))+'</div>';
     if(r.status==='active')h+='<div class="bk-sub">'+fmt(ytd)+' commission so far in '+yr+(owes>0?' · <span style="color:var(--red);font-weight:700;">owes '+fmt(owes)+'</span>':'')+' · order link <button class="link-btn" onclick="copyText(\''+esc(repOrderLink(r))+'\',\'Order link copied\')">copy</button></div>';
@@ -7361,20 +7418,20 @@ async function repSetStatus(id,st){
 
 // ─── pre-orders ───
 function repOrderRow(o){
-  const how=o.fulfillment==='delivery'?' · deliver to '+esc(o.address||'?'):o.fulfillment==='pickup'?' · picks up from rep':'';
+  const how=o.fulfillment==='delivery'?' · deliver to '+esc(o.address||'?'):o.fulfillment==='pickup'?' · picks up from Highlander':'';
   const paid=o.paid?' <span class="rp-chip green">Paid'+(o.paid_method?' · '+esc(o.paid_method):'')+'</span>':o.paid_claim?' <span class="rp-chip tan">Says paid · '+esc(o.paid_claim)+'</span>':'';
   return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+paid+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';
 }
 function repOrdersHTML(){
   const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&(e.event_date>=now||e.kind==='direct')&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));
   const open=REPS.preorders.filter(o=>!o.event_id&&o.fulfillment&&o.fulfillment!=='event'&&(o.status==='new'||o.status==='confirmed'));
-  if(!evs.length&&!open.length)return '<div class="bk-empty">No open orders. Reps share their own order link, and orders show up here and with the rep.</div>';
+  if(!evs.length&&!open.length)return '<div class="bk-empty">No open orders. Highlanders share their own order link, and orders show up here and with the Highlander.</div>';
   const all=repPreorderNeeds(evs.flatMap(e=>repPreorders(e.id)).concat(open));
-  let h='<div class="rp-pre" style="margin-top:0;"><b>Reserved across reps right now:</b> '+Object.values(all).map(n=>n.qty+' '+esc(n.name)).join(', ')+'</div>';
+  let h='<div class="rp-pre" style="margin-top:0;"><b>Reserved across Highlanders right now:</b> '+Object.values(all).map(n=>n.qty+' '+esc(n.name)).join(', ')+'</div>';
   if(open.length){
     const byRep={};open.forEach(o=>{(byRep[o.rep_id]=byRep[o.rep_id]||[]).push(o);});
     Object.entries(byRep).forEach(([rid,list])=>{
-      h+='<div class="bk-date">Direct orders · '+esc(repById(rid).name)+' <span style="text-transform:none;letter-spacing:0;font-weight:400;">· the rep hasn’t asked for this pasta yet</span></div>'+list.map(repOrderRow).join('');
+      h+='<div class="bk-date">Direct orders · '+esc(repById(rid).name)+' <span style="text-transform:none;letter-spacing:0;font-weight:400;">· the Highlander hasn’t asked for this pasta yet</span></div>'+list.map(repOrderRow).join('');
     });
   }
   evs.forEach(e=>{
@@ -7389,8 +7446,8 @@ function repOrdersHTML(){
 // ─── pasta & pay settings ───
 function repSetupHTML(){
   const c=REPS.cfg,stew=isStewardUser();
-  let h='<div class="rp-h" style="margin-top:4px;">Pasta reps can take</div>';
-  if(!REPS.products.length)h+='<div class="bk-empty">Add the pasta reps can take to events. Link each one to an Inventory item so stock goes out and comes back automatically.</div>';
+  let h='<div class="rp-h" style="margin-top:4px;">Pasta Highlanders can take</div>';
+  if(!REPS.products.length)h+='<div class="bk-empty">Add the pasta Highlanders can take to events. Link each one to an Inventory item so stock goes out and comes back automatically.</div>';
   let last=null;
   REPS.products.forEach(p=>{
     if(p.line!==last){last=p.line;h+='<div class="bk-date">'+esc(repLineName(p.line))+' · '+fmt(repPrice(p.line,'local'))+' local · '+fmt(repPrice(p.line,'far'))+' farther out</div>';}
@@ -7399,12 +7456,12 @@ function repSetupHTML(){
   h+='<div class="bk-actions"><button class="btn-green" onclick="openRepProduct()">+ Add a pasta</button></div>';
   h+='<div class="rp-h">Commission and prices</div>'+(stew?'':'<div class="bk-sub">Only Stewards can change these.</div>');
   const f=(k,l,v,step)=>'<div><label class="rp-lbl">'+l+'</label><input id="rpc_'+k+'" class="period-input" type="number" inputmode="decimal" step="'+(step||'1')+'" min="0" value="'+esc(v)+'"'+(stew?'':' disabled')+'></div>';
-  h+='<div class="rp-grid">'+f('base_rate','Base commission %',c.base_rate)+f('top_rate','Top commission %',c.top_rate)+f('threshold','Top rate starts past ($/month)',c.threshold)
+  h+='<div class="rp-grid">'+f('base_rate','Base commission %',c.base_rate)+f('top_rate','Top commission %',c.top_rate)+f('threshold','Top rate past ($ per event)',c.threshold)
     +REP_LINE_KEYS.map(k=>f('price_'+k,repLineName(k)+' price ($)',(c.prices||{})[k],'0.01')).join('')
     +f('far_add','Farther out adds ($/bag)',c.far_add,'0.01')+f('local_miles','“Local” means within (miles)',c.local_miles)+'</div>';
-  h+='<div class="bk-sub" style="margin-top:6px;">Reps keep the base rate on a month’s sales up to the line, and the top rate on everything above it. Changes apply to events settled from now on.</div>';
+  h+='<div class="bk-sub" style="margin-top:6px;">Highlanders keep the base rate on each event’s sales up to the line, and the top rate on everything above it. Orders customers paid ahead always earn the top rate. Each event (or kitchen pickup of direct orders) counts on its own. Changes apply to events settled from now on.</div>';
   if(stew)h+='<div class="bk-actions"><button class="btn-green" onclick="repSaveCfg()">Save commission and prices</button></div>';
-  h+='<div class="rp-h">Sign-up page</div><div class="bk-sub">Send this to anyone who wants to be a rep: <b>'+esc(repSignupLink())+'</b> <button class="link-btn" onclick="copyText(repSignupLink(),\'Rep sign-up link copied\')">copy</button></div>';
+  h+='<div class="rp-h">Sign-up page</div><div class="bk-sub">Send this to anyone who wants to be a Highlander: <b>'+esc(repSignupLink())+'</b> <button class="link-btn" onclick="copyText(repSignupLink(),\'Highlander sign-up link copied\')">copy</button></div>';
   return h;
 }
 async function repSaveCfg(){
@@ -7430,7 +7487,7 @@ async function openRepProduct(id){
     +'<label class="rp-lbl">Recipes &amp; details link</label><input id="rppInfo" class="period-input" style="width:100%;" value="'+esc(p&&p.info_url||'')+'" placeholder="https://… the product page on your Square site">'
     +'<label class="rp-lbl">Inventory item</label><select id="rppInv" class="period-select" style="width:100%;"><option value="">Not linked</option>'+REPS.inv.map(i=>'<option value="'+i.id+'"'+(p&&p.inv_item_id===i.id?' selected':'')+'>'+esc(i.name)+' ('+(+i.on_hand||0)+' on hand)</option>').join('')+'</select>'
     +'<div class="rp-grid" style="margin-top:4px;"><div><label class="rp-lbl">Sort order</label><input id="rppSort" class="period-input" type="number" value="'+(p?+p.sort_order||0:REPS.products.length)+'"></div>'
-    +'<div><label class="rp-lbl">Reps can take it</label><select id="rppActive" class="period-select"><option value="1"'+(!p||p.active?' selected':'')+'>Yes</option><option value="0"'+(p&&!p.active?' selected':'')+'>Hidden</option></select></div></div>'
+    +'<div><label class="rp-lbl">Highlanders can take it</label><select id="rppActive" class="period-select"><option value="1"'+(!p||p.active?' selected':'')+'>Yes</option><option value="0"'+(p&&!p.active?' selected':'')+'>Hidden</option></select></div></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="repSaveProduct()">Save</button>'+(p?'<button class="btn-secondary danger" onclick="repDeleteProduct()">Delete</button>':'')+'</div>';
   m.classList.add('open');
 }
@@ -7442,7 +7499,7 @@ async function repSaveProduct(){
     closeRepModal();toast('Saved');await loadReps();drawReps();}catch(x){toast(x.message,true);}
 }
 async function repDeleteProduct(){
-  const p=REPS.editProd;if(!p||!confirm('Delete '+p.name+'? Past events keep its name. To stop reps taking it but keep it on file, set it to Hidden instead.'))return;
+  const p=REPS.editProd;if(!p||!confirm('Delete '+p.name+'? Past events keep its name. To stop Highlanders taking it but keep it on file, set it to Hidden instead.'))return;
   try{await sb('kf_rep_products?id=eq.'+p.id,{method:'DELETE'});closeRepModal();toast('Deleted');await loadReps();drawReps();}catch(x){toast(x.message,true);}
 }
 
@@ -7456,19 +7513,19 @@ async function repSetW9(id,on,quiet){
     try{const w9=Object.assign({},acct().w9||{});if(on)w9[r.name]=true;else delete w9[r.name];await saveAcct({w9},true);}catch(e){console.warn('w9 books flag',e);}
     if(!quiet){toast(on?'W-9 on file for '+r.name:'W-9 unmarked for '+r.name);drawReps();}
     return true;
-  }catch(x){toast(/w9_/.test(x.message)?'Run the updated rep SQL once (it adds W-9 tracking), then try again':x.message,true);return false;}
+  }catch(x){toast(/w9_/.test(x.message)?'Run the updated Highlanders SQL once (it adds W-9 tracking), then try again':x.message,true);return false;}
 }
 // Commission each rep kept in a year, straight from the books (category "Rep Commissions")
 function repPayouts(y){
   const by={};
-  (BOOKS.rows||[]).forEach(r=>{if(r.dir!=='out'||r.category!=='Rep Commissions'||String(r.date).slice(0,4)!==String(y))return;const k=r.payee||'Unnamed rep';const o=by[k]||(by[k]={name:k,total:0,events:0});o.total+=r.amount;o.events++;});
+  (BOOKS.rows||[]).forEach(r=>{if(r.dir!=='out'||(r.category!=='Highlander Commissions'&&r.category!=='Rep Commissions')||String(r.date).slice(0,4)!==String(y))return;const k=r.payee||'Unnamed Highlander';const o=by[k]||(by[k]={name:k,total:0,events:0});o.total+=r.amount;o.events++;});
   return Object.values(by).map(o=>Object.assign(o,{total:r2(o.total)})).sort((a,b)=>b.total-a.total);
 }
 function repTaxCardHTML(y,a,setupOk){
   const list=repPayouts(y);if(!list.length)return '';
   const th=threshold1099(y),w9=a.w9||{};
-  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Pasta reps &amp; 1099s</div>'
-    +'<div class="card-sub">Reps are independent contractors. The commission they keep from sales is what goes in <b>box 1 of a 1099-NEC</b>. Anyone who kept <b>'+fmt(th).replace('.00','')+' or more</b> in '+y+' gets one by January 31 (the next business day if that’s a weekend), and a copy goes to the IRS. You can file free through the IRS’s IRIS portal or with a filing service. Keep each W-9 on paper or in that software, not here.</div>';
+  let h='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Pasta Highlanders &amp; 1099s</div>'
+    +'<div class="card-sub">Highlanders are independent contractors. The commission they keep from sales is what goes in <b>box 1 of a 1099-NEC</b>. Anyone who kept <b>'+fmt(th).replace('.00','')+' or more</b> in '+y+' gets one by January 31 (the next business day if that’s a weekend), and a copy goes to the IRS. You can file free through the IRS’s IRIS portal or with a filing service. Keep each W-9 on paper or in that software, not here.</div>';
   REPS.taxNames=list.map(p=>p.name);
   list.forEach((p,i)=>{
     const need=p.total>=th;
@@ -7492,19 +7549,19 @@ async function repW9FromTaxes(i,on){
 async function repTaxCSV(y){
   let reps=[];try{reps=await sbAll('kf_reps?select=name,email,phone,city,w9_on_file');}catch(e){try{reps=await sbAll('kf_reps?select=name,email,phone,city');}catch(x){}}
   const th=threshold1099(y),w9=acct().w9||{};
-  const rows=[['Rep','Email','Phone','Town','Events','Commission kept in '+y+' (1099-NEC box 1)','1099-NEC needed','W-9 on file']];
+  const rows=[['Highlander','Email','Phone','Town','Events','Commission kept in '+y+' (1099-NEC box 1)','1099-NEC needed','W-9 on file']];
   repPayouts(y).forEach(p=>{const r=reps.find(x=>x.name===p.name)||{};rows.push([p.name,r.email||'',r.phone||'',r.city||'',p.events,p.total.toFixed(2),p.total>=th?'Yes':'No',(r.w9_on_file||w9[p.name])?'Yes':'No']);});
-  downloadCSV(fileSlug()+'-rep-1099s-'+y+'.csv',rows);
+  downloadCSV(fileSlug()+'-highlander-1099s-'+y+'.csv',rows);
 }
 function repTaxPrintHTML(y,tbl){
   const list=repPayouts(y);if(!list.length)return '';
   const th=threshold1099(y),w9=acct().w9||{};
-  return '<h2>Pasta reps (1099-NEC, box 1: commission kept)</h2>'+tbl(['Rep','Events','1099-NEC (≥'+fmt(th).replace('.00','')+')','W-9','Commission'],list.map(p=>[esc(p.name),String(p.events),p.total>=th?'Yes':'No',w9[p.name]?'On file':'<b>Needed</b>',fmt(p.total)]))
-    +'<p class="muted">Already in the worksheet as “Commissions paid to pasta reps” (Schedule C line 10).</p>';
+  return '<h2>Pasta Highlanders (1099-NEC, box 1: commission kept)</h2>'+tbl(['Highlander','Events','1099-NEC (≥'+fmt(th).replace('.00','')+')','W-9','Commission'],list.map(p=>[esc(p.name),String(p.events),p.total>=th?'Yes':'No',w9[p.name]?'On file':'<b>Needed</b>',fmt(p.total)]))
+    +'<p class="muted">Already in the worksheet as “Commissions paid to Pasta Highlanders” (Schedule C line 10).</p>';
 }
 
 const REPS_SQL=`-- ═══════════════════════════════════════════════════════════════════
--- THE KILTED FARMERS — PASTA REP PROGRAM
+-- THE KILTED FARMERS — PASTA HIGHLANDERS
 -- Paste into the Supabase SQL Editor and hit Run. Safe to run more than once.
 --
 -- Part 1 locks every Kilted Farmers table to the Kilted Farmers team.
@@ -7536,6 +7593,7 @@ begin
     where schemaname = 'public' and tablename like 'kf\\_%'
       and tablename not in ('kf_user_profiles', 'kf_onboarding')
       and tablename not like 'kf\\_rep%'
+      and tablename not like 'kf\\_training%'
   loop
     execute format('alter table %I enable row level security', t);
     for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
@@ -7769,42 +7827,48 @@ end $$;
 drop trigger if exists kf_reps_code on kf_reps;
 create trigger kf_reps_code before insert on kf_reps for each row execute function kf_rep_make_code();
 
--- Commission: base rate on a month's sales up to the threshold, top rate on everything above it.
--- Events count in date order, so each event's commission is exact and the month adds up.
-create or replace function kf_rep_recalc(p_rep uuid, p_month date) returns void
+-- Commission, figured per event (or per kitchen pickup of direct orders):
+--   * orders the customer paid ahead always earn the top rate
+--   * the rest earns the base rate until the event reaches the threshold in sales, then the top rate
+--   (paid-ahead sales count toward reaching the threshold first, so paying ahead never lowers a rep's pay)
+create or replace function kf_rep_recalc_event(p_event uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   cfg jsonb := kf_rep_cfg();
   base numeric := coalesce((cfg->>'base_rate')::numeric, 25) / 100;
   top numeric := coalesce((cfg->>'top_rate')::numeric, 30) / 100;
   th numeric := coalesce((cfg->>'threshold')::numeric, 500);
-  cum numeric := 0; e record; below numeric; above numeric;
+  ev kf_rep_events; prepaid numeric; other numeric; below numeric;
+begin
+  select * into ev from kf_rep_events where id = p_event;
+  if ev.id is null then return; end if;
+  if ev.status <> 'settled' then
+    if ev.commission is not null then update kf_rep_events set commission = null where id = ev.id; end if;
+    return;
+  end if;
+  select coalesce(sum(total), 0) into prepaid from kf_rep_preorders where event_id = ev.id and paid and status <> 'cancelled';
+  prepaid := least(greatest(coalesce(ev.sales, 0), 0), prepaid);
+  other := greatest(coalesce(ev.sales, 0), 0) - prepaid;
+  below := greatest(0, least(other, th - prepaid));
+  update kf_rep_events set commission = round(prepaid * top + below * base + (other - below) * top, 2) where id = ev.id;
+end $$;
+
+-- Kept for older callers: recalculates every event a rep has in a month
+create or replace function kf_rep_recalc(p_rep uuid, p_month date) returns void
+language plpgsql security definer set search_path = public as $$
+declare e record;
 begin
   if p_rep is null or p_month is null then return; end if;
-  for e in
-    select id, coalesce(sales, 0) s from kf_rep_events
-    where rep_id = p_rep and status = 'settled'
-      and date_trunc('month', event_date) = date_trunc('month', p_month)
-    order by event_date, settled_at nulls last, created_at, id
-  loop
-    below := greatest(0, least(e.s, th - cum));
-    above := e.s - below;
-    update kf_rep_events set commission = round(below * base + above * top, 2) where id = e.id;
-    cum := cum + e.s;
+  for e in select id from kf_rep_events where rep_id = p_rep
+      and date_trunc('month', event_date) = date_trunc('month', p_month) loop
+    perform kf_rep_recalc_event(e.id);
   end loop;
-  update kf_rep_events set commission = null
-  where rep_id = p_rep and status <> 'settled' and commission is not null
-    and date_trunc('month', event_date) = date_trunc('month', p_month);
 end $$;
 
 create or replace function kf_rep_events_recalc() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if tg_op in ('UPDATE', 'DELETE') then perform kf_rep_recalc(old.rep_id, old.event_date); end if;
-  if tg_op in ('INSERT', 'UPDATE') and (tg_op = 'INSERT' or old.rep_id is distinct from new.rep_id
-      or date_trunc('month', old.event_date) is distinct from date_trunc('month', new.event_date)) then
-    perform kf_rep_recalc(new.rep_id, new.event_date);
-  end if;
+  if tg_op in ('INSERT', 'UPDATE') then perform kf_rep_recalc_event(new.id); end if;
   return null;
 end $$;
 drop trigger if exists kf_rep_events_commission on kf_rep_events;
@@ -7812,6 +7876,20 @@ create trigger kf_rep_events_commission after insert or delete or update of stat
   on kf_rep_events for each row execute function kf_rep_events_recalc();
 
 revoke execute on function kf_rep_recalc(uuid, date) from public, anon, authenticated;
+revoke execute on function kf_rep_recalc_event(uuid) from public, anon, authenticated;
+
+-- Marking an order paid (or moving it) after its event settled updates that event's commission
+create or replace function kf_rep_preorders_recalc() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') and old.event_id is not null then perform kf_rep_recalc_event(old.event_id); end if;
+  if tg_op in ('INSERT', 'UPDATE') and new.event_id is not null and new.event_id is distinct from old.event_id then perform kf_rep_recalc_event(new.event_id); end if;
+  return null;
+end $$;
+drop trigger if exists kf_rep_preorders_commission on kf_rep_preorders;
+create trigger kf_rep_preorders_commission after insert or delete or update of paid, status, total, event_id
+  on kf_rep_preorders for each row execute function kf_rep_preorders_recalc();
+revoke execute on function kf_rep_preorders_recalc() from public, anon, authenticated;
 revoke execute on function kf_rep_events_recalc() from public, anon, authenticated;
 revoke execute on function kf_rep_make_code() from public, anon, authenticated;
 
@@ -7850,7 +7928,7 @@ declare
   d date := nullif(p_event->>'event_date', '')::date; l jsonb; pr kf_rep_products; q int; total_q int := 0;
 begin
   select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
-  if rid is null then raise exception 'Your rep account isn''t active yet'; end if;
+  if rid is null then raise exception 'Your Highlander account isn''t active yet'; end if;
   if coalesce(trim(p_event->>'name'), '') = '' then raise exception 'Give the event a name'; end if;
   if d is null then raise exception 'Pick the event date'; end if;
   if d < current_date - 1 then raise exception 'That date has already passed'; end if;
@@ -7968,7 +8046,7 @@ begin
     if ev.id is null then raise exception 'Pick an upcoming event'; end if;
     z := ev.zone;
   else
-    if not r.direct_orders then raise exception 'This rep is only taking orders for events right now'; end if;
+    if not r.direct_orders then raise exception 'This Highlander is only taking orders for events right now'; end if;
     if f = 'delivery' and coalesce(trim(p_address), '') = '' then raise exception 'Tell us where to bring it'; end if;
   end if;
   if coalesce(trim(p_name), '') = '' then raise exception 'Enter your name'; end if;
@@ -8032,7 +8110,7 @@ begin
   end if;
   update kf_reps set venmo = left(v, 40), cashapp = left(c, 40), paypal = left(pp, 60), require_prepay = coalesce(p_require, false)
   where user_id = auth.uid() returning * into r;
-  if r.id is null then raise exception 'No rep account found'; end if;
+  if r.id is null then raise exception 'No Highlander account found'; end if;
   return r;
 end $$;
 
@@ -8041,7 +8119,7 @@ create or replace function kf_rep_set_direct(p_on boolean) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   update kf_reps set direct_orders = coalesce(p_on, true) where user_id = auth.uid();
-  if not found then raise exception 'No rep account found'; end if;
+  if not found then raise exception 'No Highlander account found'; end if;
 end $$;
 
 -- Rep: ask the kitchen for the pasta to fill a group of direct orders. Works like booking an event.
@@ -8050,7 +8128,7 @@ language plpgsql security definer set search_path = public as $$
 declare rid uuid; eid uuid; cfg jsonb := kf_rep_cfg(); o record; cnt int;
 begin
   select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
-  if rid is null then raise exception 'Your rep account isn''t active'; end if;
+  if rid is null then raise exception 'Your Highlander account isn''t active'; end if;
   if p_date is null or p_date < current_date then raise exception 'Pick the day you''ll pick up from the kitchen'; end if;
   select count(*) into cnt from kf_rep_preorders po where id = any(p_order_ids) and rep_id = rid and event_id is null
     and fulfillment <> 'event' and status in ('new', 'confirmed')
@@ -8094,6 +8172,523 @@ notify pgrst, 'reload schema';
 select p.name as team_member, p.role, u.email
 from kf_user_profiles p left join auth.users u on u.id = p.id
 order by p.name;
+`;
+
+const TR_CFG={docs:'kf_training_docs',acks:'kf_training_acks',bucket:'kf-training',biz:false};
+// ─── Training: SOPs, how-tos and training the team reads and signs off on ───
+// Shared by the Kilted Farmers hub and the Operations Hub; TR_CFG says which tables and storage to use.
+const TR={loaded:false,missing:false,key:null,docs:[],acks:[],q:'',cat:'',editing:null,open:null,upload:null};
+const TR_MAX_MB=25;
+function trBiz(){return TR_CFG.biz?(typeof BIZ!=='undefined'&&BIZ.id)||null:null;}
+function trScope(){return TR_CFG.biz?'business_id=eq.'+trBiz()+'&':'';}
+function trDemo(){return typeof isDemo==='function'&&isDemo();}
+function trSteward(){try{return isStewardUser();}catch(e){return false;}}
+function trMyId(){return (typeof currentUser!=='undefined'&&currentUser&&currentUser.id)||null;}
+function trMyName(){return (typeof currentProfile!=='undefined'&&currentProfile&&currentProfile.name)||'';}
+function trFirst(n){return normName(n).split(' ')[0]||'';}
+function trSameName(a,b){a=normName(a);b=normName(b);if(!a||!b)return false;return a===b||a.split(' ')[0]===b.split(' ')[0]&&(a.indexOf(' ')<0||b.indexOf(' ')<0);}
+function trMyAck(d){const me=trMyId();return TR.acks.find(a=>a.doc_id===d.id&&(me&&a.user_id===me));}
+function trIsDone(d){const a=trMyAck(d);return !!a&&(+a.version||1)>=(+d.version||1);}
+function trTodo(){return TR.docs.filter(d=>d.active&&d.required&&!trIsDone(d));}
+// The people who should read things: the active team list (people without a login yet still show up)
+function trRoster(){
+  const list=(typeof members!=='undefined'&&Array.isArray(members)?members:[]).filter(m=>m&&m.name&&String(m.name).trim());
+  const seen=new Set();return list.filter(m=>{const k=normName(m.name);if(seen.has(k))return false;seen.add(k);return true;});
+}
+function trAckFor(d,person){
+  return TR.acks.find(a=>a.doc_id===d.id&&((person.user_id&&a.user_id===person.user_id)||trSameName(a.name,person.name)));
+}
+function trProgress(d){
+  const r=trRoster();let done=0;r.forEach(p=>{const a=trAckFor(d,p);if(a&&(+a.version||1)>=(+d.version||1))done++;});
+  return{done,total:r.length};
+}
+function trCats(){return [...new Set(TR.docs.map(d=>d.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b));}
+function trIcon(d){
+  if(d.kind==='link')return '🔗';if(d.kind==='text')return '📝';
+  const t=String(d.file_type||'')+' '+String(d.file_name||'');
+  if(/pdf/i.test(t))return '📄';if(/image|\.(png|jpe?g|gif|heic|webp)$/i.test(t))return '🖼️';if(/video|\.(mp4|mov)$/i.test(t))return '🎬';
+  if(/sheet|excel|\.xlsx?$|\.csv$/i.test(t))return '📊';if(/presentation|powerpoint|\.pptx?$/i.test(t))return '📽️';return '📎';
+}
+
+async function loadTraining(force){
+  const key=TR_CFG.biz?trBiz():'kf';
+  if(TR.loaded&&!force&&TR.key===key)return;
+  if(TR_CFG.biz&&!key){TR.docs=[];TR.acks=[];return;}
+  try{
+    const [docs,acks]=await Promise.all([
+      sbAll(TR_CFG.docs+'?'+trScope()+'order=sort_order.asc,category.asc.nullsfirst,title.asc'),
+      sbAll(TR_CFG.acks+'?'+trScope()+'select=*')
+    ]);
+    TR.docs=docs;TR.acks=acks;TR.loaded=true;TR.missing=false;TR.key=key;
+  }catch(e){if(tableMissing(e)){TR.missing=true;TR.docs=[];TR.acks=[];}else throw e;}
+  trBadge();
+}
+async function trainingBadgeLoad(){try{await loadTraining(true);}catch(e){}}
+function trBadge(){
+  const el=document.getElementById('trainBadge');if(!el)return;
+  const n=TR.missing?0:trTodo().length;el.textContent=n||'';el.style.display=n?'inline-block':'none';
+}
+async function renderTraining(){
+  const el=document.getElementById('trainBody');if(!el)return;
+  if(!TR.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading training…</div></div>';
+  try{await loadTraining(true);}catch(e){el.innerHTML='<div class="card"><div class="bk-empty">Training didn’t load: '+esc(e.message)+'</div></div>';return;}
+  drawTraining();
+}
+function drawTraining(){
+  const el=document.getElementById('trainBody');if(!el)return;
+  if(TR.missing){el.innerHTML=trSetupHTML();return;}
+  const st=trSteward(),todo=trTodo(),all=TR.docs.filter(d=>st||d.active);
+  let h='';
+  // what I still need to read
+  const req=TR.docs.filter(d=>d.active&&d.required);
+  h+='<div class="card"><div class="tr-top"><div style="flex:1;min-width:200px;"><div class="card-title"><div class="card-title-dot"></div>Training &amp; how-tos</div>'
+    +'<div class="card-sub" style="margin-bottom:0;">'+(st?'Upload your SOPs, recipes, checklists and training. The team reads them here and signs off, and you can see who’s caught up.':'How we do things here. Read each one and tap <b>I’ve read this</b> when you’re done.')+'</div></div>'
+    +(st?'<button class="btn-green" onclick="trEdit()">+ Add training</button>':'')+'</div>';
+  if(req.length){
+    const done=req.length-todo.length;
+    h+='<div class="tr-mine"><div class="tr-meter'+(todo.length?'':' done')+'"><i style="width:'+Math.round(done/req.length*100)+'%"></i></div>'
+      +'<div class="bk-sub">'+(todo.length?'You’ve signed off on <b>'+done+' of '+req.length+'</b>. '+todo.length+' to go.':'You’re all caught up. Nice work.')+'</div></div>';
+  }
+  h+='</div>';
+  if(todo.length)h+='<div class="card"><div class="tr-h">For you to read</div>'+todo.map(trRow).join('')+'</div>';
+  if(st&&req.length&&trRoster().length)h+=trTeamCardHTML(req);
+  // the whole library
+  h+='<div class="card"><div class="tr-h">'+(st?'Library':'Everything')+'</div>';
+  if(!all.length)h+='<div class="bk-empty">'+(st?'Nothing here yet. Add your first SOP: write it right here, upload a PDF, Word file or photo, or link a video.':'Nothing here yet. Your managers will add training soon.')+'</div>';
+  else{
+    const cats=trCats();
+    if(all.length>6)h+='<div class="bk-filters"><input class="period-input" type="search" placeholder="Search training…" value="'+esc(TR.q)+'" oninput="TR.q=this.value;trRedraw()">'
+      +(cats.length?'<select class="period-select" onchange="TR.cat=this.value;trRedraw()"><option value="">All topics</option>'+cats.map(c=>'<option'+(c===TR.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select>':'')+'</div>';
+    h+='<div id="trRows">'+trRows()+'</div>';
+  }
+  h+='</div>';
+  el.innerHTML=h;trBadge();
+}
+function trRedraw(){const b=document.getElementById('trRows');if(b)b.innerHTML=trRows();}
+function trRows(){
+  const st=trSteward(),q=TR.q.trim().toLowerCase();
+  const list=TR.docs.filter(d=>(st||d.active)&&(!TR.cat||d.category===TR.cat)&&(!q||[d.title,d.category,d.body,d.file_name].join(' ').toLowerCase().includes(q)));
+  if(!list.length)return '<div class="bk-empty">Nothing matches.</div>';
+  let last=null,h='';
+  list.slice().sort((a,b)=>String(a.category||'').localeCompare(String(b.category||''))||(+a.sort_order||0)-(+b.sort_order||0)||a.title.localeCompare(b.title)).forEach(d=>{
+    if((d.category||'')!==last){last=d.category||'';h+='<div class="bk-date">'+esc(last||'General')+'</div>';}
+    h+=trRow(d);
+  });
+  return h;
+}
+function trRow(d){
+  const st=trSteward(),mine=trMyAck(d),done=trIsDone(d);
+  let chip='';
+  if(!d.active)chip='<span class="tr-chip">Hidden</span>';
+  else if(d.required&&!done)chip=mine?'<span class="tr-chip tan">Updated · read again</span>':'<span class="tr-chip blue">To read</span>';
+  else if(done)chip='<span class="tr-chip green">✓ Read</span>';
+  else if(!d.required)chip='<span class="tr-chip">Reference</span>';
+  let right='';
+  if(st&&d.required&&d.active){const p=trProgress(d);if(p.total)right='<div class="tr-prog'+(p.done>=p.total?' done':'')+'">'+p.done+'/'+p.total+'<small>read</small></div>';}
+  return '<div class="bk-row" onclick="trOpen(\''+d.id+'\')"><div class="tr-ico" aria-hidden="true">'+trIcon(d)+'</div><div class="bk-main"><div class="bk-payee">'+esc(d.title)+'</div>'
+    +'<div class="bk-sub">'+chip+(d.kind==='file'&&d.file_name?' '+esc(d.file_name):'')+(+d.version>1?' · version '+d.version:'')+'</div></div>'+right+'</div>';
+}
+// who still has reading to do
+function trTeamCardHTML(req){
+  const r=trRoster();
+  const rows=r.map(p=>{const left=req.filter(d=>{const a=trAckFor(d,p);return !(a&&(+a.version||1)>=(+d.version||1));});return{p,left};});
+  const behind=rows.filter(x=>x.left.length);
+  let h='<div class="card"><div class="tr-h">Your team</div>';
+  if(!behind.length)return h+'<div class="bk-sub">Everyone has signed off on everything. 🎉</div></div>';
+  h+=rows.sort((a,b)=>b.left.length-a.left.length).map(x=>'<div class="tr-person"><div class="bk-main"><div class="bk-payee">'+esc(x.p.name)+'</div><div class="bk-sub">'
+    +(x.left.length?x.left.length+' to read: '+x.left.slice(0,3).map(d=>esc(d.title)).join(', ')+(x.left.length>3?'…':''):'All caught up')+'</div></div>'
+    +'<div class="tr-prog'+(x.left.length?'':' done')+'">'+(req.length-x.left.length)+'/'+req.length+'</div></div>').join('');
+  return h+'</div>';
+}
+function trSetupHTML(){
+  if(typeof TRAIN_SQL==='undefined')return '<div class="card"><div class="card-title"><div class="card-title-dot"></div>Training is almost ready</div><div class="card-sub">The Hub’s database needs a quick update before training can be used. We’ve been told; check back soon.</div></div>';
+  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for Training</div>'
+    +'<div class="card-sub">The training library needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once.</div>'
+    +'<pre>'+esc(TRAIN_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(TRAIN_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
+    +'<button class="btn-secondary" onclick="TR.missing=false;renderTraining();">Recheck</button></div></div>';
+}
+
+// ─── reading one ───
+function trModal(){
+  let m=document.getElementById('trModal');if(m)return m;
+  m=document.createElement('div');m.className='modal-overlay';m.id='trModal';
+  m.onclick=e=>{if(e.target===m)trClose();};
+  m.innerHTML='<div class="modal" style="max-width:680px;"><button class="modal-close" onclick="trClose()" aria-label="Close">×</button><div class="modal-title" id="trMTitle"></div><div id="trMBody"></div></div>';
+  document.body.appendChild(m);return m;
+}
+function trClose(){const m=document.getElementById('trModal');if(m)m.classList.remove('open');TR.open=null;TR.editing=null;TR.upload=null;}
+// Light formatting for written SOPs: # headings, - bullets, 1. steps, [ ] checklists, **bold**
+function trFormat(src){
+  const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(https:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const lines=String(src||'').replace(/\r/g,'').split('\n');let h='',list=null;
+  const close=()=>{if(list){h+='</'+list+'>';list=null;}};
+  lines.forEach(raw=>{
+    const l=raw.trim();let m;
+    if(!l){close();return;}
+    if((m=l.match(/^#{1,3}\s+(.*)/))){close();h+='<h4>'+inline(m[1])+'</h4>';return;}
+    if((m=l.match(/^\[( |x)\]\s*(.*)/i))){if(list!=='ul class="tr-check"'){close();h+='<ul class="tr-check">';list='ul';}h+='<li>'+inline(m[2])+'</li>';return;}
+    if((m=l.match(/^[-*•]\s+(.*)/))){if(list!=='ul'){close();h+='<ul>';list='ul';}h+='<li>'+inline(m[1])+'</li>';return;}
+    if((m=l.match(/^\d+[.)]\s+(.*)/))){if(list!=='ol'){close();h+='<ol>';list='ol';}h+='<li>'+inline(m[1])+'</li>';return;}
+    close();h+='<p>'+inline(l)+'</p>';
+  });
+  close();return h;
+}
+async function trOpen(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d)return;TR.open=d;TR.editing=null;
+  const m=trModal(),st=trSteward(),mine=trMyAck(d),done=trIsDone(d);
+  document.getElementById('trMTitle').textContent=d.title;
+  let h='<div class="bk-sub" style="margin-bottom:10px;">'+esc(d.category||'General')+(d.required?' · everyone signs off':' · reference')+(+d.version>1?' · version '+d.version:'')+(d.updated_at?' · updated '+esc(prettyDate(String(d.updated_at).slice(0,10))):'')+'</div>';
+  if(d.kind==='text')h+='<div class="tr-doc">'+(trFormat(d.body)||'<p class="bk-sub">(Nothing written yet.)</p>')+'</div>';
+  else if(d.kind==='link')h+=(d.body?'<div class="tr-doc">'+trFormat(d.body)+'</div>':'')+'<div class="bk-actions"><a class="btn-green" style="text-decoration:none;" href="'+esc(trSafeUrl(d.link_url))+'" target="_blank" rel="noopener">Open '+esc(trLinkLabel(d.link_url))+' ↗</a></div>';
+  else{
+    h+=(d.body?'<div class="tr-doc">'+trFormat(d.body)+'</div>':'')+'<div id="trPreview"></div>'
+      +'<div class="bk-actions"><button class="btn-green" onclick="trOpenFile()">Open '+esc(d.file_name||'the file')+'</button></div>';
+  }
+  if(d.active){
+    if(done)h+='<div class="tr-done">✓ You signed off on this '+esc(prettyDate(String(mine.acked_at||'').slice(0,10)))+'.</div>';
+    else h+='<div class="tr-ack"><div class="bk-sub">'+(mine?'This was updated since you last read it. Have a look at what changed.':(d.required?'When you’ve read it and understand it, sign off so '+(st?'the team':'your managers')+' know.':'Tap below once you’ve read it.'))+'</div>'
+      +'<button class="btn-green" onclick="trAck()">I’ve read this</button></div>';
+  }
+  if(st){
+    if(d.required&&d.active){
+      const r=trRoster();
+      if(r.length){
+        h+='<div class="tr-h" style="margin-top:16px;">Who’s read it</div>'+r.map(p=>{const a=trAckFor(d,p),ok=a&&(+a.version||1)>=(+d.version||1);
+          return '<div class="tr-who"><span>'+esc(p.name)+'</span><span class="'+(ok?'ok':a?'old':'no')+'">'+(ok?'✓ '+esc(prettyDate(String(a.acked_at||'').slice(0,10))):a?'Read an older version':'Not yet')+'</span></div>';}).join('');
+      }
+    }
+    h+='<div class="bk-actions" style="margin-top:14px;"><button class="btn-secondary" onclick="trEdit(\''+d.id+'\')">Edit</button>'
+      +'<button class="btn-secondary" onclick="trToggle(\''+d.id+'\')">'+(d.active?'Hide from the team':'Show to the team')+'</button>'
+      +'<button class="btn-secondary danger" onclick="trDelete(\''+d.id+'\')">Delete</button></div>';
+  }
+  document.getElementById('trMBody').innerHTML=h;m.classList.add('open');
+  if(d.kind==='file'&&/^image\//.test(d.file_type||''))trInlineImage(d);
+}
+function trSafeUrl(u){u=String(u||'').trim();return /^https?:\/\//i.test(u)?u:'#';}
+function trLinkLabel(u){u=String(u||'');if(/youtu\.?be/i.test(u))return 'the video';if(/docs\.google|drive\.google/i.test(u))return 'in Google';if(/vimeo/i.test(u))return 'the video';return 'the link';}
+async function trSignedUrl(d){
+  if(/^blob:|^data:/.test(d.file_path||''))return d.file_path;
+  if(trDemo())throw new Error('Files open in your real Hub');
+  const r=await fetch(SUPABASE_URL+'/storage/v1/object/sign/'+TR_CFG.bucket+'/'+String(d.file_path).split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})});
+  if(!r.ok)throw new Error(r.status===400||r.status===404?'That file couldn’t be found':'You don’t have access to that file');
+  const j=await r.json();const su=j.signedURL||j.signedUrl||'';
+  return /^https?:/.test(su)?su:SUPABASE_URL+'/storage/v1'+su;
+}
+async function trInlineImage(d){
+  try{const u=await trSignedUrl(d);const p=document.getElementById('trPreview');if(p&&TR.open&&TR.open.id===d.id)p.innerHTML='<img class="tr-img" src="'+esc(u)+'" alt="'+esc(d.title)+'">';}catch(e){}
+}
+async function trOpenFile(){
+  const d=TR.open;if(!d)return;
+  const w=/^blob:|^data:/.test(d.file_path||'')?null:window.open('','_blank');
+  try{const u=await trSignedUrl(d);if(w)w.location.href=u;else window.open(u,'_blank');}
+  catch(e){if(w)w.close();toast(e.message,true);}
+}
+async function trAck(){
+  const d=TR.open;if(!d)return;const mine=trMyAck(d);
+  const body={doc_id:d.id,version:+d.version||1,name:trMyName(),user_id:trMyId()};if(TR_CFG.biz)body.business_id=trBiz();
+  try{
+    if(mine)await sb(TR_CFG.acks+'?id=eq.'+mine.id,{method:'PATCH',body:JSON.stringify({version:body.version,name:body.name})});
+    else await sb(TR_CFG.acks,{method:'POST',body:JSON.stringify(body)});
+    toast('Signed off: '+d.title);await loadTraining(true);drawTraining();trOpen(d.id);
+  }catch(e){toast('Didn’t save: '+e.message,true);}
+}
+
+// ─── adding and editing (owners and managers) ───
+function trEdit(id){
+  if(!trSteward())return;
+  const d=id?TR.docs.find(x=>x.id===id):null;TR.editing=d||{};TR.open=null;TR.upload=null;
+  const kind=d?d.kind:'text',m=trModal();
+  document.getElementById('trMTitle').textContent=d?'Edit '+d.title:'Add training';
+  const cats=trCats();
+  let h='<label class="tr-lbl" for="trTitle">Title</label><input id="trTitle" class="period-input tr-full" value="'+esc(d?d.title:'')+'" placeholder="Opening checklist, Making the dough, Food safety basics…">'
+    +'<label class="tr-lbl" for="trCat">Topic</label><input id="trCat" class="period-input tr-full" list="trCatList" value="'+esc(d&&d.category||'')+'" placeholder="Kitchen, Markets, Food safety…"><datalist id="trCatList">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist>'
+    +'<label class="tr-lbl">What is it?</label><div class="seg mini" id="trKind">'+[['text','✏️ Write it here'],['file','📎 Upload a file'],['link','🔗 Link a video or page']].map(([k,l])=>'<button type="button" class="'+(kind===k?'active':'')+'" data-k="'+k+'" onclick="trKind(\''+k+'\')">'+l+'</button>').join('')+'</div>'
+    +'<div id="trKindBody"></div>'
+    +'<label class="tr-check-row"><input type="checkbox" id="trReq" '+(!d||d.required?'checked':'')+'> Everyone on the team reads it and signs off</label>';
+  if(d)h+='<label class="tr-check-row"><input type="checkbox" id="trBump"> This is a big change. Ask everyone to read it again.</label>';
+  h+='<div class="bk-actions"><button class="btn-green" id="trSave" onclick="trSave()">'+(d?'Save changes':'Add it')+'</button><button class="btn-secondary" onclick="'+(d?'trOpen(\''+d.id+'\')':'trClose()')+'">Cancel</button></div><div class="tr-status" id="trStatus"></div>';
+  document.getElementById('trMBody').innerHTML=h;m.classList.add('open');
+  TR.editKind=kind;trKind(kind);
+}
+function trKind(k){
+  TR.editKind=k;const d=TR.editing||{};
+  document.querySelectorAll('#trKind button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
+  const body=document.getElementById('trBodyTxt');const keep=body?body.value:(d.body||'');
+  let h='';
+  if(k==='text')h='<label class="tr-lbl" for="trBodyTxt">The steps</label><textarea id="trBodyTxt" class="period-input tr-full tr-area" placeholder="# Before you start\n- Wash hands and put on an apron\n- Sanitize the bench\n\n# Steps\n1. Weigh 1 kg semolina\n2. Add 10 eggs\n\n[ ] Label and date every batch">'+esc(keep)+'</textarea>'
+    +'<div class="bk-sub">Start a line with <b>#</b> for a heading, <b>-</b> for a bullet, <b>1.</b> for a step, or <b>[ ]</b> for a checklist item.</div>';
+  else if(k==='file'){
+    const cur=d.kind==='file'&&d.file_name?'<div class="bk-sub" style="margin-top:6px;">Current file: <b>'+esc(d.file_name)+'</b>. Pick a new one to replace it.</div>':'';
+    h='<label class="tr-file"><input type="file" id="trFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.rtf,.odt,.csv,image/*,video/mp4,video/quicktime" onchange="trPicked(this)"><span id="trFileLbl">📎 Choose a PDF, Word file, slides, photo or short video</span></label>'+cur
+      +'<div class="bk-sub">Up to '+TR_MAX_MB+' MB. Files stay private to your team.</div>'
+      +'<label class="tr-lbl" for="trBodyTxt">Notes (optional)</label><textarea id="trBodyTxt" class="period-input tr-full" style="min-height:70px;" placeholder="Anything to know before opening it">'+esc(keep)+'</textarea>';
+  }else h='<label class="tr-lbl" for="trLink">Link</label><input id="trLink" class="period-input tr-full" type="url" inputmode="url" value="'+esc(d.link_url||'')+'" placeholder="https://youtube.com/… or a Google Doc">'
+    +'<label class="tr-lbl" for="trBodyTxt">Notes (optional)</label><textarea id="trBodyTxt" class="period-input tr-full" style="min-height:70px;" placeholder="What to watch for">'+esc(keep)+'</textarea>';
+  document.getElementById('trKindBody').innerHTML=h;
+  if(TR.upload&&k==='file'){const l=document.getElementById('trFileLbl');if(l)l.textContent='📎 '+TR.upload.name;}
+}
+function trPicked(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(f.size>TR_MAX_MB*1024*1024){toast('That file is '+Math.round(f.size/1048576)+' MB. The limit is '+TR_MAX_MB+' MB. For longer videos, upload to YouTube (unlisted) and link it instead.',true);input.value='';return;}
+  TR.upload=f;document.getElementById('trFileLbl').textContent='📎 '+f.name;
+  const t=document.getElementById('trTitle');if(t&&!t.value.trim())t.value=f.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
+}
+async function trUpload(f){
+  if(trDemo())return URL.createObjectURL(f);
+  const safe=(f.name||'file').replace(/[^a-zA-Z0-9._-]/g,'_').slice(-60);
+  const path=(TR_CFG.biz?trBiz()+'/':'')+'doc_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)+'_'+safe;
+  const send=()=>fetch(SUPABASE_URL+'/storage/v1/object/'+TR_CFG.bucket+'/'+path.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':f.type||'application/octet-stream'},body:f});
+  let res=await send();
+  if(res.status===401&&typeof silentRefresh==='function'&&await silentRefresh())res=await send();
+  if(!res.ok){let m='';try{m=(await res.json()).message||'';}catch(e){}
+    if(/bucket not found/i.test(m))throw new Error('File storage isn’t set up yet. Run the training SQL once, then try again.');
+    throw new Error('Upload failed'+(m?': '+m:' ('+res.status+')'));}
+  return path;
+}
+async function trRemoveFile(path){
+  if(!path||/^blob:|^data:/.test(path)||trDemo())return;
+  try{await fetch(SUPABASE_URL+'/storage/v1/object/'+TR_CFG.bucket,{method:'DELETE',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken,'Content-Type':'application/json'},body:JSON.stringify({prefixes:[path]})});}catch(e){}
+}
+async function trSave(){
+  const d=TR.editing||{},isNew=!d.id,k=TR.editKind;
+  const title=document.getElementById('trTitle').value.trim();if(!title){toast('Give it a title',true);return;}
+  const body=(document.getElementById('trBodyTxt')||{}).value||'';
+  const row={title,category:document.getElementById('trCat').value.trim()||null,kind:k,body:body.trim()||null,required:document.getElementById('trReq').checked,updated_at:new Date().toISOString()};
+  if(k==='text'&&!row.body){toast('Write the steps first',true);return;}
+  if(k==='link'){let u=(document.getElementById('trLink').value||'').trim();if(!u){toast('Paste the link',true);return;}if(!/^https?:\/\//i.test(u))u='https://'+u;row.link_url=u;}
+  if(k==='file'&&!TR.upload&&!(d.kind==='file'&&d.file_path)){toast('Choose a file to upload',true);return;}
+  const btn=document.getElementById('trSave'),status=document.getElementById('trStatus');btn.disabled=true;
+  let oldFile=null;
+  try{
+    if(k==='file'&&TR.upload){
+      status.textContent='Uploading '+TR.upload.name+'…';
+      row.file_path=await trUpload(TR.upload);row.file_name=TR.upload.name;row.file_type=TR.upload.type||null;
+      if(d.file_path)oldFile=d.file_path;
+    }
+    if(k!=='file'){if(d.file_path)oldFile=d.file_path;row.file_path=null;row.file_name=null;row.file_type=null;}
+    if(k!=='link')row.link_url=null;
+    const bump=!isNew&&((document.getElementById('trBump')||{}).checked||(k==='file'&&TR.upload&&d.kind==='file'));
+    if(bump)row.version=(+d.version||1)+1;
+    status.textContent='Saving…';
+    let saved;
+    if(isNew){row.created_by=trMyName()||null;if(TR_CFG.biz)row.business_id=trBiz();row.sort_order=TR.docs.length;saved=(await sb(TR_CFG.docs,{method:'POST',body:JSON.stringify(row)}))[0];}
+    else saved=(await sb(TR_CFG.docs+'?id=eq.'+d.id,{method:'PATCH',body:JSON.stringify(row)}))[0];
+    if(oldFile)trRemoveFile(oldFile);
+    TR.upload=null;toast(isNew?'Added: '+title:(bump?'Saved. Everyone will be asked to read it again.':'Saved'));
+    await loadTraining(true);drawTraining();if(saved)trOpen(saved.id);else trClose();
+  }catch(e){status.textContent='';toast(e.message,true);btn.disabled=false;}
+}
+async function trToggle(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d)return;
+  try{await sb(TR_CFG.docs+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify({active:!d.active})});toast(d.active?'Hidden from the team':'Showing to the team');await loadTraining(true);drawTraining();trOpen(id);}
+  catch(e){toast(e.message,true);}
+}
+async function trDelete(id){
+  const d=TR.docs.find(x=>x.id===id);if(!d||!confirm('Delete “'+d.title+'”? Its sign-offs go too. To keep the record, hide it instead.'))return;
+  try{await sb(TR_CFG.docs+'?id=eq.'+id,{method:'DELETE'});trRemoveFile(d.file_path);toast('Deleted');trClose();await loadTraining(true);drawTraining();}
+  catch(e){toast(e.message,true);}
+}
+
+const TRAIN_SQL=`-- ═══════════════════════════════════════════════════════════════════
+-- TRAINING LIBRARY — SOPs, how-tos and training your team reads and signs off on
+-- For both The Kilted Farmers hub (kf_*) and the Operations Hub (ohb_*).
+-- Paste into the Supabase SQL Editor and hit Run. Safe to run more than once.
+-- ═══════════════════════════════════════════════════════════════════
+
+-- ─── KILTED FARMERS ─────────────────────────────────────────────────
+create or replace function kf_is_team() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from kf_user_profiles p where p.id = auth.uid());
+$$;
+create or replace function kf_is_steward() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from kf_user_profiles p where p.id = auth.uid()
+    and (p.role = 'Steward' or p.name ilike 'justin%' or p.name ilike 'jessica%'));
+$$;
+
+create table if not exists kf_training_docs (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  category text,
+  kind text not null default 'text' check (kind in ('text','file','link')),
+  body text,
+  file_path text,
+  file_name text,
+  file_type text,
+  link_url text,
+  required boolean not null default true,
+  version int not null default 1,
+  active boolean not null default true,
+  sort_order int default 0,
+  created_by text,
+  updated_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+create table if not exists kf_training_acks (
+  id uuid primary key default gen_random_uuid(),
+  doc_id uuid not null references kf_training_docs(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
+  name text,
+  version int not null default 1,
+  acked_at timestamptz default now(),
+  unique (doc_id, user_id)
+);
+
+-- Sign-offs are always in the signed-in person's own name
+create or replace function kf_training_ack_stamp() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null then
+    new.user_id := auth.uid();
+    new.name := coalesce((select name from kf_user_profiles where id = auth.uid()), new.name);
+  end if;
+  new.acked_at := now();
+  return new;
+end $$;
+drop trigger if exists kf_training_ack_stamp on kf_training_acks;
+create trigger kf_training_ack_stamp before insert or update on kf_training_acks
+  for each row execute function kf_training_ack_stamp();
+
+alter table kf_training_docs enable row level security;
+alter table kf_training_acks enable row level security;
+do $$ declare p record; begin
+  for p in select policyname, tablename from pg_policies where schemaname = 'public' and tablename in ('kf_training_docs','kf_training_acks') loop
+    execute format('drop policy %I on %I', p.policyname, p.tablename);
+  end loop;
+end $$;
+create policy "team reads training" on kf_training_docs for select to authenticated using (kf_is_team());
+create policy "stewards add training" on kf_training_docs for insert to authenticated with check (kf_is_steward());
+create policy "stewards change training" on kf_training_docs for update to authenticated using (kf_is_steward()) with check (kf_is_steward());
+create policy "stewards remove training" on kf_training_docs for delete to authenticated using (kf_is_steward());
+create policy "see sign-offs" on kf_training_acks for select to authenticated using (user_id = auth.uid() or kf_is_steward());
+create policy "sign off" on kf_training_acks for insert to authenticated with check (kf_is_team() and user_id = auth.uid());
+create policy "re-sign" on kf_training_acks for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "stewards clear sign-offs" on kf_training_acks for delete to authenticated using (kf_is_steward());
+
+-- ─── OPERATIONS HUB (each business sees only its own) ───────────────
+do $outer$
+begin
+  if to_regclass('public.ohb_businesses') is null then
+    raise notice 'Operations Hub tables not found; skipping the Operations Hub part.';
+    return;
+  end if;
+
+  create table if not exists ohb_training_docs (
+    id uuid primary key default gen_random_uuid(),
+    business_id uuid not null references ohb_businesses(id) on delete cascade,
+    title text not null,
+    category text,
+    kind text not null default 'text' check (kind in ('text','file','link')),
+    body text,
+    file_path text,
+    file_name text,
+    file_type text,
+    link_url text,
+    required boolean not null default true,
+    version int not null default 1,
+    active boolean not null default true,
+    sort_order int default 0,
+    created_by text,
+    updated_at timestamptz default now(),
+    created_at timestamptz default now()
+  );
+  create index if not exists ohb_training_docs_biz_idx on ohb_training_docs(business_id);
+  create table if not exists ohb_training_acks (
+    id uuid primary key default gen_random_uuid(),
+    business_id uuid not null references ohb_businesses(id) on delete cascade,
+    doc_id uuid not null references ohb_training_docs(id) on delete cascade,
+    user_id uuid not null default auth.uid(),
+    name text,
+    version int not null default 1,
+    acked_at timestamptz default now(),
+    unique (doc_id, user_id)
+  );
+  create index if not exists ohb_training_acks_biz_idx on ohb_training_acks(business_id);
+
+  alter table ohb_training_docs enable row level security;
+  alter table ohb_training_acks enable row level security;
+end
+$outer$;
+
+do $outer$
+declare p record;
+begin
+  if to_regclass('public.ohb_training_docs') is null then return; end if;
+
+  -- a sign-off always belongs to the business its document is in, in the signed-in person's own name
+  execute $f$
+    create or replace function ohb_training_ack_stamp() returns trigger
+    language plpgsql security definer set search_path = public as $b$
+    begin
+      new.business_id := (select business_id from ohb_training_docs where id = new.doc_id);
+      if auth.uid() is not null then
+        new.user_id := auth.uid();
+        new.name := coalesce((select name from ohb_members where business_id = new.business_id and user_id = auth.uid()), new.name);
+      end if;
+      new.acked_at := now();
+      return new;
+    end $b$;
+  $f$;
+  drop trigger if exists ohb_training_ack_stamp on ohb_training_acks;
+  create trigger ohb_training_ack_stamp before insert or update on ohb_training_acks
+    for each row execute function ohb_training_ack_stamp();
+
+  for p in select policyname, tablename from pg_policies where schemaname = 'public' and tablename in ('ohb_training_docs','ohb_training_acks') loop
+    execute format('drop policy %I on %I', p.policyname, p.tablename);
+  end loop;
+  create policy "team reads training" on ohb_training_docs for select to authenticated using (ohb_is_member(business_id));
+  create policy "stewards add training" on ohb_training_docs for insert to authenticated with check (ohb_is_steward(business_id));
+  create policy "stewards change training" on ohb_training_docs for update to authenticated using (ohb_is_steward(business_id)) with check (ohb_is_steward(business_id));
+  create policy "stewards remove training" on ohb_training_docs for delete to authenticated using (ohb_is_steward(business_id));
+  create policy "see sign-offs" on ohb_training_acks for select to authenticated using (user_id = auth.uid() or ohb_is_steward(business_id));
+  create policy "sign off" on ohb_training_acks for insert to authenticated with check (user_id = auth.uid() and ohb_is_member(business_id));
+  create policy "re-sign" on ohb_training_acks for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid() and ohb_is_member(business_id));
+  create policy "stewards clear sign-offs" on ohb_training_acks for delete to authenticated using (ohb_is_steward(business_id));
+end
+$outer$;
+
+revoke execute on function kf_training_ack_stamp() from public, anon, authenticated;
+do $$ begin
+  if to_regprocedure('public.ohb_training_ack_stamp()') is not null then
+    revoke execute on function ohb_training_ack_stamp() from public, anon, authenticated;
+  end if;
+end $$;
+
+-- ─── FILES: private storage, opened with short-lived links ─────────
+insert into storage.buckets (id, name, public) values ('kf-training', 'kf-training', false) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('ohb-training', 'ohb-training', false) on conflict (id) do nothing;
+update storage.buckets set public = false where id in ('kf-training', 'ohb-training');
+
+-- the business a file belongs to is the first folder in its path
+create or replace function ohb_training_business(p_name text) returns uuid
+language plpgsql immutable as $$
+begin return (split_part(p_name, '/', 1))::uuid; exception when others then return null; end $$;
+
+drop policy if exists "kf training read" on storage.objects;
+create policy "kf training read" on storage.objects for select to authenticated
+  using (bucket_id = 'kf-training' and kf_is_team());
+drop policy if exists "kf training upload" on storage.objects;
+create policy "kf training upload" on storage.objects for insert to authenticated
+  with check (bucket_id = 'kf-training' and kf_is_steward());
+drop policy if exists "kf training remove" on storage.objects;
+create policy "kf training remove" on storage.objects for delete to authenticated
+  using (bucket_id = 'kf-training' and kf_is_steward());
+
+do $$ begin
+  if to_regprocedure('public.ohb_is_member(uuid)') is null then return; end if;
+  drop policy if exists "ohb training read" on storage.objects;
+  create policy "ohb training read" on storage.objects for select to authenticated
+    using (bucket_id = 'ohb-training' and ohb_is_member(ohb_training_business(name)));
+  drop policy if exists "ohb training upload" on storage.objects;
+  create policy "ohb training upload" on storage.objects for insert to authenticated
+    with check (bucket_id = 'ohb-training' and ohb_is_steward(ohb_training_business(name)));
+  drop policy if exists "ohb training remove" on storage.objects;
+  create policy "ohb training remove" on storage.objects for delete to authenticated
+    using (bucket_id = 'ohb-training' and ohb_is_steward(ohb_training_business(name)));
+end $$;
+
+notify pgrst, 'reload schema';
 `;
 </script>
 </body>
