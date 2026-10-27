@@ -146,6 +146,8 @@ label.pick,label.check{text-transform:none;letter-spacing:0;font-size:14px;color
 .calc-big{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--green-dark);line-height:1.1;}
 .calc-rows{margin-top:10px;border-top:1px solid rgba(27,67,50,.15);padding-top:8px;font-size:14px;}
 .calc-rows div{display:flex;justify-content:space-between;gap:8px;padding:3px 0;}
+.calc-more{margin-top:10px;}
+.calc-more summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--green-dark);}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--green-dark);color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;max-width:90vw;text-align:center;}
 .toast.err{background:var(--red);}
 .toast.show{opacity:1;}
@@ -438,8 +440,12 @@ function taxCardHTML(){
 
 // ─── goal calculator: how much do I need to sell to earn $X? ───
 const GOAL_KEY='kf_rep_goal';
-const CALC={goal:null,zone:'local'};
-function calcLoad(){if(CALC.goal!=null)return;let g=null;try{g=parseFloat(localStorage.getItem(GOAL_KEY));}catch(e){}CALC.goal=g>0?g:300;}
+const CALC={goal:null,zone:'local',events:null};
+const EVENTS_KEY='kf_rep_goal_events';
+function calcLoad(){
+  if(CALC.goal==null){let g=null;try{g=parseFloat(localStorage.getItem(GOAL_KEY));}catch(e){}CALC.goal=g>0?g:300;}
+  if(CALC.events==null){let n=null;try{n=parseInt(localStorage.getItem(EVENTS_KEY));}catch(e){}CALC.events=n>0?n:4;}
+}
 // Sales needed to earn `want` more commission, starting from `prior` sales already counted this month
 function salesForCommission(prior,want){
   const r=cfgRates();if(want<=0)return 0;
@@ -458,24 +464,30 @@ function calcMix(){
 function calcHTML(mode){
   calcLoad();
   const rep=mode==='rep';
-  let h='<div class="card" id="calcCard"><h2>'+(rep?'Set a goal':'What could you make?')+'</h2>'
-    +'<p class="muted">'+(rep?'How much do you want to earn this month? We’ll show what it takes.':'Pick an amount you’d like to earn in a month and see how much pasta that is.')+'</p>'
+  return '<div class="card" id="calcCard"><h2>'+(rep?'Set a goal':'What could you make?')+'</h2>'
+    +'<p class="muted">'+(rep?'How much do you want to earn this month? We’ll break it down event by event.':'Pick an amount you’d like to earn in a month and see what it takes at each event.')+'</p>'
     +'<div class="goal-row"><span class="dollar">$</span><input id="calcGoal" class="inp" type="number" inputmode="decimal" min="0" step="10" value="'+CALC.goal+'" oninput="calcSet(this.value)" aria-label="Goal in dollars"><span class="muted">'+(rep?'this month':'a month')+'</span></div>'
-    +'<div class="chips">'+[100,250,500,1000].map(v=>'<button type="button" class="'+(+CALC.goal===v?'on':'')+'" onclick="calcSet('+v+',true)">'+fmt0(v)+'</button>').join('')+'</div>'
+    +'<div class="chips" id="goalChips">'+[100,250,500,1000].map(v=>'<button type="button" class="'+(+CALC.goal===v?'on':'')+'" onclick="calcSet('+v+',true)">'+fmt0(v)+'</button>').join('')+'</div>'
+    +'<label style="margin-top:16px;">'+(rep?'Events or selling days left this month':'Events or selling days a month')+'</label>'
+    +'<div class="chips" id="evChips" style="margin-top:0;">'+[1,2,4,6,8,12].map(v=>'<button type="button" class="'+(CALC.events===v?'on':'')+'" onclick="calcEvents('+v+')">'+v+'</button>').join('')+'</div>'
     +'<div class="seg2"><button type="button" class="'+(CALC.zone==='local'?'on':'')+'" onclick="CALC.zone=\'local\';calcRedraw()">Local events</button><button type="button" class="'+(CALC.zone==='far'?'on':'')+'" onclick="CALC.zone=\'far\';calcRedraw()">Farther out (+'+fmt0((S.cfg||{}).far_add||0)+'/bag)</button></div>'
     +'<div id="calcOut"></div></div>';
-  return h;
 }
 function calcSet(v,redraw){
   CALC.goal=Math.max(0,parseFloat(v)||0);try{localStorage.setItem(GOAL_KEY,String(CALC.goal));}catch(e){}
   if(redraw){const i=$('calcGoal');if(i)i.value=CALC.goal;}
-  document.querySelectorAll('#calcCard .chips button').forEach(b=>b.classList.toggle('on',b.textContent===fmt0(CALC.goal)));
+  document.querySelectorAll('#goalChips button').forEach(b=>b.classList.toggle('on',b.textContent===fmt0(CALC.goal)));
+  calcDraw();
+}
+function calcEvents(n){
+  CALC.events=n;try{localStorage.setItem(EVENTS_KEY,String(n));}catch(e){}
+  document.querySelectorAll('#evChips button').forEach(b=>b.classList.toggle('on',+b.textContent===n));
   calcDraw();
 }
 function calcRedraw(){const card=$('calcCard');if(!card)return;const mode=S.rep&&S.rep.status==='active'?'rep':'prospect';const t=document.createElement('div');t.innerHTML=calcHTML(mode);card.replaceWith(t.firstChild);calcDraw();}
 function calcDraw(){
   const out=$('calcOut');if(!out||!S.cfg)return;
-  const rep=!!(S.rep&&S.rep.status==='active'),c=S.cfg,r=cfgRates(),goal=+CALC.goal||0;
+  const rep=!!(S.rep&&S.rep.status==='active'),c=S.cfg,r=cfgRates(),goal=+CALC.goal||0,n=Math.max(1,CALC.events||1);
   const m=rep?monthSummary(ym(today())):{sales:0,commission:0};
   const want=r2(goal-m.commission);
   if(!goal){out.innerHTML='';return;}
@@ -483,18 +495,28 @@ function calcDraw(){
   const sales=salesForCommission(m.sales,want);
   const mix=calcMix(),keys=Object.keys(mix.share);
   const avg=keys.reduce((a,k)=>a+mix.share[k]*priceFor(k,CALC.zone),0)||1;
-  const bags=Math.ceil(sales/avg);
+  const bags=Math.ceil(sales/avg),perEvent=Math.ceil(bags/n),perEventSales=Math.ceil(sales/n);
+  // weeks to spread it over: what's left of this month for a rep, about 4 for someone thinking it over
+  const now=new Date(),last=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const weeks=rep?Math.max(1,Math.ceil((last-now.getDate()+1)/7)):4;
+  const perWeek=Math.ceil(bags/weeks);
   const hitsTop=m.sales+sales>r.th;
-  let h='<div class="calc-out"><div class="muted small">'+(rep&&m.commission>0?'You’ve earned '+fmt0(m.commission)+' so far. To reach '+fmt0(goal)+', sell about':'To earn '+fmt0(goal)+', sell about')+'</div>'
-    +'<div class="calc-big">'+fmt0(Math.ceil(sales))+' <span style="font-size:18px;">'+(rep&&m.sales>0?'more ':'')+'in pasta</span></div>'
-    +'<div class="muted" style="margin-top:4px;">That’s about <b>'+plural(bags,'bag')+'</b> at '+(mix.from==='what you’ve sold'?'your usual mix':'an even mix of all three kinds')+'.</div>';
-  h+='<div class="calc-rows"><div class="muted small" style="display:block;padding-bottom:2px;">Or if you only sold one kind:</div>'
-    +keys.map(k=>'<div><span>'+esc(lineName(k))+' at '+fmt0(priceFor(k,CALC.zone))+'</span><b>'+plural(Math.ceil(sales/priceFor(k,CALC.zone)),'bag')+'</b></div>').join('')+'</div>';
-  if(rep){
-    const done=(S.events||[]).filter(e=>e.status==='settled'&&+e.sales>0);
-    if(done.length){const per=done.reduce((a,e)=>a+(+e.sales||0),0)/done.length;h+='<div class="calc-rows"><div><span>Your events average '+fmt0(Math.round(per))+' in sales</span><b>≈ '+plural(Math.max(1,Math.ceil(sales/per)),'event')+'</b></div></div>';}
-  }
-  h+='<p class="muted small" style="margin-top:10px;">'+(hitsTop?'This counts '+c.top_rate+'% on everything past '+fmt0(r.th)+' in the month'+(m.sales>=r.th?', which you’ve already reached.':'.'):'All of this earns '+c.base_rate+'%. Past '+fmt0(r.th)+' in a month, you’d keep '+c.top_rate+'%.')+'</p></div>';
+  // how this rep's events have actually gone, if they have a few
+  const past=rep?(S.events||[]).filter(e=>e.status==='settled'&&e.kind!=='direct'&&+e.sales>0):[];
+  const pastBags=past.length?Math.round(past.reduce((a,e)=>a+(e.lines||[]).reduce((x,l)=>x+lineSold(l),0),0)/past.length):0;
+
+  let h='<div class="calc-out">'
+    +'<div class="muted small">'+(rep&&m.commission>0?'You’ve earned '+fmt0(m.commission)+' so far. To reach '+fmt0(goal)+', plan on about':'To earn '+fmt0(goal)+', plan on about')+'</div>'
+    +'<div class="calc-big">'+perEvent+' bags <span style="font-size:18px;">'+(n===1?'at your event':'per event')+'</span></div>'
+    +'<div class="muted" style="margin-top:4px;">'+(n===1?'One event':n+' events')+(rep?' left this month':' a month')+' · about <b>'+fmt0(perEventSales)+'</b> in sales each</div>'
+    +'<div class="calc-rows"><div><span>Spread over the '+(rep?'rest of the month':'month')+'</span><b>~'+plural(perWeek,'bag')+' a week</b></div>';
+  if(pastBags)h+='<div><span>Your events have averaged</span><b>'+plural(pastBags,'bag')+'</b></div>';
+  h+='</div>';
+  if(perEvent>Math.max(80,pastBags*1.5))h+='<p class="muted small" style="margin-top:8px;">That’s a big table for one day. More events, or direct orders from your link (people order and you bring it by), spread it out.'+(n<12?' Try more events above to see how it changes.':'')+'</p>';
+  h+='<details class="calc-more"><summary>See the full math</summary>'
+    +'<div class="calc-rows" style="border-top:none;"><div><span>Total sales'+(rep&&m.sales>0?' still to go':'')+'</span><b>'+fmt0(Math.ceil(sales))+'</b></div><div><span>Total bags, '+(mix.from==='what you’ve sold'?'your usual mix':'even mix')+'</span><b>'+bags+'</b></div>'
+    +keys.map(k=>'<div><span>Only '+esc(lineName(k).toLowerCase())+' at '+fmt0(priceFor(k,CALC.zone))+'</span><b>'+plural(Math.ceil(sales/priceFor(k,CALC.zone)),'bag')+'</b></div>').join('')+'</div>'
+    +'<p class="muted small" style="margin-top:6px;">'+(hitsTop?'This counts '+c.top_rate+'% on everything past '+fmt0(r.th)+' in the month'+(m.sales>=r.th?', which you’ve already reached.':'.'):'All of this earns '+c.base_rate+'%. Past '+fmt0(r.th)+' in a month, you’d keep '+c.top_rate+'%.')+'</p></details></div>';
   out.innerHTML=h;
 }
 
