@@ -320,7 +320,7 @@ function renderAuth(mode,note){
 function pitchHTML(){
   const c=S.cfg||{base_rate:25,top_rate:30,threshold:500};
   return '<div class="card"><h2>Sell pasta at your own events</h2><p class="muted">Already doing craft fairs, church bazaars, a booth for your own goods, or parties at home? Add a table of our handmade pasta.</p>'
-    +'<ul class="plain"><li>Pick up pasta at the kitchen. No buying inventory up front.</li><li>Keep <b>'+c.base_rate+'%</b> of what you sell, and <b>'+c.top_rate+'%</b> on everything past <b>'+fmt0(c.threshold)+'</b> in a month.</li><li>Bring back whatever doesn’t sell.</li><li>Your own order link, so customers can reserve bags before your event.</li><li>You’re an independent seller: you fill out a W-9 before your first pickup, and get a 1099-NEC if you earn '+fmt0(th1099(new Date().getFullYear()))+' or more in a year.</li></ul></div>';
+    +'<ul class="plain"><li>Pick up pasta at the kitchen. No buying inventory up front.</li><li>Keep <b>'+c.base_rate+'%</b> of what you sell, and <b>'+c.top_rate+'%</b> on everything past <b>'+fmt0(c.threshold)+'</b> in a month.</li><li>Bring back whatever doesn’t sell.</li><li>Your own order link to post anywhere. People can order any time for you to deliver or for pickup from you, or reserve bags for your events. No shipping.</li><li>You’re an independent seller: you fill out a W-9 before your first pickup, and get a 1099-NEC if you earn '+fmt0(th1099(new Date().getFullYear()))+' or more in a year.</li></ul></div>';
 }
 async function doAuth(mode){
   const em=($('aEmail')||{}).value,pw=($('aPw')||{}).value,pw2=($('aPw2')||{}).value;
@@ -405,12 +405,12 @@ const NAV=[
 ];
 function drawNav(){
   const n=$('nav');n.style.display='flex';
-  const newOrders=S.preorders.filter(o=>o.status==='new').length;
+  const newOrders=S.preorders.filter(o=>o.status==='new'||(!o.event_id&&o.fulfillment&&o.fulfillment!=='event'&&o.status==='confirmed')).length;
   n.innerHTML='<div class="nav-in">'+NAV.map(([k,l,ico])=>'<button class="'+(S.view===k?'on':'')+'" onclick="go(\''+k+'\')"><svg viewBox="0 0 24 24">'+ico+'</svg>'+l+(k==='orders'&&newOrders?'<span class="dot">'+newOrders+'</span>':'')+'</button>').join('')+'</div>';
 }
 function go(v){
   S.view=v;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;
-  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back'}[v]||'Pasta Reps';
+  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back'}[v]||'Pasta Reps';
   $('hSub').textContent=v==='home'?'Kilted Farmers pasta rep':'The Kilted Farmers';
   drawNav();
   ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount}[v]||renderHome)();
@@ -517,13 +517,13 @@ function renderHome(){
   else h+=upcoming.slice(0,3).map(eventCard).join('');
   h+='<div class="btns"><button class="btn primary full" onclick="newBooking()">+ Book an event</button></div></div>';
 
-  h+='<div class="card"><h2>Your order link</h2><p class="muted">Share it before an event so people can reserve bags and pay you when they pick up.</p>'
+  h+='<div class="card"><h2>Your order link</h2><p class="muted">'+(S.rep.direct_orders?'Post it anywhere: Facebook, your group chats, your own shop page. People can order for you to bring by, to pick up from you, or to grab at your next event. They pay you when they get it.':'Share it before an event so people can reserve bags and pay you when they pick up.')+'</p>'
     +'<div class="linkbox"><code>'+esc(orderLink())+'</code></div>'
     +'<div class="btns"><button class="btn tan" onclick="shareLink()">Share link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy</button><a class="btn soft" href="'+esc(orderLink())+'" target="_blank" rel="noopener">Preview</a></div></div>';
   $('app').innerHTML=h;calcDraw();
 }
 function shareLink(){
-  const url=orderLink(),text='Reserve handmade pasta from The Kilted Farmers. Pick it up from me at my next event:';
+  const url=orderLink(),text=S.rep.direct_orders?'Order handmade pasta from The Kilted Farmers through me. I’ll bring it to you, or you can pick it up:':'Reserve handmade pasta from The Kilted Farmers. Pick it up from me at my next event:';
   if(navigator.share)navigator.share({title:'Kilted Farmers pasta',text,url}).catch(()=>{});
   else copy(text+' '+url,'Link and message copied');
 }
@@ -536,12 +536,17 @@ const STATUS={
   settled:['Settled','chip','' ],
   cancelled:['Cancelled','chip red','']
 };
+const STATUS_DIRECT={
+  requested:['Asked the kitchen','chip blue','Pick up this pasta at '+KITCHEN+', then get it to your customers.'],
+  out:['Pasta’s with you','chip green','Deliver your orders, then count anything left over.'],
+  returning:['Count sent','chip tan','The kitchen will check it in and settle up.']
+};
 function eventCard(e){
-  const d=parseISO(e.event_date),st=STATUS[e.status]||['','chip',''];
+  const d=parseISO(e.event_date),direct=e.kind==='direct',st=(direct&&STATUS_DIRECT[e.status])||STATUS[e.status]||['','chip',''];
   const pre=preordersFor(e.id),preBags=pre.reduce((a,o)=>a+(o.items||[]).reduce((x,i)=>x+(+i.qty||0),0),0);
   let h='<div class="ev"><div class="ev-top"><div class="ev-date"><span>'+(d?d.toLocaleDateString('en-US',{month:'short'}):'')+'</span><b>'+(d?d.getDate():'')+'</b></div>'
-    +'<div class="ev-main"><div class="ev-name">'+esc(e.name)+'</div><div class="muted">'+esc([e.start_time,e.place,e.city].filter(Boolean).join(' · ')||dayLabel(e.event_date))+'</div>'
-    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><span class="'+st[1]+'">'+st[0]+'</span>'+(e.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')+(pre.length?'<span class="chip green">'+plural(pre.length,'pre-order')+' · '+plural(preBags,'bag')+'</span>':'')+'</div></div></div>';
+    +'<div class="ev-main"><div class="ev-name">'+(direct?'Kitchen pickup · '+esc(e.name):esc(e.name))+'</div><div class="muted">'+esc(direct?'Pickup '+dayLabel(e.event_date):[e.start_time,e.place,e.city].filter(Boolean).join(' · ')||dayLabel(e.event_date))+'</div>'
+    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><span class="'+st[1]+'">'+st[0]+'</span>'+(e.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')+(pre.length?'<span class="chip green">'+plural(pre.length,direct?'order':'pre-order')+' · '+plural(preBags,'bag')+'</span>':'')+'</div></div></div>';
   if(e.status==='settled'){
     h+='<div class="lines"><div><span>Sold</span><b>'+fmt(e.sales)+'</b></div><div><span>You earned</span><b>'+fmt(e.commission)+'</b></div>'
       +'<div><span>Owed to the kitchen</span><b>'+fmt(r2((+e.sales||0)-(+e.commission||0)))+'</b></div>'
@@ -549,14 +554,14 @@ function eventCard(e){
   }else if(e.status!=='cancelled'){
     const field=e.status==='requested'?'qty_requested':'qty_out';
     h+='<div class="lines">'+(e.lines||[]).map(l=>'<div><span>'+esc(l.product_name)+'</span><span>'+(+l[field]||0)+(e.status==='returning'&&l.qty_back_reported!=null?' out · '+l.qty_back_reported+' back':'')+' × '+fmt0(l.unit_price)+'</span></div>').join('')
-      +'<div style="border-top:1px solid var(--cream-dark);margin-top:4px;padding-top:4px;"><span>'+plural(eventBags(e,field),'bag')+'</span><b>'+fmt(eventValue(e,field))+' if it all sells</b></div></div>';
+      +'<div style="border-top:1px solid var(--cream-dark);margin-top:4px;padding-top:4px;"><span>'+plural(eventBags(e,field),'bag')+'</span><b>'+fmt(eventValue(e,field))+(direct?' in orders':' if it all sells')+'</b></div></div>';
     if(st[2])h+='<p class="muted small" style="margin-top:8px;">'+st[2]+(e.status==='requested'&&!S.rep.w9_on_file?' Bring your filled-out <a href="'+W9_URL+'" target="_blank" rel="noopener">W-9</a> with you.':'')+'</p>';
     if(e.team_note)h+='<div class="msg info">From the kitchen: '+esc(e.team_note)+'</div>';
   }
   const b=[];
-  if(e.status==='requested'){b.push('<button class="btn sm soft" onclick="editBooking(\''+e.id+'\')">Change</button>');b.push('<button class="btn sm danger" onclick="cancelBooking(\''+e.id+'\')">Cancel</button>');}
-  if(e.status==='out'||e.status==='returning')b.push('<button class="btn sm primary" onclick="startCount(\''+e.id+'\')">'+(e.status==='out'?'Count what came back':'Change my count')+'</button>');
-  if(pre.length&&e.status!=='settled'&&e.status!=='cancelled')b.push('<button class="btn sm soft" onclick="go(\'orders\')">See pre-orders</button>');
+  if(e.status==='requested'){if(!direct)b.push('<button class="btn sm soft" onclick="editBooking(\''+e.id+'\')">Change</button>');b.push('<button class="btn sm danger" onclick="cancelBooking(\''+e.id+'\')">Cancel</button>');}
+  if(e.status==='out'||e.status==='returning')b.push('<button class="btn sm primary" onclick="startCount(\''+e.id+'\')">'+(e.status==='out'?(direct?'Count what’s left over':'Count what came back'):'Change my count')+'</button>');
+  if(pre.length&&e.status!=='settled'&&e.status!=='cancelled')b.push('<button class="btn sm soft" onclick="go(\'orders\')">'+(direct?'See orders':'See pre-orders')+'</button>');
   if(b.length)h+='<div class="btns">'+b.join('')+'</div>';
   return h+'</div>';
 }
@@ -576,7 +581,7 @@ function editBooking(id){
   go('book');
 }
 async function cancelBooking(id){
-  const e=S.events.find(x=>x.id===id);if(!e||!confirm('Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'))return;
+  const e=S.events.find(x=>x.id===id);if(!e||!confirm(e.kind==='direct'?'Cancel this kitchen pickup? Its orders go back to your open orders.':'Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'))return;
   try{await rpc('kf_rep_cancel_event',{p_id:id});toast('Cancelled');await reload();}catch(x){toast(x.message,true);}
 }
 function renderBook(){
@@ -664,33 +669,68 @@ async function sendCount(){
 }
 
 // ─── pre-orders ───
+function orderBags(o){return (o.items||[]).reduce((a,i)=>a+(+i.qty||0),0);}
+function openDirect(){return S.preorders.filter(o=>!o.event_id&&o.fulfillment&&o.fulfillment!=='event'&&(o.status==='new'||o.status==='confirmed'));}
+function orderHTML(o,pickable){
+  const contact=o.customer_contact||'',tel=contact.replace(/[^\d+]/g,'');
+  const clink=/@/.test(contact)?'<a href="mailto:'+esc(contact)+'">'+esc(contact)+'</a>':tel.length>=7?'<a href="tel:'+esc(tel)+'">'+esc(contact)+'</a>':esc(contact);
+  const chip={new:'<span class="chip blue">New</span>',confirmed:'<span class="chip green">Confirmed</span>',picked_up:'<span class="chip">'+(o.fulfillment==='delivery'?'Delivered':'Picked up')+'</span>',cancelled:'<span class="chip red">Cancelled</span>'}[o.status];
+  const how=o.fulfillment==='delivery'?'<div class="small" style="margin-top:3px;">🚗 <b>Bring it to:</b> '+esc(o.address||'(no address given)')+'</div>':o.fulfillment==='pickup'?'<div class="small" style="margin-top:3px;">🏠 <b>Picks up from you</b></div>':'';
+  const pick=pickable?'<input type="checkbox" class="dsel" value="'+o.id+'" checked onchange="drawDirectTotal()" style="width:20px;height:20px;accent-color:var(--green);margin-top:2px;flex-shrink:0;" aria-label="Include this order">':'';
+  return '<div class="order"><div class="order-top"><div style="display:flex;gap:10px;">'+pick+'<div><b>'+esc(o.customer_name)+'</b> '+chip+'<div class="muted small">'+clink+'</div></div></div><b>'+fmt(o.total)+'</b></div>'
+    +'<div class="small" style="margin-top:4px;">'+(o.items||[]).map(i=>(+i.qty)+'× '+esc(i.name)).join(', ')+'</div>'+how
+    +(o.note?'<div class="muted small" style="margin-top:2px;">“'+esc(o.note)+'”</div>':'')
+    +(o.status!=='cancelled'&&o.status!=='picked_up'?'<div class="btns" style="margin-top:8px;">'+(o.status==='new'?'<button class="btn sm soft" onclick="setOrder(\''+o.id+'\',\'confirmed\')">Confirm</button>':'')+'<button class="btn sm primary" onclick="setOrder(\''+o.id+'\',\'picked_up\')">'+(o.fulfillment==='delivery'?'Delivered':'Picked up')+'</button><button class="btn sm danger" onclick="setOrder(\''+o.id+'\',\'cancelled\')">Cancel</button></div>':'')+'</div>';
+}
 function renderOrders(){
   const evById={};S.events.forEach(e=>evById[e.id]=e);
-  const groups={};S.preorders.forEach(o=>{const k=o.event_id||'none';(groups[k]=groups[k]||[]).push(o);});
+  const on=!!S.rep.direct_orders,open=openDirect();
+  let h='<div class="card"><h2>Get more orders</h2><p class="muted">'+(on?'Post your link anywhere. People can order for you to bring by, pick up from you, or grab at your next event, and they pay you when they get it.':'Right now your link only takes orders for your events.')+'</p>'
+    +'<label class="check"><input type="checkbox" '+(on?'checked':'')+' onchange="setDirect(this.checked)"> Take orders outside events (I’ll deliver it or they pick up from me)</label>'
+    +'<div class="btns"><button class="btn tan" onclick="shareLink()">Share my order link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy link</button></div></div>';
+  if(open.length){
+    h+='<div class="section-t">Open orders · need pasta from the kitchen</div><div class="card"><p class="muted" style="margin-bottom:4px;">Tick the orders you’re ready to fill and pick a day to grab the pasta at the kitchen. It works just like an event: you take the bags, deliver them, and bring back anything left over.</p>'
+      +open.map(o=>orderHTML(o,true)).join('')
+      +'<div id="directTotal"></div><label for="dDate">Kitchen pickup day</label><input id="dDate" class="inp" type="date" min="'+today()+'" value="'+today()+'">'
+      +'<label for="dNote">Note for the kitchen (optional)</label><input id="dNote" class="inp" placeholder="e.g. after 3pm">'
+      +'<div class="msg err" id="dMsg"></div><div class="btns"><button class="btn primary full" id="dBtn" onclick="requestDirect()">Ask the kitchen for this pasta</button></div></div>';
+  }
+  const groups={};S.preorders.filter(o=>o.event_id).forEach(o=>{(groups[o.event_id]=groups[o.event_id]||[]).push(o);});
+  const done=S.preorders.filter(o=>!o.event_id&&o.fulfillment!=='event'&&(o.status==='picked_up'||o.status==='cancelled'));
   const keys=Object.keys(groups).sort((a,b)=>{const ea=evById[a],eb=evById[b];const da=ea?ea.event_date:'0',db=eb?eb.event_date:'0';const up=x=>x>=today()?0:1;return up(da)-up(db)||(up(da)?db.localeCompare(da):da.localeCompare(db));});
-  let h='<div class="card"><h2>Get more pre-orders</h2><p class="muted">People reserve on your link and pay you when they pick up at the event.</p><div class="btns"><button class="btn tan" onclick="shareLink()">Share my order link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy link</button></div></div>';
-  if(!keys.length)h+='<div class="card empty">No pre-orders yet.</div>';
+  if(!open.length&&!keys.length&&!done.length)h+='<div class="card empty">No orders yet. Share your link to get some.</div>';
   keys.forEach(k=>{
     const e=evById[k],list=groups[k];
     const live=list.filter(o=>o.status!=='cancelled');const need={};live.forEach(o=>(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);}));
-    h+='<div class="section-t">'+(e?esc(e.name)+' · '+esc(dayLabel(e.event_date)):'No event')+'</div><div class="card">';
-    if(Object.keys(need).length)h+='<div class="msg ok" style="margin-top:0;margin-bottom:6px;">Set aside: '+Object.entries(need).map(([n,q])=>'<b>'+q+'</b> '+esc(n)).join(', ')+'</div>';
-    list.forEach(o=>{
-      const contact=o.customer_contact||'',tel=contact.replace(/[^\d+]/g,'');
-      const clink=/@/.test(contact)?'<a href="mailto:'+esc(contact)+'">'+esc(contact)+'</a>':tel.length>=7?'<a href="tel:'+esc(tel)+'">'+esc(contact)+'</a>':esc(contact);
-      const chip={new:'<span class="chip blue">New</span>',confirmed:'<span class="chip green">Confirmed</span>',picked_up:'<span class="chip">Picked up</span>',cancelled:'<span class="chip red">Cancelled</span>'}[o.status];
-      h+='<div class="order"><div class="order-top"><div><b>'+esc(o.customer_name)+'</b> '+chip+'<div class="muted small">'+clink+'</div></div><b>'+fmt(o.total)+'</b></div>'
-        +'<div class="small" style="margin-top:4px;">'+(o.items||[]).map(i=>(+i.qty)+'× '+esc(i.name)).join(', ')+'</div>'
-        +(o.note?'<div class="muted small" style="margin-top:2px;">“'+esc(o.note)+'”</div>':'')
-        +(o.status!=='cancelled'&&o.status!=='picked_up'?'<div class="btns" style="margin-top:8px;">'+(o.status==='new'?'<button class="btn sm soft" onclick="setOrder(\''+o.id+'\',\'confirmed\')">Confirm</button>':'')+'<button class="btn sm primary" onclick="setOrder(\''+o.id+'\',\'picked_up\')">Picked up</button><button class="btn sm danger" onclick="setOrder(\''+o.id+'\',\'cancelled\')">Cancel</button></div>':'')+'</div>';
-    });
-    h+='</div>';
+    h+='<div class="section-t">'+(e?(e.kind==='direct'?'Kitchen pickup '+esc(dayLabel(e.event_date)):esc(e.name)+' · '+esc(dayLabel(e.event_date))):'Event')+'</div><div class="card">';
+    if(Object.keys(need).length)h+='<div class="msg ok" style="margin-top:0;margin-bottom:6px;">'+(e&&e.kind==='direct'?'In this pickup: ':'Set aside: ')+Object.entries(need).map(([n,q])=>'<b>'+q+'</b> '+esc(n)).join(', ')+'</div>';
+    h+=list.map(o=>orderHTML(o,false)).join('')+'</div>';
   });
-  $('app').innerHTML=h;
+  if(done.length)h+='<div class="section-t">Finished direct orders</div><div class="card">'+done.slice(0,20).map(o=>orderHTML(o,false)).join('')+'</div>';
+  $('app').innerHTML=h;if(open.length)drawDirectTotal();
+}
+function drawDirectTotal(){
+  const ids=[...document.querySelectorAll('.dsel:checked')].map(i=>i.value),need={};let t=0;
+  S.preorders.filter(o=>ids.includes(o.id)).forEach(o=>{t+=+o.total||0;(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);});});
+  const bags=Object.values(need).reduce((a,b)=>a+b,0),prior=monthSummary(ym(today())).sales;
+  $('directTotal').innerHTML=bags?'<div class="total-bar"><div><div class="s">'+Object.entries(need).map(([n,q])=>q+' '+esc(n)).join(', ')+'</div><div class="big">'+fmt0(t)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(addCommission(prior,t))+'</div></div></div>':'';
+  const b=$('dBtn');if(b)b.disabled=!ids.length;
+}
+async function requestDirect(){
+  const ids=[...document.querySelectorAll('.dsel:checked')].map(i=>i.value),btn=$('dBtn'),msg=$('dMsg');msg.textContent='';
+  if(!ids.length){msg.textContent='Tick at least one order.';return;}
+  if(!$('dDate').value){msg.textContent='Pick the day you’ll grab the pasta.';return;}
+  btn.disabled=true;btn.textContent='Sending…';
+  try{await rpc('kf_rep_request_direct',{p_order_ids:ids,p_date:$('dDate').value,p_note:$('dNote').value.trim()});toast('Sent! The kitchen will have it ready.');await reload('orders');}
+  catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent='Ask the kitchen for this pasta';}
+}
+async function setDirect(on){
+  try{await rpc('kf_rep_set_direct',{p_on:on});S.rep.direct_orders=on;toast(on?'Your link now takes direct orders':'Your link only takes event orders now');go('orders');}
+  catch(e){toast(e.message,true);}
 }
 async function setOrder(id,st){
   if(st==='cancelled'&&!confirm('Cancel this pre-order?'))return;
-  try{await rpc('kf_rep_preorder_status',{p_id:id,p_status:st});const o=S.preorders.find(x=>x.id===id);if(o)o.status=st;toast({confirmed:'Confirmed',picked_up:'Marked picked up',cancelled:'Cancelled'}[st]);go('orders');}
+  try{await rpc('kf_rep_preorder_status',{p_id:id,p_status:st});const o=S.preorders.find(x=>x.id===id);if(o)o.status=st;toast({confirmed:'Confirmed',picked_up:o&&o.fulfillment==='delivery'?'Marked delivered':'Marked picked up',cancelled:'Cancelled'}[st]);go('orders');}
   catch(e){toast(e.message,true);}
 }
 
@@ -734,31 +774,43 @@ async function saveMe(){
   btn.disabled=false;
 }
 
-// ─── public pre-order page ───
-const O={code:'',data:null,event:null,qty:{}};
+// ─── public order page ───
+const O={code:'',data:null,how:null,qty:{}};   // how: 'delivery' | 'pickup' | 'ev:<event id>'
 async function renderOrderPage(code){
   O.code=code;$('nav').style.display='none';
-  $('hTitle').textContent='Reserve handmade pasta';$('hSub').textContent='Pay when you pick it up';
+  $('hTitle').textContent='Order handmade pasta';$('hSub').textContent='Pay when you get it';
   try{O.data=await rpc('kf_rep_public',{p_code:code});}catch(e){O.data={ok:false,err:e.message};}
   if(!O.data||!O.data.ok){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>This order link isn’t active</h2><p class="muted">'+(O.data&&O.data.err?esc(O.data.err):'Double-check the link with the person who shared it.')+'</p></div>';return;}
   S.cfg=Object.assign({},S.cfg||{},{line_names:O.data.line_names});
   const first=O.data.rep.first_name;
   $('hTitle').textContent='Pasta from '+first;
   $('hSub').textContent='The Kilted Farmers · handmade in Concord, MI';
-  if(!O.data.events.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>No upcoming events right now</h2><p class="muted">'+esc(first)+' doesn’t have an event open for pre-orders yet. Check back soon.</p></div>';return;}
-  if(!O.event||!O.data.events.some(e=>e.id===O.event))O.event=O.data.events.length===1?O.data.events[0].id:null;
+  const opts=oOptions();
+  if(!opts.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>Not taking orders right now</h2><p class="muted">'+esc(first)+' doesn’t have an event open for orders yet. Check back soon.</p></div>';return;}
+  if(!O.how||!opts.some(x=>x.key===O.how))O.how=opts.length===1?opts[0].key:null;
   drawOrderPage();
 }
-function oZone(){const e=O.data.events.find(x=>x.id===O.event);return e?e.zone:'local';}
-function oPrice(p){return r2(+p.price+(oZone()==='far'?+O.data.far_add||0:0));}
+function oOptions(){
+  const first=O.data.rep.first_name,list=[];
+  if(O.data.direct_orders){
+    list.push({key:'delivery',title:esc(first)+' brings it to me',sub:'Leave an address or nearby spot, and '+esc(first)+' will reach out to set a time.'});
+    list.push({key:'pickup',title:'I’ll pick it up from '+esc(first),sub:esc(first)+' will reach out when it’s ready'+(O.data.rep.city?' in '+esc(O.data.rep.city):'')+'.'});
+  }
+  O.data.events.forEach(e=>list.push({key:'ev:'+e.id,title:'At '+esc(e.name),sub:esc(dayLabel(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?'<br>'+esc([e.place,e.city].filter(Boolean).join(', ')):''),ev:e}));
+  return list;
+}
+function oEvent(){return O.how&&O.how.startsWith('ev:')?O.data.events.find(x=>'ev:'+x.id===O.how):null;}
+function oPrice(p){const e=oEvent();return r2(+p.price+(e&&e.zone==='far'?+O.data.far_add||0:0));}
 function drawOrderPage(){
-  const first=O.data.rep.first_name;
-  let h='<div class="card"><h2>Pick your event</h2><p class="muted">Reserve bags now and pay '+esc(first)+' when you pick them up.</p>';
-  O.data.events.forEach(e=>{
-    h+='<label class="pick'+(O.event===e.id?' on':'')+'"><input type="radio" name="oev" '+(O.event===e.id?'checked':'')+' onchange="O.event=\''+e.id+'\';drawOrderPage()"><b>'+esc(e.name)+'</b><br><span class="muted">'+esc(dayLabel(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?'<br>'+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</span></label>';
+  const first=O.data.rep.first_name,opts=oOptions();
+  let h='<div class="card"><h2>How do you want to get it?</h2><p class="muted">No shipping and nothing to pay now. You pay '+esc(first)+' when you get your pasta.</p>';
+  if(O.data.direct_orders&&O.data.events.length)h+='<div class="line-h" style="margin-top:12px;">Any time</div>';
+  opts.forEach((o,ix)=>{
+    if(o.ev&&(ix===0||!opts[ix-1].ev))h+=O.data.direct_orders?'<div class="line-h" style="margin-top:14px;">At an upcoming event</div>':'';
+    h+='<label class="pick'+(O.how===o.key?' on':'')+'"><input type="radio" name="ohow" '+(O.how===o.key?'checked':'')+' onchange="O.how=\''+o.key+'\';drawOrderPage()"><b>'+o.title+'</b><br><span class="muted">'+o.sub+'</span></label>';
   });
   h+='</div>';
-  if(O.event){
+  if(O.how){
     h+='<div class="card"><h2>Choose your pasta</h2>';let last=null;
     O.data.products.forEach(p=>{
       if(p.line!==last){last=p.line;h+='<div class="line-h">'+esc(lineName(p.line))+' · '+fmt0(oPrice(p))+' a bag</div>';}
@@ -766,18 +818,19 @@ function drawOrderPage(){
     });
     h+='<div id="oTotal"></div></div>';
     h+='<div class="card"><h2>Your details</h2>'
-      +'<label for="oName">Name</label><input id="oName" class="inp" autocomplete="name">'
-      +'<label for="oContact">Phone or email</label><input id="oContact" class="inp" autocomplete="tel" placeholder="So '+esc(first)+' can reach you">'
-      +'<label for="oNote">Note (optional)</label><input id="oNote" class="inp" placeholder="Anything '+esc(first)+' should know">'
-      +'<div class="msg err" id="oMsg"></div><div class="btns"><button class="btn primary full" id="oBtn" onclick="placeOrder()">Reserve my pasta</button></div>'
-      +'<p class="muted small center" style="margin-top:10px;">Nothing to pay now. You’ll pay '+esc(first)+' at pickup.</p></div>';
+      +'<label for="oName">Name</label><input id="oName" class="inp" autocomplete="name" value="'+esc(O.name||'')+'" oninput="O.name=this.value">'
+      +'<label for="oContact">Phone or email</label><input id="oContact" class="inp" autocomplete="tel" placeholder="So '+esc(first)+' can reach you" value="'+esc(O.contact||'')+'" oninput="O.contact=this.value">'
+      +(O.how==='delivery'?'<label for="oAddr">Where should '+esc(first)+' bring it?</label><input id="oAddr" class="inp" autocomplete="street-address" placeholder="Address, or a spot like your work" value="'+esc(O.addr||'')+'" oninput="O.addr=this.value">':'')
+      +'<label for="oNote">Note (optional)</label><input id="oNote" class="inp" placeholder="'+(O.how==='delivery'||O.how==='pickup'?'Best days or times for you':'Anything '+esc(first)+' should know')+'" value="'+esc(O.note||'')+'" oninput="O.note=this.value">'
+      +'<div class="msg err" id="oMsg"></div><div class="btns"><button class="btn primary full" id="oBtn" onclick="placeOrder()">Place my order</button></div>'
+      +'<p class="muted small center" style="margin-top:10px;">Nothing to pay now. You’ll pay '+esc(first)+' when you get it.</p></div>';
   }
-  $('app').innerHTML=h;if(O.event)drawOTotal();
+  $('app').innerHTML=h;if(O.how)drawOTotal();
 }
 function oQty(pid,v){O.qty[pid]=Math.min(25,Math.max(0,v|0));const i=$('o_'+pid);if(i&&+i.value!==O.qty[pid])i.value=O.qty[pid];drawOTotal();}
 function drawOTotal(){
   let bags=0,t=0;O.data.products.forEach(p=>{const q=O.qty[p.id]||0;bags+=q;t+=q*oPrice(p);});
-  $('oTotal').innerHTML=bags?'<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+'</div><div class="big">'+fmt(t)+'</div></div><div class="s" style="text-align:right;">paid at pickup</div></div>':'';
+  $('oTotal').innerHTML=bags?'<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+'</div><div class="big">'+fmt(t)+'</div></div><div class="s" style="text-align:right;">paid when you get it</div></div>':'';
 }
 async function placeOrder(){
   const msg=$('oMsg'),btn=$('oBtn');msg.textContent='';
@@ -785,15 +838,19 @@ async function placeOrder(){
   if(!items.length){msg.textContent='Choose at least one bag.';return;}
   if(!$('oName').value.trim()){msg.textContent='Enter your name.';return;}
   if(!$('oContact').value.trim()){msg.textContent='Enter a phone number or email.';return;}
-  btn.disabled=true;btn.textContent='Reserving…';
+  if(O.how==='delivery'&&!$('oAddr').value.trim()){msg.textContent='Tell us where to bring it.';return;}
+  const ev=oEvent();
+  btn.disabled=true;btn.textContent='Placing your order…';
   try{
-    const r=await rpc('kf_rep_place_preorder',{p_code:O.code,p_event:O.event,p_name:$('oName').value.trim(),p_contact:$('oContact').value.trim(),p_items:items,p_note:$('oNote').value.trim()});
+    const r=await rpc('kf_rep_place_preorder',{p_code:O.code,p_event:ev?ev.id:null,p_name:$('oName').value.trim(),p_contact:$('oContact').value.trim(),p_items:items,p_note:$('oNote').value.trim(),p_fulfillment:ev?'event':O.how,p_address:O.how==='delivery'?$('oAddr').value.trim():null});
     const first=O.data.rep.first_name;
-    $('app').innerHTML='<div class="card center"><div class="hero-ico">🎉</div><h2>You’re all set</h2><p class="muted">'+esc(first)+' will have your pasta at <b>'+esc(r.event)+'</b> on '+esc(dayLabel(r.event_date))+(r.place||r.city?', '+esc([r.place,r.city].filter(Boolean).join(', ')):'')+'.</p>'
-      +'<div class="total-bar" style="justify-content:center;"><div class="center"><div class="s">Pay at pickup</div><div class="big">'+fmt(r.total)+'</div></div></div>'
-      +'<p class="muted small" style="margin-top:12px;">Need to change something? Reach out to '+esc(first)+'.</p><div class="btns" style="justify-content:center;"><button class="btn soft" onclick="O.qty={};renderOrderPage(O.code)">Place another order</button></div></div>';
+    const where=r.fulfillment==='event'?esc(first)+' will have your pasta at <b>'+esc(r.event)+'</b> on '+esc(dayLabel(r.event_date))+(r.place||r.city?', '+esc([r.place,r.city].filter(Boolean).join(', ')):'')+'.'
+      :r.fulfillment==='delivery'?esc(first)+' will reach out to set a time to bring it to you.':esc(first)+' will reach out when it’s ready to pick up.';
+    $('app').innerHTML='<div class="card center"><div class="hero-ico">🎉</div><h2>You’re all set</h2><p class="muted">'+where+'</p>'
+      +'<div class="total-bar" style="justify-content:center;"><div class="center"><div class="s">Pay '+esc(first)+' when you get it</div><div class="big">'+fmt(r.total)+'</div></div></div>'
+      +'<p class="muted small" style="margin-top:12px;">Need to change something? Reach out to '+esc(first)+'.</p><div class="btns" style="justify-content:center;"><button class="btn soft" onclick="O.qty={};O.note=\'\';O.addr=\'\';renderOrderPage(O.code)">Place another order</button></div></div>';
     window.scrollTo(0,0);
-  }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent='Reserve my pasta';}
+  }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent='Place my order';}
 }
 
 init();
