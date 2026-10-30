@@ -183,6 +183,7 @@ const HUBS = [
     { id:'proposals', label:'Civic Voice' },
     { id:'reps',      label:'Reps' },
     { id:'jackets',   label:'Sponsor Jackets' },
+    { id:'constitution', label:'Constitutions' },
     { id:'pulse',     label:'Pulse' }
   ]},
   { id:'community', icon:'\uD83E\uDD1D', label:'Community', subs:[
@@ -2364,7 +2365,7 @@ const __DEEP_LINK = (function(){
     }
     if(!billId && !q) {
       const t = p.get('tab');
-      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|organize|funding|business)$/.test(t) ? {tab:t} : null;
+      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|constitution|organize|funding|business)$/.test(t) ? {tab:t} : null;
     }
     return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
   } catch(e) { return null; }
@@ -11276,7 +11277,7 @@ function filerCase(s) {
   const str = String(s || '');
   if(str !== str.toUpperCase()) return str;
   const small = {OF:'of',AND:'and',FOR:'for',THE:'the',IN:'in',TO:'to',ON:'on',AT:'at'};
-  const keep = /^(PAC|PACS|LLC|INC|USA|US|U\.S\.|UAW|IBEW|AFL|CIO|AFSCME|SEIU|NRA|NEA|AFT|UFCW|IUOE|UA|IUPAT|NAR|AIPAC|BANKPAC|AT&T|II|III|IV|MI|DC|LP|CO|JR|SR)$/;
+  const keep = /^(PAC|PACS|LLC|INC|USA|US|U\.S\.|UAW|IBEW|AFL|CIO|AFSCME|SEIU|NRA|NEA|AFT|UFCW|IUOE|UA|IUPAT|NAR|AIPAC|BANKPAC|AT&T|II|III|IV|MI|DC|LP|CO|JR|SR|DTE|CMS|MEA|MTA|BCBSM|MIBANKPAC|LCV|NFIB|AARP|AEP|ITC|CPA|CPAS|MEDC|NBCUNIVERSAL)$/;
   return str.split(/(\s+|-|\/|\()/).map((w,i)=>{
     const bare = w.replace(/[^A-Z&.]/g,'');
     if(!bare) return w;
@@ -11854,13 +11855,12 @@ function JacketCard({o, profile, highlight, onToast, onChanged}) {
             o.refresh_error && h('div',{style:{color:'#c0392b',marginTop:3}}, o.refresh_error))));
 }
 
-function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNavigate}) {
+// The Congress jackets: numbers from the FEC (finance-refresh fills them in)
+function CongressJackets({profile, onToast, focus}) {
   const [rows, setRows] = useState(null);       // null = loading
   const [missing, setMissing] = useState(false);
   const [sort, setSort] = useState('seat');
-  const [why, setWhy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [focus, setFocus] = useState(null);
   const admin = isAdminHere(profile) || isFullAdmin(profile);
   const load = async()=>{
     const {data, error} = await sb.from('official_money').select('*').eq('active', true).order('sort');
@@ -11868,9 +11868,6 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNaviga
     setMissing(false); setRows(data || []);
   };
   useEffect(()=>{ load(); },[]);
-  useEffect(()=>{
-    if(navCtx && navCtx.jacketId) { setFocus(String(navCtx.jacketId)); onNavCtxConsumed && onNavCtxConsumed(); }
-  },[navCtx && navCtx.jacketId]);
   // What the last refresh told us about the server setup, in plain words
   const [setup, setSetup] = useState(null);   // {oldFunction, demoKey, notDeployed}
   const refresh = async()=>{
@@ -11895,23 +11892,7 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNaviga
   const list = [...(rows || [])];
   if(sort === 'pacs') list.sort((a,b)=>(Number(b.from_pacs)||0) - (Number(a.from_pacs)||0) || a.sort - b.sort);
   const waiting = (rows || []).length > 0 && (rows || []).every(r=>r.status === 'unchecked');
-  const tab = (id, label)=>h('button',{onClick:()=>setSort(id),'aria-pressed':sort===id,
-    style:{background:sort===id?'#1a1a2e':'#fff',color:sort===id?'#f0c040':'#555',border:'1px solid ' + (sort===id?'#1a1a2e':'#ddd'),
-      borderRadius:16,padding:'5px 13px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, label);
-  return h('div',null,
-    h('div',{style:{marginBottom:14}},
-      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:6}},'Sponsor Jackets'),
-      h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10,marginBottom:8}},
-        'Robin Williams once joked that politicians should wear NASCAR jackets so we\'d know who their sponsors are. So we made them.'),
-      h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6}},
-        'Each patch is a PAC that gave money to their campaign, and the biggest money gets the chest. The gold band is small donors: people giving $200 or less. ',
-        'Every member of Congress from Michigan gets the same jacket, with numbers straight from federal filings.'),
-      onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('funding'),
-        style:{background:'none',border:'none',padding:0,marginTop:6,marginRight:14,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
-        'Fair\'s fair: see who funds The People\'s Voices →'),
-      h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,marginTop:6,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
-        why ? 'Hide' : 'What counts as PAC money?'),
-      why && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:8}}, h(PacMoneyExplainer))),
+  return h(Fragment,null,
     admin && h('div',{style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'8px 12px',marginBottom:14,fontFamily:LB,fontSize:12.5,color:'#8a6000'}},
       missing ? 'Admins: run tpv_sponsor_jackets.sql in Supabase, then deploy the updated finance-refresh server function.'
         : h(Fragment,null,
@@ -11931,15 +11912,288 @@ function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNaviga
     : missing || (waiting && !admin) ? (!admin && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'20px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
         'The sponsor patches are being stitched on. Check back soon.'))
     : h(Fragment,null,
-        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
-          h('span',{style:{fontSize:12,color:'#888',fontFamily:LB,marginRight:2}},'Order:'),
-          tab('seat','By seat'), tab('pacs','Most PAC money')),
+        h(JacketSortRow,{sort,setSort}),
         h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}},
           list.map(o=>h(JacketCard,{key:o.id, o, profile, highlight:focus===o.id, onToast, onChanged:load}))),
         h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.6,marginTop:16}},
           'Source: Federal Election Commission. Not sure which district is yours? ',
           h('a',{href:'https://www.house.gov/representatives/find-your-representative',target:'_blank',rel:'noopener',style:{color:'#1a5c8a'}},'Find your U.S. Representative ↗'),
-          '. State and local officials report to Michigan instead of the FEC, so they aren\'t here yet.')));
+          '.')));
+}
+
+function JacketSortRow({sort, setSort, children}) {
+  const tab = (id, label)=>h('button',{onClick:()=>setSort(id),'aria-pressed':sort===id,
+    style:{background:sort===id?'#1a1a2e':'#fff',color:sort===id?'#f0c040':'#555',border:'1px solid ' + (sort===id?'#1a1a2e':'#ddd'),
+      borderRadius:16,padding:'5px 13px',fontSize:12.5,cursor:'pointer',fontFamily:LB}}, label);
+  return h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
+    h('span',{style:{fontSize:12,color:'#888',fontFamily:LB,marginRight:2}},'Order:'),
+    tab('seat','By seat'), tab('pacs','Most PAC money'), children);
+}
+
+// ── Michigan's own government: numbers from Michigan's campaign finance files ──
+// (the nightly state-jackets job on GitHub fills in the state_money table)
+const MI_JACKET_SEARCH = 'https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do?page=page.miboeContributionPublicSearch';
+const MI_CHAMBERS = [['all','Everyone'],['statewide','Statewide'],['state_senate','State Senate'],['state_house','State House']];
+function miSeatSub(o) {
+  if(o.chamber === 'statewide') return o.office + ' of Michigan';
+  return (o.chamber === 'state_senate' ? 'State Sen.' : 'State Rep.') + ' · ' + (o.district_label || 'Michigan');
+}
+function miRaces(o) {
+  const r = Array.isArray(o.other_races) ? o.other_races : [];
+  const name = (x)=>{
+    const off = x.office === 'Representative in State Legislature' ? 'State House' : x.office === 'State Senator' ? 'State Senate' : x.office === 'Lt. Governor' ? 'Lieutenant Governor' : x.office;
+    return off + (x.district ? ' (' + x.district + ')' : '');
+  };
+  return r.map(name);
+}
+function stateJacketView(o) {
+  const reported = o.status === 'reported';
+  return {...o,
+    subtitle: miSeatSub(o),
+    band: !o.status || o.status === 'unchecked' ? 'First numbers coming soon'
+      : o.status === 'none_filed' ? 'No ' + (o.period_label || '2025–26') + ' contributions on file'
+      : 'Individual donors · ' + fmtMoney(o.from_individuals),
+    emptyTitle: 'No PAC or committee money',
+    emptySub: reported ? 'This campaign reported none' : ''};
+}
+
+function StateJacketCard({o, profile, highlight, onToast, onChanged}) {
+  const [open, setOpen] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [ids, setIds] = useState('');
+  const [busy, setBusy] = useState(false);
+  const full = isFullAdmin(profile);
+  const ref = useRef(null);
+  useEffect(()=>{ if(highlight && ref.current) { try { ref.current.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) {} } },[highlight]);
+  const v = stateJacketView(o);
+  const raised = Number(o.total_raised) || 0;
+  const pacs = Number(o.from_pacs) || 0;
+  const people = o.from_individuals === null || o.from_individuals === undefined ? null : Number(o.from_individuals);
+  const tops = Array.isArray(o.top_pacs) ? o.top_pacs : [];
+  const asOf = o.coverage_end ? new Date(o.coverage_end + 'T12:00:00').toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : null;
+  const races = miRaces(o);
+  const pill = {fontSize:11.5,padding:'2px 9px',borderRadius:10,border:'1px solid #d8d2c4',background:'#faf8f3',color:'#444',whiteSpace:'nowrap'};
+  const committees = (o.mi_committee_ids || []).map((id, i)=>({id, name:(o.mi_committee_names || [])[i] || ''}));
+  const share = async()=>{
+    const url = shareLink(getCurrentCounty().slug, 'j=' + encodeURIComponent(o.id));
+    const text = o.name + '\'s sponsor jacket: who funds their campaign, straight from Michigan\'s campaign finance filings.';
+    if(navigator.share) { try { await navigator.share({title:'Sponsor Jackets · The People\'s Voices', text, url}); return; } catch(e) { if(e && e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); onToast && onToast('🔗 Link copied'); } catch(e) { window.prompt('Copy this link:', url); }
+  };
+  const savePin = async()=>{
+    const list = ids.split(/[\s,]+/).map(x=>x.trim()).filter(Boolean);
+    if(list.some(x=>!/^\d{6,8}$/.test(x))) { onToast && onToast('Committee numbers are 6 to 8 digits, like 0520430.'); return; }
+    setBusy(true);
+    const {error} = await sb.from('state_money').update({pinned_committee_ids:list, refresh_error:null}).eq('id', o.id);
+    setBusy(false);
+    if(error) { onToast && onToast('❌ ' + error.message); return; }
+    setFixing(false);
+    onToast && onToast(list.length ? '✓ Saved. Tomorrow morning\'s update uses those committees.' : '✓ Back to finding their committees automatically.');
+    onChanged && onChanged();
+  };
+  return h('div',{ref,id:'jacket-' + o.id,style:{background:'#fff',border:'1px solid ' + (highlight ? JACKET_GOLD : '#e5dece'),borderRadius:12,padding:'14px 14px 12px',
+      boxShadow:highlight ? '0 0 0 3px rgba(240,192,64,.35)' : 'none',fontFamily:LB,scrollMarginTop:80}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:8}},
+      h('div',{style:{minWidth:0}},
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:16.5,color:'#1a1a2e',lineHeight:1.2}}, o.name),
+        h('div',{style:{fontSize:12,color:'#888',marginTop:2}},
+          o.office + (o.district_label ? ' · ' + o.district_label : '') + (o.party ? ' · ' + o.party : ''))),
+      h('button',{onClick:share,'aria-label':'Share ' + o.name + '\'s jacket',
+        style:{background:'none',border:'1px solid #e5dece',borderRadius:6,padding:'4px 10px',fontSize:12,color:'#1a5c8a',cursor:'pointer',whiteSpace:'nowrap',fontFamily:LB}},'Share')),
+    h(SponsorJacket,{o:v}),
+    o.status === 'reported' && h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,justifyContent:'center',marginTop:10}},
+      h('span',{style:pill},'Raised ', h('strong',null, fmtMoney(raised))),
+      h('span',{style:pacs === 0 ? {...pill,borderColor:'#9ab8a6',background:'#f1f7f3',color:'#2f5d43'} : pill},
+        'PACs & committees ', h('strong',null, fmtMoney(pacs)), raised ? ' (' + pctOf(pacs, raised) + ')' : ''),
+      people !== null && h('span',{style:pill},'People ', h('strong',null, fmtMoney(people)), raised ? ' (' + pctOf(people, raised) + ')' : '')),
+    o.status === 'reported' && h('div',{style:{fontSize:11.5,color:'#888',textAlign:'center',marginTop:6,lineHeight:1.5}},
+      'Money raised ' + (o.period_label || '2025–26') + (asOf ? ', through ' + asOf : ''),
+      races.length > 0 && h('div',{style:{color:'#8a6000'}}, 'Includes money for their ' + (races.length > 1 ? 'races for ' + races.slice(0, -1).join(', ') + ' and ' + races[races.length - 1] : 'race for ' + races[0]) + '.'),
+      Number(o.in_kind) > 0 && h('div',null, 'Includes ' + fmtMoney(o.in_kind) + ' given as goods or services, like ads, mail or staff time.'),
+      Number(o.own_committees) > 0 && h('div',null, 'Plus ' + fmtMoney(o.own_committees) + ' moved from their own other committees (no patch for that).'),
+      Number(o.self_funded) > 0 && h('div',null, 'Plus ' + fmtMoney(o.self_funded) + ' of their own money.')),
+    o.status === 'none_filed' && h('div',{style:{fontSize:12,color:'#666',textAlign:'center',marginTop:8,lineHeight:1.5}},
+      'No contributions to their campaign committee are on file with Michigan for ' + (o.period_label || '2025–26') + '. That can mean they aren\'t raising money right now; it isn\'t an accusation of anything.'),
+    h('div',{style:{display:'flex',justifyContent:'center',gap:14,flexWrap:'wrap',marginTop:8}},
+      tops.length > 0 && h('button',{className:'tpv-link',onClick:()=>setOpen(!open),
+        style:{background:'none',border:'none',color:'#1a5c8a',cursor:'pointer',fontSize:12.5,padding:0,textDecoration:'underline',fontFamily:LB}},
+        open ? 'Hide sponsor list' : 'See the biggest sponsors'),
+      h('a',{href:MI_JACKET_SEARCH,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:12.5}},'Michigan\'s filings ↗')),
+    open && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:10}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:12.5,color:'#1a1a2e',marginBottom:4}},'Biggest PAC and committee sponsors'),
+      tops.map((p,i)=>h('div',{key:i,style:{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5,color:'#333',padding:'3px 0',borderBottom:'1px dotted #e5dece'}},
+        h('span',{style:{minWidth:0}}, filerCase(p.name)), h('strong',{style:{whiteSpace:'nowrap'}}, fmtMoney(p.amount)))),
+      pacs - tops.reduce((n,p)=>n+Number(p.amount||0),0) > 1 && h('div',{style:{fontSize:12,color:'#777',padding:'4px 0'}},
+        'Others: ' + fmtMoney(pacs - tops.reduce((n,p)=>n+Number(p.amount||0),0)) + (o.sponsor_count > tops.length ? ' from ' + (o.sponsor_count - tops.length) + ' more' : '')),
+      committees.length > 0 && h('div',{style:{fontSize:11.5,color:'#777',marginTop:8,lineHeight:1.5}},
+        'Their campaign committee' + (committees.length > 1 ? 's' : '') + ' with Michigan: ',
+        committees.map((c,i)=>h('span',{key:c.id}, i ? '; ' : '', filerCase(c.name), ' (no. ' + c.id + ')')),
+        '. Search that number on Michigan\'s site to see every filing.')),
+    // Full admins: which committees this jacket uses
+    full && h('div',{style:{borderTop:'1px dashed #e5dece',marginTop:10,paddingTop:8,fontSize:11.5,color:'#888'}},
+      fixing
+        ? h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}},
+            h('input',{value:ids,onChange:e=>setIds(e.target.value),placeholder:'Committee numbers, like 0520430','aria-label':'Michigan committee numbers',
+              style:{flex:'1 1 170px',minWidth:0,border:'1px solid #ddd',borderRadius:5,padding:'6px 8px',fontSize:16,fontFamily:'ui-monospace, Menlo, monospace'}}),
+            h('button',{onClick:savePin,disabled:busy,style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:5,padding:'6px 12px',fontSize:12,cursor:'pointer'}}, busy ? 'Saving...' : 'Save'),
+            h('button',{onClick:()=>setFixing(false),style:{background:'none',border:'none',color:'#888',fontSize:12,cursor:'pointer'}},'Cancel'),
+            h('div',{style:{width:'100%',fontSize:11.5,color:'#888'}},'Leave it empty to go back to finding their committees automatically.'))
+        : h('div',null,
+            'Michigan committees: ', committees.length ? committees.map(c=>c.id).join(', ') : 'none found',
+            (o.pinned_committee_ids || []).length ? ' (set by an admin)' : ' (found automatically)',
+            ' · ', h('button',{onClick:()=>{ setIds((o.pinned_committee_ids || []).join(', ') || (o.mi_committee_ids || []).join(', ')); setFixing(true); },style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:11.5}},'Change'),
+            o.refresh_error && h('div',{style:{color:'#c0392b',marginTop:3}}, o.refresh_error))));
+}
+
+function StateJackets({profile, onToast, focus}) {
+  const [rows, setRows] = useState(null);
+  const [missing, setMissing] = useState(false);
+  const [sort, setSort] = useState('seat');
+  const [chamber, setChamber] = useState('all');
+  const [q, setQ] = useState('');
+  const [limit, setLimit] = useState(24);
+  const admin = isAdminHere(profile) || isFullAdmin(profile);
+  const load = async()=>{
+    const {data, error} = await sb.from('state_money').select('*').eq('active', true).order('sort');
+    if(error) { setMissing(true); setRows([]); return; }
+    setMissing(false); setRows(data || []);
+  };
+  useEffect(()=>{ load(); },[]);
+  // A shared link to one jacket: make sure it's on screen
+  useEffect(()=>{
+    if(!focus || !rows) return;
+    const i = rows.findIndex(r=>r.id === focus);
+    if(i < 0) return;
+    setChamber('all'); setQ(''); setSort('seat'); setLimit(Math.max(24, i + 6));
+  },[focus, rows && rows.length]);
+  const words = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const hit = (r)=>{
+    if(!words.length) return true;
+    const hay = (r.name + ' ' + r.office + ' ' + (r.district_label || '') + ' district ' + (r.district_num || '') + ' ' + (r.party || '')).toLowerCase();
+    return words.every(w=>/^\d+$/.test(w) ? Number(w) === r.district_num : hay.includes(w));
+  };
+  let list = (rows || []).filter(r=>(chamber === 'all' || r.chamber === chamber) && hit(r));
+  if(sort === 'pacs') list = [...list].sort((a,b)=>(Number(b.from_pacs)||0) - (Number(a.from_pacs)||0) || a.sort - b.sort);
+  const count = (c)=>(rows || []).filter(r=>c === 'all' || r.chamber === c).length;
+  const waiting = (rows || []).length > 0 && (rows || []).every(r=>r.status === 'unchecked');
+  const asOfRaw = (rows || []).map(r=>r.data_as_of).filter(Boolean).sort().pop();
+  const asOf = asOfRaw ? new Date(asOfRaw) : null;
+  const stale = asOf && Date.now() - asOf.getTime() > 3 * 864e5;
+  const chip = (id, label)=>h('button',{key:id,onClick:()=>{ setChamber(id); setLimit(24); },'aria-pressed':chamber===id,
+    style:{background:chamber===id?'#1a1a2e':'#fff',color:chamber===id?'#f0c040':'#555',border:'1px solid ' + (chamber===id?'#1a1a2e':'#ddd'),
+      borderRadius:16,padding:'5px 12px',fontSize:12.5,cursor:'pointer',fontFamily:LB,whiteSpace:'nowrap'}}, label + (rows ? ' (' + count(id) + ')' : ''));
+  return h(Fragment,null,
+    admin && (missing || stale || waiting) && h('div',{style:{background:'#fff8e7',border:'1px solid #f0c040',borderRadius:8,padding:'10px 12px',marginBottom:14,fontFamily:LB,fontSize:12.5,color:'#8a6000',lineHeight:1.6}},
+      missing ? 'Admins: run tpv_state_jackets.sql in Supabase, then add the nightly update to GitHub (state-jackets.yml).'
+      : waiting ? 'Admins: these fill in after the nightly update on GitHub runs. To run it now: GitHub → Actions → "Sponsor Jackets (Michigan)" → Run workflow.'
+      : 'Admins: the nightly update hasn\'t brought in new numbers since ' + asOf.toLocaleDateString([], {month:'long', day:'numeric'}) + '. Check GitHub → Actions → "Sponsor Jackets (Michigan)". GitHub pauses nightly jobs after 60 days with no uploads to the site; tap "Enable workflow" there if you see it.'),
+    rows === null ? h('div',{style:{textAlign:'center',padding:30}}, h(Spinner))
+    : missing || (waiting && !admin) ? (!admin && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'20px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
+        'The sponsor patches are being stitched on. Check back soon.'))
+    : h(Fragment,null,
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}, MI_CHAMBERS.map(([id,label])=>chip(id,label))),
+        h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
+          h('input',{value:q,onChange:e=>{ setQ(e.target.value); setLimit(24); },type:'search',placeholder:'Find by name or district number','aria-label':'Find a state official by name or district number',
+            style:{flex:'1 1 220px',minWidth:0,border:'1px solid #d8d2c4',borderRadius:8,padding:'8px 10px',fontSize:16,fontFamily:LB,background:'#fff'}}),
+          h('a',{href:'https://www.michigan.gov/sos/elections/voting/find-your-elected-officials',target:'_blank',rel:'noopener',style:{color:'#1a5c8a',fontSize:12.5,fontFamily:LB}},'Who represents me? ↗')),
+        h(JacketSortRow,{sort,setSort}),
+        list.length === 0 && h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'18px 16px',textAlign:'center',fontFamily:LB,color:'#666'}},
+          'Nobody matches “' + q.trim() + '”. Try a last name or a district number.'),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}},
+          list.slice(0, limit).map(o=>h(StateJacketCard,{key:o.id, o, profile, highlight:focus===o.id, onToast, onChanged:load}))),
+        list.length > limit && h('div',{style:{textAlign:'center',marginTop:16}},
+          h('button',{onClick:()=>setLimit(limit + 24),style:{background:'#fff',border:'1px solid #1a1a2e',color:'#1a1a2e',borderRadius:8,padding:'9px 18px',fontFamily:PD,fontWeight:700,fontSize:13.5,cursor:'pointer'}},
+            'Show ' + Math.min(24, list.length - limit) + ' more of ' + list.length)),
+        h('div',{style:{fontFamily:LB,fontSize:12,color:'#888',lineHeight:1.6,marginTop:16}},
+          'Source: the Michigan Department of State\'s campaign finance filings, which the state refreshes every night',
+          asOf ? ' (these numbers are from its ' + asOf.toLocaleDateString([], {month:'long', day:'numeric', year:'numeric'}) + ' files)' : '',
+          '. Totals count every contribution in their campaign committee\'s reports dated in the two-year period. ',
+          'Michigan law doesn\'t allow this information to be used to ask people for money or for commercial purposes, so we show totals and the committees that gave, never individual donors.')));
+}
+
+function StateMoneyExplainer() {
+  return h('div',{style:{fontSize:12,color:'#555',fontFamily:LB,lineHeight:1.65}},
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'Patches'), ' are PACs and committees that gave to the campaign: company, trade-group and union PACs, ',
+      'party and caucus committees, and other politicians\' leadership funds and campaigns. Michigan doesn\'t let corporations or unions give to candidates directly, so they give through PACs.'),
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'Caucus committees'), ' like the House and Senate Republican and Democratic funds often pay for ads, mail and staff in close races. ',
+      'That help counts too, as "goods or services."'),
+    h('p',{style:{margin:'0 0 6px'}}, h('strong',null,'The gold band'), ' is money from individual people. We never name them.'),
+    h('p',{style:{margin:0}}, h('strong',null,'Money moved'), ' from a politician\'s own other committees, and their own money, isn\'t a sponsor, so it gets no patch.'));
+}
+
+function SponsorJacketsTab({profile, onToast, navCtx, onNavCtxConsumed, onNavigate}) {
+  const [level, setLevelState] = useState(()=>{ try { return localStorage.getItem('tpv_jacket_level') === 'michigan' ? 'michigan' : 'congress'; } catch(e) { return 'congress'; } });
+  const setLevel = (l)=>{ setLevelState(l); try { localStorage.setItem('tpv_jacket_level', l); } catch(e) {} };
+  const [why, setWhy] = useState(false);
+  const [focus, setFocus] = useState(null);
+  useEffect(()=>{
+    if(navCtx && navCtx.jacketId) {
+      const id = String(navCtx.jacketId);
+      setFocus(id);
+      setLevelState(/^MI-(GOV|LTGOV|AG|SOS|SSEN|SREP)/.test(id) ? 'michigan' : 'congress');
+      onNavCtxConsumed && onNavCtxConsumed();
+    }
+  },[navCtx && navCtx.jacketId]);
+  const mi = level === 'michigan';
+  const lv = (id, label, sub)=>h('button',{onClick:()=>{ setLevel(id); setWhy(false); },role:'tab','aria-selected':level===id,
+    style:{flex:'1 1 0',minWidth:0,background:level===id?'#1a1a2e':'#fff',color:level===id?'#fff':'#1a1a2e',border:'1px solid ' + (level===id?'#1a1a2e':'#d8d2c4'),
+      borderRadius:10,padding:'9px 10px',cursor:'pointer',textAlign:'left',fontFamily:LB}},
+    h('span',{style:{display:'block',fontFamily:PD,fontWeight:700,fontSize:14,color:level===id?JACKET_GOLD:'#1a1a2e'}}, label),
+    h('span',{style:{display:'block',fontSize:11.5,color:level===id?'#c8d0dc':'#888',marginTop:1}}, sub));
+  return h('div',null,
+    h('div',{style:{marginBottom:14}},
+      h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:6}},'Sponsor Jackets'),
+      h('div',{style:{fontFamily:LB,fontSize:14,color:'#1a1a2e',lineHeight:1.6,fontStyle:'italic',borderLeft:'3px solid ' + JACKET_GOLD,paddingLeft:10,marginBottom:10}},
+        'Robin Williams once joked that politicians should wear NASCAR jackets so we\'d know who their sponsors are. So we made them.'),
+      h('div',{role:'tablist','aria-label':'Which officials',style:{display:'flex',gap:8,marginBottom:10}},
+        lv('congress','Congress','Michigan\'s 15 in Washington'),
+        lv('michigan','Michigan government','Governor, statewide offices and the Legislature')),
+      h('div',{style:{fontFamily:LB,fontSize:13,color:'#666',lineHeight:1.6}},
+        mi ? 'Each patch is a PAC or committee that gave to their campaign, and the biggest money gets the chest. The gold band is money from individual people. Every state official gets the same jacket, with numbers straight from Michigan\'s campaign finance filings.'
+           : 'Each patch is a PAC that gave money to their campaign, and the biggest money gets the chest. The gold band is small donors: people giving $200 or less. Every member of Congress from Michigan gets the same jacket, with numbers straight from federal filings.'),
+      onNavigate && h('button',{className:'tpv-link',onClick:()=>onNavigate('funding'),
+        style:{background:'none',border:'none',padding:0,marginTop:6,marginRight:14,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
+        'Fair\'s fair: see who funds The People\'s Voices →'),
+      h('button',{onClick:()=>setWhy(!why),style:{background:'none',border:'none',padding:0,marginTop:6,color:'#1a5c8a',cursor:'pointer',fontSize:12.5,textDecoration:'underline',fontFamily:LB}},
+        why ? 'Hide' : mi ? 'What counts as a sponsor?' : 'What counts as PAC money?'),
+      why && h('div',{style:{background:'#faf8f3',borderRadius:8,padding:'10px 12px',marginTop:8}}, mi ? h(StateMoneyExplainer) : h(PacMoneyExplainer))),
+    mi ? h(StateJackets,{profile, onToast, focus}) : h(CongressJackets,{profile, onToast, focus}));
+}
+
+// ── The Constitutions: links into constitution.html, the full official text ──
+function ConstitutionsTab() {
+  const [q, setQ] = useState('');
+  const [doc, setDoc] = useState('mi');
+  const go = (e)=>{ e && e.preventDefault(); window.location.href = '/constitution.html?doc=' + doc + (q.trim() ? '&q=' + encodeURIComponent(q.trim()) : '') + '#' + doc; };
+  const big = (href, icon, title, sub)=>h('a',{href,style:{display:'flex',gap:12,alignItems:'center',background:'#1a1a2e',color:'#fff',textDecoration:'none',borderRadius:12,padding:'14px 16px',flex:'1 1 240px'}},
+    h('span',{style:{fontSize:28},'aria-hidden':true}, icon),
+    h('span',{style:{minWidth:0}},
+      h('span',{style:{display:'block',fontFamily:PD,fontWeight:700,fontSize:16,color:JACKET_GOLD}}, title),
+      h('span',{style:{display:'block',fontFamily:LB,fontSize:12.5,color:'#c8d0dc',marginTop:2}}, sub)),
+    h('span',{style:{marginLeft:'auto',color:JACKET_GOLD,fontWeight:700}},'→'));
+  const quick = [
+    ['/constitution.html#mi-1','Michigan\'s Declaration of Rights'], ['/constitution.html#mi-2','Michigan elections and ballot petitions'],
+    ['/constitution.html#mi-7','Counties, cities and townships'], ['/constitution.html#mi-9','Michigan taxes and budgets'],
+    ['/constitution.html#us-billofrights','The Bill of Rights'], ['/constitution.html#us-am-14','The 14th Amendment'],
+    ['/constitution.html#us-1','Congress and its powers'], ['/constitution.html#us-am-19','The 19th Amendment'],
+  ];
+  return h('div',null,
+    h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:19,color:'#1a1a2e',marginBottom:4}},'📜 The Constitutions'),
+    h('div',{style:{fontFamily:LB,fontSize:14,color:'#555',lineHeight:1.6,marginBottom:14}},
+      'Every word of Michigan\'s Constitution and the U.S. Constitution, from the official copies. Read them, search them, and share a link to any section.'),
+    h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}},
+      big('/constitution.html#mi','🏛️','Michigan Constitution','The Constitution of 1963, as amended (current through June 2025)'),
+      big('/constitution.html#us','🇺🇸','U.S. Constitution','The 1787 text and all 27 amendments')),
+    h('form',{onSubmit:go,style:{display:'flex',gap:8,flexWrap:'wrap',background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'10px 12px',marginBottom:14}},
+      h('input',{value:q,onChange:e=>setQ(e.target.value),type:'search',placeholder:'Search, like “free speech” or “property tax”','aria-label':'Search the constitutions',
+        style:{flex:'1 1 200px',minWidth:0,border:'1px solid #d8d2c4',borderRadius:8,padding:'8px 10px',fontSize:16,fontFamily:LB}}),
+      h('select',{value:doc,onChange:e=>setDoc(e.target.value),'aria-label':'Which constitution',style:{border:'1px solid #d8d2c4',borderRadius:8,padding:'8px',fontSize:14,fontFamily:LB,background:'#fff'}},
+        h('option',{value:'mi'},'Michigan'), h('option',{value:'us'},'U.S.')),
+      h('button',{type:'submit',style:{background:'#1a1a2e',color:JACKET_GOLD,border:'none',borderRadius:8,padding:'8px 16px',fontFamily:PD,fontWeight:700,fontSize:14,cursor:'pointer'}},'Search')),
+    h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'12px 14px'}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:6}},'Jump to'),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'2px 16px'}},
+        quick.map(([href,label])=>h('a',{key:href,href,style:{fontFamily:LB,fontSize:13.5,color:'#1a5c8a',padding:'5px 0',borderBottom:'1px dotted #eee6d6',textDecoration:'none'}}, label + ' →')))));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -21528,12 +21782,13 @@ function App() {
           h('span',{style:{fontSize:22}},'🏁'),
           h('span',{style:{flex:1,minWidth:0}},
             h('span',{style:{display:'block',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14.5,color:'#f0c040'}},'Sponsor Jackets'),
-            h('span',{style:{display:'block',fontSize:12.5,color:'#c8d0dc',marginTop:2}},'Who funds each of Michigan\'s members of Congress, on a NASCAR jacket')),
+            h('span',{style:{display:'block',fontSize:12.5,color:'#c8d0dc',marginTop:2}},'Who funds Michigan\'s members of Congress, Governor and Legislature, on a NASCAR jacket')),
           h('span',{style:{color:'#f0c040',fontWeight:700}},'→')),
         h(RepTracker,{bills,userZip:profile?.zip})
       ),
 
       // Sponsor Jackets
+      mainTab==='constitution'&&h(ConstitutionsTab),
       mainTab==='jackets'&&h(SponsorJacketsTab,{profile,onToast:setToast,navCtx:feedNavCtx,onNavCtxConsumed:()=>setFeedNavCtx(null),onNavigate:(tab,ctx)=>{setFeedNavCtx(ctx||null);setMainTab(tab);}}),
 
       // Admin tab
@@ -21551,7 +21806,8 @@ function App() {
           'Who funds us? Every dollar, out in the open →'),
         h('button',{className:'tpv-link',onClick:()=>{ setFeedNavCtx(null); setMainTab('business'); try { window.scrollTo({top:0,behavior:'smooth'}); } catch(e) { window.scrollTo(0,0); } },
           style:{background:'none',border:'none',padding:0,color:'#c8d0dc',fontSize:12.5,cursor:'pointer',textDecoration:'underline',fontFamily:"'Lora',serif"}},
-          'For Michigan businesses →')),
+          'For Michigan businesses →'),
+        h('a',{href:'/constitution.html',style:{color:'#c8d0dc',fontSize:12.5,textDecoration:'underline',fontFamily:"'Lora',serif"}},'📜 The Constitutions →')),
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
         h('span',{style:{marginLeft:8}},
