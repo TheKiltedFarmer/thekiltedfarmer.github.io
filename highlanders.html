@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kilted Farmers Pasta Highlanders</title>
+<meta name="description" content="Sell The Kilted Farmers' handmade pasta at your own events and earn a commission.">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#2D6A4F;--green-dark:#1B4332;--green-light:#52B788;--green-wash:#e8f3ec;
+  --tan:#A67C52;--tan-light:#D4A96A;--tan-wash:#f6ede2;
+  --cream:#FAF6EF;--cream-dark:#F0E9DC;
+  --ink:#1A1A1A;--mid:#5A5A5A;--rule:#D8CFC4;--red:#C0392B;--red-wash:#fbeceb;--blue:#2471A3;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{background:var(--cream);font-family:'Source Sans 3',system-ui,sans-serif;color:var(--ink);min-height:100vh;font-size:15px;line-height:1.45;}
+button,input,select,textarea{font-family:inherit;font-size:16px;color:inherit;}
+a{color:var(--green-dark);}
+
+.header{background:var(--green-dark);padding:22px 16px 18px;text-align:center;position:relative;overflow:hidden;}
+.header::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 18px,rgba(255,255,255,.035) 18px,rgba(255,255,255,.035) 36px),repeating-linear-gradient(-45deg,transparent,transparent 18px,rgba(212,169,106,.05) 18px,rgba(212,169,106,.05) 36px);}
+.header>*{position:relative;}
+.kicker{font-size:11px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;font-weight:700;}
+.header h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:#fff;margin-top:4px;line-height:1.15;}
+.header .sub{font-size:13px;color:rgba(255,255,255,.62);margin-top:4px;}
+.header .rule{width:44px;height:2px;background:var(--tan-light);margin:10px auto 0;}
+.who{position:absolute;top:10px;right:10px;z-index:2;}
+.who button{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:20px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 110px;}
+.card{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.04);}
+.card h2{font-family:'Playfair Display',serif;font-size:19px;color:var(--green-dark);margin-bottom:4px;line-height:1.2;}
+.card h3{font-size:15px;font-weight:700;margin-bottom:2px;}
+.muted{color:var(--mid);font-size:13px;}
+.small{font-size:12px;}
+.center{text-align:center;}
+.gap{height:10px;}
+
+label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);font-weight:700;margin:12px 0 5px;}
+.inp{width:100%;padding:11px 12px;border:1.5px solid var(--rule);border-radius:9px;background:var(--cream);}
+.inp:focus{outline:none;border-color:var(--green);background:#fff;}
+textarea.inp{min-height:80px;resize:vertical;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.check{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:14px;cursor:pointer;}
+.check input{width:20px;height:20px;margin-top:1px;accent-color:var(--green);flex-shrink:0;}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 18px;border-radius:10px;border:none;font-weight:700;font-size:15px;cursor:pointer;text-decoration:none;}
+.btn.full{width:100%;}
+.btn.primary{background:var(--green-dark);color:#fff;}
+.btn.primary:active{background:var(--green);}
+.btn.tan{background:var(--tan);color:#fff;}
+.btn.ghost{background:transparent;color:var(--green-dark);border:2px solid var(--green-dark);}
+.btn.soft{background:var(--cream-dark);color:var(--green-dark);}
+.btn.danger{background:transparent;color:var(--red);border:2px solid var(--red);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn.sm{padding:8px 12px;font-size:13px;border-radius:8px;}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.link{background:none;border:none;color:var(--green-dark);text-decoration:underline;cursor:pointer;font-size:14px;padding:0;}
+
+.msg{border-radius:10px;padding:10px 12px;font-size:14px;margin-top:12px;}
+.msg.err{background:var(--red-wash);color:var(--red);}
+.msg.ok{background:var(--green-wash);color:var(--green-dark);}
+.msg.info{background:var(--tan-wash);color:#6d4d2c;}
+.msg:empty{display:none;}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+.stat{background:var(--cream);border-radius:10px;padding:11px 12px;}
+.stat .l{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mid);font-weight:700;}
+.stat .v{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:var(--green-dark);margin-top:2px;}
+.stat .s{font-size:12px;color:var(--mid);}
+.meter{height:12px;background:var(--cream-dark);border-radius:8px;overflow:hidden;margin-top:14px;position:relative;}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:8px;transition:width .4s;}
+.meter.done i{background:linear-gradient(90deg,var(--tan),var(--tan-light));}
+.meter-cap{display:flex;justify-content:space-between;font-size:12px;color:var(--mid);margin-top:5px;}
+
+.linkbox{display:flex;gap:8px;align-items:center;background:var(--cream);border:1.5px dashed var(--rule);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px;word-break:break-all;}
+.linkbox code{flex:1;font-family:inherit;color:var(--green-dark);font-weight:600;}
+
+.ev{border:1px solid var(--rule);border-radius:12px;padding:14px;margin-top:10px;background:#fff;}
+.ev-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+.ev-date{flex-shrink:0;width:52px;text-align:center;background:var(--green-wash);border-radius:10px;padding:6px 0;color:var(--green-dark);}
+.ev-date b{display:block;font-family:'Playfair Display',serif;font-size:22px;line-height:1;}
+.ev-date span{font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;}
+.ev-main{flex:1;min-width:0;}
+.ev-name{font-weight:700;font-size:16px;line-height:1.25;}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:12px;background:var(--cream-dark);color:var(--mid);white-space:nowrap;}
+.chip.green{background:var(--green-wash);color:var(--green-dark);}
+.chip.tan{background:var(--tan-wash);color:#7a5530;}
+.chip.red{background:var(--red-wash);color:var(--red);}
+.chip.blue{background:#e6f0f7;color:var(--blue);}
+.lines{margin-top:10px;border-top:1px solid var(--cream-dark);padding-top:8px;font-size:14px;}
+.lines div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;}
+
+.section-t{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:700;margin:20px 2px 2px;}
+
+.prod{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--cream-dark);}
+.prod:last-child{border-bottom:none;}
+.prod-main{flex:1;min-width:0;}
+.prod-name{font-weight:600;}
+.prod-sub{font-size:12px;color:var(--mid);}
+.step{display:flex;align-items:center;border:1.5px solid var(--rule);border-radius:10px;overflow:hidden;flex-shrink:0;}
+.step button{width:38px;height:38px;border:none;background:var(--cream);font-size:20px;font-weight:700;color:var(--green-dark);cursor:pointer;}
+.step input{width:46px;height:38px;border:none;text-align:center;font-weight:700;background:#fff;-moz-appearance:textfield;}
+.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.line-h{font-size:12px;font-weight:700;color:var(--tan);text-transform:uppercase;letter-spacing:1px;margin-top:14px;}
+
+.total-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--green-dark);color:#fff;border-radius:12px;padding:12px 14px;margin-top:14px;}
+.total-bar .big{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;}
+.total-bar .s{font-size:12px;color:rgba(255,255,255,.7);}
+
+.order{border-bottom:1px solid var(--cream-dark);padding:12px 0;}
+.order:last-child{border-bottom:none;}
+.order-top{display:flex;justify-content:space-between;gap:10px;}
+
+table.st{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px;}
+table.st th{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);text-align:right;padding:6px 4px;border-bottom:1px solid var(--rule);font-weight:700;}
+table.st th:first-child,table.st td:first-child{text-align:left;}
+table.st td{padding:8px 4px;border-bottom:1px solid var(--cream-dark);text-align:right;vertical-align:top;}
+table.st tfoot td{font-weight:700;border-bottom:none;border-top:2px solid var(--rule);}
+
+.nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--rule);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:50;box-shadow:0 -4px 16px rgba(0,0,0,.05);}
+.nav-in{display:flex;max-width:640px;width:100%;}
+.nav button{flex:1;background:none;border:none;padding:9px 4px 10px;font-size:12px;font-weight:700;color:var(--mid);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;}
+.nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.nav button.on{color:var(--green-dark);}
+.nav button.on::before{content:'';position:absolute;top:0;left:30%;right:30%;height:3px;background:var(--tan);border-radius:0 0 3px 3px;}
+.dot{position:absolute;top:5px;left:calc(50% + 8px);min-width:17px;height:17px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;line-height:17px;padding:0 4px;}
+
+.pick{display:block;border:2px solid var(--rule);border-radius:12px;padding:12px 14px;margin-top:10px;cursor:pointer;background:#fff;}
+.pick input{display:none;}
+label.pick,label.check{text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);font-weight:400;}
+.pick.on{border-color:var(--green);background:var(--green-wash);}
+
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.chips button{border:1.5px solid var(--rule);background:#fff;border-radius:18px;padding:6px 12px;font-size:14px;font-weight:700;color:var(--green-dark);cursor:pointer;}
+.chips button.on{background:var(--green-dark);border-color:var(--green-dark);color:#fff;}
+.goal-row{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.goal-row .dollar{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:var(--tan);}
+.goal-row input{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:var(--green-dark);width:150px;padding:6px 10px;}
+.seg2{display:flex;background:var(--cream-dark);padding:3px;border-radius:9px;margin-top:12px;}
+.seg2 button{flex:1;padding:8px 6px;border:none;background:transparent;border-radius:7px;font-weight:700;font-size:13px;color:var(--mid);cursor:pointer;}
+.seg2 button.on{background:#fff;color:var(--green-dark);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.calc-out{background:var(--green-wash);border-radius:12px;padding:14px;margin-top:12px;}
+.calc-big{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--green-dark);line-height:1.1;}
+.calc-rows{margin-top:10px;border-top:1px solid rgba(27,67,50,.15);padding-top:8px;font-size:14px;}
+.calc-rows div{display:flex;justify-content:space-between;gap:8px;padding:3px 0;}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--green-dark);color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;max-width:90vw;text-align:center;}
+.toast.err{background:var(--red);}
+.toast.show{opacity:1;}
+.loading{text-align:center;color:var(--mid);padding:40px 0;}
+.empty{text-align:center;color:var(--mid);padding:18px 6px;font-size:14px;}
+.hero-ico{font-size:40px;text-align:center;margin-bottom:6px;}
+ul.plain{list-style:none;margin-top:8px;}
+ul.plain li{padding:6px 0 6px 26px;position:relative;font-size:14px;}
+ul.plain li::before{content:'✓';position:absolute;left:4px;color:var(--green);font-weight:700;}
+@media(max-width:380px){.row2{grid-template-columns:1fr;}.header h1{font-size:22px;}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="who" id="who"></div>
+  <div class="kicker">The Kilted Farmers</div>
+  <h1 id="hTitle">Pasta Highlanders</h1>
+  <div class="sub" id="hSub">Handmade pasta, sold by neighbors</div>
+  <div class="rule"></div>
+</div>
+<div class="wrap" id="app"><div class="loading">Loading…</div></div>
+<nav class="nav" id="nav" style="display:none;"></nav>
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// THE KILTED FARMERS — PASTA HIGHLANDERS
+// Highlanders sign in here. ?r=CODE opens a Highlander's public order page.
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE';
+const AUTH_KEY='kf_rep_auth';
+const KITCHEN='The Kilted Farmers kitchen in Concord';
+
+const S={auth:null,user:null,rep:null,cfg:null,products:[],events:[],preorders:[],view:'home',month:null,draft:null,count:null};
+
+// ─── helpers ───
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
+function fmt(n){return '$'+r2(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmt0(n){const v=r2(n);return '$'+(v%1?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):v.toLocaleString('en-US'));}
+function isoLocal(d){d=new Date(d);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function today(){return isoLocal(new Date());}
+function parseISO(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?new Date(+m[1],+m[2]-1,+m[3],12):null;}
+function ym(s){return String(s||'').slice(0,7);}
+function monthName(k){const d=parseISO(k+'-01');return d?d.toLocaleDateString('en-US',{month:'long',year:'numeric'}):k;}
+function dayLabel(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}):'';}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.className='toast'+(err?' err':''),3200);}
+function $(id){return document.getElementById(id);}
+function plural(n,w){return n+' '+w+(n===1?'':'s');}
+function lineName(k){return (S.cfg&&S.cfg.line_names&&S.cfg.line_names[k])||k;}
+function priceFor(line,zone){const c=S.cfg||{};return r2((+((c.prices||{})[line])||0)+(zone==='far'?(+c.far_add||0):0));}
+function copy(t,msg){const done=()=>toast(msg||'Copied');if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,()=>fallbackCopy(t,done));else fallbackCopy(t,done);}
+function fallbackCopy(t,done){const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');done();}catch(e){prompt('Copy this:',t);}a.remove();}
+
+// ─── auth & data ───
+function saveAuth(a){S.auth=a;try{if(a)localStorage.setItem(AUTH_KEY,JSON.stringify({refresh_token:a.refresh_token}));else localStorage.removeItem(AUTH_KEY);}catch(e){}}
+async function authFetch(path,body,method){
+  const res=await fetch(SUPABASE_URL+'/auth/v1/'+path,{method:method||'POST',headers:Object.assign({'apikey':SUPABASE_KEY,'Content-Type':'application/json'},S.auth&&method?{'Authorization':'Bearer '+S.auth.access_token}:{}),body:body?JSON.stringify(body):undefined});
+  let data={};try{data=await res.json();}catch(e){}
+  if(!res.ok)throw new Error(friendlyAuth(data.error_description||data.msg||data.message||data.error||'Something went wrong'));
+  return data;
+}
+function friendlyAuth(m){
+  if(/invalid login/i.test(m))return 'That email and password don’t match. Try again, or reset your password.';
+  if(/not confirmed/i.test(m))return 'Your email isn’t confirmed yet. Click the link in the email we sent, then sign in.';
+  if(/already registered|already exists/i.test(m))return 'There’s already an account with that email. Sign in instead.';
+  if(/rate limit|too many/i.test(m))return 'Too many tries. Wait a few minutes and try again.';
+  return m;
+}
+let _refreshing=null;
+async function refresh(){
+  if(_refreshing)return _refreshing;
+  _refreshing=(async()=>{
+    let rt=S.auth&&S.auth.refresh_token;
+    if(!rt){try{rt=(JSON.parse(localStorage.getItem(AUTH_KEY)||'{}')).refresh_token;}catch(e){}}
+    if(!rt)return false;
+    try{const d=await authFetch('token?grant_type=refresh_token',{refresh_token:rt});saveAuth(d);S.user=d.user||S.user;return true;}
+    catch(e){saveAuth(null);return false;}
+  })();
+  const r=await _refreshing;_refreshing=null;return r;
+}
+async function api(path,opts={},retried){
+  const headers=Object.assign({'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'},opts.headers||{});
+  if(S.auth)headers['Authorization']='Bearer '+S.auth.access_token;
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,Object.assign({},opts,{headers}));
+  if(res.status===401&&S.auth&&!retried&&await refresh())return api(path,opts,true);
+  if(res.status===204)return null;
+  let data=null;try{data=await res.json();}catch(e){}
+  if(!res.ok)throw new Error((data&&(data.message||data.hint||data.error))||res.statusText||'Something went wrong');
+  return data;
+}
+function rpc(name,args){return api('rpc/'+name,{method:'POST',body:JSON.stringify(args||{})});}
+
+// ─── start ───
+async function init(){
+  const q=new URLSearchParams(location.search);
+  const code=q.get('r');
+  if(code){renderOrderPage(code);return;}
+  // Links from emails (confirm account, reset password) arrive with tokens in the hash
+  const h=new URLSearchParams(location.hash.replace(/^#/,''));
+  if(h.get('access_token')){
+    saveAuth({access_token:h.get('access_token'),refresh_token:h.get('refresh_token')});
+    const type=h.get('type');
+    history.replaceState(null,'',location.pathname+location.search);
+    if(type==='recovery'){renderAuth('reset');return;}
+  }else if(h.get('error_description')){
+    history.replaceState(null,'',location.pathname+location.search);
+    renderAuth('signin',decodeURIComponent(h.get('error_description').replace(/\+/g,' ')));return;
+  }
+  if(S.auth||await refresh()){await boot();return;}
+  renderAuth('signin');
+}
+
+async function boot(){
+  $('app').innerHTML='<div class="loading">Loading your Highlander account…</div>';
+  try{
+    const u=await authFetch('user',null,'GET');S.user=u;
+  }catch(e){if(!(await refresh())){saveAuth(null);renderAuth('signin');return;}try{S.user=await authFetch('user',null,'GET');}catch(x){saveAuth(null);renderAuth('signin');return;}}
+  try{
+    const rows=await api('kf_reps?user_id=eq.'+S.user.id+'&select=*');
+    S.rep=(rows&&rows[0])||null;
+    S.cfg=await rpc('kf_rep_cfg');
+  }catch(e){$('app').innerHTML='<div class="card"><h2>Couldn’t load</h2><p class="muted">'+esc(e.message)+'</p><div class="btns"><button class="btn primary" onclick="boot()">Try again</button></div></div>';return;}
+  setWho();
+  if(!S.rep||S.rep.status==='declined'){renderApply();return;}
+  if(S.rep.status==='pending'){renderPending();return;}
+  if(S.rep.status==='paused'){renderPaused();return;}
+  await loadAll();
+  go(S.view||'home');
+}
+async function loadAll(){
+  const [p,e,o]=await Promise.all([
+    api('kf_rep_products?active=eq.true&order=sort_order.asc,line.asc,name.asc'),
+    api('kf_rep_events?select=*,kf_rep_event_lines(*)&order=event_date.desc,created_at.desc'),
+    api('kf_rep_preorders?order=created_at.desc')
+  ]);
+  S.products=p||[];S.events=(e||[]).map(ev=>Object.assign(ev,{lines:(ev.kf_rep_event_lines||[]).sort((a,b)=>b.unit_price-a.unit_price||a.product_name.localeCompare(b.product_name))}));S.preorders=o||[];
+}
+function setWho(){
+  const w=$('who');
+  w.innerHTML=S.user?'<button onclick="go(\'me\')" aria-label="Your account">'+esc((S.rep&&S.rep.name||S.user.email||'').split(/[ @]/)[0])+'</button>':'';
+}
+function signOut(){saveAuth(null);S.user=null;S.rep=null;S.view='home';$('nav').style.display='none';setWho();renderAuth('signin');}
+
+// ─── sign in / create account ───
+function renderAuth(mode,note){
+  $('nav').style.display='none';setWho();
+  $('hTitle').textContent='Pasta Highlanders';$('hSub').textContent='Handmade pasta, sold by neighbors';
+  const titles={signin:'Sign in',signup:'Become a Highlander',forgot:'Reset your password',reset:'Choose a new password'};
+  let h='';
+  const pitch=mode==='signin'||mode==='signup';
+  if(pitch)h+=pitchHTML();
+  h+='<div class="card"><h2>'+titles[mode]+'</h2>';
+  if(mode==='signup')h+='<p class="muted">Make an account, then tell us a little about the events you’d sell at. We’ll look it over and get you started.</p>';
+  if(mode==='forgot')h+='<p class="muted">We’ll email you a link to set a new one.</p>';
+  if(mode!=='reset')h+='<label for="aEmail">Email</label><input id="aEmail" class="inp" type="email" autocomplete="email" inputmode="email">';
+  if(mode==='signin'||mode==='signup'||mode==='reset')h+='<label for="aPw">'+(mode==='reset'?'New password':'Password')+'</label><input id="aPw" class="inp" type="password" autocomplete="'+(mode==='signin'?'current-password':'new-password')+'">';
+  if(mode==='signup'||mode==='reset')h+='<label for="aPw2">Password again</label><input id="aPw2" class="inp" type="password" autocomplete="new-password">';
+  h+='<div class="msg '+(note&&/sent|check|confirm/i.test(note)?'ok':'err')+'" id="aMsg">'+esc(note||'')+'</div>';
+  h+='<div class="btns"><button class="btn primary full" id="aBtn" onclick="doAuth(\''+mode+'\')">'+({signin:'Sign in',signup:'Create my account',forgot:'Email me a link',reset:'Save password'})[mode]+'</button></div>';
+  h+='<div class="btns" style="justify-content:space-between;">';
+  if(mode==='signin')h+='<button class="link" onclick="renderAuth(\'signup\')">New here? Become a Highlander</button><button class="link" onclick="renderAuth(\'forgot\')">Forgot password?</button>';
+  else if(mode!=='reset')h+='<button class="link" onclick="renderAuth(\'signin\')">Already have an account? Sign in</button>';
+  h+='</div></div>';
+  if(pitch)h+=calcHTML('prospect');
+  $('app').innerHTML=h;
+  if(pitch){if(S.cfg)calcDraw();else rpc('kf_rep_cfg').then(c=>{S.cfg=c;const p=document.querySelector('#app .card');if(p&&p.querySelector('ul.plain'))p.outerHTML=pitchHTML();calcRedraw();}).catch(()=>{const c=$('calcCard');if(c)c.remove();});}
+  const f=$('aEmail')||$('aPw');if(f&&mode!=='signin')f.focus();
+  $('app').querySelectorAll('.inp').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')doAuth(mode);}));
+}
+function pitchHTML(){
+  const c=S.cfg||{base_rate:25,top_rate:30,threshold:500};
+  return '<div class="card"><h2>Become a Pasta Highlander</h2><p class="muted">Scotland’s chapmen once walked from town to town with their packs, bringing goods to neighbors. Highlanders carry on that tradition with our handmade pasta. Already doing craft fairs, church bazaars, a booth for your own goods, or parties at home? Add a table of pasta.</p>'
+    +'<ul class="plain"><li>Pick up pasta at the kitchen. No buying inventory up front.</li><li>Keep <b>'+c.base_rate+'%</b> of what you sell, and <b>'+c.top_rate+'%</b> on everything past <b>'+fmt0(c.threshold)+'</b> in a month.</li><li>Bring back whatever doesn’t sell.</li><li>Your own order link, so customers can reserve bags before your event.</li><li>You’re an independent seller: you fill out a W-9 before your first pickup, and get a 1099-NEC if you earn '+fmt0(th1099(new Date().getFullYear()))+' or more in a year.</li></ul></div>';
+}
+async function doAuth(mode){
+  const em=($('aEmail')||{}).value,pw=($('aPw')||{}).value,pw2=($('aPw2')||{}).value;
+  const msg=$('aMsg'),btn=$('aBtn');msg.className='msg err';msg.textContent='';
+  if(mode!=='reset'&&!/^\S+@\S+\.\S+$/.test(em||'')){msg.textContent='Enter your email address.';return;}
+  if((mode==='signup'||mode==='reset')&&(pw||'').length<8){msg.textContent='Use at least 8 characters for your password.';return;}
+  if((mode==='signup'||mode==='reset')&&pw!==pw2){msg.textContent='Those passwords don’t match.';return;}
+  if(mode==='signin'&&!pw){msg.textContent='Enter your password.';return;}
+  const label=btn.textContent;btn.disabled=true;btn.textContent='One moment…';
+  const back=location.origin+location.pathname;
+  try{
+    if(mode==='signin'){const d=await authFetch('token?grant_type=password',{email:em.trim(),password:pw});saveAuth(d);S.user=d.user;await boot();return;}
+    if(mode==='signup'){
+      const d=await authFetch('signup?redirect_to='+encodeURIComponent(back),{email:em.trim(),password:pw});
+      if(d.access_token){saveAuth(d);S.user=d.user;await boot();return;}
+      if(d.identities&&!d.identities.length){msg.textContent='There’s already an account with that email. Sign in instead.';return;}
+      renderAuth('signin','Almost there. We sent a confirmation link to '+em.trim()+'. Click it, then come back here and sign in.');return;
+    }
+    if(mode==='forgot'){await authFetch('recover?redirect_to='+encodeURIComponent(back),{email:em.trim()});msg.className='msg ok';msg.textContent='If there’s an account for that email, a reset link is on its way. Check your inbox.';return;}
+    if(mode==='reset'){await authFetch('user',{password:pw},'PUT');toast('Password saved');await boot();return;}
+  }catch(e){msg.className='msg err';msg.textContent=e.message;}
+  finally{if(btn.isConnected){btn.disabled=false;btn.textContent=label;}}
+}
+
+// ─── applying ───
+function renderApply(){
+  $('nav').style.display='none';
+  const r=S.rep||{};const declined=r.status==='declined';
+  let h=declined?'<div class="card"><h2>Your last application</h2><p class="muted">We weren’t able to bring you on last time'+(r.team_note?': '+esc(r.team_note):'.')+' You’re welcome to update your details and apply again.</p></div>':pitchHTML();
+  h+='<div class="card"><h2>Apply to be a Highlander</h2><p class="muted">Tell us who you are and where you’d sell. We’ll look it over and let you know here.</p>'
+    +'<label for="apName">Your name</label><input id="apName" class="inp" autocomplete="name" value="'+esc(r.name||'')+'">'
+    +'<div class="row2"><div><label for="apPhone">Phone</label><input id="apPhone" class="inp" type="tel" autocomplete="tel" value="'+esc(r.phone||'')+'"></div>'
+    +'<div><label for="apCity">Town</label><input id="apCity" class="inp" autocomplete="address-level2" value="'+esc(r.city||'')+'"></div></div>'
+    +'<label for="apAbout">Where would you sell?</label><textarea id="apAbout" class="inp" placeholder="The events you already do or want to do, what else you sell, how often…">'+esc(r.about||'')+'</textarea>'
+    +'<div class="msg err" id="apMsg"></div><div class="btns"><button class="btn primary full" id="apBtn" onclick="submitApply()">Send my application</button></div>'
+    +'<div class="btns center" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
+  $('app').innerHTML=h;
+}
+async function submitApply(){
+  const name=$('apName').value.trim(),btn=$('apBtn');
+  if(!name){$('apMsg').textContent='Enter your name.';return;}
+  if(!$('apAbout').value.trim()){$('apMsg').textContent='Tell us a little about where you’d sell.';return;}
+  btn.disabled=true;btn.textContent='Sending…';
+  try{const r=await rpc('kf_rep_apply',{p_name:name,p_phone:$('apPhone').value.trim(),p_city:$('apCity').value.trim(),p_about:$('apAbout').value.trim()});S.rep=Array.isArray(r)?r[0]:r;setWho();renderPending(true);}
+  catch(e){$('apMsg').textContent=e.message;btn.disabled=false;btn.textContent='Send my application';}
+}
+function renderPending(fresh){
+  $('nav').style.display='none';
+  $('app').innerHTML='<div class="card center"><div class="hero-ico">🌾</div><h2>'+(fresh?'Application sent':'We’re looking at your application')+'</h2>'
+    +'<p class="muted">Thanks, '+esc((S.rep.name||'').split(' ')[0])+'. Once you’re approved, this page turns into your Highlander hub: book events, pick up pasta, and get your own order link. Check back here, or we’ll reach out at '+esc(S.rep.phone||S.rep.email||'the contact you gave')+'.</p>'
+    +'<div class="btns" style="justify-content:center;"><button class="btn soft" onclick="boot()">Check again</button><button class="btn ghost" onclick="renderApply()">Edit my details</button></div>'
+    +'<div class="btns" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
+}
+function renderPaused(){
+  $('nav').style.display='none';
+  $('app').innerHTML='<div class="card center"><div class="hero-ico">⏸️</div><h2>Your Highlander account is paused</h2><p class="muted">'+(S.rep.team_note?esc(S.rep.team_note):'Reach out to the kitchen to pick things back up.')+'</p><div class="btns" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
+}
+
+// ─── commission math (same rule the database uses) ───
+function cfgRates(){const c=S.cfg||{};return{base:(+c.base_rate||25)/100,top:(+c.top_rate||30)/100,th:+c.threshold||0};}
+function addCommission(prior,add){const r=cfgRates();const below=Math.max(0,Math.min(add,r.th-prior));return r2(below*r.base+(add-below)*r.top);}
+function monthSummary(k){
+  const ev=S.events.filter(e=>e.status==='settled'&&ym(e.event_date)===k).sort((a,b)=>a.event_date.localeCompare(b.event_date)||String(a.settled_at||'').localeCompare(String(b.settled_at||'')));
+  const sales=r2(ev.reduce((a,e)=>a+(+e.sales||0),0));
+  const commission=r2(ev.reduce((a,e)=>a+(+e.commission||0),0));
+  const owed=r2(sales-commission);
+  const paid=r2(ev.reduce((a,e)=>a+(e.money_in!=null?+e.money_in:0),0));
+  return{ev,sales,commission,owed,paid,left:r2(Math.max(0,owed-paid))};
+}
+function lineSold(l){return Math.max(0,(+l.qty_out||0)-(l.qty_back!=null?+l.qty_back:(l.qty_back_reported!=null?+l.qty_back_reported:0)));}
+function eventBags(e,field){return (e.lines||[]).reduce((a,l)=>a+(+l[field]||0),0);}
+function eventValue(e,field){return r2((e.lines||[]).reduce((a,l)=>a+(+l[field]||0)*(+l.unit_price||0),0));}
+function preordersFor(eid){return S.preorders.filter(o=>o.event_id===eid&&o.status!=='cancelled');}
+function orderLink(){return location.origin+location.pathname+'?r='+encodeURIComponent(S.rep.code||'');}
+
+// ─── app shell ───
+const NAV=[
+  ['home','Home','<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'],
+  ['events','Events','<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'],
+  ['orders','Orders','<path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 016 0"/>'],
+  ['pay','Pay','<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>']
+];
+function drawNav(){
+  const n=$('nav');n.style.display='flex';
+  const newOrders=S.preorders.filter(o=>o.status==='new').length;
+  n.innerHTML='<div class="nav-in">'+NAV.map(([k,l,ico])=>'<button class="'+(S.view===k?'on':'')+'" onclick="go(\''+k+'\')"><svg viewBox="0 0 24 24">'+ico+'</svg>'+l+(k==='orders'&&newOrders?'<span class="dot">'+newOrders+'</span>':'')+'</button>').join('')+'</div>';
+}
+function go(v){
+  S.view=v;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;
+  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back'}[v]||'Pasta Highlanders';
+  $('hSub').textContent=v==='home'?'Kilted Farmers Pasta Highlander':'The Kilted Farmers';
+  drawNav();
+  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount}[v]||renderHome)();
+  window.scrollTo(0,0);
+}
+async function reload(v){try{await loadAll();}catch(e){toast(e.message,true);}go(v||S.view);}
+
+// ─── taxes: W-9 before the first pickup, 1099-NEC at year end ───
+const W9_URL='https://www.irs.gov/pub/irs-pdf/fw9.pdf';
+function th1099(y){return y>=2026?2000:600;}
+function yearCommission(y){return r2((S.events||[]).filter(e=>e.status==='settled'&&String(e.event_date).slice(0,4)===String(y)).reduce((a,e)=>a+(+e.commission||0),0));}
+function w9BannerHTML(){
+  if(S.rep.w9_on_file)return '';
+  return '<div class="card" style="border-color:var(--tan-light);background:var(--tan-wash);"><h2>Bring a W-9 to your first pickup</h2>'
+    +'<p class="muted" style="color:#6d4d2c;">It’s the IRS form that gives us your legal name, address and taxpayer ID number, so we can send you a 1099 at tax time. The kitchen needs it before handing over pasta. Fill it out on paper and bring it with you. We never ask for your Social Security number on this site.</p>'
+    +'<div class="btns"><a class="btn tan" href="'+W9_URL+'" target="_blank" rel="noopener">Get the W-9 (IRS)</a></div></div>';
+}
+function taxCardHTML(){
+  const y=new Date().getFullYear(),earned=yearCommission(y),th=th1099(y);
+  return '<div class="card"><h2>Taxes</h2><ul class="plain">'
+    +'<li>W-9: '+(S.rep.w9_on_file?'<b>on file</b>'+(S.rep.w9_date?' since '+esc((parseISO(S.rep.w9_date)||new Date()).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})):''):'<b>still needed</b>. <a href="'+W9_URL+'" target="_blank" rel="noopener">Get the form</a> and bring it to your next pickup.')+'</li>'
+    +'<li>You’ve kept <b>'+fmt(earned)+'</b> in commission so far in '+y+'. '+(earned>=th?'That’s over '+fmt0(th)+', so you’ll get a <b>1099-NEC</b> from us by January 31.':'If you keep '+fmt0(th)+' or more in a year, you’ll get a <b>1099-NEC</b> from us by January 31.')+'</li>'
+    +'<li>Nothing is taken out for taxes. You’re self-employed for this, so set some of each payout aside. Many people save 20–30%. A tax preparer can tell you what’s right for you.</li></ul></div>';
+}
+
+// ─── goal calculator: how much do I need to sell to earn $X? ───
+const GOAL_KEY='kf_rep_goal';
+const CALC={goal:null,zone:'local'};
+function calcLoad(){if(CALC.goal!=null)return;let g=null;try{g=parseFloat(localStorage.getItem(GOAL_KEY));}catch(e){}CALC.goal=g>0?g:300;}
+// Sales needed to earn `want` more commission, starting from `prior` sales already counted this month
+function salesForCommission(prior,want){
+  const r=cfgRates();if(want<=0)return 0;
+  const room=Math.max(0,r.th-prior),atBase=room*r.base;
+  const x=want<=atBase?want/r.base:room+(want-atBase)/r.top;
+  return Math.ceil(x*100)/100;
+}
+// What share of bags falls in each price group: from what this Highlander has sold, or an even mix
+function calcMix(){
+  const c={},keys=Object.keys((S.cfg&&S.cfg.prices)||{handmade:1,extruded:1,traditional:1}).sort((x,y)=>priceFor(y,'local')-priceFor(x,'local'));
+  (S.events||[]).filter(e=>e.status==='settled').forEach(e=>(e.lines||[]).forEach(l=>{const n=lineSold(l);if(n>0)c[l.line]=(c[l.line]||0)+n;}));
+  const tot=Object.values(c).reduce((a,b)=>a+b,0);
+  if(tot>=10)return{from:'what you’ve sold',share:Object.fromEntries(keys.map(k=>[k,(c[k]||0)/tot]))};
+  return{from:'an even mix',share:Object.fromEntries(keys.map(k=>[k,1/keys.length]))};
+}
+function calcHTML(mode){
+  calcLoad();
+  const rep=mode==='rep';
+  let h='<div class="card" id="calcCard"><h2>'+(rep?'Set a goal':'What could you make?')+'</h2>'
+    +'<p class="muted">'+(rep?'How much do you want to earn this month? We’ll show what it takes.':'Pick an amount you’d like to earn in a month and see how much pasta that is.')+'</p>'
+    +'<div class="goal-row"><span class="dollar">$</span><input id="calcGoal" class="inp" type="number" inputmode="decimal" min="0" step="10" value="'+CALC.goal+'" oninput="calcSet(this.value)" aria-label="Goal in dollars"><span class="muted">'+(rep?'this month':'a month')+'</span></div>'
+    +'<div class="chips">'+[100,250,500,1000].map(v=>'<button type="button" class="'+(+CALC.goal===v?'on':'')+'" onclick="calcSet('+v+',true)">'+fmt0(v)+'</button>').join('')+'</div>'
+    +'<div class="seg2"><button type="button" class="'+(CALC.zone==='local'?'on':'')+'" onclick="CALC.zone=\'local\';calcRedraw()">Local events</button><button type="button" class="'+(CALC.zone==='far'?'on':'')+'" onclick="CALC.zone=\'far\';calcRedraw()">Farther out (+'+fmt0((S.cfg||{}).far_add||0)+'/bag)</button></div>'
+    +'<div id="calcOut"></div></div>';
+  return h;
+}
+function calcSet(v,redraw){
+  CALC.goal=Math.max(0,parseFloat(v)||0);try{localStorage.setItem(GOAL_KEY,String(CALC.goal));}catch(e){}
+  if(redraw){const i=$('calcGoal');if(i)i.value=CALC.goal;}
+  document.querySelectorAll('#calcCard .chips button').forEach(b=>b.classList.toggle('on',b.textContent===fmt0(CALC.goal)));
+  calcDraw();
+}
+function calcRedraw(){const card=$('calcCard');if(!card)return;const mode=S.rep&&S.rep.status==='active'?'rep':'prospect';const t=document.createElement('div');t.innerHTML=calcHTML(mode);card.replaceWith(t.firstChild);calcDraw();}
+function calcDraw(){
+  const out=$('calcOut');if(!out||!S.cfg)return;
+  const rep=!!(S.rep&&S.rep.status==='active'),c=S.cfg,r=cfgRates(),goal=+CALC.goal||0;
+  const m=rep?monthSummary(ym(today())):{sales:0,commission:0};
+  const want=r2(goal-m.commission);
+  if(!goal){out.innerHTML='';return;}
+  if(want<=0){out.innerHTML='<div class="calc-out"><div class="calc-big">You made it!</div><p class="muted" style="margin-top:6px;">You’ve already earned '+fmt0(m.commission)+' this month, past your '+fmt0(goal)+' goal. Set a bigger one?</p></div>';return;}
+  const sales=salesForCommission(m.sales,want);
+  const mix=calcMix(),keys=Object.keys(mix.share);
+  const avg=keys.reduce((a,k)=>a+mix.share[k]*priceFor(k,CALC.zone),0)||1;
+  const bags=Math.ceil(sales/avg);
+  const hitsTop=m.sales+sales>r.th;
+  let h='<div class="calc-out"><div class="muted small">'+(rep&&m.commission>0?'You’ve earned '+fmt0(m.commission)+' so far. To reach '+fmt0(goal)+', sell about':'To earn '+fmt0(goal)+', sell about')+'</div>'
+    +'<div class="calc-big">'+fmt0(Math.ceil(sales))+' <span style="font-size:18px;">'+(rep&&m.sales>0?'more ':'')+'in pasta</span></div>'
+    +'<div class="muted" style="margin-top:4px;">That’s about <b>'+plural(bags,'bag')+'</b> at '+(mix.from==='what you’ve sold'?'your usual mix':'an even mix of all three kinds')+'.</div>';
+  h+='<div class="calc-rows"><div class="muted small" style="display:block;padding-bottom:2px;">Or if you only sold one kind:</div>'
+    +keys.map(k=>'<div><span>'+esc(lineName(k))+' at '+fmt0(priceFor(k,CALC.zone))+'</span><b>'+plural(Math.ceil(sales/priceFor(k,CALC.zone)),'bag')+'</b></div>').join('')+'</div>';
+  if(rep){
+    const done=(S.events||[]).filter(e=>e.status==='settled'&&+e.sales>0);
+    if(done.length){const per=done.reduce((a,e)=>a+(+e.sales||0),0)/done.length;h+='<div class="calc-rows"><div><span>Your events average '+fmt0(Math.round(per))+' in sales</span><b>≈ '+plural(Math.max(1,Math.ceil(sales/per)),'event')+'</b></div></div>';}
+  }
+  h+='<p class="muted small" style="margin-top:10px;">'+(hitsTop?'This counts '+c.top_rate+'% on everything past '+fmt0(r.th)+' in the month'+(m.sales>=r.th?', which you’ve already reached.':'.'):'All of this earns '+c.base_rate+'%. Past '+fmt0(r.th)+' in a month, you’d keep '+c.top_rate+'%.')+'</p></div>';
+  out.innerHTML=h;
+}
+
+// ─── home ───
+function renderHome(){
+  const k=ym(today()),m=monthSummary(k),r=cfgRates(),c=S.cfg;
+  const pct=r.th>0?Math.min(100,Math.round(m.sales/r.th*100)):100,past=m.sales>=r.th;
+  let h=w9BannerHTML()+'<div class="card"><h2>'+monthName(k)+'</h2>'
+    +'<div class="stats"><div class="stat"><div class="l">You’ve sold</div><div class="v">'+fmt0(m.sales)+'</div><div class="s">settled this month</div></div>'
+    +'<div class="stat"><div class="l">You’ve earned</div><div class="v">'+fmt0(m.commission)+'</div><div class="s">'+(m.sales?Math.round(m.commission/m.sales*1000)/10+'% overall':'commission')+'</div></div></div>'
+    +'<div class="meter'+(past?' done':'')+'"><i style="width:'+pct+'%"></i></div>'
+    +'<div class="meter-cap"><span>'+c.base_rate+'%</span><span>'+fmt0(r.th)+' → '+c.top_rate+'%</span></div>'
+    +'<p class="muted" style="margin-top:8px;">'+(past?'You’re past '+fmt0(r.th)+' this month. Every sale from here earns you <b>'+c.top_rate+'%</b>.':'Sell <b>'+fmt0(r2(r.th-m.sales))+'</b> more this month and everything past '+fmt0(r.th)+' earns you <b>'+c.top_rate+'%</b> instead of '+c.base_rate+'%.')+'</p>'
+    +(m.left>0?'<div class="msg info">You owe the kitchen <b>'+fmt(m.left)+'</b> from settled events (sales minus your commission).</div>':'')+'</div>';
+  h+=calcHTML('rep');
+
+  const upcoming=S.events.filter(e=>['requested','out','returning'].includes(e.status)).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  h+='<div class="card"><h2>Coming up</h2>';
+  if(!upcoming.length)h+='<div class="empty">No events booked yet.</div>';
+  else h+=upcoming.slice(0,3).map(eventCard).join('');
+  h+='<div class="btns"><button class="btn primary full" onclick="newBooking()">+ Book an event</button></div></div>';
+
+  h+='<div class="card"><h2>Your order link</h2><p class="muted">Share it before an event so people can reserve bags and pay you when they pick up.</p>'
+    +'<div class="linkbox"><code>'+esc(orderLink())+'</code></div>'
+    +'<div class="btns"><button class="btn tan" onclick="shareLink()">Share link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy</button><a class="btn soft" href="'+esc(orderLink())+'" target="_blank" rel="noopener">Preview</a></div></div>';
+  $('app').innerHTML=h;calcDraw();
+}
+function shareLink(){
+  const url=orderLink(),text='Reserve handmade pasta from The Kilted Farmers. Pick it up from me at my next event:';
+  if(navigator.share)navigator.share({title:'Kilted Farmers pasta',text,url}).catch(()=>{});
+  else copy(text+' '+url,'Link and message copied');
+}
+
+// ─── events ───
+const STATUS={
+  requested:['Booked','chip blue','Pick up your pasta at '+KITCHEN+' before the event.'],
+  out:['Pasta’s with you','chip green','After the event, count what’s coming back.'],
+  returning:['Count sent','chip tan','The kitchen will check it in and settle up.'],
+  settled:['Settled','chip','' ],
+  cancelled:['Cancelled','chip red','']
+};
+function eventCard(e){
+  const d=parseISO(e.event_date),st=STATUS[e.status]||['','chip',''];
+  const pre=preordersFor(e.id),preBags=pre.reduce((a,o)=>a+(o.items||[]).reduce((x,i)=>x+(+i.qty||0),0),0);
+  let h='<div class="ev"><div class="ev-top"><div class="ev-date"><span>'+(d?d.toLocaleDateString('en-US',{month:'short'}):'')+'</span><b>'+(d?d.getDate():'')+'</b></div>'
+    +'<div class="ev-main"><div class="ev-name">'+esc(e.name)+'</div><div class="muted">'+esc([e.start_time,e.place,e.city].filter(Boolean).join(' · ')||dayLabel(e.event_date))+'</div>'
+    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><span class="'+st[1]+'">'+st[0]+'</span>'+(e.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')+(pre.length?'<span class="chip green">'+plural(pre.length,'pre-order')+' · '+plural(preBags,'bag')+'</span>':'')+'</div></div></div>';
+  if(e.status==='settled'){
+    h+='<div class="lines"><div><span>Sold</span><b>'+fmt(e.sales)+'</b></div><div><span>You earned</span><b>'+fmt(e.commission)+'</b></div>'
+      +'<div><span>Owed to the kitchen</span><b>'+fmt(r2((+e.sales||0)-(+e.commission||0)))+'</b></div>'
+      +'<div><span>Paid in</span><b>'+(e.money_in!=null?fmt(e.money_in):'Not yet')+'</b></div></div>';
+  }else if(e.status!=='cancelled'){
+    const field=e.status==='requested'?'qty_requested':'qty_out';
+    h+='<div class="lines">'+(e.lines||[]).map(l=>'<div><span>'+esc(l.product_name)+'</span><span>'+(+l[field]||0)+(e.status==='returning'&&l.qty_back_reported!=null?' out · '+l.qty_back_reported+' back':'')+' × '+fmt0(l.unit_price)+'</span></div>').join('')
+      +'<div style="border-top:1px solid var(--cream-dark);margin-top:4px;padding-top:4px;"><span>'+plural(eventBags(e,field),'bag')+'</span><b>'+fmt(eventValue(e,field))+' if it all sells</b></div></div>';
+    if(st[2])h+='<p class="muted small" style="margin-top:8px;">'+st[2]+(e.status==='requested'&&!S.rep.w9_on_file?' Bring your filled-out <a href="'+W9_URL+'" target="_blank" rel="noopener">W-9</a> with you.':'')+'</p>';
+    if(e.team_note)h+='<div class="msg info">From the kitchen: '+esc(e.team_note)+'</div>';
+  }
+  const b=[];
+  if(e.status==='requested'){b.push('<button class="btn sm soft" onclick="editBooking(\''+e.id+'\')">Change</button>');b.push('<button class="btn sm danger" onclick="cancelBooking(\''+e.id+'\')">Cancel</button>');}
+  if(e.status==='out'||e.status==='returning')b.push('<button class="btn sm primary" onclick="startCount(\''+e.id+'\')">'+(e.status==='out'?'Count what came back':'Change my count')+'</button>');
+  if(pre.length&&e.status!=='settled'&&e.status!=='cancelled')b.push('<button class="btn sm soft" onclick="go(\'orders\')">See pre-orders</button>');
+  if(b.length)h+='<div class="btns">'+b.join('')+'</div>';
+  return h+'</div>';
+}
+function renderEvents(){
+  const now=S.events.filter(e=>['requested','out','returning'].includes(e.status)).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  const past=S.events.filter(e=>e.status==='settled'||e.status==='cancelled');
+  let h='<div class="btns" style="margin-top:0;"><button class="btn primary full" onclick="newBooking()">+ Book an event</button></div>';
+  h+='<div class="section-t">Coming up and in progress</div>'+(now.length?now.map(eventCard).join(''):'<div class="card empty">Nothing booked. Book your next event and we’ll have the pasta ready.</div>');
+  if(past.length)h+='<div class="section-t">Past events</div>'+past.slice(0,30).map(eventCard).join('');
+  $('app').innerHTML=h;
+}
+function newBooking(){S.draft={id:null,name:'',event_date:'',start_time:'',place:'',city:'',zone:'local',rep_note:'',show_on_order_page:true,qty:{}};go('book');}
+function editBooking(id){
+  const e=S.events.find(x=>x.id===id);if(!e)return;
+  const qty={};(e.lines||[]).forEach(l=>{if(l.product_id)qty[l.product_id]=+l.qty_requested||0;});
+  S.draft={id:e.id,name:e.name,event_date:e.event_date,start_time:e.start_time||'',place:e.place||'',city:e.city||'',zone:e.zone,rep_note:e.rep_note||'',show_on_order_page:e.show_on_order_page!==false,qty};
+  go('book');
+}
+async function cancelBooking(id){
+  const e=S.events.find(x=>x.id===id);if(!e||!confirm('Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'))return;
+  try{await rpc('kf_rep_cancel_event',{p_id:id});toast('Cancelled');await reload();}catch(x){toast(x.message,true);}
+}
+function renderBook(){
+  const d=S.draft;if(!d){go('events');return;}
+  const c=S.cfg;
+  let h='<div class="card"><h2>The event</h2>'
+    +'<label for="bName">Event name</label><input id="bName" class="inp" placeholder="St. John’s Holiday Bazaar" value="'+esc(d.name)+'" oninput="S.draft.name=this.value">'
+    +'<div class="row2"><div><label for="bDate">Date</label><input id="bDate" class="inp" type="date" min="'+today()+'" value="'+esc(d.event_date)+'" onchange="S.draft.event_date=this.value"></div>'
+    +'<div><label for="bTime">Time</label><input id="bTime" class="inp" placeholder="9am–3pm" value="'+esc(d.start_time)+'" oninput="S.draft.start_time=this.value"></div></div>'
+    +'<label for="bPlace">Where</label><input id="bPlace" class="inp" placeholder="Venue or address" value="'+esc(d.place)+'" oninput="S.draft.place=this.value">'
+    +'<label for="bCity">Town</label><input id="bCity" class="inp" value="'+esc(d.city)+'" oninput="S.draft.city=this.value">'
+    +'<label>How far from Concord?</label>'
+    +'<label class="pick'+(d.zone==='local'?' on':'')+'"><input type="radio" name="zone" value="local" '+(d.zone==='local'?'checked':'')+' onchange="setZone(\'local\')"><b>Local</b> · within about '+esc(c.local_miles)+' miles<br><span class="muted">Regular prices</span></label>'
+    +'<label class="pick'+(d.zone==='far'?' on':'')+'"><input type="radio" name="zone" value="far" '+(d.zone==='far'?'checked':'')+' onchange="setZone(\'far\')"><b>Farther out</b><br><span class="muted">'+fmt0(c.far_add)+' more per bag, so you earn a bit more for the drive</span></label>'
+    +'<label class="check"><input type="checkbox" '+(d.show_on_order_page?'checked':'')+' onchange="S.draft.show_on_order_page=this.checked"> Let customers pre-order for this event on my order link</label>'
+    +'<label for="bNote">Anything the kitchen should know?</label><textarea id="bNote" class="inp" placeholder="Optional" oninput="S.draft.rep_note=this.value">'+esc(d.rep_note)+'</textarea></div>';
+  h+='<div class="card"><h2>What you’ll take</h2><p class="muted">Ask for what you think you can sell. Whatever doesn’t sell comes back.</p>';
+  if(d.id){const pre=preordersFor(d.id);if(pre.length){const need={};pre.forEach(o=>(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);}));h+='<div class="msg ok">Pre-ordered so far: '+Object.entries(need).map(([n,q])=>q+' '+esc(n)).join(', ')+'. Make sure you ask for at least that many.</div>';}}
+  if(!S.products.length)h+='<div class="empty">The kitchen hasn’t listed any pasta yet. Check back soon.</div>';
+  let last=null;
+  S.products.forEach(p=>{
+    if(p.line!==last){last=p.line;h+='<div class="line-h">'+esc(lineName(p.line))+' · '+fmt0(priceFor(p.line,d.zone))+' a bag</div>';}
+    h+='<div class="prod"><div class="prod-main"><div class="prod-name">'+esc(p.name)+'</div>'+(p.description?'<div class="prod-sub">'+esc(p.description)+'</div>':'')+'</div>'+stepper('q_'+p.id,d.qty[p.id]||0,'setQty(\''+p.id+'\',VAL)')+'</div>';
+  });
+  h+='<div id="bookTotal"></div><div class="msg err" id="bMsg"></div>'
+    +'<div class="btns"><button class="btn primary full" id="bBtn" onclick="saveBooking()">'+(d.id?'Save changes':'Book it')+'</button><button class="btn soft full" onclick="S.draft=null;go(\'events\')">Back</button></div></div>';
+  $('app').innerHTML=h;drawBookTotal();
+}
+function stepper(id,v,onset){
+  const set=onset.replace('VAL','v');
+  return '<div class="step"><button type="button" aria-label="One less" onclick="(function(){var i=document.getElementById(\''+id+'\');var v=Math.max(0,(parseInt(i.value)||0)-1);i.value=v;'+set+'})()">−</button>'
+    +'<input id="'+id+'" type="number" inputmode="numeric" min="0" value="'+v+'" oninput="(function(i){var v=Math.max(0,parseInt(i.value)||0);'+set+'})(this)">'
+    +'<button type="button" aria-label="One more" onclick="(function(){var i=document.getElementById(\''+id+'\');var v=(parseInt(i.value)||0)+1;i.value=v;'+set+'})()">+</button></div>';
+}
+function setZone(z){S.draft.zone=z;renderBook();}
+function setQty(pid,v){S.draft.qty[pid]=Math.min(500,Math.max(0,v|0));drawBookTotal();}
+function drawBookTotal(){
+  const d=S.draft;let bags=0,val=0;
+  S.products.forEach(p=>{const q=d.qty[p.id]||0;bags+=q;val+=q*priceFor(p.line,d.zone);});
+  const prior=d.event_date?monthSummary(ym(d.event_date)).sales:monthSummary(ym(today())).sales;
+  $('bookTotal').innerHTML='<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+' · if it all sells</div><div class="big">'+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(addCommission(prior,val))+'</div></div></div>';
+}
+async function saveBooking(){
+  const d=S.draft,msg=$('bMsg'),btn=$('bBtn');msg.textContent='';
+  if(!d.name.trim()){msg.textContent='Give the event a name.';return;}
+  if(!d.event_date){msg.textContent='Pick the date.';return;}
+  const lines=Object.entries(d.qty).filter(([,q])=>q>0).map(([product_id,qty])=>({product_id,qty}));
+  if(!lines.length){msg.textContent='Choose at least one bag to take.';return;}
+  btn.disabled=true;btn.textContent='Saving…';
+  try{
+    await rpc('kf_rep_book_event',{p_event:{id:d.id,name:d.name.trim(),event_date:d.event_date,start_time:d.start_time,place:d.place,city:d.city,zone:d.zone,rep_note:d.rep_note,show_on_order_page:d.show_on_order_page},p_lines:lines});
+    toast(d.id?'Booking updated':'Booked! The kitchen will get your pasta ready.');S.draft=null;await reload('events');
+  }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent=d.id?'Save changes':'Book it';}
+}
+
+// ─── count what came back ───
+function startCount(id){
+  const e=S.events.find(x=>x.id===id);if(!e)return;
+  S.count={id,back:{}};(e.lines||[]).forEach(l=>{S.count.back[l.id]=l.qty_back_reported!=null?+l.qty_back_reported:0;});
+  go('count');
+}
+function renderCount(){
+  const c=S.count,e=c&&S.events.find(x=>x.id===c.id);if(!e){go('events');return;}
+  let h='<div class="card"><h2>'+esc(e.name)+'</h2><p class="muted">'+esc(dayLabel(e.event_date))+'. Count the bags you’re bringing back for each kind. We’ll work out what sold.</p>';
+  (e.lines||[]).forEach(l=>{
+    h+='<div class="prod"><div class="prod-main"><div class="prod-name">'+esc(l.product_name)+'</div><div class="prod-sub">Took '+l.qty_out+' · '+fmt0(l.unit_price)+' each</div></div>'
+      +'<div style="text-align:center;"><div class="small muted" style="margin-bottom:3px;">coming back</div>'+stepper('b_'+l.id,c.back[l.id]||0,'setBack(\''+l.id+'\',VAL)')+'</div></div>';
+  });
+  h+='<div id="countTotal"></div><div class="msg err" id="cMsg"></div><div class="btns"><button class="btn primary full" id="cBtn" onclick="sendCount()">Send my count</button><button class="btn soft full" onclick="go(\'events\')">Back</button></div></div>';
+  $('app').innerHTML=h;drawCountTotal();
+}
+function setBack(lid,v){const e=S.events.find(x=>x.id===S.count.id),l=e&&(e.lines||[]).find(x=>x.id===lid);if(!l)return;const max=+l.qty_out||0;if(v>max){v=max;const i=$('b_'+lid);if(i)i.value=v;}S.count.back[lid]=v;drawCountTotal();}
+function drawCountTotal(){
+  const e=S.events.find(x=>x.id===S.count.id);let sold=0,val=0;
+  (e.lines||[]).forEach(l=>{const s=Math.max(0,(+l.qty_out||0)-(S.count.back[l.id]||0));sold+=s;val+=s*(+l.unit_price||0);});
+  const k=ym(e.event_date),prior=monthSummary(k).ev.filter(x=>x.event_date<=e.event_date&&x.id!==e.id).reduce((a,x)=>a+(+x.sales||0),0);
+  const earn=addCommission(prior,val);
+  $('countTotal').innerHTML='<div class="total-bar"><div><div class="s">'+plural(sold,'bag')+' sold</div><div class="big">'+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you keep about</div><div class="big">'+fmt0(earn)+'</div></div></div>'
+    +'<p class="muted small" style="margin-top:8px;">Bring the kitchen '+fmt(r2(val-earn))+' (sales minus your commission) along with the unsold bags. The kitchen confirms the count when you drop off.</p>';
+}
+async function sendCount(){
+  const btn=$('cBtn');btn.disabled=true;btn.textContent='Sending…';
+  try{await rpc('kf_rep_report_back',{p_id:S.count.id,p_lines:Object.entries(S.count.back).map(([line_id,back])=>({line_id,back}))});toast('Count sent. Thanks!');S.count=null;await reload('events');}
+  catch(e){$('cMsg').textContent=e.message;btn.disabled=false;btn.textContent='Send my count';}
+}
+
+// ─── pre-orders ───
+function renderOrders(){
+  const evById={};S.events.forEach(e=>evById[e.id]=e);
+  const groups={};S.preorders.forEach(o=>{const k=o.event_id||'none';(groups[k]=groups[k]||[]).push(o);});
+  const keys=Object.keys(groups).sort((a,b)=>{const ea=evById[a],eb=evById[b];const da=ea?ea.event_date:'0',db=eb?eb.event_date:'0';const up=x=>x>=today()?0:1;return up(da)-up(db)||(up(da)?db.localeCompare(da):da.localeCompare(db));});
+  let h='<div class="card"><h2>Get more pre-orders</h2><p class="muted">People reserve on your link and pay you when they pick up at the event.</p><div class="btns"><button class="btn tan" onclick="shareLink()">Share my order link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy link</button></div></div>';
+  if(!keys.length)h+='<div class="card empty">No pre-orders yet.</div>';
+  keys.forEach(k=>{
+    const e=evById[k],list=groups[k];
+    const live=list.filter(o=>o.status!=='cancelled');const need={};live.forEach(o=>(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);}));
+    h+='<div class="section-t">'+(e?esc(e.name)+' · '+esc(dayLabel(e.event_date)):'No event')+'</div><div class="card">';
+    if(Object.keys(need).length)h+='<div class="msg ok" style="margin-top:0;margin-bottom:6px;">Set aside: '+Object.entries(need).map(([n,q])=>'<b>'+q+'</b> '+esc(n)).join(', ')+'</div>';
+    list.forEach(o=>{
+      const contact=o.customer_contact||'',tel=contact.replace(/[^\d+]/g,'');
+      const clink=/@/.test(contact)?'<a href="mailto:'+esc(contact)+'">'+esc(contact)+'</a>':tel.length>=7?'<a href="tel:'+esc(tel)+'">'+esc(contact)+'</a>':esc(contact);
+      const chip={new:'<span class="chip blue">New</span>',confirmed:'<span class="chip green">Confirmed</span>',picked_up:'<span class="chip">Picked up</span>',cancelled:'<span class="chip red">Cancelled</span>'}[o.status];
+      h+='<div class="order"><div class="order-top"><div><b>'+esc(o.customer_name)+'</b> '+chip+'<div class="muted small">'+clink+'</div></div><b>'+fmt(o.total)+'</b></div>'
+        +'<div class="small" style="margin-top:4px;">'+(o.items||[]).map(i=>(+i.qty)+'× '+esc(i.name)).join(', ')+'</div>'
+        +(o.note?'<div class="muted small" style="margin-top:2px;">“'+esc(o.note)+'”</div>':'')
+        +(o.status!=='cancelled'&&o.status!=='picked_up'?'<div class="btns" style="margin-top:8px;">'+(o.status==='new'?'<button class="btn sm soft" onclick="setOrder(\''+o.id+'\',\'confirmed\')">Confirm</button>':'')+'<button class="btn sm primary" onclick="setOrder(\''+o.id+'\',\'picked_up\')">Picked up</button><button class="btn sm danger" onclick="setOrder(\''+o.id+'\',\'cancelled\')">Cancel</button></div>':'')+'</div>';
+    });
+    h+='</div>';
+  });
+  $('app').innerHTML=h;
+}
+async function setOrder(id,st){
+  if(st==='cancelled'&&!confirm('Cancel this pre-order?'))return;
+  try{await rpc('kf_rep_preorder_status',{p_id:id,p_status:st});const o=S.preorders.find(x=>x.id===id);if(o)o.status=st;toast({confirmed:'Confirmed',picked_up:'Marked picked up',cancelled:'Cancelled'}[st]);go('orders');}
+  catch(e){toast(e.message,true);}
+}
+
+// ─── pay ───
+function renderPay(){
+  const months=[...new Set([ym(today())].concat(S.events.filter(e=>e.status==='settled').map(e=>ym(e.event_date))))].sort().reverse();
+  if(!S.month||!months.includes(S.month))S.month=months[0];
+  const m=monthSummary(S.month),c=S.cfg;
+  let h='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><h2 style="margin:0;">Statement</h2>'
+    +'<select class="inp" style="width:auto;padding:8px 10px;" onchange="S.month=this.value;renderPay()">'+months.map(k=>'<option value="'+k+'"'+(k===S.month?' selected':'')+'>'+monthName(k)+'</option>').join('')+'</select></div>'
+    +'<div class="stats"><div class="stat"><div class="l">Sold</div><div class="v">'+fmt0(m.sales)+'</div></div><div class="stat"><div class="l">You earned</div><div class="v">'+fmt0(m.commission)+'</div></div>'
+    +'<div class="stat"><div class="l">Owed to kitchen</div><div class="v">'+fmt0(m.owed)+'</div></div><div class="stat"><div class="l">Still to bring in</div><div class="v" style="color:'+(m.left>0?'var(--red)':'var(--green)')+'">'+fmt0(m.left)+'</div></div></div>';
+  if(m.ev.length){
+    h+='<table class="st"><thead><tr><th>Event</th><th>Sold</th><th>You</th><th>Paid in</th></tr></thead><tbody>'
+      +m.ev.map(e=>'<tr><td>'+esc(e.name)+'<div class="muted small">'+esc((parseISO(e.event_date)||new Date()).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+'</div></td><td>'+fmt(e.sales)+'</td><td>'+fmt(e.commission)+'</td><td>'+(e.money_in!=null?fmt(e.money_in):'—')+'</td></tr>').join('')
+      +'</tbody><tfoot><tr><td>Total</td><td>'+fmt(m.sales)+'</td><td>'+fmt(m.commission)+'</td><td>'+fmt(m.paid)+'</td></tr></tfoot></table>';
+  }else h+='<div class="empty">No settled events in '+monthName(S.month)+'.</div>';
+  h+='</div>'+calcHTML('rep')+taxCardHTML()+'<div class="card"><h2>How your pay works</h2><ul class="plain">'
+    +'<li>You keep <b>'+c.base_rate+'%</b> of what you sell.</li>'
+    +'<li>Once you pass <b>'+fmt0(c.threshold)+'</b> in a month, you keep <b>'+c.top_rate+'%</b> of everything above it. It resets on the 1st.</li>'
+    +'<li>Events farther than about '+esc(c.local_miles)+' miles sell for '+fmt0(c.far_add)+' more a bag, so your cut grows too.</li>'
+    +'<li>Keep your commission out of the cash you collect, and bring the rest to the kitchen with any unsold bags.</li></ul></div>';
+  $('app').innerHTML=h;calcDraw();
+}
+
+// ─── account ───
+function renderMe(){
+  const r=S.rep;
+  $('app').innerHTML='<div class="card"><h2>Your details</h2>'
+    +'<label for="meName">Name</label><input id="meName" class="inp" value="'+esc(r.name)+'">'
+    +'<div class="row2"><div><label for="mePhone">Phone</label><input id="mePhone" class="inp" type="tel" value="'+esc(r.phone||'')+'"></div><div><label for="meCity">Town</label><input id="meCity" class="inp" value="'+esc(r.city||'')+'"></div></div>'
+    +'<p class="muted small" style="margin-top:10px;">Signed in as '+esc(S.user&&S.user.email||r.email||'')+'</p>'
+    +'<div class="msg err" id="meMsg"></div><div class="btns"><button class="btn primary" id="meBtn" onclick="saveMe()">Save</button><button class="btn soft" onclick="go(\'home\')">Back</button></div></div>'
+    +'<div class="card"><h2>Your order link</h2><div class="linkbox"><code>'+esc(orderLink())+'</code></div><div class="btns"><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy</button></div></div>'
+    +'<div class="card"><button class="btn danger full" onclick="signOut()">Sign out</button></div>';
+}
+async function saveMe(){
+  const btn=$('meBtn');btn.disabled=true;
+  try{const r=await rpc('kf_rep_apply',{p_name:$('meName').value.trim(),p_phone:$('mePhone').value.trim(),p_city:$('meCity').value.trim(),p_about:S.rep.about||''});S.rep=Array.isArray(r)?r[0]:r;setWho();toast('Saved');}
+  catch(e){$('meMsg').textContent=e.message;}
+  btn.disabled=false;
+}
+
+// ─── public pre-order page ───
+const O={code:'',data:null,event:null,qty:{}};
+async function renderOrderPage(code){
+  O.code=code;$('nav').style.display='none';
+  $('hTitle').textContent='Reserve handmade pasta';$('hSub').textContent='Pay when you pick it up';
+  try{O.data=await rpc('kf_rep_public',{p_code:code});}catch(e){O.data={ok:false,err:e.message};}
+  if(!O.data||!O.data.ok){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>This order link isn’t active</h2><p class="muted">'+(O.data&&O.data.err?esc(O.data.err):'Double-check the link with the person who shared it.')+'</p></div>';return;}
+  S.cfg=Object.assign({},S.cfg||{},{line_names:O.data.line_names});
+  const first=O.data.rep.first_name;
+  $('hTitle').textContent='Pasta from '+first;
+  $('hSub').textContent='The Kilted Farmers · handmade in Concord, MI';
+  if(!O.data.events.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>No upcoming events right now</h2><p class="muted">'+esc(first)+' doesn’t have an event open for pre-orders yet. Check back soon.</p></div>';return;}
+  if(!O.event||!O.data.events.some(e=>e.id===O.event))O.event=O.data.events.length===1?O.data.events[0].id:null;
+  drawOrderPage();
+}
+function oZone(){const e=O.data.events.find(x=>x.id===O.event);return e?e.zone:'local';}
+function oPrice(p){return r2(+p.price+(oZone()==='far'?+O.data.far_add||0:0));}
+function drawOrderPage(){
+  const first=O.data.rep.first_name;
+  let h='<div class="card"><h2>Pick your event</h2><p class="muted">Reserve bags now and pay '+esc(first)+' when you pick them up.</p>';
+  O.data.events.forEach(e=>{
+    h+='<label class="pick'+(O.event===e.id?' on':'')+'"><input type="radio" name="oev" '+(O.event===e.id?'checked':'')+' onchange="O.event=\''+e.id+'\';drawOrderPage()"><b>'+esc(e.name)+'</b><br><span class="muted">'+esc(dayLabel(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?'<br>'+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</span></label>';
+  });
+  h+='</div>';
+  if(O.event){
+    h+='<div class="card"><h2>Choose your pasta</h2>';let last=null;
+    O.data.products.forEach(p=>{
+      if(p.line!==last){last=p.line;h+='<div class="line-h">'+esc(lineName(p.line))+' · '+fmt0(oPrice(p))+' a bag</div>';}
+      h+='<div class="prod"><div class="prod-main"><div class="prod-name">'+esc(p.name)+'</div>'+(p.description?'<div class="prod-sub">'+esc(p.description)+'</div>':'')+'</div>'+stepper('o_'+p.id,O.qty[p.id]||0,'oQty(\''+p.id+'\',VAL)')+'</div>';
+    });
+    h+='<div id="oTotal"></div></div>';
+    h+='<div class="card"><h2>Your details</h2>'
+      +'<label for="oName">Name</label><input id="oName" class="inp" autocomplete="name">'
+      +'<label for="oContact">Phone or email</label><input id="oContact" class="inp" autocomplete="tel" placeholder="So '+esc(first)+' can reach you">'
+      +'<label for="oNote">Note (optional)</label><input id="oNote" class="inp" placeholder="Anything '+esc(first)+' should know">'
+      +'<div class="msg err" id="oMsg"></div><div class="btns"><button class="btn primary full" id="oBtn" onclick="placeOrder()">Reserve my pasta</button></div>'
+      +'<p class="muted small center" style="margin-top:10px;">Nothing to pay now. You’ll pay '+esc(first)+' at pickup.</p></div>';
+  }
+  $('app').innerHTML=h;if(O.event)drawOTotal();
+}
+function oQty(pid,v){O.qty[pid]=Math.min(25,Math.max(0,v|0));const i=$('o_'+pid);if(i&&+i.value!==O.qty[pid])i.value=O.qty[pid];drawOTotal();}
+function drawOTotal(){
+  let bags=0,t=0;O.data.products.forEach(p=>{const q=O.qty[p.id]||0;bags+=q;t+=q*oPrice(p);});
+  $('oTotal').innerHTML=bags?'<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+'</div><div class="big">'+fmt(t)+'</div></div><div class="s" style="text-align:right;">paid at pickup</div></div>':'';
+}
+async function placeOrder(){
+  const msg=$('oMsg'),btn=$('oBtn');msg.textContent='';
+  const items=Object.entries(O.qty).filter(([,q])=>q>0).map(([product_id,qty])=>({product_id,qty}));
+  if(!items.length){msg.textContent='Choose at least one bag.';return;}
+  if(!$('oName').value.trim()){msg.textContent='Enter your name.';return;}
+  if(!$('oContact').value.trim()){msg.textContent='Enter a phone number or email.';return;}
+  btn.disabled=true;btn.textContent='Reserving…';
+  try{
+    const r=await rpc('kf_rep_place_preorder',{p_code:O.code,p_event:O.event,p_name:$('oName').value.trim(),p_contact:$('oContact').value.trim(),p_items:items,p_note:$('oNote').value.trim()});
+    const first=O.data.rep.first_name;
+    $('app').innerHTML='<div class="card center"><div class="hero-ico">🎉</div><h2>You’re all set</h2><p class="muted">'+esc(first)+' will have your pasta at <b>'+esc(r.event)+'</b> on '+esc(dayLabel(r.event_date))+(r.place||r.city?', '+esc([r.place,r.city].filter(Boolean).join(', ')):'')+'.</p>'
+      +'<div class="total-bar" style="justify-content:center;"><div class="center"><div class="s">Pay at pickup</div><div class="big">'+fmt(r.total)+'</div></div></div>'
+      +'<p class="muted small" style="margin-top:12px;">Need to change something? Reach out to '+esc(first)+'.</p><div class="btns" style="justify-content:center;"><button class="btn soft" onclick="O.qty={};renderOrderPage(O.code)">Place another order</button></div></div>';
+    window.scrollTo(0,0);
+  }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent='Reserve my pasta';}
+}
+
+init();
+</script>
+</body>
+</html>
