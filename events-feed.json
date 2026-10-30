@@ -1,0 +1,45 @@
+{
+  "updated": "2026-10-30",
+  "about": "Events found by the weekly search for Kilted Farmers Pasta Highlanders. The Highlanders page and the kitchen Hub read this file. Check each event with its organizer before booking.",
+  "events": [
+    {
+      "feed_id": "women-in-the-arts-festival-east-lansing-2026-11-13",
+      "name": "Women in the Arts Festival",
+      "kind": "craft_show",
+      "next_date": "2026-11-13",
+      "end_date": "2026-11-14",
+      "place": "Edgewood United Church, 469 N Hagadorn Rd",
+      "city": "East Lansing",
+      "zone": "far",
+      "notes": "50+ booths. Organizer contact isn't on the listing.",
+      "source_url": "https://www.thecraftmap.com/fair/women-in-the-arts-festival-east-lansing-mi",
+      "found": "2026-10-30"
+    },
+    {
+      "feed_id": "november-saline-craft-show-2026-11-14",
+      "name": "November Saline Craft Show",
+      "kind": "craft_show",
+      "next_date": "2026-11-14",
+      "place": "Saline Middle School",
+      "city": "Saline",
+      "zone": "far",
+      "notes": "Shoppers pay $5 admission. Organizer contact isn't on the listing.",
+      "source_url": "https://www.thecraftmap.com/fair/november-saline-craft-show-saline-mi",
+      "found": "2026-10-30"
+    },
+    {
+      "feed_id": "winter-art-market-ann-arbor-2026-12-05",
+      "name": "Winter Art Market",
+      "kind": "craft_show",
+      "next_date": "2026-12-05",
+      "end_date": "2026-12-06",
+      "place": "York Food & Drink",
+      "city": "Ann Arbor",
+      "zone": "far",
+      "booth_fee": "$225",
+      "notes": "Food-friendly venue.",
+      "source_url": "https://www.thecraftmap.com/fair/winter-art-market-ann-arbor-mi",
+      "found": "2026-10-30"
+    }
+  ]
+}

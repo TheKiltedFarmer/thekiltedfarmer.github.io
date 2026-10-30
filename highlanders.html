@@ -150,6 +150,16 @@ label.pick,label.check{text-transform:none;letter-spacing:0;font-size:14px;color
 .toast.err{background:var(--red);}
 .toast.show{opacity:1;}
 .loading{text-align:center;color:var(--mid);padding:40px 0;}
+.kv{margin-top:8px;font-size:14px;display:grid;gap:3px;}
+.kv div{display:flex;gap:8px;}
+.kv span{color:var(--mid);min-width:86px;flex-shrink:0;}
+.kv a{color:var(--green-dark);font-weight:600;word-break:break-word;}
+.est{background:var(--green-wash);border-radius:12px;padding:12px 14px;margin-top:10px;color:var(--green-dark);}
+.est b{font-family:'Playfair Display',serif;font-size:22px;}
+.ev-date.rec{background:var(--tan-wash);color:#7a5530;}
+.ev-date.rec b{font-size:18px;}
+details.more{margin-top:12px;border-top:1px solid var(--cream-dark);padding-top:6px;}
+details.more summary{cursor:pointer;font-weight:700;color:var(--green-dark);padding:6px 0;font-size:14px;}
 .empty{text-align:center;color:var(--mid);padding:18px 6px;font-size:14px;}
 .hero-ico{font-size:40px;text-align:center;margin-bottom:6px;}
 ul.plain{list-style:none;margin-top:8px;}
@@ -283,6 +293,10 @@ async function loadAll(){
     api('kf_rep_events?select=*,kf_rep_event_lines(*)&order=event_date.desc,created_at.desc'),
     api('kf_rep_preorders?order=created_at.desc')
   ]);
+  try{S.listings=await api('kf_event_listings?order=next_date.asc.nullslast,name.asc')||[];S.noListings=false;}
+  catch(x){S.listings=[];S.noListings=true;}
+  if(!S.noListings){const feed=await loadFeed();feedNew(S.listings,feed,today()).forEach(f=>S.listings.push(Object.assign({},f,{id:'feed:'+f.feed_id,status:'listed',found_on:f.found,from_feed:true})));}
+  S.listings=S.listings.filter(l=>l.status!=='hidden');
   S.products=p||[];S.events=(e||[]).map(ev=>Object.assign(ev,{lines:(ev.kf_rep_event_lines||[]).sort((a,b)=>b.unit_price-a.unit_price||a.product_name.localeCompare(b.product_name))}));S.preorders=o||[];
 }
 function setWho(){
@@ -400,6 +414,7 @@ function orderLink(){return location.origin+location.pathname+'?r='+encodeURICom
 const NAV=[
   ['home','Home','<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'],
   ['events','Events','<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'],
+  ['find','Find','<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'],
   ['orders','Orders','<path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 016 0"/>'],
   ['pay','Pay','<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>']
 ];
@@ -409,11 +424,11 @@ function drawNav(){
   n.innerHTML='<div class="nav-in">'+NAV.map(([k,l,ico])=>'<button class="'+(S.view===k?'on':'')+'" onclick="go(\''+k+'\')"><svg viewBox="0 0 24 24">'+ico+'</svg>'+l+(k==='orders'&&newOrders?'<span class="dot">'+newOrders+'</span>':'')+'</button>').join('')+'</div>';
 }
 function go(v){
-  S.view=v;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;
-  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back'}[v]||'Pasta Highlanders';
+  S.view=v;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;if(v!=='listing')S.ldraft=null;
+  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back',find:'Find events',listing:S.ldraft&&S.ldraft.id?'Fix an event':'Add an event'}[v]||'Pasta Highlanders';
   $('hSub').textContent=v==='home'?'Kilted Farmers Pasta Highlander':'The Kilted Farmers';
   drawNav();
-  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount}[v]||renderHome)();
+  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount,find:renderFind,listing:renderListingForm}[v]||renderHome)();
   window.scrollTo(0,0);
 }
 async function reload(v){try{await loadAll();}catch(e){toast(e.message,true);}go(v||S.view);}
@@ -511,6 +526,8 @@ function renderHome(){
     +(m.left>0?'<div class="msg info">You owe the kitchen <b>'+fmt(m.left)+'</b> from settled events (sales minus your commission).</div>':'')+'</div>';
   h+=calcHTML('rep');
 
+  const fresh=(S.listings||[]).filter(l=>isNewThisWeek(l.found_on,today())&&listingUpcoming(l));
+  if(fresh.length)h+='<div class="card" style="border-color:var(--green);"><h2>'+plural(fresh.length,'new event')+' this week</h2><p class="muted">'+fresh.slice(0,3).map(l=>esc(l.name)+(l.next_date?' ('+esc((parseISO(l.next_date)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+')':'')).join(', ')+(fresh.length>3?' and more':'')+'. Grab one before the booths fill up.</p><div class="btns"><button class="btn primary" onclick="FIND.kind=\'all\';go(\'find\')">See them</button></div></div>';
   const upcoming=S.events.filter(e=>['requested','out','returning'].includes(e.status)).sort((a,b)=>a.event_date.localeCompare(b.event_date));
   h+='<div class="card"><h2>Coming up</h2>';
   if(!upcoming.length)h+='<div class="empty">No events booked yet.</div>';
@@ -528,6 +545,140 @@ function shareLink(){
   else copy(text+' '+url,'Link and message copied');
 }
 
+// ─── event types, crowd-based estimate ───
+const EVENT_TYPES={farmers_market:'Farmers market',craft_show:'Craft show',bazaar:'Bazaar or church sale',festival:'Festival or fair',private:'Private party',other:'Something else'};
+function typeName(k){return EVENT_TYPES[k]||'';}
+function peoplePerBag(){const n=+(S.cfg&&S.cfg.people_per_bag);return n>0?n:15;}
+// About one bag for every 15 people (the kitchen can change this), rounded to 5s
+function estimateBags(att){att=+att||0;if(att<=0)return 0;return Math.min(500,Math.max(10,Math.round(att/peoplePerBag()/5)*5));}
+function avgBagPrice(zone){const mix=calcMix();return Object.keys(mix.share).reduce((a,k)=>a+mix.share[k]*priceFor(k,zone),0)||priceFor('handmade',zone)||1;}
+// What this Highlander's own settled events say: people per bag sold
+function myPeoplePerBag(){
+  let ppl=0,bags=0,n=0;
+  (S.events||[]).filter(e=>e.status==='settled'&&+e.attendance>0).forEach(e=>{const b=(e.lines||[]).reduce((a,l)=>a+lineSold(l),0);if(b>0){ppl+=+e.attendance;bags+=b;n++;}});
+  return n>=2?{per:Math.round(ppl/bags),n}:null;
+}
+function telLink(v){const t=String(v||'').replace(/[^\d+]/g,'');return t.length>=7?'<a href="tel:'+esc(t)+'">'+esc(v)+'</a>':esc(v);}
+function webLink(v,label){v=String(v||'').trim();if(!v)return'';const u=/^https?:\/\//i.test(v)?v:'https://'+v;return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(label||v.replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>';}
+function contactKV(o){
+  const r=[];
+  if(o.contact_name)r.push(['Contact',esc(o.contact_name)]);
+  if(o.contact_phone)r.push(['Phone',telLink(o.contact_phone)]);
+  if(o.contact_email)r.push(['Email','<a href="mailto:'+esc(o.contact_email)+'">'+esc(o.contact_email)+'</a>']);
+  if(o.website)r.push(['Website',webLink(o.website)]);
+  if(o.booth_fee)r.push(['Booth fee',esc(o.booth_fee)]);
+  return r;
+}
+function kvHTML(rows){return rows.length?'<div class="kv">'+rows.map(([k,v])=>'<div><span>'+k+'</span><div>'+v+'</div></div>').join('')+'</div>':'';}
+
+// ─── weekly event search: events-feed.json on the website ───
+const FEED_KEYS=['feed_id','name','kind','schedule','next_date','end_date','start_time','place','city','zone','attendance','contact_name','contact_phone','contact_email','website','booth_fee','apply_by','notes','source_url','found'];
+const FEED_KINDS=['farmers_market','craft_show','festival','bazaar','private','other'];
+function feedClean(f){
+  if(!f||typeof f!=='object')return null;
+  const o={};FEED_KEYS.forEach(k=>{const v=f[k];o[k]=v==null||v===''?null:(typeof v==='number'?v:String(v).slice(0,1000));});
+  if(!o.feed_id||!o.name)return null;
+  ['next_date','end_date','apply_by','found'].forEach(k=>{if(o[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(o[k]))o[k]=null;});
+  o.attendance=o.attendance!=null&&+o.attendance>0?Math.min(1000000,Math.round(+o.attendance)):null;
+  if(!FEED_KINDS.includes(o.kind))o.kind='other';
+  if(o.zone!=='far')o.zone='local';
+  ['website','source_url'].forEach(k=>{if(o[k]&&!/^https?:\/\//i.test(o[k]))o[k]=null;});
+  return o;
+}
+async function loadFeed(){
+  try{const r=await fetch('events-feed.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)return[];const j=await r.json();return (Array.isArray(j)?j:(j&&j.events)||[]).map(feedClean).filter(Boolean);}
+  catch(e){return[];}
+}
+function feedKey(n,d){return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'')+'|'+(d||'');}
+// Feed events that aren't on the list yet (or that the kitchen hid)
+function feedNew(rows,feed,todayISO){
+  const ids=new Set(rows.filter(r=>r.feed_id).map(r=>r.feed_id));
+  const keys=new Set(rows.map(r=>feedKey(r.name,r.next_date))),names=new Set(rows.map(r=>feedKey(r.name,'')));
+  return feed.filter(f=>{const last=f.end_date||f.next_date;if(last&&last<todayISO)return false;
+    return !ids.has(f.feed_id)&&!keys.has(feedKey(f.name,f.next_date))&&!(!f.next_date&&names.has(feedKey(f.name,'')));});
+}
+function isNewThisWeek(d,todayISO){if(!d)return false;const a=new Date(d+'T12:00:00'),b=new Date(todayISO+'T12:00:00');return (b-a)/864e5<=7&&(b-a)>=-1;}
+
+// ─── find events: the list the kitchen keeps, plus events Highlanders add ───
+const FIND={kind:'all'};
+function listingUpcoming(l){const last=l.end_date||l.next_date;return !last||last>=today();}
+function renderFind(){
+  let h='<div class="card"><h2>Find your next event</h2><p class="muted">Farmers markets, craft shows and bazaars near Concord. Book one and your details fill in for you. New ones are added every Monday. Dates and fees change, so check with the organizer before you sign up.</p>'
+    +'<div class="btns"><button class="btn tan" onclick="newListing()">+ Add an event you found</button></div></div>';
+  if(S.noListings){$('app').innerHTML=h+'<div class="card empty">The events list isn’t turned on yet. The kitchen is finishing an update. You can still book any event from the Events tab.</div>';return;}
+  const kinds=[['all','All'],['farmers_market','Farmers markets'],['craft_show','Craft shows'],['bazaar','Bazaars'],['festival','Festivals'],['mine','Ones I added']];
+  h+='<div class="chips" style="margin:0 2px 4px;">'+kinds.map(([k,l])=>'<button class="'+(FIND.kind===k?'on':'')+'" onclick="FIND.kind=\''+k+'\';renderFind()">'+l+'</button>').join('')+'</div>';
+  const mine=x=>x.added_by_rep===S.rep.id;
+  const list=(S.listings||[]).filter(l=>listingUpcoming(l)&&(FIND.kind==='all'||(FIND.kind==='mine'?mine(l):l.kind===FIND.kind)));
+  const dated=list.filter(l=>l.next_date).sort((a,b)=>a.next_date.localeCompare(b.next_date));
+  const rec=list.filter(l=>!l.next_date);
+  if(!list.length)h+='<div class="card empty">'+(FIND.kind==='mine'?'You haven’t added any events yet.':'Nothing here right now. Know of one? Add it and the kitchen will check it.')+'</div>';
+  if(dated.length)h+='<div class="section-t">Coming up</div>'+dated.map(listingCard).join('');
+  if(rec.length)h+='<div class="section-t">Weekly and seasonal</div>'+rec.map(listingCard).join('');
+  $('app').innerHTML=h;
+}
+function listingCard(l){
+  const d=parseISO(l.next_date),own=l.added_by_rep===S.rep.id;
+  const when=d?(l.end_date&&l.end_date!==l.next_date?dayLabel(l.next_date)+' to '+((parseISO(l.end_date)||d).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})):dayLabel(l.next_date)):(l.schedule||'Ask the organizer for dates');
+  const soon=l.apply_by&&l.apply_by>=today()?Math.round((parseISO(l.apply_by)-parseISO(today()))/864e5):null;
+  let h='<div class="ev"><div class="ev-top"><div class="ev-date'+(d?'':' rec')+'">'+(d?'<span>'+d.toLocaleDateString('en-US',{month:'short'})+'</span><b>'+d.getDate()+'</b>':'<span>Every</span><b>wk</b>')+'</div>'
+    +'<div class="ev-main"><div class="ev-name">'+esc(l.name)+'</div><div class="muted">'+esc(when)+(d&&l.start_time?' · '+esc(l.start_time):'')+'</div>'
+    +'<div class="muted">'+esc([l.place,l.city].filter(Boolean).join(', '))+'</div>'
+    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">'+(l.kind?'<span class="chip">'+esc(typeName(l.kind))+'</span>':'')
+    +(+l.attendance>0?'<span class="chip green">~'+(+l.attendance).toLocaleString('en-US')+' people</span>':'')
+    +(l.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')
+    +(isNewThisWeek(l.found_on,today())?'<span class="chip green">New this week</span>':'')
+    +(own&&l.status==='suggested'?'<span class="chip blue">Waiting for the kitchen to check</span>':'')
+    +(soon!=null?'<span class="chip '+(soon<=7?'red':'tan')+'">Apply by '+esc((parseISO(l.apply_by)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+'</span>':'')+'</div></div></div>';
+  if(d&&l.schedule)h+='<p class="muted" style="margin-top:6px;">'+esc(l.schedule)+'</p>';
+  h+=kvHTML(contactKV(l));
+  if(l.notes)h+='<p class="muted" style="margin-top:8px;">'+esc(l.notes)+'</p>';
+  if(l.source_url)h+='<p class="muted small" style="margin-top:6px;">Found on '+webLink(l.source_url,String(l.source_url).replace(/^https?:\/\/(www\.)?/i,'').split('/')[0])+'</p>';
+  const booked=(S.events||[]).find(e=>e.listing_id===l.id&&!['cancelled','settled'].includes(e.status));
+  h+='<div class="btns">'+(booked?'<span class="chip green" style="align-self:center;">You’re booked · '+esc(dayLabel(booked.event_date))+'</span>':'<button class="btn sm primary" onclick="bookFromListing(\''+l.id+'\')">Book this event</button>')
+    +(own&&l.status==='suggested'?'<button class="btn sm soft" onclick="editListing(\''+l.id+'\')">Fix details</button>':'')+'</div>';
+  return h+'</div>';
+}
+function bookFromListing(id){
+  const l=(S.listings||[]).find(x=>x.id===id);if(!l)return;
+  newBooking();
+  Object.assign(S.draft,{listing_id:l.from_feed?'':l.id,fromList:true,name:l.name,event_date:l.next_date&&l.next_date>=today()?l.next_date:'',start_time:l.start_time||'',place:l.place||'',city:l.city||'',zone:l.zone||'local',
+    event_type:l.kind||'',attendance:l.attendance||'',contact_name:l.contact_name||'',contact_phone:l.contact_phone||'',contact_email:l.contact_email||'',website:l.website||'',booth_fee:l.booth_fee||'',share:false});
+  S.draft.bags_wanted=estimateBags(S.draft.attendance)||'';
+  if(l.end_date&&l.end_date!==l.next_date)S.draft.rep_note='Two-day event: '+dayLabel(l.next_date)+' and '+dayLabel(l.end_date)+'.';
+  go('book');
+}
+const LFIELDS=['id','name','kind','schedule','next_date','end_date','start_time','place','city','zone','attendance','contact_name','contact_phone','contact_email','website','booth_fee','apply_by','notes'];
+function newListing(){S.ldraft={kind:'farmers_market',zone:'local'};go('listing');}
+function editListing(id){const l=(S.listings||[]).find(x=>x.id===id);if(!l)return;S.ldraft=Object.fromEntries(LFIELDS.map(k=>[k,l[k]==null?'':l[k]]));go('listing');}
+function lf(k,label,type,ph){const v=S.ldraft[k]==null?'':S.ldraft[k];return '<label for="lf_'+k+'">'+label+'</label><input id="lf_'+k+'" class="inp"'+(type?' type="'+type+'"':'')+(type==='number'?' inputmode="numeric" min="0"':'')+' placeholder="'+esc(ph||'')+'" value="'+esc(v)+'" oninput="S.ldraft.'+k+'=this.value">';}
+function renderListingForm(){
+  const d=S.ldraft;if(!d){go('find');return;}
+  let h='<div class="card"><h2>'+(d.id?'Fix this event':'Add an event you found')+'</h2><p class="muted">The kitchen checks it, then every Highlander can find it. You can book it yourself right away.</p>'
+    +lf('name','Event name','', 'Homer Christmas Bazaar')
+    +'<label for="lf_kind">What kind of event</label><select id="lf_kind" class="inp" onchange="S.ldraft.kind=this.value">'+Object.entries(EVENT_TYPES).map(([k,l])=>'<option value="'+k+'"'+(d.kind===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<div class="row2"><div>'+lf('next_date','Next date','date')+'</div><div>'+lf('end_date','Last day (if more than one)','date')+'</div></div>'
+    +lf('start_time','Hours','', '9am–3pm')
+    +lf('schedule','Or, if it repeats','', 'Saturdays, May–October')
+    +lf('place','Where','', 'Venue or address')+lf('city','Town')
+    +'<label>How far from Concord?</label><div class="chips">'+[['local','Local'],['far','Farther out']].map(([k,l])=>'<button type="button" class="'+(d.zone===k?'on':'')+'" onclick="S.ldraft.zone=\''+k+'\';renderListingForm()">'+l+'</button>').join('')+'</div>'
+    +lf('attendance','About how many people come','number','1500')
+    +'<div class="section-t" style="margin-top:18px;">The organizer</div>'
+    +lf('contact_name','Name')+'<div class="row2"><div>'+lf('contact_phone','Phone','tel')+'</div><div>'+lf('contact_email','Email','email')+'</div></div>'
+    +lf('website','Website or Facebook page')+'<div class="row2"><div>'+lf('booth_fee','Booth fee','', '$40')+'</div><div>'+lf('apply_by','Apply by','date')+'</div></div>'
+    +'<label for="lf_notes">Anything else to know</label><textarea id="lf_notes" class="inp" oninput="S.ldraft.notes=this.value">'+esc(d.notes||'')+'</textarea>'
+    +'<div class="msg err" id="lfMsg"></div><div class="btns"><button class="btn primary full" id="lfBtn" onclick="saveListing()">'+(d.id?'Save changes':'Add it')+'</button><button class="btn soft full" onclick="go(\'find\')">Back</button></div></div>';
+  $('app').innerHTML=h;
+}
+async function saveListing(){
+  const d=S.ldraft,msg=$('lfMsg'),btn=$('lfBtn');msg.textContent='';
+  if(!String(d.name||'').trim()){msg.textContent='Give the event a name.';return;}
+  if(d.end_date&&d.next_date&&d.end_date<d.next_date){msg.textContent='The last day is before the first day.';return;}
+  btn.disabled=true;btn.textContent='Saving…';
+  try{await rpc('kf_hl_save_listing',{p:Object.fromEntries(LFIELDS.map(k=>[k,d[k]==null?'':String(d[k])]))});toast(d.id?'Saved':'Added. The kitchen will check it.');S.ldraft=null;FIND.kind='mine';await reload('find');}
+  catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent=d.id?'Save changes':'Add it';}
+}
+
 // ─── events ───
 const STATUS={
   requested:['Booked','chip blue','Pick up your pasta at '+KITCHEN+' before the event.'],
@@ -541,11 +692,16 @@ function eventCard(e){
   const pre=preordersFor(e.id),preBags=pre.reduce((a,o)=>a+(o.items||[]).reduce((x,i)=>x+(+i.qty||0),0),0);
   let h='<div class="ev"><div class="ev-top"><div class="ev-date"><span>'+(d?d.toLocaleDateString('en-US',{month:'short'}):'')+'</span><b>'+(d?d.getDate():'')+'</b></div>'
     +'<div class="ev-main"><div class="ev-name">'+esc(e.name)+'</div><div class="muted">'+esc([e.start_time,e.place,e.city].filter(Boolean).join(' · ')||dayLabel(e.event_date))+'</div>'
-    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><span class="'+st[1]+'">'+st[0]+'</span>'+(e.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')+(pre.length?'<span class="chip green">'+plural(pre.length,'pre-order')+' · '+plural(preBags,'bag')+'</span>':'')+'</div></div></div>';
+    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><span class="'+st[1]+'">'+st[0]+'</span>'+(e.zone==='far'?'<span class="chip tan">Farther out +'+fmt0(S.cfg.far_add)+'/bag</span>':'')+(pre.length?'<span class="chip green">'+plural(pre.length,'pre-order')+' · '+plural(preBags,'bag')+'</span>':'')+(e.event_type?'<span class="chip">'+esc(typeName(e.event_type))+'</span>':'')+(+e.attendance>0?'<span class="chip">~'+(+e.attendance).toLocaleString('en-US')+' people</span>':'')+'</div></div></div>';
+  if(e.status!=='settled'&&e.status!=='cancelled'){const kv=contactKV(e);if(kv.length)h+='<details class="more"><summary>Organizer details</summary>'+kvHTML(kv)+'</details>';}
   if(e.status==='settled'){
     h+='<div class="lines"><div><span>Sold</span><b>'+fmt(e.sales)+'</b></div><div><span>You earned</span><b>'+fmt(e.commission)+'</b></div>'
       +'<div><span>Owed to the kitchen</span><b>'+fmt(r2((+e.sales||0)-(+e.commission||0)))+'</b></div>'
       +'<div><span>Paid in</span><b>'+(e.money_in!=null?fmt(e.money_in):'Not yet')+'</b></div></div>';
+  }else if(e.status==='requested'&&+e.bags_wanted>0&&!(e.lines||[]).some(l=>+l.qty_requested>0)){
+    h+='<div class="lines"><div><span>You asked for</span><b>'+plural(+e.bags_wanted,'bag')+'</b></div><div><span>Worth about</span><b>'+fmt0(Math.round(+e.bags_wanted*avgBagPrice(e.zone)))+' if it all sells</b></div></div>'
+      +'<p class="muted small" style="margin-top:8px;">The kitchen packs a mix of what it made that week. You’ll see every bag when you pick up at '+KITCHEN+'.'+(!S.rep.w9_on_file?' Bring your filled-out <a href="'+W9_URL+'" target="_blank" rel="noopener">W-9</a> with you.':'')+'</p>';
+    if(e.team_note)h+='<div class="msg info">From the kitchen: '+esc(e.team_note)+'</div>';
   }else if(e.status!=='cancelled'){
     const field=e.status==='requested'?'qty_requested':'qty_out';
     h+='<div class="lines">'+(e.lines||[]).map(l=>'<div><span>'+esc(l.product_name)+'</span><span>'+(+l[field]||0)+(e.status==='returning'&&l.qty_back_reported!=null?' out · '+l.qty_back_reported+' back':'')+' × '+fmt0(l.unit_price)+'</span></div>').join('')
@@ -568,43 +724,66 @@ function renderEvents(){
   if(past.length)h+='<div class="section-t">Past events</div>'+past.slice(0,30).map(eventCard).join('');
   $('app').innerHTML=h;
 }
-function newBooking(){S.draft={id:null,name:'',event_date:'',start_time:'',place:'',city:'',zone:'local',rep_note:'',show_on_order_page:true,qty:{}};go('book');}
+const DRAFT_EXTRA=['listing_id','event_type','attendance','bags_wanted','contact_name','contact_phone','contact_email','website','booth_fee'];
+function newBooking(){S.draft={id:null,name:'',event_date:'',start_time:'',place:'',city:'',zone:'local',rep_note:'',show_on_order_page:true,qty:{},listing_id:'',event_type:'',attendance:'',bags_wanted:'',contact_name:'',contact_phone:'',contact_email:'',website:'',booth_fee:'',share:true,bagsTouched:false};go('book');}
 function editBooking(id){
   const e=S.events.find(x=>x.id===id);if(!e)return;
   const qty={};(e.lines||[]).forEach(l=>{if(l.product_id)qty[l.product_id]=+l.qty_requested||0;});
-  S.draft={id:e.id,name:e.name,event_date:e.event_date,start_time:e.start_time||'',place:e.place||'',city:e.city||'',zone:e.zone,rep_note:e.rep_note||'',show_on_order_page:e.show_on_order_page!==false,qty};
+  S.draft={id:e.id,name:e.name,event_date:e.event_date,start_time:e.start_time||'',place:e.place||'',city:e.city||'',zone:e.zone,rep_note:e.rep_note||'',show_on_order_page:e.show_on_order_page!==false,qty,share:false,bagsTouched:true};
+  DRAFT_EXTRA.forEach(k=>{S.draft[k]=e[k]==null?'':e[k];});
+  if(!S.draft.bags_wanted){const n=Object.values(qty).reduce((a,b)=>a+b,0);S.draft.bags_wanted=n||'';}
   go('book');
 }
 async function cancelBooking(id){
   const e=S.events.find(x=>x.id===id);if(!e||!confirm('Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'))return;
   try{await rpc('kf_rep_cancel_event',{p_id:id});toast('Cancelled');await reload();}catch(x){toast(x.message,true);}
 }
+function bf(k,label,type,ph,extra){const v=S.draft[k]==null?'':S.draft[k];return '<label for="bf_'+k+'">'+label+'</label><input id="bf_'+k+'" class="inp"'+(type?' type="'+type+'"':'')+' placeholder="'+esc(ph||'')+'" value="'+esc(v)+'" oninput="S.draft.'+k+'=this.value'+(extra||'')+'">';}
 function renderBook(){
   const d=S.draft;if(!d){go('events');return;}
   const c=S.cfg;
   let h='<div class="card"><h2>The event</h2>'
+    +(d.fromList?'<div class="msg ok" style="margin-top:6px;">Filled in from the events list. Change anything that’s different this time.</div>':'')
     +'<label for="bName">Event name</label><input id="bName" class="inp" placeholder="St. John’s Holiday Bazaar" value="'+esc(d.name)+'" oninput="S.draft.name=this.value">'
-    +'<div class="row2"><div><label for="bDate">Date</label><input id="bDate" class="inp" type="date" min="'+today()+'" value="'+esc(d.event_date)+'" onchange="S.draft.event_date=this.value"></div>'
+    +'<label for="bType">What kind of event</label><select id="bType" class="inp" onchange="S.draft.event_type=this.value"><option value="">Pick one</option>'+Object.entries(EVENT_TYPES).map(([k,l])=>'<option value="'+k+'"'+(d.event_type===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<div class="row2"><div><label for="bDate">Date</label><input id="bDate" class="inp" type="date" min="'+today()+'" value="'+esc(d.event_date)+'" onchange="S.draft.event_date=this.value;drawBookTotal()"></div>'
     +'<div><label for="bTime">Time</label><input id="bTime" class="inp" placeholder="9am–3pm" value="'+esc(d.start_time)+'" oninput="S.draft.start_time=this.value"></div></div>'
     +'<label for="bPlace">Where</label><input id="bPlace" class="inp" placeholder="Venue or address" value="'+esc(d.place)+'" oninput="S.draft.place=this.value">'
     +'<label for="bCity">Town</label><input id="bCity" class="inp" value="'+esc(d.city)+'" oninput="S.draft.city=this.value">'
     +'<label>How far from Concord?</label>'
     +'<label class="pick'+(d.zone==='local'?' on':'')+'"><input type="radio" name="zone" value="local" '+(d.zone==='local'?'checked':'')+' onchange="setZone(\'local\')"><b>Local</b> · within about '+esc(c.local_miles)+' miles<br><span class="muted">Regular prices</span></label>'
     +'<label class="pick'+(d.zone==='far'?' on':'')+'"><input type="radio" name="zone" value="far" '+(d.zone==='far'?'checked':'')+' onchange="setZone(\'far\')"><b>Farther out</b><br><span class="muted">'+fmt0(c.far_add)+' more per bag, so you earn a bit more for the drive</span></label>'
+    +'<details class="more"'+(d.contact_name||d.contact_phone||d.contact_email||d.website||d.booth_fee?' open':'')+'><summary>Organizer details</summary>'
+    +bf('contact_name','Contact name')+'<div class="row2"><div>'+bf('contact_phone','Phone','tel')+'</div><div>'+bf('contact_email','Email','email')+'</div></div>'
+    +bf('website','Website or Facebook page')+bf('booth_fee','Booth fee','', '$40')+'</details>'
+    +(!d.id&&!d.fromList?'<label class="check"><input type="checkbox" '+(d.share?'checked':'')+' onchange="S.draft.share=this.checked"> Add it to the events list so other Highlanders can find it (the kitchen checks it first)</label>':'')
     +'<label class="check"><input type="checkbox" '+(d.show_on_order_page?'checked':'')+' onchange="S.draft.show_on_order_page=this.checked"> Let customers pre-order for this event on my order link</label>'
     +'<label for="bNote">Anything the kitchen should know?</label><textarea id="bNote" class="inp" placeholder="Optional" oninput="S.draft.rep_note=this.value">'+esc(d.rep_note)+'</textarea></div>';
-  h+='<div class="card"><h2>What you’ll take</h2><p class="muted">Ask for what you think you can sell. Whatever doesn’t sell comes back.</p>';
-  if(d.id){const pre=preordersFor(d.id);if(pre.length){const need={};pre.forEach(o=>(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);}));h+='<div class="msg ok">Pre-ordered so far: '+Object.entries(need).map(([n,q])=>q+' '+esc(n)).join(', ')+'. Make sure you ask for at least that many.</div>';}}
-  if(!S.products.length)h+='<div class="empty">The kitchen hasn’t listed any pasta yet. Check back soon.</div>';
-  let last=null;
-  S.products.forEach(p=>{
-    if(p.line!==last){last=p.line;h+='<div class="line-h">'+esc(lineName(p.line))+' · '+fmt0(priceFor(p.line,d.zone))+' a bag</div>';}
-    h+='<div class="prod"><div class="prod-main"><div class="prod-name">'+esc(p.name)+'</div>'+(p.description?'<div class="prod-sub">'+esc(p.description)+'</div>':'')+'</div>'+stepper('q_'+p.id,d.qty[p.id]||0,'setQty(\''+p.id+'\',VAL)')+'</div>';
-  });
+
+  h+='<div class="card"><h2>How much pasta</h2><p class="muted">Tell us how big the crowd is and we’ll suggest how many bags to bring. The kitchen packs a mix of whatever it made that week, so you don’t pick flavors. You’ll see exactly what you’re taking when you pick it up.</p>'
+    +'<label for="bAtt">About how many people come</label><input id="bAtt" class="inp" type="number" inputmode="numeric" min="0" placeholder="1500" value="'+esc(d.attendance)+'" oninput="setAttendance(this.value)">'
+    +'<div id="bEst"></div>'
+    +'<label for="q_bags">Bags you’d like</label><div style="display:flex;justify-content:flex-start;">'+stepper('q_bags',+d.bags_wanted||0,'setBags(VAL)')+'</div>';
+  if(d.id){const pre=preordersFor(d.id);if(pre.length){const need={};pre.forEach(o=>(o.items||[]).forEach(i=>{need[i.name]=(need[i.name]||0)+(+i.qty||0);}));const n=Object.values(need).reduce((a,b)=>a+b,0);h+='<div class="msg ok">Pre-ordered so far: '+Object.entries(need).map(([nm,q])=>q+' '+esc(nm)).join(', ')+'. The kitchen packs those for you'+(n>(+d.bags_wanted||0)?', so ask for at least '+plural(n,'bag')+'.':'.')+'</div>';}}
   h+='<div id="bookTotal"></div><div class="msg err" id="bMsg"></div>'
-    +'<div class="btns"><button class="btn primary full" id="bBtn" onclick="saveBooking()">'+(d.id?'Save changes':'Book it')+'</button><button class="btn soft full" onclick="S.draft=null;go(\'events\')">Back</button></div></div>';
-  $('app').innerHTML=h;drawBookTotal();
+    +'<div class="btns"><button class="btn primary full" id="bBtn" onclick="saveBooking()">'+(d.id?'Save changes':'Book it')+'</button><button class="btn soft full" onclick="S.draft=null;go(\''+(d.fromList&&!d.id?'find':'events')+'\')">Back</button></div></div>';
+  $('app').innerHTML=h;drawEst();drawBookTotal();
 }
+function setAttendance(v){
+  const d=S.draft;d.attendance=v;
+  if(!d.bagsTouched){const n=estimateBags(v);d.bags_wanted=n||'';const i=$('q_bags');if(i)i.value=n||0;}
+  drawEst();drawBookTotal();
+}
+function setBags(v){S.draft.bags_wanted=Math.min(500,Math.max(0,v|0));S.draft.bagsTouched=true;drawEst();drawBookTotal();}
+function drawEst(){
+  const el=$('bEst');if(!el)return;const d=S.draft,att=+d.attendance||0;
+  if(!att){el.innerHTML='<p class="muted small" style="margin-top:6px;">Not sure? Ask the organizer, or guess. About one bag for every '+peoplePerBag()+' people is a good start.</p>';return;}
+  const n=estimateBags(att),mine=myPeoplePerBag();
+  el.innerHTML='<div class="est">For about '+att.toLocaleString('en-US')+' people, bring about <b>'+n+'</b> bags.'
+    +(+d.bags_wanted&&+d.bags_wanted!==n?'<div class="small" style="margin-top:4px;">You’re asking for '+plural(+d.bags_wanted,'bag')+'. <a href="#" onclick="useEstimate();return false;">Use '+n+'</a></div>':'')
+    +(mine?'<div class="small" style="margin-top:4px;">At your last '+mine.n+' events you sold about 1 bag for every '+mine.per+' people.</div>':'')+'</div>';
+}
+function useEstimate(){const n=estimateBags(S.draft.attendance);S.draft.bags_wanted=n;S.draft.bagsTouched=true;const i=$('q_bags');if(i)i.value=n;drawEst();drawBookTotal();}
 function stepper(id,v,onset){
   const set=onset.replace('VAL','v');
   return '<div class="step"><button type="button" aria-label="One less" onclick="(function(){var i=document.getElementById(\''+id+'\');var v=Math.max(0,(parseInt(i.value)||0)-1);i.value=v;'+set+'})()">−</button>'
@@ -612,24 +791,32 @@ function stepper(id,v,onset){
     +'<button type="button" aria-label="One more" onclick="(function(){var i=document.getElementById(\''+id+'\');var v=(parseInt(i.value)||0)+1;i.value=v;'+set+'})()">+</button></div>';
 }
 function setZone(z){S.draft.zone=z;renderBook();}
-function setQty(pid,v){S.draft.qty[pid]=Math.min(500,Math.max(0,v|0));drawBookTotal();}
 function drawBookTotal(){
-  const d=S.draft;let bags=0,val=0;
-  S.products.forEach(p=>{const q=d.qty[p.id]||0;bags+=q;val+=q*priceFor(p.line,d.zone);});
-  const prior=d.event_date?monthSummary(ym(d.event_date)).sales:monthSummary(ym(today())).sales;
-  $('bookTotal').innerHTML='<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+' · if it all sells</div><div class="big">'+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(addCommission(prior,val))+'</div></div></div>';
+  const d=S.draft,el=$('bookTotal');if(!el)return;
+  const bags=+d.bags_wanted||0,val=Math.round(bags*avgBagPrice(d.zone));
+  if(!bags){el.innerHTML='';return;}
+  el.innerHTML='<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+' · if it all sells</div><div class="big">about '+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(addCommission(0,val))+'</div></div></div>'
+    +'<p class="muted small" style="margin-top:6px;">An estimate. The real number depends on the mix the kitchen packs.</p>';
 }
 async function saveBooking(){
   const d=S.draft,msg=$('bMsg'),btn=$('bBtn');msg.textContent='';
   if(!d.name.trim()){msg.textContent='Give the event a name.';return;}
   if(!d.event_date){msg.textContent='Pick the date.';return;}
-  const lines=Object.entries(d.qty).filter(([,q])=>q>0).map(([product_id,qty])=>({product_id,qty}));
-  if(!lines.length){msg.textContent='Choose at least one bag to take.';return;}
+  const bags=+d.bags_wanted||0;
+  if(bags<1){msg.textContent=+d.attendance>0?'Say how many bags you’d like.':'Tell us about how many people come, or how many bags you’d like.';return;}
+  if(bags>500){msg.textContent='That’s more than 500 bags. Talk to the kitchen about an event that big.';return;}
   btn.disabled=true;btn.textContent='Saving…';
   try{
-    await rpc('kf_rep_book_event',{p_event:{id:d.id,name:d.name.trim(),event_date:d.event_date,start_time:d.start_time,place:d.place,city:d.city,zone:d.zone,rep_note:d.rep_note,show_on_order_page:d.show_on_order_page},p_lines:lines});
-    toast(d.id?'Booking updated':'Booked! The kitchen will get your pasta ready.');S.draft=null;await reload('events');
-  }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent=d.id?'Save changes':'Book it';}
+    let lid=d.listing_id||'';
+    if(!d.id&&!lid&&d.share&&!d.fromList){
+      try{lid=await rpc('kf_hl_save_listing',{p:{name:d.name.trim(),kind:d.event_type||'other',next_date:d.event_date,start_time:d.start_time,place:d.place,city:d.city,zone:d.zone,attendance:String(d.attendance||''),contact_name:d.contact_name,contact_phone:d.contact_phone,contact_email:d.contact_email,website:d.website,booth_fee:d.booth_fee}});}
+      catch(x){lid='';}
+    }
+    const ev={id:d.id,name:d.name.trim(),event_date:d.event_date,start_time:d.start_time,place:d.place,city:d.city,zone:d.zone,rep_note:d.rep_note,show_on_order_page:d.show_on_order_page,
+      listing_id:lid||'',event_type:d.event_type||'',attendance:String(d.attendance||''),bags_wanted:String(bags),contact_name:d.contact_name||'',contact_phone:d.contact_phone||'',contact_email:d.contact_email||'',website:d.website||'',booth_fee:d.booth_fee||''};
+    await rpc('kf_hl_book_event',{p_event:ev});
+    toast(d.id?'Booking updated':'Booked! The kitchen will pack '+plural(bags,'bag')+' for you.');S.draft=null;await reload('events');
+  }catch(e){msg.textContent=/kf_hl_book_event|schema cache|PGRST202/i.test(e.message)?'The kitchen is finishing an update to booking. Try again a little later.':e.message;btn.disabled=false;btn.textContent=d.id?'Save changes':'Book it';}
 }
 
 // ─── count what came back ───

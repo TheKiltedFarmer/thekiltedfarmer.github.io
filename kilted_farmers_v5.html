@@ -739,6 +739,14 @@ details[open]>summary.card-title::after{content:'▴';}
 .rp-add .btn-secondary{padding:7px 14px;}
 .rp-total{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--green-dark);color:#fff;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px;}
 .rp-total:empty{display:none;}
+.rp-kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px;margin:6px 0;}
+.rp-kv span{color:var(--mid);}
+.rp-kv a{color:var(--green-dark);font-weight:600;word-break:break-word;}
+.rp-ask{background:var(--cream);border-radius:8px;padding:8px 10px;font-size:13px;margin:6px 0;}
+.rp-ask b{color:var(--green-dark);}
+.rp-line.zero b{color:var(--mid);font-weight:600;}
+#repsBody .seg{overflow-x:auto;scrollbar-width:none;}
+#repsBody .seg button{flex:1 0 auto;padding:9px 10px;}
 .rp-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:10px 0 4px;font-weight:600;}
 .rp-zone{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
 .rp-zone label{font-size:12px;color:var(--mid);font-weight:600;}
@@ -7067,7 +7075,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
 
 // ─── Pasta Highlanders: people who sell our pasta at their own events on commission ───
-const REPS={loaded:false,missing:false,mode:'events',reps:[],events:[],products:[],preorders:[],cfg:null,inv:[],open:null,showDeclined:false,showAllSettled:false};
+const REPS={loaded:false,missing:false,listMissing:false,listings:[],mode:'events',reps:[],events:[],products:[],preorders:[],cfg:null,inv:[],open:null,showDeclined:false,showAllSettled:false};
 const REP_LINE_KEYS=['handmade','extruded','traditional'];
 const REP_STATUS={requested:['Get ready','rp-chip blue'],out:['Out with Highlander','rp-chip green'],returning:['Count to check','rp-chip tan'],settled:['Settled','rp-chip'],cancelled:['Cancelled','rp-chip red']};
 function repLineName(k){return (REPS.cfg&&REPS.cfg.line_names&&REPS.cfg.line_names[k])||k;}
@@ -7107,6 +7115,11 @@ async function loadReps(){
     REPS.events=events.map(e=>Object.assign(e,{lines:(e.kf_rep_event_lines||[]).sort((a,b)=>(+b.unit_price)-(+a.unit_price)||String(a.product_name).localeCompare(b.product_name))}));
     REPS.loaded=true;REPS.missing=false;
   }catch(e){if(tableMissing(e)){REPS.missing=true;}else toast('Highlanders didn’t load: '+e.message,true);}
+  if(!REPS.missing){
+    try{REPS.listings=await sbAll('kf_event_listings?order=next_date.asc.nullslast,name.asc');REPS.listMissing=false;}
+    catch(e){REPS.listings=[];REPS.listMissing=tableMissing(e);if(!REPS.listMissing)console.warn('event list',e);}
+    if(!REPS.listMissing)await repImportFeed();
+  }
   repsBadge();
 }
 async function loadRepInv(){try{REPS.inv=await sbAll('kf_inv_items?active=eq.true&order=name.asc');}catch(e){REPS.inv=[];}}
@@ -7118,7 +7131,7 @@ async function repsBadgeLoad(){
 }
 function repsBadge(){
   const el=document.getElementById('repsBadge');if(!el||!REPS.loaded)return;
-  const n=REPS.reps.filter(r=>r.status==='pending').length+REPS.events.filter(e=>e.status==='requested'||e.status==='returning').length;
+  const n=REPS.reps.filter(r=>r.status==='pending').length+REPS.events.filter(e=>e.status==='requested'||e.status==='returning').length+REPS.listings.filter(l=>l.status==='suggested').length;
   el.textContent=n||'';el.style.display=n?'inline-block':'none';
 }
 async function renderReps(){
@@ -7137,8 +7150,9 @@ function drawReps(){
     +'<div class="bk-stat"><div class="bk-stat-l">Bags out now</div><div class="bk-stat-v">'+outBags+'</div></div>'
     +'<div class="bk-stat"><div class="bk-stat-l">Highlanders owe us</div><div class="bk-stat-v" style="color:'+(owed>0?'var(--red)':'var(--green)')+';">'+fmt(owed)+'</div></div>'
     +'<div class="bk-stat"><div class="bk-stat-l">This month</div><div class="bk-stat-v">'+fmt(REPS.events.filter(e=>e.status==='settled'&&repYM(e.event_date)===repYM(todayISO())).reduce((a,e)=>a+(+e.sales||0),0))+'</div><div class="bk-stat-s">Highlander sales settled</div></div></div>';
-  h+='<div class="card"><div class="seg">'+[['events','Events'],['reps','Highlanders'+(pending?' ('+pending+')':'')],['orders','Pre-orders'],['setup','Pasta & pay']].map(([k,l])=>'<button class="'+(REPS.mode===k?'active':'')+'" onclick="repMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
-  h+=({events:repEventsHTML,reps:repRepsHTML,orders:repOrdersHTML,setup:repSetupHTML}[REPS.mode]||repEventsHTML)();
+  const sugg=REPS.listings.filter(l=>l.status==='suggested').length;
+  h+='<div class="card"><div class="seg">'+[['events','Events'],['reps','Highlanders'+(pending?' ('+pending+')':'')],['list','Event list'+(sugg?' ('+sugg+')':'')],['orders','Pre-orders'],['setup','Pasta & pay']].map(([k,l])=>'<button class="'+(REPS.mode===k?'active':'')+'" onclick="repMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
+  h+=({events:repEventsHTML,reps:repRepsHTML,list:repListHTML,orders:repOrdersHTML,setup:repSetupHTML}[REPS.mode]||repEventsHTML)();
   h+='</div>';
   el.innerHTML=h;
 }
@@ -7151,15 +7165,391 @@ function repsSetupHTML(){
     +'<button class="btn-secondary" onclick="REPS.missing=false;renderReps();">Recheck</button></div></div>';
 }
 
+// ─── event types, crowd estimate, event details ───
+const REP_EVENT_TYPES={farmers_market:'Farmers market',craft_show:'Craft show',bazaar:'Bazaar or church sale',festival:'Festival or fair',private:'Private party',other:'Something else'};
+function repPeoplePerBag(){const n=+((REPS.cfg||{}).people_per_bag);return n>0?n:15;}
+function repEstimateBags(att){att=+att||0;if(att<=0)return 0;return Math.min(500,Math.max(10,Math.round(att/repPeoplePerBag()/5)*5));}
+// Requested events: what the kitchen has packed so far, or what the Highlander asked for
+function repEventBags(e){
+  if(e.status!=='requested')return e.lines.reduce((a,l)=>a+(+l.qty_out||0),0);
+  const packed=e.lines.reduce((a,l)=>a+(+l.qty_out||0),0);
+  return packed||(+e.bags_wanted||0)||e.lines.reduce((a,l)=>a+(+l.qty_requested||0),0);
+}
+function repWeb(v,label){v=String(v||'').trim();if(!v)return'';const u=/^https?:\/\//i.test(v)?v:'https://'+v;return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(label||v.replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>';}
+function repTel(v){const t=String(v||'').replace(/[^\d+]/g,'');return t.length>=7?'<a href="tel:'+esc(t)+'">'+esc(v)+'</a>':esc(v);}
+function repDetailsKV(o){
+  const r=[];
+  if(o.event_type||o.kind)r.push(['Type',esc(REP_EVENT_TYPES[o.event_type||o.kind]||'')]);
+  if(+o.attendance>0)r.push(['Crowd','about '+(+o.attendance).toLocaleString('en-US')+' people']);
+  if(o.contact_name)r.push(['Organizer',esc(o.contact_name)]);
+  if(o.contact_phone)r.push(['Phone',repTel(o.contact_phone)]);
+  if(o.contact_email)r.push(['Email','<a href="mailto:'+esc(o.contact_email)+'">'+esc(o.contact_email)+'</a>']);
+  if(o.website)r.push(['Website',repWeb(o.website)]);
+  if(o.booth_fee)r.push(['Booth fee',esc(o.booth_fee)]);
+  return r.length?'<div class="rp-kv">'+r.map(([k,v])=>'<span>'+k+'</span><div>'+v+'</div>').join('')+'</div>':'';
+}
+// What settled events with a crowd size say: people per bag sold
+function repLearnedPeoplePerBag(){
+  let ppl=0,bags=0,n=0;
+  REPS.events.filter(e=>e.status==='settled'&&+e.attendance>0).forEach(e=>{const b=e.lines.reduce((a,l)=>a+Math.max(0,(+l.qty_out||0)-(+l.qty_back||0)),0);if(b>0){ppl+=+e.attendance;bags+=b;n++;}});
+  return n>=2?{per:Math.round(ppl/bags),n}:null;
+}
+
+// ─── weekly event search: events-feed.json on the website ───
+const FEED_KEYS=['feed_id','name','kind','schedule','next_date','end_date','start_time','place','city','zone','attendance','contact_name','contact_phone','contact_email','website','booth_fee','apply_by','notes','source_url','found'];
+const FEED_KINDS=['farmers_market','craft_show','festival','bazaar','private','other'];
+function feedClean(f){
+  if(!f||typeof f!=='object')return null;
+  const o={};FEED_KEYS.forEach(k=>{const v=f[k];o[k]=v==null||v===''?null:(typeof v==='number'?v:String(v).slice(0,1000));});
+  if(!o.feed_id||!o.name)return null;
+  ['next_date','end_date','apply_by','found'].forEach(k=>{if(o[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(o[k]))o[k]=null;});
+  o.attendance=o.attendance!=null&&+o.attendance>0?Math.min(1000000,Math.round(+o.attendance)):null;
+  if(!FEED_KINDS.includes(o.kind))o.kind='other';
+  if(o.zone!=='far')o.zone='local';
+  ['website','source_url'].forEach(k=>{if(o[k]&&!/^https?:\/\//i.test(o[k]))o[k]=null;});
+  return o;
+}
+async function loadFeed(){
+  try{const r=await fetch('events-feed.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)return[];const j=await r.json();return (Array.isArray(j)?j:(j&&j.events)||[]).map(feedClean).filter(Boolean);}
+  catch(e){return[];}
+}
+function feedKey(n,d){return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'')+'|'+(d||'');}
+// Feed events that aren't on the list yet (or that the kitchen hid)
+function feedNew(rows,feed,todayISO){
+  const ids=new Set(rows.filter(r=>r.feed_id).map(r=>r.feed_id));
+  const keys=new Set(rows.map(r=>feedKey(r.name,r.next_date))),names=new Set(rows.map(r=>feedKey(r.name,'')));
+  return feed.filter(f=>{const last=f.end_date||f.next_date;if(last&&last<todayISO)return false;
+    return !ids.has(f.feed_id)&&!keys.has(feedKey(f.name,f.next_date))&&!(!f.next_date&&names.has(feedKey(f.name,'')));});
+}
+function isNewThisWeek(d,todayISO){if(!d)return false;const a=new Date(d+'T12:00:00'),b=new Date(todayISO+'T12:00:00');return (b-a)/864e5<=7&&(b-a)>=-1;}
+// Add this week's search results to the list (once each; hidden ones stay hidden)
+async function repImportFeed(){
+  if(REPS._feedTried)return;REPS._feedTried=true;
+  try{
+    const fresh=feedNew(REPS.listings,await loadFeed(),todayISO());if(!fresh.length)return;
+    const rows=fresh.map(f=>{const o=Object.assign({},f);o.found_on=o.found||todayISO();delete o.found;o.status='listed';return o;});
+    await sb('kf_event_listings',{method:'POST',body:JSON.stringify(rows)});
+    REPS.listings=await sbAll('kf_event_listings?order=next_date.asc.nullslast,name.asc');
+  }catch(e){console.warn('weekly events',e);}
+}
+
+// ─── event list: markets, craft shows and bazaars Highlanders can book ───
+const HL_EVENTS_SQL=`-- ═══════════════════════════════════════════════════════════════════
+-- THE KILTED FARMERS — PASTA HIGHLANDERS: EVENT LIST + EVENT DETAILS
+-- Paste into the Supabase SQL Editor and hit Run. Safe to run more than once.
+--
+-- 1. An events list: farmers markets, craft shows and bazaars Highlanders
+--    can browse and book. The kitchen keeps it; Highlanders can add events
+--    they find, and those wait for the kitchen to check them.
+-- 2. Each booked event keeps its details: type, expected crowd, organizer
+--    contact, booth fee, website.
+-- 3. Highlanders ask for a number of bags, not flavors. The kitchen packs
+--    the mix from what it made that week.
+-- 4. A starter list of events near Concord, each with where it came from.
+-- 5. Room for the weekly event search to add what it finds.
+-- ═══════════════════════════════════════════════════════════════════
+
+create table if not exists kf_event_listings (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  kind text not null default 'other',
+  schedule text,
+  next_date date,
+  end_date date,
+  start_time text,
+  place text,
+  city text,
+  zone text not null default 'local',
+  attendance int,
+  contact_name text,
+  contact_phone text,
+  contact_email text,
+  website text,
+  booth_fee text,
+  apply_by date,
+  notes text,
+  source_url text,
+  status text not null default 'listed',
+  added_by_rep uuid references kf_reps(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'kf_event_listings_kind_chk') then
+    alter table kf_event_listings add constraint kf_event_listings_kind_chk
+      check (kind in ('farmers_market','craft_show','festival','bazaar','private','other'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'kf_event_listings_zone_chk') then
+    alter table kf_event_listings add constraint kf_event_listings_zone_chk check (zone in ('local','far'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'kf_event_listings_status_chk') then
+    alter table kf_event_listings add constraint kf_event_listings_status_chk check (status in ('listed','suggested','hidden'));
+  end if;
+end $$;
+create index if not exists kf_event_listings_date_idx on kf_event_listings(next_date);
+
+alter table kf_event_listings enable row level security;
+drop policy if exists "team manages listings" on kf_event_listings;
+create policy "team manages listings" on kf_event_listings for all to authenticated using (kf_is_team()) with check (kf_is_team());
+drop policy if exists "highlanders read listings" on kf_event_listings;
+create policy "highlanders read listings" on kf_event_listings for select to authenticated
+  using (kf_is_active_rep() and (status = 'listed' or added_by_rep = kf_my_rep_id()));
+
+-- Weekly event search: events found each week arrive in events-feed.json on the website.
+-- The kitchen Hub adds them to this list; feed_id keeps hidden ones from coming back.
+alter table kf_event_listings add column if not exists feed_id text;
+alter table kf_event_listings add column if not exists found_on date;
+create unique index if not exists kf_event_listings_feed_idx on kf_event_listings(feed_id) where feed_id is not null;
+drop policy if exists "highlanders read listings" on kf_event_listings;
+create policy "highlanders read listings" on kf_event_listings for select to authenticated
+  using (kf_is_active_rep() and (status = 'listed' or added_by_rep = kf_my_rep_id() or feed_id is not null));
+
+-- Event details on each booking
+alter table kf_rep_events add column if not exists listing_id uuid references kf_event_listings(id) on delete set null;
+alter table kf_rep_events add column if not exists event_type text;
+alter table kf_rep_events add column if not exists attendance int;
+alter table kf_rep_events add column if not exists bags_wanted int;
+alter table kf_rep_events add column if not exists contact_name text;
+alter table kf_rep_events add column if not exists contact_phone text;
+alter table kf_rep_events add column if not exists contact_email text;
+alter table kf_rep_events add column if not exists website text;
+alter table kf_rep_events add column if not exists booth_fee text;
+
+-- Book an event by how many bags, not which flavors.
+-- Changing a booking never touches pasta the kitchen has already started packing.
+create or replace function kf_hl_book_event(p_event jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  rid uuid; eid uuid := nullif(p_event->>'id', '')::uuid; ev kf_rep_events;
+  z text := coalesce(nullif(p_event->>'zone', ''), 'local');
+  d date := nullif(p_event->>'event_date', '')::date;
+  bags int := nullif(p_event->>'bags_wanted', '')::int;
+  att int := nullif(p_event->>'attendance', '')::int;
+  lid uuid := nullif(p_event->>'listing_id', '')::uuid;
+  t text := nullif(p_event->>'event_type', '');
+begin
+  select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
+  if rid is null then raise exception 'Your Highlander account isn''t active yet'; end if;
+  if coalesce(trim(p_event->>'name'), '') = '' then raise exception 'Give the event a name'; end if;
+  if d is null then raise exception 'Pick the event date'; end if;
+  if d < current_date - 1 then raise exception 'That date has already passed'; end if;
+  if z not in ('local', 'far') then raise exception 'Pick local or farther out'; end if;
+  if bags is null or bags < 1 then raise exception 'Say about how many bags you''ll need'; end if;
+  if bags > 500 then raise exception 'That''s more than 500 bags. Talk to the kitchen about an event that big'; end if;
+  if att is not null and (att < 0 or att > 1000000) then raise exception 'Check the expected crowd size'; end if;
+  if t is not null and t not in ('farmers_market','craft_show','festival','bazaar','private','other') then t := 'other'; end if;
+  if lid is not null and not exists (select 1 from kf_event_listings where id = lid and (status = 'listed' or added_by_rep = rid)) then lid := null; end if;
+
+  if eid is null then
+    insert into kf_rep_events (rep_id, name, event_date, start_time, place, city, zone, rep_note, show_on_order_page,
+      listing_id, event_type, attendance, bags_wanted, contact_name, contact_phone, contact_email, website, booth_fee)
+    values (rid, left(trim(p_event->>'name'), 120), d, left(p_event->>'start_time', 40), left(p_event->>'place', 160),
+      left(p_event->>'city', 80), z, left(p_event->>'rep_note', 1000), coalesce((p_event->>'show_on_order_page')::boolean, true),
+      lid, t, att, bags, left(p_event->>'contact_name', 80), left(p_event->>'contact_phone', 40), left(p_event->>'contact_email', 120),
+      left(p_event->>'website', 300), left(p_event->>'booth_fee', 80))
+    returning id into eid;
+  else
+    select * into ev from kf_rep_events where id = eid and rep_id = rid;
+    if ev.id is null then raise exception 'That event isn''t yours'; end if;
+    if ev.status <> 'requested' then raise exception 'This event''s pasta has already been handed over, so ask the kitchen to change it'; end if;
+    update kf_rep_events set name = left(trim(p_event->>'name'), 120), event_date = d, start_time = left(p_event->>'start_time', 40),
+      place = left(p_event->>'place', 160), city = left(p_event->>'city', 80), zone = z, rep_note = left(p_event->>'rep_note', 1000),
+      show_on_order_page = coalesce((p_event->>'show_on_order_page')::boolean, true),
+      listing_id = lid, event_type = t, attendance = att, bags_wanted = bags,
+      contact_name = left(p_event->>'contact_name', 80), contact_phone = left(p_event->>'contact_phone', 40),
+      contact_email = left(p_event->>'contact_email', 120), website = left(p_event->>'website', 300), booth_fee = left(p_event->>'booth_fee', 80)
+    where id = eid;
+  end if;
+  return eid;
+end $$;
+
+-- A Highlander adds an event they found (or fixes one they added). The kitchen checks it before others see it.
+create or replace function kf_hl_save_listing(p jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  rid uuid; lid uuid := nullif(p->>'id', '')::uuid; old kf_event_listings;
+  k text := coalesce(nullif(p->>'kind', ''), 'other'); z text := coalesce(nullif(p->>'zone', ''), 'local');
+  att int := nullif(p->>'attendance', '')::int;
+begin
+  select id into rid from kf_reps where user_id = auth.uid() and status = 'active';
+  if rid is null then raise exception 'Your Highlander account isn''t active yet'; end if;
+  if coalesce(trim(p->>'name'), '') = '' then raise exception 'Give the event a name'; end if;
+  if k not in ('farmers_market','craft_show','festival','bazaar','private','other') then k := 'other'; end if;
+  if z not in ('local', 'far') then z := 'local'; end if;
+  if att is not null and (att < 0 or att > 1000000) then raise exception 'Check the expected crowd size'; end if;
+  if lid is null then
+    if (select count(*) from kf_event_listings where added_by_rep = rid and created_at > now() - interval '1 day') >= 30 then
+      raise exception 'That''s a lot of new events for one day. Try again tomorrow';
+    end if;
+    insert into kf_event_listings (name, kind, schedule, next_date, end_date, start_time, place, city, zone, attendance,
+      contact_name, contact_phone, contact_email, website, booth_fee, apply_by, notes, status, added_by_rep)
+    values (left(trim(p->>'name'), 120), k, left(p->>'schedule', 160), nullif(p->>'next_date', '')::date, nullif(p->>'end_date', '')::date,
+      left(p->>'start_time', 40), left(p->>'place', 160), left(p->>'city', 80), z, att,
+      left(p->>'contact_name', 80), left(p->>'contact_phone', 40), left(p->>'contact_email', 120), left(p->>'website', 300),
+      left(p->>'booth_fee', 80), nullif(p->>'apply_by', '')::date, left(p->>'notes', 1000), 'suggested', rid)
+    returning id into lid;
+  else
+    select * into old from kf_event_listings where id = lid and added_by_rep = rid;
+    if old.id is null then raise exception 'You can only change events you added'; end if;
+    if old.status <> 'suggested' then raise exception 'The kitchen has already added this one to the list. Ask the kitchen to change it'; end if;
+    update kf_event_listings set name = left(trim(p->>'name'), 120), kind = k, schedule = left(p->>'schedule', 160),
+      next_date = nullif(p->>'next_date', '')::date, end_date = nullif(p->>'end_date', '')::date, start_time = left(p->>'start_time', 40),
+      place = left(p->>'place', 160), city = left(p->>'city', 80), zone = z, attendance = att,
+      contact_name = left(p->>'contact_name', 80), contact_phone = left(p->>'contact_phone', 40), contact_email = left(p->>'contact_email', 120),
+      website = left(p->>'website', 300), booth_fee = left(p->>'booth_fee', 80), apply_by = nullif(p->>'apply_by', '')::date,
+      notes = left(p->>'notes', 1000), updated_at = now()
+    where id = lid;
+  end if;
+  return lid;
+end $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['kf_hl_book_event(jsonb)','kf_hl_save_listing(jsonb)'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+-- ─── Starter list: events near Concord, gathered Oct 30, 2026 ───
+-- Dates, fees and contacts came from the linked pages. Check with each organizer before booking.
+insert into kf_event_listings (name, kind, schedule, next_date, end_date, start_time, place, city, zone, attendance,
+  contact_name, contact_phone, contact_email, website, booth_fee, apply_by, notes, source_url)
+select v.* from (values
+  ('This & That Market', 'craft_show', null, date '2026-11-15', null::date, '10am–4pm',
+   'Jackson County Fairgrounds, 200 W Ganson St', 'Jackson', 'local', null::int,
+   null, null, null, 'https://vendorbound.com/event/this-and-that-market-jackson-mi-nov-15-mi-790eb263e3', '$150 (10×10)', date '2026-11-08',
+   'Indoor and outdoor. Apply through the Vendorbound link.', 'https://www.thecraftmap.com/fair/this-that-market-jackson-mi'),
+  ('Christmas Craft & Vendor Show', 'bazaar', null, date '2026-12-05', null, '11am–6pm',
+   'St. Aidan''s Episcopal Church, 361 E Grove Ave', 'Michigan Center', 'local', null,
+   null, null, null, null, null, null,
+   'Organizer contact isn''t posted yet. Ask the church office.', 'https://www.thecraftmap.com/fair/christmas-craft-vendor-show-michigan-center-mi'),
+  ('Christmas Craft Show @ Westwood Mall', 'craft_show', null, date '2026-12-19', null, '11am–6pm',
+   'Westwood Mall, 1850 W Michigan Ave', 'Jackson', 'local', null,
+   'Fishville Farms Events', null, null, 'https://www.facebook.com/share/1BmjudZCoF/', null, null,
+   'Bakers and food vendors welcome. Reach the organizer through the Facebook event.', 'https://www.eventbrite.com/e/christmas-craft-show-westwood-mall-tickets-1981368029112'),
+  ('Grand River Farmers Market: Winter Market', 'farmers_market', '1st and 3rd Fridays, November–April (indoors)', date '2026-11-06', null, null,
+   'Found Church, 141 E Michigan Ave', 'Jackson', 'local', null,
+   'Grow Jackson', null, null, 'http://www.jacksondda.org', null, null,
+   'Grow Jackson took over the market from the Jackson DDA in late 2025. Summer market: Tue, Fri and Sat 8am–1pm, June–November, at 117 W Louis Glick Hwy.', 'https://jtv.tv/jackson-dda-hands-over-grand-river-farmers-market-operations-to-grow-jackson/'),
+  ('Marshall Area Farmers Market', 'farmers_market', 'Saturdays. Summer 8am–1pm (May–Oct), winter 9am–noon on select Saturdays', null, null, null,
+   'Summer: 125 W Green St. Winter: B.E. Henry Building, 615 S Marshall Ave', 'Marshall', 'local', null,
+   null, null, null, 'https://choosemarshall.com', null, null,
+   'Schedule is from the 2024 season. Check this year''s dates.', 'https://choosemarshall.com/?p=23645'),
+  ('Battle Creek Farmers Market', 'farmers_market', 'Seasonal. Call for days and hours', null, null, null,
+   '25 S McCamly St', 'Battle Creek', 'local', null,
+   null, '269-788-1102', null, null, null, null,
+   'Focus is Michigan grown and made food.', 'https://www.localdifference.org/partner/battle-creek-farmers-market/'),
+  ('Meridian Township Farmers'' Market', 'farmers_market', 'Saturdays 8am–2pm May–Nov (10am in Nov); Wednesdays 3–7pm Jun–Oct; winter 1st, 3rd and 5th Saturdays Jan–Apr, 10am–2pm', date '2026-11-07', null, '10am–2pm',
+   'Summer: Marketplace on the Green, 1995 Central Park Dr. Winter: Meridian Mall (JCPenney wing), 1982 E Grand River Ave', 'Okemos', 'far', null,
+   'Tom Cary, Market Manager', '517-712-2395', 'farmersmarket@meridian.mi.us', 'https://www.meridian.mi.us/recreation-leisure/farmers-market/', null, null,
+   'Stall fees are paid through Meridian Township Parks and Recreation (517-853-4600).', 'https://www.meridian.mi.us/recreation-leisure/farmers-market/'),
+  ('Chelsea Farmers Market', 'farmers_market', 'Wednesdays 10am–3pm and Saturdays 8am–1pm, May–October. Holiday pop-ups some years', null, null, null,
+   'Wed: 1010 S Main St. Sat: 304 S Main St', 'Chelsea', 'far', null,
+   null, '734-593-6806', 'coordinator@chelseafarmersmkt.org', 'https://chelseamich.com/farmers-market/', null, null,
+   null, 'https://chelseamich.com/farmers-market/'),
+  ('Ann Arbor Farmers Market', 'farmers_market', 'Wed and Sat 7am–3pm May–Dec; Saturdays 8am–3pm Jan–Apr', null, null, null,
+   '315 Detroit St', 'Ann Arbor', 'far', null,
+   'Stefanie T. Stauffer, Market Manager', '734-794-6255', 'SStauffer@a2gov.org', 'https://www.a2gov.org/parks-and-recreation/parks-and-places/ann-arbor-farmers-market/', null, null,
+   'Vendors must make what they sell, and new vendor applications open January 1, 2027. Ask whether a Highlander can sell for the kitchen before booking.', 'https://www.a2gov.org/parks-and-recreation/parks-and-places/ann-arbor-farmers-market/'),
+  ('MSU Winter Arts & Crafts Show', 'craft_show', null, date '2026-12-05', date '2026-12-06', null,
+   'MSU Union, 49 Abbot Rd', 'East Lansing', 'far', 8000,
+   'University Activities Board', null, null, 'https://uabevents.com/vendorinfo', '$225 single, $495 double, plus $30 application fee', date '2026-10-31',
+   'About 8,000 shoppers over the weekend and 125+ vendors. Two days: bring enough for both.', 'https://www.thecraftmap.com/fair/msu-62nd-annual-winter-arts-crafts-show-2025-east-lansing-mi'),
+  ('Okemos Winter Wonderland Craft & Vendor Market', 'craft_show', null, date '2026-12-05', date '2026-12-06', null,
+   'Meridian Mall', 'Okemos', 'far', null,
+   null, null, null, null, null, null,
+   'Organizer contact isn''t posted on the listing.', 'https://www.thecraftmap.com/fair/okemos-winter-wonderland-craft-vendor-market-okemos-mi'),
+  ('Shipshewana on the Road: Lansing/Mason', 'craft_show', null, date '2026-12-05', date '2026-12-06', null,
+   'Ingham County Fairgrounds', 'Mason', 'far', null,
+   null, null, null, null, null, null,
+   'Shoppers pay $5–$10 admission.', 'https://www.thecraftmap.com/fair/shipshewana-on-the-road-lansingmason-mason-mi'),
+  ('Washtenaw Food Hub Holiday Market', 'bazaar', null, date '2026-12-12', null, null,
+   'Washtenaw Food Hub', 'Ann Arbor', 'far', null,
+   null, null, null, null, null, null,
+   'Free admission. Food-focused crowd.', 'https://www.thecraftmap.com/fair/washtenaw-food-hub-holiday-market-ann-arbor-mi'),
+  ('Jackson Fall Gift, Food and Craft Show (Shipshewana on the Road)', 'craft_show', 'Every October. 2026 was Oct 17–18', null, null, null,
+   'Jackson County Fairgrounds, 200 W Ganson St', 'Jackson', 'local', null,
+   null, null, null, null, null, null,
+   'Food is part of the show. Watch for next year''s dates in late summer.', 'https://www.thecraftmap.com/fairs/michigan/jackson')
+) as v(name, kind, schedule, next_date, end_date, start_time, place, city, zone, attendance,
+  contact_name, contact_phone, contact_email, website, booth_fee, apply_by, notes, source_url)
+where not exists (select 1 from kf_event_listings l where lower(l.name) = lower(v.name));
+
+notify pgrst, 'reload schema';
+
+select count(*) as events_on_the_list from kf_event_listings where status = 'listed';
+`;
+function repListHTML(){
+  if(REPS.listMissing)return '<div class="bk-sub" style="margin-bottom:8px;">The events list needs a small database update. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It also adds a starter list of markets and craft shows near Concord, and lets Highlanders ask for bags instead of picking flavors.</div>'
+    +'<pre style="max-height:220px;overflow:auto;font-size:11px;background:var(--cream);padding:10px;border-radius:8px;">'+esc(HL_EVENTS_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(HL_EVENTS_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
+    +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
+    +'<button class="btn-secondary" onclick="REPS.listMissing=false;renderReps();">Recheck</button></div>';
+  const today=todayISO(),L=REPS.listings;
+  const upcoming=l=>{const last=l.end_date||l.next_date;return !last||last>=today;};
+  const sugg=L.filter(l=>l.status==='suggested');
+  const live=L.filter(l=>l.status==='listed'&&upcoming(l));
+  const dated=live.filter(l=>l.next_date),rec=live.filter(l=>!l.next_date);
+  const past=L.filter(l=>l.status==='listed'&&!upcoming(l)),hidden=L.filter(l=>l.status==='hidden');
+  let h='<div class="bk-sub" style="margin-bottom:8px;">Highlanders see these on their <b>Find</b> tab and can book one in a tap. Every Monday a search adds new events it finds, marked <b>New this week</b>. Hide any that don’t fit. When a Highlander adds an event they found, it waits here for you to check.</div>'
+    +'<div class="bk-actions" style="margin-top:0;margin-bottom:6px;"><button class="btn-green" onclick="openListing()">+ Add an event</button></div>';
+  const sec=(t,list)=>list.length?'<div class="bk-date">'+t+'</div>'+list.map(repListingRow).join(''):'';
+  h+=sec('Added by Highlanders · check these',sugg)+sec('Coming up',dated)+sec('Weekly and seasonal',rec);
+  if(!sugg.length&&!dated.length&&!rec.length)h+='<div class="bk-empty">No events on the list yet.</div>';
+  if(past.length||hidden.length)h+='<div class="bk-foot"><span>'+(past.length?past.length+' past':'')+(past.length&&hidden.length?' · ':'')+(hidden.length?hidden.length+' hidden':'')+'</span> <button class="link-btn" onclick="REPS.showOldList=!REPS.showOldList;drawReps()">'+(REPS.showOldList?'Hide':'Show')+'</button></div>'
+    +(REPS.showOldList?sec('Past',past)+sec('Hidden',hidden):'');
+  return h;
+}
+function repListingRow(l){
+  const d=parseISO(l.next_date),by=l.added_by_rep?repById(l.added_by_rep).name:'';
+  const booked=REPS.events.filter(e=>e.listing_id===l.id&&e.status!=='cancelled').length;
+  return '<div class="bk-row" onclick="openListing(\''+l.id+'\')"><div class="rp-date"'+(d?'':' style="background:#f6ede2;color:#7a5530;"')+'><span>'+(d?esc(d.toLocaleDateString('en-US',{month:'short'})):'Every')+'</span><b>'+(d?d.getDate():'wk')+'</b></div>'
+    +'<div class="bk-main"><div class="bk-payee">'+esc(l.name)+'</div><div class="bk-sub">'+esc([REP_EVENT_TYPES[l.kind],l.city,(d?'':l.schedule)].filter(Boolean).join(' · '))+(+l.attendance>0?' · ~'+(+l.attendance).toLocaleString('en-US')+' people':'')+'</div>'
+    +'<div style="margin-top:3px;">'+(isNewThisWeek(l.found_on,todayISO())?'<span class="rp-chip green">New this week</span> ':'')+(l.status==='suggested'?'<span class="rp-chip blue">From '+esc(by||'a Highlander')+'</span> ':'')+(l.status==='hidden'?'<span class="rp-chip">Hidden</span> ':'')+(l.zone==='far'?'<span class="rp-chip tan">Farther out</span> ':'')+(booked?'<span class="rp-chip green">'+booked+' booked</span>':'')+(l.apply_by&&l.apply_by>=todayISO()?' <span class="rp-chip red">Apply by '+esc((parseISO(l.apply_by)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+'</span>':'')+'</div></div>'
+    +'<div class="bk-sub">Edit</div></div>';
+}
+const LIST_FIELDS=[['name','Event name','text','Homer Christmas Bazaar',1],['next_date','Next date','date'],['end_date','Last day (if more than one)','date'],['start_time','Hours','text','9am–3pm'],['schedule','Or, if it repeats','text','Saturdays, May–October',1],
+  ['place','Where','text','Venue or address',1],['city','Town','text'],['attendance','About how many people','number','1500'],['contact_name','Organizer','text'],['contact_phone','Phone','tel'],['contact_email','Email','email'],
+  ['website','Website or Facebook page','text','',1],['booth_fee','Booth fee','text','$40'],['apply_by','Apply by','date'],['source_url','Where you found it (link)','text','',1]];
+function openListing(id){
+  const l=id?REPS.listings.find(x=>x.id===id):null;const m=repModal();REPS.open=null;REPS.editList=l;
+  document.getElementById('repMTitle').textContent=l?l.name:'Add an event';
+  let h=(l&&l.status==='suggested'?'<div class="rp-pre">Added by '+esc(l.added_by_rep?repById(l.added_by_rep).name:'a Highlander')+'. Check the details, then add it to the list so every Highlander can find it.</div>':'')
+    +'<div class="rp-grid" style="grid-template-columns:1fr 1fr;">'
+    +'<div style="grid-column:1/-1;"><label class="rp-lbl">What kind of event</label><select id="rpl_kind" class="period-select">'+Object.entries(REP_EVENT_TYPES).map(([k,v])=>'<option value="'+k+'"'+(l&&l.kind===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'
+    +LIST_FIELDS.map(([k,lab,t,ph,full])=>'<div'+(full?' style="grid-column:1/-1;"':'')+'><label class="rp-lbl">'+lab+'</label><input id="rpl_'+k+'" class="period-input" type="'+t+'"'+(t==='number'?' inputmode="numeric" min="0"':'')+' placeholder="'+esc(ph||'')+'" value="'+esc(l&&l[k]!=null?l[k]:'')+'"></div>').join('')
+    +'<div><label class="rp-lbl">How far from Concord</label><select id="rpl_zone" class="period-select"><option value="local"'+(!l||l.zone!=='far'?' selected':'')+'>Local</option><option value="far"'+(l&&l.zone==='far'?' selected':'')+'>Farther out</option></select></div>'
+    +'<div><label class="rp-lbl">Highlanders see it</label><select id="rpl_status" class="period-select"><option value="listed"'+(!l||l.status!=='hidden'?' selected':'')+'>Yes'+(l&&l.status==='suggested'?' (add to the list)':'')+'</option><option value="hidden"'+(l&&l.status==='hidden'?' selected':'')+'>Hidden</option></select></div>'
+    +'<div style="grid-column:1/-1;"><label class="rp-lbl">Notes for Highlanders</label><textarea id="rpl_notes" class="period-input" style="width:100%;min-height:60px;">'+esc(l&&l.notes||'')+'</textarea></div></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="saveListing()">'+(l&&l.status==='suggested'?'Add to the list':'Save')+'</button>'+(l?'<button class="btn-secondary danger" onclick="deleteListing()">Delete</button>':'')+'</div>';
+  document.getElementById('repMBody').innerHTML=h;m.classList.add('open');
+}
+async function saveListing(){
+  const l=REPS.editList,g=k=>{const el=document.getElementById('rpl_'+k);return el?el.value.trim():'';};
+  const b={kind:g('kind'),zone:g('zone'),status:g('status'),notes:g('notes')||null,updated_at:new Date().toISOString()};
+  LIST_FIELDS.forEach(([k,,t])=>{const v=g(k);b[k]=v===''?null:(t==='number'?Math.max(0,parseInt(v)||0):v);});
+  if(!b.name){toast('Give the event a name',true);return;}
+  if(b.end_date&&b.next_date&&b.end_date<b.next_date){toast('The last day is before the first day',true);return;}
+  ['website','source_url'].forEach(k=>{if(b[k])b[k]=repUrl(b[k]);});
+  try{if(l)await sb('kf_event_listings?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify(b)});else await sb('kf_event_listings',{method:'POST',body:JSON.stringify(b)});
+    closeRepModal();toast(l&&l.status==='suggested'&&b.status==='listed'?'Added to the list':'Saved');await loadReps();drawReps();}catch(x){toast(x.message,true);}
+}
+async function deleteListing(){
+  const l=REPS.editList;if(!l||!confirm('Delete '+l.name+' from the list? Events already booked from it keep their details. To keep it on file, set it to Hidden instead.'))return;
+  try{await sb('kf_event_listings?id=eq.'+l.id,{method:'DELETE'});closeRepModal();toast('Deleted');await loadReps();drawReps();}catch(x){toast(x.message,true);}
+}
+
 // ─── events board ───
 function repEventRow(e){
   const r=repById(e.rep_id),st=REP_STATUS[e.status]||['','rp-chip'];
-  const pre=repPreorders(e.id),bags=e.lines.reduce((a,l)=>a+(+(e.status==='requested'?l.qty_requested:l.qty_out)||0),0);
+  const pre=repPreorders(e.id),bags=repEventBags(e);
   let right='';
   if(e.status==='settled')right='<div class="bk-amt in">'+fmt(e.sales)+'</div>'+(repOwes(e)>0?'<div class="bk-sub" style="color:var(--red);font-weight:700;">owes '+fmt(repOwes(e))+'</div>':'<div class="bk-sub">paid up</div>');
   else right='<div class="bk-amt">'+bags+' <small style="font-family:inherit;font-weight:400;font-size:12px;color:var(--mid);">bags</small></div>';
   return '<div class="bk-row" onclick="openRepEvent(\''+e.id+'\')"><div class="rp-date"><span>'+esc((parseISO(e.event_date)||new Date()).toLocaleDateString('en-US',{month:'short'}))+'</span><b>'+((parseISO(e.event_date)||new Date()).getDate())+'</b></div>'
-    +'<div class="bk-main"><div class="bk-payee">'+(e.kind==='direct'?'Kitchen pickup · ':'')+esc(e.name)+'</div><div class="bk-sub">'+esc(r.name)+(e.kind==='direct'?' · for orders they’ll deliver':(e.city?' · '+esc(e.city):'')+(e.zone==='far'?' · farther out':''))+'</div>'
+    +'<div class="bk-main"><div class="bk-payee">'+(e.kind==='direct'?'Kitchen pickup · ':'')+esc(e.name)+'</div><div class="bk-sub">'+esc(r.name)+(e.kind==='direct'?' · for orders they’ll deliver':(e.city?' · '+esc(e.city):'')+(e.zone==='far'?' · farther out':'')+(+e.attendance>0?' · ~'+(+e.attendance).toLocaleString('en-US')+' people':''))+'</div>'
     +'<div style="margin-top:3px;"><span class="'+st[1]+'">'+st[0]+'</span>'+(pre.length?' <span class="rp-chip green">'+pre.length+' pre-order'+(pre.length===1?'':'s')+'</span>':'')+'</div></div>'
     +'<div style="text-align:right;">'+right+'</div></div>';
 }
@@ -7195,6 +7585,7 @@ async function openRepEvent(id){
   document.getElementById('repMTitle').textContent=(e.kind==='direct'?'Kitchen pickup · ':'')+e.name;
   let h='<div class="rp-meta"><span class="'+st[1]+'">'+st[0]+'</span> <b>'+esc(r.name)+'</b>'+(r.phone?' · <a href="tel:'+esc(String(r.phone).replace(/[^\d+]/g,''))+'">'+esc(r.phone)+'</a>':'')
     +'<div class="bk-sub">'+esc(prettyDate(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?' · '+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</div>'
+    +repDetailsKV(e)
     +(e.rep_note?'<div class="rp-note">“'+esc(e.rep_note)+'”</div>':'')+'</div>';
   const pre=repPreorders(e.id),need=repPreorderNeeds(pre);
   if(pre.length&&e.status!=='settled')h+='<div class="rp-pre">'+(e.kind==='direct'?'For '+pre.length+' customer order'+(pre.length===1?'':'s')+': ':'Pre-ordered: ')+''+Object.values(need).map(n=>'<b>'+n.qty+'</b> '+esc(n.name)).join(', ')+'</div>';
@@ -7204,46 +7595,88 @@ async function openRepEvent(id){
   else h+='<div class="bk-empty">This event was cancelled.</div>';
   document.getElementById('repMBody').innerHTML=h;m.classList.add('open');
   if(e.status==='out'||e.status==='returning')repSettleCalc();
-  if(e.status==='requested'){repHandCalc();if(!REPS.inv.length)loadRepInv();}
+  if(e.status==='requested'){repHandCalc();if(!REPS.inv.length)loadRepInv().then(()=>{if(REPS.open===e&&REPS.inv.length)openRepEvent(e.id);});}
+}
+// Every pasta the kitchen could send: lines already on the event, then the rest of the active list
+function repHandRows(e){
+  const rows=e.lines.map(l=>({key:'l'+l.id,l,p:REPS.products.find(x=>x.id===l.product_id)||null,name:l.product_name,line:l.line,q:+l.qty_out||0,asked:+l.qty_requested||0}));
+  REPS.products.filter(p=>p.active&&!e.lines.some(l=>l.product_id===p.id)).forEach(p=>rows.push({key:'p'+p.id,l:null,p,name:p.name,line:p.line,q:0,asked:0}));
+  return rows;
 }
 function repHandoverHTML(e){
   const rr=repById(e.rep_id);
   let h=rr.w9_on_file?'':'<div class="rp-w9"><b>No W-9 on file for '+esc(rr.name)+' yet.</b> Get a filled-out W-9 before handing over pasta, so you can send them a 1099 at tax time. Keep the form itself on paper or in your tax software.'
     +'<label class="rp-w9-ok"><input type="checkbox" id="rpW9"> I got their W-9 today</label></div>';
-  h+='<div class="rp-h">What goes out</div><div class="bk-sub" style="margin-bottom:6px;">Requested amounts are filled in. Change them to what you actually hand over.</div>'
-    +'<div class="rp-zone"><label>Price zone</label><select id="rpZone" class="period-select" onchange="repHandCalc()"><option value="local"'+(e.zone==='local'?' selected':'')+'>Local · regular prices</option><option value="far"'+(e.zone==='far'?' selected':'')+'>Farther out · +'+fmt(REPS.cfg.far_add)+' a bag</option></select></div>';
-  h+='<div class="rp-lines">'+e.lines.map(l=>'<div class="rp-line"><div><b>'+esc(l.product_name)+'</b><div class="bk-sub">asked for '+l.qty_requested+' · <span class="rp-up" data-line="'+esc(l.line)+'">'+fmt(l.unit_price)+'</span></div></div>'
-    +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" data-id="'+l.id+'" value="'+(+l.qty_out||0)+'" oninput="repHandCalc()"></div>').join('')+'</div>';
-  const left=REPS.products.filter(p=>p.active&&!e.lines.some(l=>l.product_id===p.id));
-  if(left.length)h+='<div class="rp-add"><select id="rpAddProd" class="period-select"><option value="">+ Add another pasta…</option>'+left.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+'</select><input id="rpAddQty" class="period-input rp-num" type="number" inputmode="numeric" min="1" placeholder="How many"><button class="btn-secondary" onclick="repAddLine()">Add</button></div>';
+  const askedFlavors=e.lines.some(l=>+l.qty_requested>0);
+  const ask=+e.bags_wanted||e.lines.reduce((a,l)=>a+(+l.qty_requested||0),0);
+  h+='<div class="rp-h">What goes out</div>'
+    +(ask?'<div class="rp-ask">'+esc(rr.name.split(' ')[0])+' asked for <b>'+ask+' bags</b>'+(+e.attendance>0?' for about '+(+e.attendance).toLocaleString('en-US')+' people (that crowd usually needs about '+repEstimateBags(e.attendance)+')':'')+'.'+(askedFlavors?' They picked flavors before the mix change, so those are filled in.':' Pack whatever mix you have this week.')+'</div>':'')
+    +'<div class="rp-zone"><label>Price zone</label><select id="rpZone" class="period-select" onchange="repHandCalc()"><option value="local"'+(e.zone==='local'?' selected':'')+'>Local · regular prices</option><option value="far"'+(e.zone==='far'?' selected':'')+'>Farther out · +'+fmt(REPS.cfg.far_add)+' a bag</option></select></div>'
+    +'<div class="bk-actions" style="margin:6px 0;"><button class="btn-secondary" onclick="repFillFromStock()">Fill '+(ask||'')+' from what’s on hand</button><button class="btn-secondary" onclick="repHandClear()">Clear</button></div>';
+  const rows=repHandRows(e);REPS.handRows=rows;
+  h+='<div class="rp-lines">'+rows.map(r=>{const inv=r.p&&r.p.inv_item_id?REPS.inv.find(i=>i.id===r.p.inv_item_id):null;
+    return '<div class="rp-line'+(r.q?'':' zero')+'"><div><b>'+esc(r.name)+'</b><div class="bk-sub">'+(r.asked?'asked for '+r.asked+' · ':'')+'<span class="rp-up" data-line="'+esc(r.line)+'">'+fmt(r.l?r.l.unit_price:repPrice(r.line,e.zone))+'</span>'+(inv?' · '+(+inv.on_hand||0)+' on hand':'')+'</div></div>'
+    +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" data-key="'+r.key+'" value="'+r.q+'" oninput="repHandCalc()"></div>';}).join('')+'</div>';
+  if(!rows.length)h+='<div class="bk-empty">Add the pasta Highlanders can take in <b>Pasta &amp; pay</b> first.</div>';
   h+='<div class="rp-total" id="rpHandTotal"></div>'
     +'<label class="rp-lbl">Note to the Highlander (they’ll see it)</label><input id="rpTeamNote" class="period-input" style="width:100%;" value="'+esc(e.team_note||'')+'" placeholder="Optional">'
     +'<div class="bk-actions"><button class="btn-green" onclick="repHandOver()">Hand it over</button><button class="btn-secondary" onclick="repSaveRequested()">Save for later</button><button class="btn-secondary danger" onclick="repCancelEvent()">Cancel event</button></div>'
     +'<div class="bk-sub" style="margin-top:8px;">Handing over takes these bags out of Inventory for any pasta linked to an inventory item.</div>';
   return h;
 }
+function repHandInput(r){return document.querySelector('#repMBody .rp-num[data-key="'+r.key+'"]');}
 function repHandCalc(){
   const e=REPS.open;if(!e)return;const z=(document.getElementById('rpZone')||{}).value||e.zone;
   let bags=0,val=0;
   document.querySelectorAll('#repMBody .rp-up').forEach(s=>{s.textContent=fmt(repPrice(s.dataset.line,z));});
-  e.lines.forEach(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');const q=Math.max(0,parseInt(i&&i.value)||0);bags+=q;val+=q*repPrice(l.line,z);});
-  const t=document.getElementById('rpHandTotal');if(t)t.innerHTML='<span>'+bags+' bags</span><b>'+fmt(val)+' if it all sells</b>';
+  (REPS.handRows||[]).forEach(r=>{const i=repHandInput(r);const q=Math.max(0,parseInt(i&&i.value)||0);if(i)i.closest('.rp-line').classList.toggle('zero',!q);bags+=q;val+=q*repPrice(r.line,z);});
+  const ask=+e.bags_wanted||0;
+  const t=document.getElementById('rpHandTotal');if(t)t.innerHTML='<span>'+bags+' bags'+(ask?' of '+ask+' asked for':'')+'</span><b>'+fmt(val)+' if it all sells</b>';
 }
 function repHandValues(){
   const e=REPS.open,z=(document.getElementById('rpZone')||{}).value||e.zone;
-  return{z,lines:e.lines.map(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');return{l,q:Math.max(0,parseInt(i&&i.value)||0),price:repPrice(l.line,z)};})};
+  return{z,rows:(REPS.handRows||[]).map(r=>{const i=repHandInput(r);return{r,q:Math.max(0,parseInt(i&&i.value)||0),price:repPrice(r.line,z)};})};
 }
-async function repAddLine(){
-  const e=REPS.open,pid=document.getElementById('rpAddProd').value,q=Math.max(0,parseInt(document.getElementById('rpAddQty').value)||0);
-  if(!pid||!q){toast('Pick a pasta and how many',true);return;}
-  const p=REPS.products.find(x=>x.id===pid),z=(document.getElementById('rpZone')||{}).value||e.zone;
-  try{await repSaveRequested(true);await sb('kf_rep_event_lines',{method:'POST',body:JSON.stringify({event_id:e.id,product_id:p.id,product_name:p.name,line:p.line,unit_price:repPrice(p.line,z),qty_requested:0,qty_out:q})});await loadReps();drawReps();openRepEvent(e.id);}
-  catch(x){toast(x.message,true);}
+function repHandClear(){(REPS.handRows||[]).forEach(r=>{const i=repHandInput(r);if(i)i.value=0;});repHandCalc();}
+// Spread the ask across what's on hand: pre-orders first, then in proportion to stock
+async function repFillFromStock(){
+  const e=REPS.open;if(!e)return;
+  if(!REPS.inv.length)await loadRepInv();
+  const rows=REPS.handRows||[];if(!rows.length)return;
+  const target=+e.bags_wanted||rows.reduce((a,r)=>{const i=repHandInput(r);return a+Math.max(0,parseInt(i&&i.value)||0);},0);
+  if(!target){toast('No number of bags to fill. Type amounts in instead.',true);return;}
+  const stock=r=>{const inv=r.p&&r.p.inv_item_id?REPS.inv.find(i=>i.id===r.p.inv_item_id):null;return inv?Math.max(0,Math.floor(+inv.on_hand||0)):null;};
+  const q={};rows.forEach(r=>q[r.key]=0);
+  // pre-ordered pasta goes in first
+  const need=repPreorderNeeds(repPreorders(e.id));
+  rows.forEach(r=>{const n=r.p&&need[r.p.id]?need[r.p.id].qty:0;if(n)q[r.key]=n;});
+  let left=target-Object.values(q).reduce((a,b)=>a+b,0);
+  const known=rows.filter(r=>stock(r)!=null&&(r.p?r.p.active!==false:true));
+  const pool=known.length&&known.some(r=>stock(r)>0)?known.filter(r=>stock(r)-q[r.key]>0):rows.filter(r=>!r.p||r.p.active!==false);
+  if(left>0&&pool.length){
+    const room=r=>stock(r)==null?Infinity:Math.max(0,stock(r)-q[r.key]);
+    const totalRoom=pool.reduce((a,r)=>a+(room(r)===Infinity?1:room(r)),0);
+    pool.forEach(r=>{const share=Math.floor(left*(room(r)===Infinity?1:room(r))/totalRoom);const add=Math.min(share,room(r));q[r.key]+=add;});
+    left=target-Object.values(q).reduce((a,b)=>a+b,0);
+    // hand out what's left one at a time, most stock first
+    const order=pool.slice().sort((a,b)=>room(b)-room(a));
+    for(let k=0;left>0&&k<10000;k++){const r=order.find(x=>room(x)>0);if(!r)break;q[r.key]++;left--;order.push(order.splice(order.indexOf(r),1)[0]);}
+  }
+  rows.forEach(r=>{const i=repHandInput(r);if(i)i.value=q[r.key];});
+  repHandCalc();
+  if(left>0)toast('Only '+(target-left)+' bags on hand in Inventory. Add the rest by hand.',true);
+}
+async function repWriteHand(v){
+  const e=REPS.open;
+  for(const x of v.rows){
+    if(x.r.l)await sb('kf_rep_event_lines?id=eq.'+x.r.l.id,{method:'PATCH',body:JSON.stringify({qty_out:x.q,unit_price:x.price})});
+    else if(x.q>0&&x.r.p){const row=await sb('kf_rep_event_lines',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify({event_id:e.id,product_id:x.r.p.id,product_name:x.r.p.name,line:x.r.p.line,unit_price:x.price,qty_requested:0,qty_out:x.q})});x.r.l=Array.isArray(row)?row[0]:row;}
+  }
 }
 async function repSaveRequested(quiet){
   const e=REPS.open;if(!e)return;const v=repHandValues();
   try{
-    for(const x of v.lines)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_out:x.q,unit_price:x.price})});
+    await repWriteHand(v);
     await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({zone:v.z,team_note:(document.getElementById('rpTeamNote').value||'').trim()||null})});
     if(quiet===true)return;
     toast('Saved');await loadReps();drawReps();openRepEvent(e.id);
@@ -7256,14 +7689,15 @@ async function repInvItems(ids){
 function repProdInv(pid){const p=REPS.products.find(x=>x.id===pid);return p&&p.inv_item_id;}
 async function repHandOver(){
   const e=REPS.open;if(!e)return;const v=repHandValues(),r=repById(e.rep_id);
-  const total=v.lines.reduce((a,x)=>a+x.q,0);if(!total){toast('Nothing is going out. Enter some bags or cancel the event.',true);return;}
+  const total=v.rows.reduce((a,x)=>a+x.q,0);if(!total){toast('Nothing is going out. Enter some bags or cancel the event.',true);return;}
   if(!r.w9_on_file){const ok=document.getElementById('rpW9');if(!ok||!ok.checked){toast('Get '+r.name.split(' ')[0]+'’s W-9 first, then tick the box',true);return;}if(!(await repSetW9(r.id,true,true)))return;}
   if(!confirm('Hand '+total+' bags to '+r.name+' for '+e.name+'?'))return;
   try{
-    for(const x of v.lines)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_out:x.q,unit_price:x.price})});
+    await repWriteHand(v);
     await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'out',zone:v.z,out_at:new Date().toISOString(),out_by:currentProfile&&currentProfile.name||null,team_note:(document.getElementById('rpTeamNote').value||'').trim()||null})});
-    const items=await repInvItems(v.lines.map(x=>repProdInv(x.l.product_id)));
-    for(const x of v.lines){const it=items[repProdInv(x.l.product_id)];if(it&&x.q)try{await invMove(it,-x.q,'rep_out','Out with '+r.name+' · '+e.name);}catch(err){console.warn('inventory',err);}}
+    const moved=v.rows.filter(x=>x.q>0&&x.r.l).map(x=>({q:x.q,l:x.r.l}));
+    const items=await repInvItems(moved.map(x=>repProdInv(x.l.product_id)));
+    for(const x of moved){const it=items[repProdInv(x.l.product_id)];if(it&&x.q)try{await invMove(it,-x.q,'rep_out','Out with '+r.name+' · '+e.name);}catch(err){console.warn('inventory',err);}}
     INV.loaded=false;toast(total+' bags out with '+r.name.split(' ')[0]);closeRepModal();await loadReps();drawReps();
   }catch(x){toast('Didn’t save: '+x.message,true);}
 }
@@ -7458,7 +7892,9 @@ function repSetupHTML(){
   const f=(k,l,v,step)=>'<div><label class="rp-lbl">'+l+'</label><input id="rpc_'+k+'" class="period-input" type="number" inputmode="decimal" step="'+(step||'1')+'" min="0" value="'+esc(v)+'"'+(stew?'':' disabled')+'></div>';
   h+='<div class="rp-grid">'+f('base_rate','Base commission %',c.base_rate)+f('top_rate','Top commission %',c.top_rate)+f('threshold','Top rate past ($ per event)',c.threshold)
     +REP_LINE_KEYS.map(k=>f('price_'+k,repLineName(k)+' price ($)',(c.prices||{})[k],'0.01')).join('')
-    +f('far_add','Farther out adds ($/bag)',c.far_add,'0.01')+f('local_miles','“Local” means within (miles)',c.local_miles)+'</div>';
+    +f('far_add','Farther out adds ($/bag)',c.far_add,'0.01')+f('local_miles','“Local” means within (miles)',c.local_miles)+f('people_per_bag','One bag for every (people)',repPeoplePerBag())+'</div>';
+  const learned=repLearnedPeoplePerBag();
+  h+='<div class="bk-sub" style="margin-top:6px;">When a Highlander books, the Hub suggests bags from the crowd size: about one bag for every '+repPeoplePerBag()+' people, so 1,500 people means about '+repEstimateBags(1500)+' bags and 500 means about '+repEstimateBags(500)+'.'+(learned?' Highlander events so far have sold about one bag for every <b>'+learned.per+'</b> people ('+learned.n+' events).':'')+'</div>';
   h+='<div class="bk-sub" style="margin-top:6px;">Highlanders keep the base rate on each event’s sales up to the line, and the top rate on everything above it. Orders customers paid ahead always earn the top rate. Each event (or kitchen pickup of direct orders) counts on its own. Changes apply to events settled from now on.</div>';
   if(stew)h+='<div class="bk-actions"><button class="btn-green" onclick="repSaveCfg()">Save commission and prices</button></div>';
   h+='<div class="rp-h">Sign-up page</div><div class="bk-sub">Send this to anyone who wants to be a Highlander: <b>'+esc(repSignupLink())+'</b> <button class="link-btn" onclick="copyText(repSignupLink(),\'Highlander sign-up link copied\')">copy</button></div>';
@@ -7466,8 +7902,9 @@ function repSetupHTML(){
 }
 async function repSaveCfg(){
   const g=k=>{const v=document.getElementById('rpc_'+k).value;return v===''?null:+v;};
-  const val={base_rate:g('base_rate'),top_rate:g('top_rate'),threshold:g('threshold'),far_add:g('far_add'),local_miles:g('local_miles'),prices:Object.fromEntries(REP_LINE_KEYS.map(k=>[k,g('price_'+k)]))};
-  if([val.base_rate,val.top_rate,val.threshold,val.far_add,...Object.values(val.prices)].some(x=>x==null||isNaN(x))){toast('Fill in every number',true);return;}
+  const val={base_rate:g('base_rate'),top_rate:g('top_rate'),threshold:g('threshold'),far_add:g('far_add'),local_miles:g('local_miles'),people_per_bag:g('people_per_bag'),prices:Object.fromEntries(REP_LINE_KEYS.map(k=>[k,g('price_'+k)]))};
+  if([val.base_rate,val.top_rate,val.threshold,val.far_add,val.people_per_bag,...Object.values(val.prices)].some(x=>x==null||isNaN(x))){toast('Fill in every number',true);return;}
+  if(val.people_per_bag<1){toast('People per bag should be 1 or more',true);return;}
   if(val.base_rate>100||val.top_rate>100){toast('Commission is a percent, 0 to 100',true);return;}
   if(val.top_rate<val.base_rate&&!confirm('The top rate is lower than the base rate. Save anyway?'))return;
   try{
