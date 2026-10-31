@@ -9549,13 +9549,27 @@ if(typeof loadPlan==='function'){const _lpComp=loadPlan;loadPlan=async function(
   try{
     if((typeof isDemo==='function'&&isDemo())||!BIZ.id||!BIZ.member||BIZ.member.role!=='owner')return r;
     const k=planState().kind;
-    if(!['needs_sub','paused','open'].includes(k)||PLAN._compTried===BIZ.id)return r;
-    PLAN._compTried=BIZ.id;
+    // also checked while a card plan is running, so a free Hub given later can take its place
+    if(!['needs_sub','paused','open','trialing','active','past_due','ending'].includes(k)||PLAN._compTried===BIZ.id+':'+k)return r;
+    PLAN._compTried=BIZ.id+':'+k;
     const res=await sb('rpc/ohb_claim_comp',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});
     const d=Array.isArray(res)?res[0]:res;
-    if(d&&d.ok){await _lpComp.apply(this,arguments);toast('🎁 Your Hub is free, courtesy of The People’s Voices. Welcome!');}
+    PLAN._compWaiting=!!(d&&d.reason==='paying');
+    if(d&&d.ok){PLAN._compWaiting=false;await _lpComp.apply(this,arguments);toast('🎁 Your Hub is free, courtesy of The People’s Voices. Welcome!');try{if(typeof renderPlanBanner==='function')renderPlanBanner();}catch(e){}}
+    const pc=document.getElementById('planCard');if(pc&&typeof planCardHTML==='function')pc.outerHTML=planCardHTML();
   }catch(e){}
   return r;
+};}
+
+// A free Hub is waiting, but a card plan is still running: show the owner the one step to switch
+if(typeof planCardHTML==='function'){const _pcGift=planCardHTML;planCardHTML=function(){
+  const h=_pcGift.apply(this,arguments);
+  if(!PLAN._compWaiting||!isStewardUser()||!['trialing','active','past_due'].includes(planState().kind))return h;
+  const gift='<div style="background:#e6f4ec;border:1px solid #b9dcc6;border-radius:10px;padding:12px 14px;margin:8px 0 10px;font-size:14px;color:var(--green-dark);line-height:1.5;">'
+    +'<b>🎁 The People’s Voices gave you a free Hub.</b> Cancel your card plan and your free Hub switches on right away. You’ll never be charged, and nothing in your Hub changes.'
+    +'<div class="bk-actions" style="margin-top:8px;">'+billBtn('Cancel my card plan','cancel','btn-green')+'</div>'
+    +'<div class="bk-sub" style="margin-top:4px;">Opens Stripe’s page to cancel. When it sends you back here, your free Hub is on.</div></div>';
+  return h.replace('<div class="card-sub">',gift+'<div class="card-sub">');
 };}
 
 // ─── keep the plan in step with Stripe ───
