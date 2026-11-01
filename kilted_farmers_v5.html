@@ -7703,7 +7703,11 @@ async function repHandOver(){
 }
 async function repCancelEvent(){
   const e=REPS.open;if(!e||!confirm('Cancel '+e.name+'? '+repById(e.rep_id).name+' will see it as cancelled.'))return;
-  try{await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});closeRepModal();await loadReps();drawReps();toast('Cancelled');}catch(x){toast(x.message,true);}
+  try{
+    const rows=await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});
+    if(!rows.length){toast('That didn’t save. Refresh the page and try again.',true);return;}
+    closeRepModal();await loadReps();drawReps();toast('Cancelled. '+repById(e.rep_id).name.split(' ')[0]+' will see it the next time their page refreshes.');
+  }catch(x){toast(x.message,true);}
 }
 
 function repSettleHTML(e){
@@ -7854,7 +7858,17 @@ async function repSetStatus(id,st){
 function repOrderRow(o){
   const how=o.fulfillment==='delivery'?' · deliver to '+esc(o.address||'?'):o.fulfillment==='pickup'?' · picks up from Highlander':'';
   const paid=o.paid?' <span class="rp-chip green">Paid'+(o.paid_method?' · '+esc(o.paid_method):'')+'</span>':o.paid_claim?' <span class="rp-chip tan">Says paid · '+esc(o.paid_claim)+'</span>':'';
-  return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+paid+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div></div><div class="bk-amt">'+fmt(o.total)+'</div></div>';
+  return '<div class="bk-row" style="cursor:default;"><div class="bk-main"><div class="bk-payee">'+esc(o.customer_name)+paid+' <span class="rp-chip">'+({new:'New',confirmed:'Confirmed',picked_up:o.fulfillment==='delivery'?'Delivered':'Picked up'}[o.status]||o.status)+'</span></div><div class="bk-sub">'+(o.items||[]).map(i=>i.qty+'× '+esc(i.name)).join(', ')+how+(o.customer_contact?' · '+esc(o.customer_contact):'')+(o.note?' · “'+esc(o.note)+'”':'')+'</div>'
+    +(o.status!=='cancelled'&&o.status!=='picked_up'?'<div style="margin-top:4px;"><button class="link-btn" style="color:var(--red);" onclick="event.stopPropagation();repCancelOrder(\''+o.id+'\')">Cancel this order</button></div>':'')
+    +'</div><div class="bk-amt"'+(o.status==='cancelled'?' style="text-decoration:line-through;color:var(--mid);"':'')+'>'+fmt(o.total)+'</div></div>';
+}
+async function repCancelOrder(id){
+  const o=REPS.preorders.find(x=>x.id===id);if(!o||!confirm('Cancel '+o.customer_name+'’s order? '+repById(o.rep_id).name+' will see it as cancelled.'))return;
+  try{
+    const rows=await sb('kf_rep_preorders?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:'cancelled'})});
+    if(!rows.length){toast('That didn’t save. Refresh the page and try again.',true);return;}
+    await loadReps();drawReps();toast('Order cancelled');
+  }catch(x){toast(x.message,true);}
 }
 function repOrdersHTML(){
   const now=todayISO(),evs=REPS.events.filter(e=>(e.status==='requested'||e.status==='out')&&(e.event_date>=now||e.kind==='direct')&&repPreorders(e.id).length).sort((a,b)=>a.event_date.localeCompare(b.event_date));

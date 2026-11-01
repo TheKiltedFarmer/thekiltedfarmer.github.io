@@ -334,7 +334,7 @@ function renderAuth(mode,note){
 function pitchHTML(){
   const c=S.cfg||{base_rate:25,top_rate:30,threshold:500};
   return '<div class="card"><h2>Become a Pasta Highlander</h2><p class="muted">Scotland’s chapmen once walked from town to town with their packs, bringing goods to neighbors. Highlanders carry on that tradition with our handmade pasta. Already doing craft fairs, church bazaars, a booth for your own goods, or parties at home? Add a table of pasta.</p>'
-    +'<ul class="plain"><li>Pick up pasta at the kitchen. No buying inventory up front.</li><li>Keep <b>'+c.base_rate+'%</b> of what you sell, and <b>'+c.top_rate+'%</b> on everything past <b>'+fmt0(c.threshold)+'</b> in a month.</li><li>Bring back whatever doesn’t sell.</li><li>Your own order link, so customers can reserve bags before your event.</li><li>You’re an independent seller: you fill out a W-9 before your first pickup, and get a 1099-NEC if you earn '+fmt0(th1099(new Date().getFullYear()))+' or more in a year.</li></ul></div>';
+    +'<ul class="plain"><li>Pick up pasta at the kitchen. No buying inventory up front.</li><li>Keep <b>'+c.base_rate+'%</b> of what you sell, and <b>'+c.top_rate+'%</b> of everything past <b>'+fmt0(c.threshold)+'</b> at a single event. Orders customers pay ahead always earn <b>'+c.top_rate+'%</b>.</li><li>Bring back whatever doesn’t sell.</li><li>Your own order link, so customers can reserve bags before your event.</li><li>You’re an independent seller: you fill out a W-9 before your first pickup, and get a 1099-NEC if you earn '+fmt0(th1099(new Date().getFullYear()))+' or more in a year.</li></ul></div>';
 }
 async function doAuth(mode){
   const em=($('aEmail')||{}).value,pw=($('aPw')||{}).value,pw2=($('aPw2')||{}).value;
@@ -395,7 +395,9 @@ function renderPaused(){
 
 // ─── commission math (same rule the database uses) ───
 function cfgRates(){const c=S.cfg||{};return{base:(+c.base_rate||25)/100,top:(+c.top_rate||30)/100,th:+c.threshold||0};}
-function addCommission(prior,add){const r=cfgRates();const below=Math.max(0,Math.min(add,r.th-prior));return r2(below*r.base+(add-below)*r.top);}
+// One event's commission: orders paid ahead at the top rate; the rest at the base rate until the event passes the line
+function eventCommission(sales,prepaid){const r=cfgRates();sales=Math.max(0,+sales||0);prepaid=Math.min(sales,Math.max(0,+prepaid||0));const other=sales-prepaid,below=Math.max(0,Math.min(other,r.th-prepaid));return r2(prepaid*r.top+below*r.base+(other-below)*r.top);}
+function prepaidFor(eid){return r2((S.preorders||[]).filter(o=>o.event_id===eid&&o.paid&&o.status!=='cancelled').reduce((a,o)=>a+(+o.total||0),0));}
 function monthSummary(k){
   const ev=S.events.filter(e=>e.status==='settled'&&ym(e.event_date)===k).sort((a,b)=>a.event_date.localeCompare(b.event_date)||String(a.settled_at||'').localeCompare(String(b.settled_at||'')));
   const sales=r2(ev.reduce((a,e)=>a+(+e.sales||0),0));
@@ -432,6 +434,20 @@ function go(v){
   window.scrollTo(0,0);
 }
 async function reload(v){try{await loadAll();}catch(e){toast(e.message,true);}go(v||S.view);}
+// Pick up changes the kitchen makes (a cancelled event or order, pasta handed over) without a manual refresh:
+// when the page comes back into view, and every 2 minutes while it's open. Never while filling in a form.
+const LIVE={at:Date.now(),busy:false};
+async function liveRefresh(force){
+  if(LIVE.busy||document.hidden||!S.rep||S.rep.status!=='active')return;
+  if(!['home','events','orders','pay','find'].includes(S.view))return;
+  if(!force&&Date.now()-LIVE.at<120000)return;
+  LIVE.busy=true;LIVE.at=Date.now();
+  const y=window.scrollY;
+  try{await loadAll();go(S.view);window.scrollTo(0,y);}catch(e){}
+  LIVE.busy=false;
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-LIVE.at>15000)liveRefresh(true);});
+setInterval(()=>liveRefresh(false),30000);
 
 // ─── taxes: W-9 before the first pickup, 1099-NEC at year end ───
 const W9_URL='https://www.irs.gov/pub/irs-pdf/fw9.pdf';
@@ -453,13 +469,13 @@ function taxCardHTML(){
 
 // ─── goal calculator: how much do I need to sell to earn $X? ───
 const GOAL_KEY='kf_rep_goal';
-const CALC={goal:null,zone:'local'};
+const CALC={goal:null,zone:'local',events:null};
 function calcLoad(){if(CALC.goal!=null)return;let g=null;try{g=parseFloat(localStorage.getItem(GOAL_KEY));}catch(e){}CALC.goal=g>0?g:300;}
-// Sales needed to earn `want` more commission, starting from `prior` sales already counted this month
-function salesForCommission(prior,want){
+// Sales one event needs to earn `want` in commission (no paid-ahead orders assumed)
+function salesForEvent(want){
   const r=cfgRates();if(want<=0)return 0;
-  const room=Math.max(0,r.th-prior),atBase=room*r.base;
-  const x=want<=atBase?want/r.base:room+(want-atBase)/r.top;
+  const atBase=r.th*r.base;
+  const x=want<=atBase?want/r.base:r.th+(want-atBase)/r.top;
   return Math.ceil(x*100)/100;
 }
 // What share of bags falls in each price group: from what this Highlander has sold, or an even mix
@@ -477,52 +493,60 @@ function calcHTML(mode){
     +'<p class="muted">'+(rep?'How much do you want to earn this month? We’ll show what it takes.':'Pick an amount you’d like to earn in a month and see how much pasta that is.')+'</p>'
     +'<div class="goal-row"><span class="dollar">$</span><input id="calcGoal" class="inp" type="number" inputmode="decimal" min="0" step="10" value="'+CALC.goal+'" oninput="calcSet(this.value)" aria-label="Goal in dollars"><span class="muted">'+(rep?'this month':'a month')+'</span></div>'
     +'<div class="chips">'+[100,250,500,1000].map(v=>'<button type="button" class="'+(+CALC.goal===v?'on':'')+'" onclick="calcSet('+v+',true)">'+fmt0(v)+'</button>').join('')+'</div>'
+    +'<label style="margin-top:14px;">Events a month</label><div class="chips" id="calcEv">'+[1,2,3,4,6].map(v=>'<button type="button" class="'+(calcEvents()===v?'on':'')+'" onclick="CALC.events='+v+';calcRedraw()">'+v+'</button>').join('')+'</div>'
     +'<div class="seg2"><button type="button" class="'+(CALC.zone==='local'?'on':'')+'" onclick="CALC.zone=\'local\';calcRedraw()">Local events</button><button type="button" class="'+(CALC.zone==='far'?'on':'')+'" onclick="CALC.zone=\'far\';calcRedraw()">Farther out (+'+fmt0((S.cfg||{}).far_add||0)+'/bag)</button></div>'
     +'<div id="calcOut"></div></div>';
   return h;
 }
+// Events this month: what's booked, or 2 to start
+function calcEvents(){
+  if(CALC.events)return CALC.events;
+  const k=ym(today()),n=(S.events||[]).filter(e=>ym(e.event_date)===k&&e.status!=='cancelled').length;
+  return Math.min(6,Math.max(2,n));
+}
 function calcSet(v,redraw){
   CALC.goal=Math.max(0,parseFloat(v)||0);try{localStorage.setItem(GOAL_KEY,String(CALC.goal));}catch(e){}
   if(redraw){const i=$('calcGoal');if(i)i.value=CALC.goal;}
-  document.querySelectorAll('#calcCard .chips button').forEach(b=>b.classList.toggle('on',b.textContent===fmt0(CALC.goal)));
+  document.querySelectorAll('#calcCard .chips:not(#calcEv) button').forEach(b=>b.classList.toggle('on',b.textContent===fmt0(CALC.goal)));
   calcDraw();
 }
 function calcRedraw(){const card=$('calcCard');if(!card)return;const mode=S.rep&&S.rep.status==='active'?'rep':'prospect';const t=document.createElement('div');t.innerHTML=calcHTML(mode);card.replaceWith(t.firstChild);calcDraw();}
 function calcDraw(){
   const out=$('calcOut');if(!out||!S.cfg)return;
   const rep=!!(S.rep&&S.rep.status==='active'),c=S.cfg,r=cfgRates(),goal=+CALC.goal||0;
-  const m=rep?monthSummary(ym(today())):{sales:0,commission:0};
+  const k=ym(today()),m=rep?monthSummary(k):{sales:0,commission:0,ev:[]};
   const want=r2(goal-m.commission);
   if(!goal){out.innerHTML='';return;}
   if(want<=0){out.innerHTML='<div class="calc-out"><div class="calc-big">You made it!</div><p class="muted" style="margin-top:6px;">You’ve already earned '+fmt0(m.commission)+' this month, past your '+fmt0(goal)+' goal. Set a bigger one?</p></div>';return;}
-  const sales=salesForCommission(m.sales,want);
+  // events still to come this month: the plan minus what's already settled
+  const n=Math.max(1,calcEvents()-(rep?m.ev.length:0));
+  const perEventSales=Math.ceil(salesForEvent(want/n)),sales=perEventSales*n;
   const mix=calcMix(),keys=Object.keys(mix.share);
-  const avg=keys.reduce((a,k)=>a+mix.share[k]*priceFor(k,CALC.zone),0)||1;
-  const bags=Math.ceil(sales/avg);
-  const hitsTop=m.sales+sales>r.th;
-  let h='<div class="calc-out"><div class="muted small">'+(rep&&m.commission>0?'You’ve earned '+fmt0(m.commission)+' so far. To reach '+fmt0(goal)+', sell about':'To earn '+fmt0(goal)+', sell about')+'</div>'
-    +'<div class="calc-big">'+fmt0(Math.ceil(sales))+' <span style="font-size:18px;">'+(rep&&m.sales>0?'more ':'')+'in pasta</span></div>'
-    +'<div class="muted" style="margin-top:4px;">That’s about <b>'+plural(bags,'bag')+'</b> at '+(mix.from==='what you’ve sold'?'your usual mix':'an even mix of all three kinds')+'.</div>';
-  h+='<div class="calc-rows"><div class="muted small" style="display:block;padding-bottom:2px;">Or if you only sold one kind:</div>'
-    +keys.map(k=>'<div><span>'+esc(lineName(k))+' at '+fmt0(priceFor(k,CALC.zone))+'</span><b>'+plural(Math.ceil(sales/priceFor(k,CALC.zone)),'bag')+'</b></div>').join('')+'</div>';
+  const avg=keys.reduce((a,kk)=>a+mix.share[kk]*priceFor(kk,CALC.zone),0)||1;
+  const perEventBags=Math.ceil(perEventSales/avg);
+  const hitsTop=perEventSales>r.th;
+  let h='<div class="calc-out"><div class="muted small">'+(rep&&m.commission>0?'You’ve earned '+fmt0(m.commission)+' so far. To reach '+fmt0(goal)+' over '+plural(n,'more event')+', sell about':'To earn '+fmt0(goal)+' over '+plural(n,'event')+', sell about')+'</div>'
+    +'<div class="calc-big">'+fmt0(perEventSales)+' <span style="font-size:18px;">per event</span></div>'
+    +'<div class="muted" style="margin-top:4px;">That’s about <b>'+plural(perEventBags,'bag')+'</b> at each event at '+(mix.from==='what you’ve sold'?'your usual mix':'an even mix of all three kinds')+', or '+fmt0(sales)+' in all.</div>';
+  h+='<div class="calc-rows"><div class="muted small" style="display:block;padding-bottom:2px;">Per event, if you only sold one kind:</div>'
+    +keys.map(kk=>'<div><span>'+esc(lineName(kk))+' at '+fmt0(priceFor(kk,CALC.zone))+'</span><b>'+plural(Math.ceil(perEventSales/priceFor(kk,CALC.zone)),'bag')+'</b></div>').join('')+'</div>';
   if(rep){
     const done=(S.events||[]).filter(e=>e.status==='settled'&&+e.sales>0);
-    if(done.length){const per=done.reduce((a,e)=>a+(+e.sales||0),0)/done.length;h+='<div class="calc-rows"><div><span>Your events average '+fmt0(Math.round(per))+' in sales</span><b>≈ '+plural(Math.max(1,Math.ceil(sales/per)),'event')+'</b></div></div>';}
+    if(done.length){const per=done.reduce((a,e)=>a+(+e.sales||0),0)/done.length;h+='<div class="calc-rows"><div><span>Your events average</span><b>'+fmt0(Math.round(per))+' in sales</b></div></div>';}
   }
-  h+='<p class="muted small" style="margin-top:10px;">'+(hitsTop?'This counts '+c.top_rate+'% on everything past '+fmt0(r.th)+' in the month'+(m.sales>=r.th?', which you’ve already reached.':'.'):'All of this earns '+c.base_rate+'%. Past '+fmt0(r.th)+' in a month, you’d keep '+c.top_rate+'%.')+'</p></div>';
+  h+='<p class="muted small" style="margin-top:10px;">'+(hitsTop?'Each event earns '+c.base_rate+'% on its first '+fmt0(r.th)+' and '+c.top_rate+'% on the rest.':'Each event stays under '+fmt0(r.th)+', so this all earns '+c.base_rate+'%. Sell past '+fmt0(r.th)+' at one event and you keep '+c.top_rate+'% of the extra.')+' Orders paid ahead always earn '+c.top_rate+'%, so they get you there faster.</p></div>';
   out.innerHTML=h;
 }
 
 // ─── home ───
 function renderHome(){
   const k=ym(today()),m=monthSummary(k),r=cfgRates(),c=S.cfg;
-  const pct=r.th>0?Math.min(100,Math.round(m.sales/r.th*100)):100,past=m.sales>=r.th;
+  const best=m.ev.reduce((a,e)=>Math.max(a,+e.sales||0),0);
   let h=w9BannerHTML()+'<div class="card"><h2>'+monthName(k)+'</h2>'
     +'<div class="stats"><div class="stat"><div class="l">You’ve sold</div><div class="v">'+fmt0(m.sales)+'</div><div class="s">settled this month</div></div>'
     +'<div class="stat"><div class="l">You’ve earned</div><div class="v">'+fmt0(m.commission)+'</div><div class="s">'+(m.sales?Math.round(m.commission/m.sales*1000)/10+'% overall':'commission')+'</div></div></div>'
-    +'<div class="meter'+(past?' done':'')+'"><i style="width:'+pct+'%"></i></div>'
-    +'<div class="meter-cap"><span>'+c.base_rate+'%</span><span>'+fmt0(r.th)+' → '+c.top_rate+'%</span></div>'
-    +'<p class="muted" style="margin-top:8px;">'+(past?'You’re past '+fmt0(r.th)+' this month. Every sale from here earns you <b>'+c.top_rate+'%</b>.':'Sell <b>'+fmt0(r2(r.th-m.sales))+'</b> more this month and everything past '+fmt0(r.th)+' earns you <b>'+c.top_rate+'%</b> instead of '+c.base_rate+'%.')+'</p>'
+    +(best?'<div class="meter'+(best>=r.th?' done':'')+'"><i style="width:'+Math.min(100,Math.round(best/r.th*100))+'%"></i></div><div class="meter-cap"><span>Best event this month: '+fmt0(best)+'</span><span>'+fmt0(r.th)+' → '+c.top_rate+'%</span></div>':'')
+    +'<p class="muted" style="margin-top:8px;">At each event you keep <b>'+c.base_rate+'%</b> of the first '+fmt0(r.th)+' in sales and <b>'+c.top_rate+'%</b> of everything past it. Orders paid ahead always earn <b>'+c.top_rate+'%</b>.</p>'
     +(m.left>0?'<div class="msg info">You owe the kitchen <b>'+fmt(m.left)+'</b> from settled events (sales minus your commission).</div>':'')+'</div>';
   h+=calcHTML('rep');
 
@@ -710,8 +734,9 @@ function eventCard(e){
     if(e.team_note)h+='<div class="msg info">From the kitchen: '+esc(e.team_note)+'</div>';
   }
   const b=[];
-  if(e.status==='requested'){b.push('<button class="btn sm soft" onclick="editBooking(\''+e.id+'\')">Change</button>');b.push('<button class="btn sm danger" onclick="cancelBooking(\''+e.id+'\')">Cancel</button>');}
+  if(e.status==='requested'){if(e.kind!=='direct')b.push('<button class="btn sm soft" onclick="editBooking(\''+e.id+'\')">Change</button>');b.push('<button class="btn sm danger" onclick="cancelBooking(\''+e.id+'\')">'+(e.kind==='direct'?'Cancel pickup':'Cancel event')+'</button>');}
   if(e.status==='out'||e.status==='returning')b.push('<button class="btn sm primary" onclick="startCount(\''+e.id+'\')">'+(e.status==='out'?'Count what came back':'Change my count')+'</button>');
+  if(e.status==='out'&&e.kind!=='direct')b.push('<button class="btn sm danger" onclick="calledOff(\''+e.id+'\')">Event called off</button>');
   if(pre.length&&e.status!=='settled'&&e.status!=='cancelled')b.push('<button class="btn sm soft" onclick="go(\'orders\')">See pre-orders</button>');
   if(b.length)h+='<div class="btns">'+b.join('')+'</div>';
   return h+'</div>';
@@ -734,8 +759,18 @@ function editBooking(id){
   if(!S.draft.bags_wanted){const n=Object.values(qty).reduce((a,b)=>a+b,0);S.draft.bags_wanted=n||'';}
   go('book');
 }
+// Already have the pasta and the event fell through: everything goes back, nothing sold
+async function calledOff(id){
+  const e=S.events.find(x=>x.id===id);if(!e)return;
+  const n=eventBags(e,'qty_out'),pre=preordersFor(e.id).filter(o=>o.status!=='picked_up');
+  if(!confirm(e.name+' called off? This tells the kitchen you’re bringing all '+plural(n,'bag')+' back and nothing sold.'+(pre.length?' Let your '+plural(pre.length,'pre-order')+' know too (they’re on the Orders tab).':'')))return;
+  try{await rpc('kf_rep_report_back',{p_id:id,p_lines:(e.lines||[]).map(l=>({line_id:l.id,back:+l.qty_out||0}))});toast('Got it. Bring the bags back to the kitchen.');await reload('events');}
+  catch(x){toast(x.message,true);}
+}
 async function cancelBooking(id){
-  const e=S.events.find(x=>x.id===id);if(!e||!confirm('Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'))return;
+  const e=S.events.find(x=>x.id===id);if(!e)return;
+  const pre=preordersFor(e.id).filter(o=>o.status!=='picked_up');
+  if(!confirm('Cancel '+e.name+'? The kitchen won’t set pasta aside for it.'+(pre.length?' You have '+plural(pre.length,'pre-order')+' for it. Let those customers know (they’re on the Orders tab).':'')))return;
   try{await rpc('kf_rep_cancel_event',{p_id:id});toast('Cancelled');await reload();}catch(x){toast(x.message,true);}
 }
 function bf(k,label,type,ph,extra){const v=S.draft[k]==null?'':S.draft[k];return '<label for="bf_'+k+'">'+label+'</label><input id="bf_'+k+'" class="inp"'+(type?' type="'+type+'"':'')+' placeholder="'+esc(ph||'')+'" value="'+esc(v)+'" oninput="S.draft.'+k+'=this.value'+(extra||'')+'">';}
@@ -795,8 +830,8 @@ function drawBookTotal(){
   const d=S.draft,el=$('bookTotal');if(!el)return;
   const bags=+d.bags_wanted||0,val=Math.round(bags*avgBagPrice(d.zone));
   if(!bags){el.innerHTML='';return;}
-  el.innerHTML='<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+' · if it all sells</div><div class="big">about '+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(addCommission(0,val))+'</div></div></div>'
-    +'<p class="muted small" style="margin-top:6px;">An estimate. The real number depends on the mix the kitchen packs.</p>';
+  el.innerHTML='<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+' · if it all sells</div><div class="big">about '+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you’d earn about</div><div class="big">'+fmt0(eventCommission(val,d.id?prepaidFor(d.id):0))+'</div></div></div>'
+    +'<p class="muted small" style="margin-top:6px;">An estimate. The real number depends on the mix the kitchen packs.'+(val<cfgRates().th?' Sell past '+fmt0(cfgRates().th)+' at this event and everything over it earns '+S.cfg.top_rate+'%.':'')+' Orders paid ahead always earn '+S.cfg.top_rate+'%.</p>';
 }
 async function saveBooking(){
   const d=S.draft,msg=$('bMsg'),btn=$('bBtn');msg.textContent='';
@@ -839,8 +874,7 @@ function setBack(lid,v){const e=S.events.find(x=>x.id===S.count.id),l=e&&(e.line
 function drawCountTotal(){
   const e=S.events.find(x=>x.id===S.count.id);let sold=0,val=0;
   (e.lines||[]).forEach(l=>{const s=Math.max(0,(+l.qty_out||0)-(S.count.back[l.id]||0));sold+=s;val+=s*(+l.unit_price||0);});
-  const k=ym(e.event_date),prior=monthSummary(k).ev.filter(x=>x.event_date<=e.event_date&&x.id!==e.id).reduce((a,x)=>a+(+x.sales||0),0);
-  const earn=addCommission(prior,val);
+  const earn=eventCommission(val,prepaidFor(e.id));
   $('countTotal').innerHTML='<div class="total-bar"><div><div class="s">'+plural(sold,'bag')+' sold</div><div class="big">'+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you keep about</div><div class="big">'+fmt0(earn)+'</div></div></div>'
     +'<p class="muted small" style="margin-top:8px;">Bring the kitchen '+fmt(r2(val-earn))+' (sales minus your commission) along with the unsold bags. The kitchen confirms the count when you drop off.</p>';
 }
@@ -896,8 +930,9 @@ function renderPay(){
       +'</tbody><tfoot><tr><td>Total</td><td>'+fmt(m.sales)+'</td><td>'+fmt(m.commission)+'</td><td>'+fmt(m.paid)+'</td></tr></tfoot></table>';
   }else h+='<div class="empty">No settled events in '+monthName(S.month)+'.</div>';
   h+='</div>'+calcHTML('rep')+taxCardHTML()+'<div class="card"><h2>How your pay works</h2><ul class="plain">'
-    +'<li>You keep <b>'+c.base_rate+'%</b> of what you sell.</li>'
-    +'<li>Once you pass <b>'+fmt0(c.threshold)+'</b> in a month, you keep <b>'+c.top_rate+'%</b> of everything above it. It resets on the 1st.</li>'
+    +'<li>You keep <b>'+c.base_rate+'%</b> of what you sell at each event, up to <b>'+fmt0(c.threshold)+'</b>.</li>'
+    +'<li>Sell past '+fmt0(c.threshold)+' at one event and you keep <b>'+c.top_rate+'%</b> of everything over it. Each event (or kitchen pickup of direct orders) counts on its own.</li>'
+    +'<li>Orders customers pay you for ahead always earn <b>'+c.top_rate+'%</b>, so turning on pay-ahead helps you too.</li>'
     +'<li>Events farther than about '+esc(c.local_miles)+' miles sell for '+fmt0(c.far_add)+' more a bag, so your cut grows too.</li>'
     +'<li>Keep your commission out of the cash you collect, and bring the rest to the kitchen with any unsold bags.</li></ul></div>';
   $('app').innerHTML=h;calcDraw();
