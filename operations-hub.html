@@ -904,6 +904,7 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
 <!-- TABS -->
 <div class="tabs">
   <div class="tab active" onclick="switchTab('dashboard',this)">Dashboard</div>
+  <div class="tab" id="chatTab" onclick="switchTab('chat',this)">Messages<span id="chatBadge"></span></div>
   <div class="tab" onclick="switchTab('log',this)">Revenue & Expenses</div>
   <div class="tab" onclick="switchTab('books',this)">Books</div>
   <div class="tab" id="invcTab" onclick="switchTab('invoices',this)">Invoices</div>
@@ -1174,6 +1175,7 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
 
 <!-- ─── INVENTORY ─── -->
 <div class="tab-content" id="tab-training"><div style="margin-top:8px;" id="trainBody"></div></div>
+<div class="tab-content" id="tab-chat"><div style="margin-top:8px;" id="chatBody"></div></div>
 <div class="tab-content" id="tab-inventory"><div style="margin-top:8px;" id="invBody"></div></div>
 
 <!-- ─── HISTORY ─── -->
@@ -1586,6 +1588,7 @@ function switchTab(id,el){
   if(id==='settings')renderSettings();
   if(id==='alerts')renderAlertsTab();
   if(id==='training')renderTraining();
+  if(id==='chat')renderChat();else if(typeof chStopPolling==='function')chStopPolling();
   if(id==='books')loadBooks(!BOOKS.stale);
   if(id==='team')loadOnboarding();
   if(id==='log')renderRevWorkers();
@@ -5601,6 +5604,7 @@ async function autoInit(){
   dashInterval=setInterval(refreshDashboard,60000);
   loadOnboarding(true);
   trainingBadgeLoad();
+  chatBadgeLoad();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -7595,7 +7599,8 @@ const HIDEABLE_TABS=[
   ['team','Team','People, pay rules, paid sick time and new-hire paperwork.'],
   ['inventory','Inventory','Stock counts, reorder points and batches.'],
   ['history','History','Past weeks and what everyone was paid.'],
-  ['training','Training','SOPs, checklists and how-tos your team reads and signs off on.']
+  ['training','Training','SOPs, checklists and how-tos your team reads and signs off on.'],
+  ['chat','Messages','Message one person or a group of your team, like Slack.']
 ];
 const SOLO_TABS=['timeclock','schedule','team','history'];
 const TAB_NAME=k=>(HIDEABLE_TABS.find(x=>x[0]===k)||[k,k])[1];
@@ -10384,6 +10389,335 @@ document.addEventListener('DOMContentLoaded',function(){
   // Try to silently restore a previous session before showing the login form
   restoreSession();
 });
+
+
+const CH_CFG={p:'ohb',biz:true};
+// ═══════════════════════════════════════════════════════
+// MESSAGES — team chat: one-on-one and groups, like Slack
+// Shared by the Kilted Farmers hub and the Operations Hub; CH_CFG says which tables to use.
+// New messages show up by checking every few seconds while Messages is open, and every
+// minute otherwise (for the badge on the tab).
+// ═══════════════════════════════════════════════════════
+const CH={loaded:false,missing:false,rooms:[],people:[],room:null,msgs:[],showClosed:false,picker:null,manage:false,
+  sel:{},busy:false,listTimer:null,roomTimer:null,badgeTimer:null,lastSeen:'',draft:{},act:null};
+function chBiz(){return CH_CFG.biz?((typeof BIZ!=='undefined'&&BIZ.id)||null):null;}
+function chMe(){return (typeof currentUser!=='undefined'&&currentUser&&currentUser.id)||null;}
+function chSteward(){try{return isStewardUser();}catch(e){return false;}}
+function chDemo(){return typeof isDemo==='function'&&isDemo();}
+function chT(n){return CH_CFG.p+'_chat_'+n;}
+async function chRpc(fn,args){
+  if(chDemo())return chDemoRpc(fn,args||{});
+  return sb('rpc/'+chT(fn),{method:'POST',body:JSON.stringify(args||{})});
+}
+const chOne=r=>Array.isArray(r)?r[0]:r;
+function chName(uid){const p=CH.people.find(x=>x.user_id===uid);return p?p.name:'';}
+function chFirst(n){return String(n||'').trim().split(/\s+/)[0]||'';}
+function chInitial(n){return (String(n||'?').trim()[0]||'?').toUpperCase();}
+function chWhen(iso){
+  if(!iso)return'';const d=new Date(iso),now=new Date();
+  const sameDay=d.toDateString()===now.toDateString();
+  const y=new Date(now);y.setDate(now.getDate()-1);
+  if(sameDay)return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if(d.toDateString()===y.toDateString())return'Yesterday';
+  if(now-d<6*864e5)return d.toLocaleDateString('en-US',{weekday:'short'});
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function chDay(iso){const d=new Date(iso),now=new Date();if(d.toDateString()===now.toDateString())return'Today';const y=new Date(now);y.setDate(now.getDate()-1);if(d.toDateString()===y.toDateString())return'Yesterday';return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});}
+function chText(s){
+  let h=esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return h.replace(/\n/g,'<br>');
+}
+function chUnread(){return CH.rooms.filter(r=>!r.archived).reduce((a,r)=>a+(+r.unread||0),0);}
+function chBadge(){
+  const el=document.getElementById('chatBadge');const n=CH.missing?0:chUnread();
+  if(el){el.textContent=n>99?'99+':(n||'');el.style.display=n?'inline-block':'none';}
+  const t=document.title.replace(/^\(\d+\+?\) /,'');document.title=(n?'('+(n>99?'99+':n)+') ':'')+t;
+}
+
+async function chLoadList(){
+  if(CH_CFG.biz&&!chBiz())return;
+  try{
+    const [rooms,people]=await Promise.all([chRpc('list',{p_biz:chBiz()}),CH.people.length&&CH.loaded?Promise.resolve(CH.people):chRpc('people',{p_biz:chBiz()})]);
+    CH.rooms=(Array.isArray(rooms)?rooms:[]).filter(r=>r&&r.id);CH.people=(Array.isArray(people)?people:[]).filter(p=>p&&p.user_id);
+    CH.loaded=true;CH.missing=false;
+  }catch(e){if(typeof tableMissing==='function'&&(tableMissing(e)||/Could not find the function|PGRST202/i.test(e.message))){CH.missing=true;CH.loaded=true;}else throw e;}
+  chBadge();
+}
+async function chatBadgeLoad(){
+  try{await chLoadList();}catch(e){}
+  if(!CH.badgeTimer)CH.badgeTimer=setInterval(()=>{if(!document.hidden&&!chOpen())chLoadList().catch(()=>{});},60000);
+}
+function chOpen(){const t=document.getElementById('tab-chat');return !!(t&&t.classList.contains('active'));}
+
+// ─── the Messages tab ───
+async function renderChat(){
+  const el=document.getElementById('chatBody');if(!el)return;
+  if(!CH.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading messages…</div></div>';
+  try{await chLoadList();}catch(e){el.innerHTML='<div class="card"><div class="bk-empty">Messages didn’t load: '+esc(e.message)+'</div></div>';return;}
+  chDraw();chStartPolling();
+}
+function chStartPolling(){
+  chStopPolling();
+  CH.listTimer=setInterval(()=>{if(!chOpen()){chStopPolling();return;}if(!document.hidden)chLoadList().then(()=>{if(!CH.room)chDrawList();else chDrawSide();}).catch(()=>{});},15000);
+  CH.roomTimer=setInterval(()=>{if(!chOpen()){chStopPolling();return;}if(CH.room&&!document.hidden)chLoadRoom(true).catch(()=>{});},4000);
+}
+function chStopPolling(){clearInterval(CH.listTimer);clearInterval(CH.roomTimer);CH.listTimer=CH.roomTimer=null;}
+function chWide(){return window.innerWidth>=760;}
+function chDraw(){
+  const el=document.getElementById('chatBody');if(!el)return;
+  if(CH.missing){
+    el.innerHTML='<div class="card"><div class="card-title"><div class="card-title-dot"></div>Messages</div><div class="card-sub">'
+      +(chSteward()?'Team chat needs a one-time database update. Run <b>team_chat.sql</b> in the Supabase SQL Editor, then reload this page.':'Team chat isn’t switched on yet. Ask the owner to finish setting it up.')+'</div></div>';
+    return;
+  }
+  el.innerHTML='<div class="ch-wrap'+(CH.room?' in-room':'')+'"><div class="ch-side card" id="chSide"></div><div class="ch-main card" id="chMain"></div></div>';
+  chDrawSide();chDrawMain();
+}
+function chDrawList(){chDrawSide();}
+function chRoomLabel(r){return r.kind==='everyone'?'Everyone':(r.name||'Group');}
+function chRoomIcon(r){
+  if(r.kind==='everyone')return '<span class="ch-av ch-av-all">#</span>';
+  if(r.kind==='group')return '<span class="ch-av ch-av-grp">'+esc(chInitial(r.name))+'</span>';
+  return '<span class="ch-av">'+esc(chInitial(r.name))+'</span>';
+}
+function chDrawSide(){
+  const el=document.getElementById('chSide');if(!el)return;
+  const open=CH.rooms.filter(r=>!r.archived),closed=CH.rooms.filter(r=>r.archived);
+  let h='<div class="ch-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Messages</div></div>'
+    +'<div class="ch-new"><button class="btn-green" onclick="chPick(\'dm\')">+ Message someone</button><button class="btn-secondary" onclick="chPick(\'group\')">+ New group</button></div>';
+  const row=r=>{
+    const last=r.last;const sel=CH.room&&CH.room.id===r.id;
+    return '<div class="ch-row'+(sel?' sel':'')+(+r.unread?' unread':'')+'" onclick="chOpenRoom(\''+r.id+'\')">'+chRoomIcon(r)
+      +'<div class="ch-row-main"><div class="ch-row-top"><span class="ch-row-name">'+esc(chRoomLabel(r))+'</span><span class="ch-row-when">'+esc(last?chWhen(last.at):'')+'</span></div>'
+      +'<div class="ch-row-sub">'+(last?(last.mine?'You: ':(r.kind==='dm'?'':esc(chFirst(last.name))+': '))+esc(last.body):'<i>No messages yet</i>')+'</div></div>'
+      +(+r.unread?'<span class="ch-dot">'+(+r.unread>99?'99+':+r.unread)+'</span>':'')+'</div>';
+  };
+  h+='<div class="ch-rows">'+open.map(row).join('')+'</div>';
+  if(closed.length)h+='<div class="bk-foot"><button class="link-btn" onclick="CH.showClosed=!CH.showClosed;chDrawSide()">'+(CH.showClosed?'Hide':'Show')+' '+closed.length+' closed group'+(closed.length===1?'':'s')+'</button></div>'+(CH.showClosed?'<div class="ch-rows">'+closed.map(row).join('')+'</div>':'');
+  if(CH.people.length<2)h+='<div class="bk-sub" style="margin-top:10px;">Only people with their own login show up here. '+(CH_CFG.biz?'Invite your team in <b>Settings → People &amp; logins</b>.':'Give your team a login and they’ll show up.')+'</div>';
+  el.innerHTML=h;
+}
+function chDrawMain(){
+  const el=document.getElementById('chMain');if(!el)return;
+  if(CH.picker){el.innerHTML=chPickerHTML();return;}
+  if(!CH.room){el.innerHTML='<div class="ch-empty"><div style="font-size:34px;">💬</div><div class="bk-payee" style="margin-top:6px;">Pick a conversation</div><div class="bk-sub">Or start one with <b>+ Message someone</b>.</div></div>';return;}
+  const r=CH.room;const me=chMe();
+  const canManage=r.kind==='group'&&(r.created_by===me||chSteward());
+  const who=r.kind==='everyone'?'The whole team · '+(CH.people.length)+' people':r.kind==='group'?(r.members||[]).map(chName).filter(Boolean).map(chFirst).join(', '):'';
+  let h='<div class="ch-room-head"><button class="ch-back" onclick="chCloseRoom()" aria-label="Back">‹</button>'+chRoomIcon(r)
+    +'<div class="ch-room-title"><div class="ch-row-name">'+esc(chRoomLabel(r))+'</div>'+(who?'<div class="ch-row-sub">'+esc(who)+'</div>':'')+'</div>'
+    +(r.kind==='group'?'<button class="btn-secondary ch-mng" onclick="CH.manage=!CH.manage;chDrawMain()">'+(CH.manage?'Done':(canManage?'Manage':'Details'))+'</button>':'')+'</div>';
+  if(CH.manage&&r.kind==='group')h+=chManageHTML(r,canManage);
+  h+='<div class="ch-msgs" id="chMsgs">'+chMsgsHTML()+'</div>';
+  if(r.archived)h+='<div class="bk-sub" style="padding:10px 4px;">This group is closed. '+(canManage?'<button class="link-btn" onclick="chManage({archived:false})">Reopen it</button>':'')+'</div>';
+  else h+='<div class="ch-compose"><textarea id="chInput" rows="1" placeholder="Message '+esc(r.kind==='dm'?chFirst(r.name):chRoomLabel(r))+'" oninput="chGrow(this);CH.draft[CH.room.id]=this.value" onkeydown="chKey(event)">'+esc(CH.draft[r.id]||'')+'</textarea>'
+    +'<button class="btn-green" id="chSendBtn" onclick="chSend()">Send</button></div>';
+  el.innerHTML=h;
+  const box=document.getElementById('chMsgs');if(box)box.scrollTop=box.scrollHeight;
+  const inp=document.getElementById('chInput');if(inp){chGrow(inp);if(chWide())inp.focus();}
+}
+function chMsgsHTML(){
+  if(!CH.msgs.length)return '<div class="ch-empty" style="padding:30px 10px;"><div class="bk-sub">No messages yet. Say hello.</div></div>';
+  const me=chMe(),r=CH.room;let h='',day='',prev=null;
+  CH.msgs.forEach(m=>{
+    const d=chDay(m.created_at);if(d!==day){day=d;h+='<div class="ch-day"><span>'+esc(d)+'</span></div>';prev=null;}
+    const mine=m.user_id===me;const showName=!mine&&r.kind!=='dm'&&(!prev||prev.user_id!==m.user_id);
+    const del=!!m.deleted_at;
+    h+='<div class="ch-msg'+(mine?' mine':'')+'">'+(showName?'<div class="ch-who">'+esc(m.name||'')+'</div>':'')
+      +'<div class="ch-bub'+(del?' del':'')+'"'+(mine&&!del?' onclick="chToggleAct(\''+m.id+'\')"':'')+'>'+(del?'Message deleted':chText(m.body))+'</div>'
+      +'<div class="ch-meta">'+esc(new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}))+(m.edited_at&&!del?' · edited':'')
+      +(mine&&!del&&CH.act===m.id?' · <button class="link-btn" onclick="chEdit(\''+m.id+'\')">Edit</button> · <button class="link-btn" style="color:var(--red);" onclick="chDelete(\''+m.id+'\')">Delete</button>':'')+'</div></div>';
+    prev=m;
+  });
+  return h;
+}
+function chToggleAct(id){CH.act=CH.act===id?null:id;const b=document.getElementById('chMsgs');if(b){const top=b.scrollTop;b.innerHTML=chMsgsHTML();b.scrollTop=top;}}
+function chGrow(t){t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
+function chKey(e){if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&window.innerWidth>=760){e.preventDefault();chSend();}}
+
+async function chOpenRoom(id){
+  const r=CH.rooms.find(x=>x.id===id);if(!r)return;
+  CH.room=r;CH.picker=null;CH.manage=false;CH.act=null;CH.msgs=[];
+  const w=document.querySelector('#chatBody .ch-wrap');if(w)w.classList.add('in-room');
+  chDrawSide();chDrawMain();
+  await chLoadRoom(false);
+}
+function chCloseRoom(){CH.room=null;CH.manage=false;CH.picker=null;const w=document.querySelector('#chatBody .ch-wrap');if(w)w.classList.remove('in-room');chDrawSide();chDrawMain();}
+async function chLoadRoom(quiet){
+  const r=CH.room;if(!r)return;
+  let rows;
+  if(chDemo())rows=chDemoMsgs(r.id);
+  else rows=await sb(chT('messages')+'?room_id=eq.'+r.id+'&order=created_at.desc&limit=200');
+  if(CH.room!==r)return;
+  rows=(rows||[]).slice().reverse();
+  const sig=rows.map(m=>m.id+(m.edited_at||'')+(m.deleted_at||'')).join('|');
+  const changed=sig!==CH.lastSeen;CH.lastSeen=sig;CH.msgs=rows;
+  if(changed||!quiet){
+    const b=document.getElementById('chMsgs');
+    if(b){const near=b.scrollHeight-b.scrollTop-b.clientHeight<120;b.innerHTML=chMsgsHTML();if(near||!quiet)b.scrollTop=b.scrollHeight;}
+  }
+  if(+r.unread||changed){
+    try{await chRpc('read',{p_room:r.id});}catch(e){}
+    r.unread=0;chBadge();chDrawSide();
+  }
+}
+async function chSend(){
+  const inp=document.getElementById('chInput');const r=CH.room;if(!inp||!r||CH.busy)return;
+  const body=inp.value.trim();if(!body)return;
+  if(body.length>4000){toast('That’s too long for one message. Split it up.',true);return;}
+  CH.busy=true;const btn=document.getElementById('chSendBtn');if(btn)btn.disabled=true;
+  try{
+    if(chDemo())chDemoSend(r.id,body);
+    else await sb(chT('messages'),{method:'POST',body:JSON.stringify({room_id:r.id,body})});
+    inp.value='';CH.draft[r.id]='';chGrow(inp);
+    await chLoadRoom(false);
+    chLoadList().then(chDrawSide).catch(()=>{});
+  }catch(e){toast('Didn’t send: '+e.message,true);}
+  CH.busy=false;if(btn)btn.disabled=false;if(inp)inp.focus();
+}
+async function chEdit(id){
+  const m=CH.msgs.find(x=>x.id===id);if(!m)return;
+  const body=prompt('Edit your message',m.body);if(body==null)return;const t=body.trim();if(!t||t===m.body)return;
+  try{if(chDemo()){m.body=t;m.edited_at=new Date().toISOString();}else await sb(chT('messages')+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify({body:t})});CH.act=null;await chLoadRoom(true);}catch(e){toast(e.message,true);}
+}
+async function chDelete(id){
+  if(!confirm('Delete this message for everyone?'))return;
+  try{if(chDemo()){const m=CH.msgs.find(x=>x.id===id);if(m)m.deleted_at=new Date().toISOString();}else await sb(chT('messages')+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify({deleted_at:new Date().toISOString()})});CH.act=null;await chLoadRoom(true);chLoadList().then(chDrawSide).catch(()=>{});}catch(e){toast(e.message,true);}
+}
+
+// ─── start a conversation ───
+function chPick(kind){CH.picker={kind,name:''};CH.sel={};CH.room=null;const w=document.querySelector('#chatBody .ch-wrap');if(w)w.classList.add('in-room');chDrawSide();chDrawMain();}
+function chOthers(){const me=chMe();return CH.people.filter(p=>p.user_id!==me).sort((a,b)=>String(a.name).localeCompare(String(b.name)));}
+function chPickerHTML(){
+  const k=CH.picker.kind,ppl=chOthers();
+  let h='<div class="ch-room-head"><button class="ch-back" onclick="chCloseRoom()" aria-label="Back">‹</button><div class="ch-room-title"><div class="ch-row-name">'+(k==='dm'?'Message someone':'New group')+'</div></div></div>';
+  if(!ppl.length)return h+'<div class="bk-empty">Nobody else on the team has a login yet. '+(CH_CFG.biz?'Invite them in <b>Settings → People &amp; logins</b>.':'')+'</div>';
+  if(k==='dm')return h+'<div class="ch-rows">'+ppl.map(p=>'<div class="ch-row" onclick="chStartDM(\''+p.user_id+'\')"><span class="ch-av">'+esc(chInitial(p.name))+'</span><div class="ch-row-main"><div class="ch-row-name">'+esc(p.name)+'</div><div class="ch-row-sub">'+esc(chRoleName(p.role))+'</div></div></div>').join('')+'</div>';
+  return h+'<label class="ch-lbl">Group name</label><input id="chGName" class="period-input" style="width:100%;" placeholder="Saturday market crew" value="'+esc(CH.picker.name)+'" oninput="CH.picker.name=this.value">'
+    +'<label class="ch-lbl">Who’s in it</label><div class="ch-pick">'+ppl.map(p=>'<label class="ch-check"><input type="checkbox" '+(CH.sel[p.user_id]?'checked':'')+' onchange="CH.sel[\''+p.user_id+'\']=this.checked"> '+esc(p.name)+'</label>').join('')+'</div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="chStartGroup()">Start the group</button></div>';
+}
+function chRoleName(r){r=String(r||'').toLowerCase();return r==='owner'||r==='steward'?'Owner':r==='manager'?'Manager':'Team';}
+async function chStartDM(uid){
+  try{const id=chOne(await chRpc('dm',{p_biz:chBiz(),p_user:uid}));await chLoadList();CH.picker=null;await chOpenRoom(typeof id==='object'&&id?id[chT('dm')]||id.id:id);}catch(e){toast(e.message,true);}
+}
+async function chStartGroup(){
+  const name=(CH.picker.name||'').trim();const users=Object.keys(CH.sel).filter(k=>CH.sel[k]);
+  if(!name){toast('Give the group a name',true);return;}
+  if(!users.length){toast('Pick at least one person',true);return;}
+  try{const id=chOne(await chRpc('group',{p_biz:chBiz(),p_name:name,p_users:users}));await chLoadList();CH.picker=null;await chOpenRoom(typeof id==='object'&&id?id[chT('group')]||id.id:id);}catch(e){toast(e.message,true);}
+}
+function chManageHTML(r,can){
+  const ppl=chOthers();const inRoom=new Set(r.members||[]);
+  if(!can)return '<div class="ch-manage"><div class="bk-sub">In this group: '+esc((r.members||[]).map(chName).filter(Boolean).join(', '))+'</div><div class="bk-actions"><button class="btn-secondary danger" onclick="chLeave()">Leave this group</button></div></div>';
+  return '<div class="ch-manage"><label class="ch-lbl">Name</label><input id="chMName" class="period-input" style="width:100%;" value="'+esc(r.name||'')+'">'
+    +'<label class="ch-lbl">Who’s in it</label><div class="ch-pick">'+ppl.map(p=>'<label class="ch-check"><input type="checkbox" class="chm" value="'+p.user_id+'" '+(inRoom.has(p.user_id)?'checked':'')+'> '+esc(p.name)+'</label>').join('')+'</div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="chManage({save:true})">Save</button>'
+    +(r.archived?'':'<button class="btn-secondary" onclick="chManage({archived:true})">Close the group</button>')
+    +'<button class="btn-secondary danger" onclick="chLeave()">Leave</button></div></div>';
+}
+async function chManage(o){
+  const r=CH.room;if(!r)return;
+  const args={p_room:r.id,p_name:null,p_users:null,p_archived:null};
+  if(o.save){args.p_name=(document.getElementById('chMName')||{}).value||null;args.p_users=[...document.querySelectorAll('#chMain .chm:checked')].map(i=>i.value);}
+  if(o.archived!=null){if(o.archived&&!confirm('Close '+chRoomLabel(r)+'? Nobody can post in it, but everything stays readable and you can reopen it.'))return;args.p_archived=o.archived;}
+  try{await chRpc('manage',args);await chLoadList();const nr=CH.rooms.find(x=>x.id===r.id);CH.manage=false;if(nr){CH.room=nr;}chDrawSide();chDrawMain();chLoadRoom(false);toast('Saved');}catch(e){toast(e.message,true);}
+}
+async function chLeave(){
+  const r=CH.room;if(!r||!confirm('Leave '+chRoomLabel(r)+'? You won’t see its messages anymore unless someone adds you back.'))return;
+  try{await chRpc('leave',{p_room:r.id});CH.room=null;CH.manage=false;await chLoadList();chDraw();toast('You left the group');}catch(e){toast(e.message,true);}
+}
+
+// ─── demo mode: a pretend team chat, nothing saved ───
+const CHD={rooms:null,msgs:{}};
+function chDemoSeed(){
+  if(CHD.rooms)return;const me=chMe()||'me';const now=Date.now();const ago=m=>new Date(now-m*60000).toISOString();
+  const crew=((typeof members!=='undefined'&&members)||[]).filter(m=>m&&m.name).map(m=>m.name).filter(n=>!/^you$/i.test(n)).slice(0,3);
+  const names=crew.length?crew:['Maria','Devon','Kat'];
+  CHD.people=[{user_id:me,name:(typeof currentProfile!=='undefined'&&currentProfile&&currentProfile.name)||'You',role:'owner'}].concat(names.map((n,i)=>({user_id:'crew-'+i,name:n,role:'member'})));
+  CHD.rooms=[{id:'r-all',kind:'everyone',name:'Everyone',created_by:me},{id:'r-grp',kind:'group',name:'Saturday market',created_by:me,members:[me,'crew-0','crew-1']},{id:'r-dm',kind:'dm',name:names[0],other:'crew-0',created_by:'crew-0',members:[me,'crew-0']}];
+  const M=(room,uid,body,min)=>{(CHD.msgs[room]=CHD.msgs[room]||[]).push({id:room+'-'+min,room_id:room,user_id:uid,name:(CHD.people.find(p=>p.user_id===uid)||{}).name,body,created_at:ago(min)});};
+  M('r-all',me,'Morning everyone! Big order going out today, so all hands on packing after lunch.',300);
+  M('r-all','crew-1','On it. I’ll bring extra boxes.',280);
+  M('r-grp',me,'Who can take the 8am setup this Saturday?',90);
+  M('r-grp','crew-0','I can. Want me to grab the cash box Friday?',75);
+  M('r-dm','crew-0','Can I swap my Tuesday shift with '+chFirst(names[1]||'someone')+'? They’re okay with it.',20);
+  CHD.read={'r-all':ago(0),'r-grp':ago(80),'r-dm':ago(30)};
+}
+function chDemoRpc(fn,a){
+  chDemoSeed();const me=chMe()||'me';
+  if(fn==='people')return CHD.people;
+  if(fn==='list')return CHD.rooms.map(r=>{const m=(CHD.msgs[r.id]||[]).slice().sort((x,y)=>x.created_at<y.created_at?-1:1);const last=m[m.length-1];
+    return Object.assign({},r,{members:r.kind==='everyone'?CHD.people.map(p=>p.user_id):r.members,last_at:last?last.created_at:new Date().toISOString(),
+      unread:m.filter(x=>x.user_id!==me&&!x.deleted_at&&x.created_at>(CHD.read[r.id]||'')).length,last:last?{name:last.name,body:last.deleted_at?'Message deleted':last.body,at:last.created_at,mine:last.user_id===me}:null});})
+    .sort((x,y)=>(y.kind==='everyone')-(x.kind==='everyone')||String(y.last_at).localeCompare(String(x.last_at)));
+  if(fn==='read'){CHD.read[a.p_room]=new Date().toISOString();return null;}
+  if(fn==='dm'){let r=CHD.rooms.find(x=>x.kind==='dm'&&x.other===a.p_user);if(!r){r={id:'r-'+Date.now(),kind:'dm',name:(CHD.people.find(p=>p.user_id===a.p_user)||{}).name,other:a.p_user,created_by:me,members:[me,a.p_user]};CHD.rooms.push(r);}return r.id;}
+  if(fn==='group'){const r={id:'r-'+Date.now(),kind:'group',name:a.p_name,created_by:me,members:[me].concat(a.p_users||[])};CHD.rooms.push(r);return r.id;}
+  if(fn==='manage'){const r=CHD.rooms.find(x=>x.id===a.p_room);if(r){if(a.p_name)r.name=a.p_name;if(a.p_users)r.members=[me].concat(a.p_users);if(a.p_archived!=null)r.archived=a.p_archived;}return null;}
+  if(fn==='leave'){CHD.rooms=CHD.rooms.filter(x=>x.id!==a.p_room);return null;}
+  return null;
+}
+function chDemoMsgs(room){chDemoSeed();return (CHD.msgs[room]||[]).slice().sort((x,y)=>x.created_at<y.created_at?1:-1);}
+function chDemoSend(room,body){chDemoSeed();const me=chMe()||'me';(CHD.msgs[room]=CHD.msgs[room]||[]).push({id:'m-'+Date.now(),room_id:room,user_id:me,name:(CHD.people[0]||{}).name,body,created_at:new Date().toISOString()});}
+
+// ─── styles ───
+(function(){const st=document.createElement('style');st.textContent=`
+.ch-wrap{display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start;}
+.ch-wrap .card{margin:0;}
+.ch-side{max-height:calc(100vh - 210px);overflow:auto;}
+.ch-main{display:flex;flex-direction:column;min-height:420px;max-height:calc(100vh - 210px);}
+.ch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.ch-new{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.ch-new button{flex:1;padding:8px 10px;font-size:13px;}
+.ch-row{display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:10px;cursor:pointer;}
+.ch-row:hover{background:var(--cream);}
+.ch-row.sel{background:#e6f4ec;}
+.ch-row-main{flex:1;min-width:0;}
+.ch-row-top{display:flex;justify-content:space-between;gap:8px;}
+.ch-row-name{font-weight:700;color:var(--ink,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ch-row.unread .ch-row-name,.ch-row.unread .ch-row-sub{color:var(--green-dark);font-weight:700;}
+.ch-row-when{font-size:11px;color:var(--mid);flex-shrink:0;}
+.ch-row-sub{font-size:12.5px;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ch-av{width:36px;height:36px;border-radius:50%;background:var(--cream-dark);color:var(--green-dark);display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;}
+.ch-av-all{background:var(--green-dark);color:#fff;}
+.ch-av-grp{background:#f6ede2;color:#7a5530;border-radius:10px;}
+.ch-dot{background:var(--green-dark);color:#fff;border-radius:10px;font-size:11px;font-weight:800;padding:2px 7px;flex-shrink:0;}
+.ch-empty{text-align:center;color:var(--mid);margin:auto;padding:40px 10px;}
+.ch-room-head{display:flex;gap:10px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--cream-dark);}
+.ch-room-title{flex:1;min-width:0;}
+.ch-back{display:none;background:none;border:none;font-size:30px;line-height:1;color:var(--green-dark);cursor:pointer;padding:0 6px 0 0;}
+.ch-mng{padding:6px 12px;font-size:12.5px;}
+.ch-manage{background:var(--cream);border-radius:10px;padding:10px 12px;margin-top:10px;}
+.ch-msgs{flex:1;overflow-y:auto;padding:10px 2px;display:flex;flex-direction:column;gap:2px;min-height:200px;}
+.ch-day{text-align:center;margin:12px 0 6px;}
+.ch-day span{font-size:11px;color:var(--mid);background:var(--cream);border-radius:10px;padding:2px 10px;font-weight:700;letter-spacing:.3px;}
+.ch-msg{display:flex;flex-direction:column;align-items:flex-start;max-width:82%;margin-top:4px;}
+.ch-msg.mine{align-self:flex-end;align-items:flex-end;}
+.ch-who{font-size:11.5px;font-weight:700;color:var(--mid);margin:6px 0 2px 4px;}
+.ch-bub{background:var(--cream);border-radius:14px 14px 14px 4px;padding:8px 12px;font-size:14.5px;line-height:1.45;word-break:break-word;color:var(--ink,#1a1a1a);}
+.ch-msg.mine .ch-bub{background:var(--green-dark);color:#fff;border-radius:14px 14px 4px 14px;cursor:pointer;}
+.ch-msg.mine .ch-bub a{color:#fff;}
+.ch-bub.del{background:transparent!important;color:var(--mid)!important;font-style:italic;border:1px dashed var(--rule,#ddd);}
+.ch-meta{font-size:10.5px;color:var(--mid);margin:2px 6px 0;}
+.ch-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--cream-dark);padding-top:10px;}
+.ch-compose textarea{flex:1;resize:none;border:1.5px solid var(--rule,#ddd);border-radius:12px;padding:9px 12px;font:inherit;font-size:16px;min-height:42px;max-height:140px;}
+.ch-compose .btn-green{padding:10px 16px;}
+.ch-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;font-weight:700;}
+.ch-pick{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
+.ch-check{display:flex;gap:8px;align-items:center;font-size:14px;padding:4px 0;cursor:pointer;}
+.ch-check input{width:18px;height:18px;accent-color:var(--green-dark);}
+#chatBadge{display:none;background:var(--green-dark);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;margin-left:4px;vertical-align:1px;}
+@media(max-width:759px){
+  .ch-wrap{grid-template-columns:1fr;}
+  .ch-wrap.in-room .ch-side{display:none;}
+  .ch-wrap:not(.in-room) .ch-main{display:none;}
+  .ch-back{display:block;}
+  .ch-side{max-height:none;}
+  .ch-main{max-height:calc(100vh - 170px);min-height:calc(100vh - 230px);}
+  .ch-pick{grid-template-columns:1fr;}
+}
+`;document.head.appendChild(st);})();
 
 </script>
 </body>
