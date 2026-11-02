@@ -1,7 +1,62 @@
 {
-  "updated": "2026-10-30",
+  "updated": "2026-11-02",
   "about": "Events found by the weekly search for Kilted Farmers Pasta Highlanders. The Highlanders page and the kitchen Hub read this file. Check each event with its organizer before booking.",
   "events": [
+    {
+      "feed_id": "holiday-outdoor-market-dewitt-2026-11-07",
+      "name": "Holiday Outdoor Market",
+      "kind": "other",
+      "next_date": "2026-11-07",
+      "start_time": "10:00 AM",
+      "place": "Bridge + Main Market, 119 N Bridge St",
+      "city": "DeWitt",
+      "zone": "far",
+      "booth_fee": "$110 (10x10)",
+      "website": "https://vendorbound.com/event/holiday-outdoor-market-dewitt-mi-46352fe627",
+      "notes": "Outdoor market on the lawn and in the shops, 10am-3pm. Food trucks are accepted, so ask about packaged food; it's this Saturday, so spots may be gone.",
+      "source_url": "https://www.thecraftmap.com/fair/holiday-outdoor-market-dewitt-mi",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "alternative-holiday-sale-east-lansing-2026-11-07",
+      "name": "Alternative Holiday Sale",
+      "kind": "bazaar",
+      "next_date": "2026-11-07",
+      "place": "Edgewood United Church, 469 N Hagadorn Rd",
+      "city": "East Lansing",
+      "zone": "far",
+      "website": "https://www.eventbrite.com/e/alternative-holiday-sale-tickets-2003307202771",
+      "notes": "Church holiday sale this Saturday. The listing doesn't say whether food vendors are accepted, so ask first.",
+      "source_url": "https://www.thecraftmap.com/fair/alternative-holiday-sale-east-lansing-mi",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "mason-holiday-outdoor-market-mason-2026-11-08",
+      "name": "Mason Holiday Outdoor Market",
+      "kind": "other",
+      "next_date": "2026-11-08",
+      "start_time": "10:00 AM",
+      "place": "Ingham County Fairgrounds, 700 E Ash St",
+      "city": "Mason",
+      "zone": "far",
+      "notes": "Handmade goods, food trucks and live music, 10am-4pm. Food is a listed vendor type; fees and contacts aren't public on the listing.",
+      "source_url": "https://www.fairsandfestivals.net/events/details/2026-mason-holiday-outdoor-market",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "mason-christmas-craft-show-mason-2026-11-12",
+      "name": "Mason Christmas Craft Show",
+      "kind": "craft_show",
+      "next_date": "2026-11-12",
+      "end_date": "2026-11-14",
+      "start_time": "9:00 AM",
+      "place": "Ingham County Fairgrounds, Community Building, 700 E Ash St",
+      "city": "Mason",
+      "zone": "far",
+      "notes": "Three-day indoor show (Thu-Fri 9am-7pm, Sat 9am-5pm). Food is a listed vendor category; organizer contact isn't public on the listing.",
+      "source_url": "https://www.fairsandfestivals.net/events/details/2026-mason-christmas-craft-show",
+      "found": "2026-11-02"
+    },
     {
       "feed_id": "women-in-the-arts-festival-east-lansing-2026-11-13",
       "name": "Women in the Arts Festival",
@@ -28,6 +83,25 @@
       "found": "2026-10-30"
     },
     {
+      "feed_id": "merry-mile-marshall-2026-12-02",
+      "name": "Merry Mile at the Calhoun County Fairgrounds",
+      "kind": "festival",
+      "schedule": "Eggnog Jog Dec 2; then Thu-Sun Dec 3-20 and nightly Dec 21-27 (closed Christmas), 5:30-9pm",
+      "next_date": "2026-12-02",
+      "end_date": "2026-12-27",
+      "start_time": "5:30 PM",
+      "place": "Calhoun County Fairgrounds, 720 Fair St",
+      "city": "Marshall",
+      "zone": "local",
+      "attendance": "About 2,000 last year (promoter estimate)",
+      "contact_name": "Cathy Combs",
+      "contact_phone": "(269) 781-8161",
+      "website": "https://calhouncountyfairgrounds.com/merry-mile",
+      "notes": "Evening holiday event with food booths; food vendor spots are open until full. Ask Cathy whether bagged pasta fits their food booths.",
+      "source_url": "https://festivalnet.com/102440/Marshall-Michigan/Holiday-Celebrations/Merry-Mile-at-the-Calhoun-County-Fairgrounds",
+      "found": "2026-11-02"
+    },
+    {
       "feed_id": "winter-art-market-ann-arbor-2026-12-05",
       "name": "Winter Art Market",
       "kind": "craft_show",
@@ -40,6 +114,72 @@
       "notes": "Food-friendly venue.",
       "source_url": "https://www.thecraftmap.com/fair/winter-art-market-ann-arbor-mi",
       "found": "2026-10-30"
+    },
+    {
+      "feed_id": "christmas-market-onsted-2026-12-05",
+      "name": "Christmas Market - Calling All Vendors!",
+      "kind": "other",
+      "next_date": "2026-12-05",
+      "end_date": "2026-12-06",
+      "start_time": "12:00 PM",
+      "place": "Chateau Aeronautique Winery / Blue Skies Brewery, 12000 Pentecost Hwy",
+      "city": "Onsted",
+      "zone": "far",
+      "website": "https://www.eventbrite.com/e/christmas-market-calling-all-vendors-tickets-1998439549489",
+      "notes": "Holiday market at an Irish Hills winery and brewery that's actively looking for vendors. A food-friendly crowd; fees aren't listed.",
+      "source_url": "https://www.thecraftmap.com/fair/christmas-market-calling-all-vendors-onsted-mi",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "indoor-christmas-market-coldwater-2026-12-11",
+      "name": "Indoor Christmas Market",
+      "kind": "other",
+      "next_date": "2026-12-11",
+      "place": "Dr. Browne Rec Center",
+      "city": "Coldwater",
+      "zone": "far",
+      "contact_name": "Mariah Welke",
+      "notes": "City-run indoor market with food trucks alongside vendors. Vendor space is limited, so reach out soon.",
+      "source_url": "https://www.coldwatermi.gov/602/Events-Festivals",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "winter-market-ann-arbor-2026-12-12",
+      "name": "Winter Market at Motawi Tileworks",
+      "kind": "craft_show",
+      "next_date": "2026-12-12",
+      "start_time": "10:00 AM",
+      "place": "Motawi Tileworks, 170 W Enterprise Dr",
+      "city": "Ann Arbor",
+      "zone": "far",
+      "website": "https://www.eventbrite.com/e/winter-market-tickets-2003786826338",
+      "notes": "One-day holiday market, 10am-5pm. Food vendor policy isn't listed, so ask first.",
+      "source_url": "https://www.thecraftmap.com/fair/winter-market-ann-arbor-mi",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "mco-holiday-popup-market-tecumseh-2026-12-18",
+      "name": "M+Co Holiday Popup Market",
+      "kind": "other",
+      "next_date": "2026-12-18",
+      "place": "135 E Chicago Blvd",
+      "city": "Tecumseh",
+      "zone": "far",
+      "website": "https://www.eventbrite.com/e/mco-holiday-popup-market-tickets-2004067659317",
+      "notes": "Downtown Tecumseh holiday pop-up the Friday before Christmas. Vendor details aren't on the listing; check the Eventbrite page.",
+      "source_url": "https://www.thecraftmap.com/fair/mco-holiday-popup-market-tecumseh-mi",
+      "found": "2026-11-02"
+    },
+    {
+      "feed_id": "allen-street-market-lansing",
+      "name": "Allen Street Market",
+      "kind": "farmers_market",
+      "schedule": "Wednesdays 3-6:30pm in winter (2026-27 dates TBA)",
+      "city": "Lansing",
+      "zone": "far",
+      "notes": "Year-round indoor farmers market. Vendor applications are listed as opening later, so worth watching.",
+      "source_url": "https://grindkit.app/events/lansing-mi/allen-street-market-lansing-91b805af",
+      "found": "2026-11-02"
     }
   ]
 }
