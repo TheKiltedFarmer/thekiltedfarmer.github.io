@@ -558,9 +558,10 @@ function renderHome(){
   else h+=upcoming.slice(0,3).map(eventCard).join('');
   h+='<div class="btns"><button class="btn primary full" onclick="newBooking()">+ Book an event</button></div></div>';
 
-  h+='<div class="card"><h2>Your order link</h2><p class="muted">Share it before an event so people can reserve bags and pay you when they pick up.</p>'
+  h+='<div class="card"><h2>Your customers’ order link</h2><p class="muted">This link is for <b>your customers</b>, not for getting pasta from the kitchen. Share it before an event so people can reserve bags and pay you when they pick up.</p>'
+    +'<p class="muted small" style="margin-top:6px;">Getting pasta for yourself? Book the event (the <b>+ Book an event</b> button above) and the kitchen packs your bags.</p>'
     +'<div class="linkbox"><code>'+esc(orderLink())+'</code></div>'
-    +'<div class="btns"><button class="btn tan" onclick="shareLink()">Share link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy</button><a class="btn soft" href="'+esc(orderLink())+'" target="_blank" rel="noopener">Preview</a></div></div>';
+    +'<div class="btns"><button class="btn tan" onclick="shareLink()">Share link</button><button class="btn soft" onclick="copy(orderLink(),\'Order link copied\')">Copy</button><a class="btn soft" href="'+esc(orderLink())+'&preview=1" target="_blank" rel="noopener">See what customers see</a></div></div>';
   $('app').innerHTML=h;calcDraw();
 }
 function shareLink(){
@@ -969,13 +970,33 @@ async function renderOrderPage(code){
   $('hSub').textContent='The Kilted Farmers · handmade in Concord, MI';
   if(!O.data.events.length){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>No upcoming events right now</h2><p class="muted">'+esc(first)+' doesn’t have an event open for pre-orders yet. Check back soon.</p></div>';return;}
   if(!O.event||!O.data.events.some(e=>e.id===O.event))O.event=O.data.events.length===1?O.data.events[0].id:null;
+  O.preview=new URLSearchParams(location.search).get('preview')==='1';
   drawOrderPage();
+  if(!O.preview)oCheckSelf();
+}
+// Is the person on this page the Highlander whose link it is? Then this isn't where they get pasta.
+async function oCheckSelf(){
+  let rt=null;try{rt=(JSON.parse(localStorage.getItem(AUTH_KEY)||'{}')).refresh_token;}catch(e){}
+  if(!rt)return;
+  try{
+    if(!S.auth&&!(await refresh()))return;
+    const u=await authFetch('user',null,'GET');
+    const rows=await api('kf_reps?user_id=eq.'+u.id+'&select=code');
+    if(rows&&rows[0]&&String(rows[0].code||'').toLowerCase()===String(O.code).toLowerCase()){O.self=true;drawOrderPage();}
+  }catch(e){}
+}
+function oSelfBanner(){
+  if(O.self)return '<div class="card" style="border-color:var(--tan-light);background:var(--tan-wash);"><h2>This is your customers’ page</h2>'
+    +'<p class="muted" style="color:#6d4d2c;">It’s where <b>your customers</b> reserve pasta from you. To get pasta from the kitchen for your event, book it on your Highlander page and the kitchen packs your bags. Orders placed here are customer pre-orders.</p>'
+    +'<div class="btns"><a class="btn primary" href="'+esc(location.pathname)+'">Go to my Highlander page</a></div></div>';
+  if(O.preview)return '<div class="msg info" style="margin:0 0 12px;">Preview: this is what your customers see. Nothing can be ordered from this preview.</div>';
+  return '';
 }
 function oZone(){const e=O.data.events.find(x=>x.id===O.event);return e?e.zone:'local';}
 function oPrice(p){return r2(+p.price+(oZone()==='far'?+O.data.far_add||0:0));}
 function drawOrderPage(){
   const first=O.data.rep.first_name;
-  let h='<div class="card"><h2>Pick your event</h2><p class="muted">Reserve bags now and pay '+esc(first)+' when you pick them up.</p>';
+  let h=oSelfBanner()+'<div class="card"><h2>Pick your event</h2><p class="muted">Reserve bags now and pay '+esc(first)+' when you pick them up.</p>';
   O.data.events.forEach(e=>{
     h+='<label class="pick'+(O.event===e.id?' on':'')+'"><input type="radio" name="oev" '+(O.event===e.id?'checked':'')+' onchange="O.event=\''+e.id+'\';drawOrderPage()"><b>'+esc(e.name)+'</b><br><span class="muted">'+esc(dayLabel(e.event_date))+(e.start_time?' · '+esc(e.start_time):'')+(e.place||e.city?'<br>'+esc([e.place,e.city].filter(Boolean).join(', ')):'')+'</span></label>';
   });
@@ -991,7 +1012,7 @@ function drawOrderPage(){
       +'<label for="oName">Name</label><input id="oName" class="inp" autocomplete="name">'
       +'<label for="oContact">Phone or email</label><input id="oContact" class="inp" autocomplete="tel" placeholder="So '+esc(first)+' can reach you">'
       +'<label for="oNote">Note (optional)</label><input id="oNote" class="inp" placeholder="Anything '+esc(first)+' should know">'
-      +'<div class="msg err" id="oMsg"></div><div class="btns"><button class="btn primary full" id="oBtn" onclick="placeOrder()">Reserve my pasta</button></div>'
+      +'<div class="msg err" id="oMsg"></div><div class="btns"><button class="btn primary full" id="oBtn" onclick="placeOrder()"'+(O.preview?' disabled':'')+'>'+(O.preview?'Customers tap here to reserve':O.self?'Place a customer order':'Reserve my pasta')+'</button></div>'
       +'<p class="muted small center" style="margin-top:10px;">Nothing to pay now. You’ll pay '+esc(first)+' at pickup.</p></div>';
   }
   $('app').innerHTML=h;if(O.event)drawOTotal();
@@ -1002,6 +1023,8 @@ function drawOTotal(){
   $('oTotal').innerHTML=bags?'<div class="total-bar"><div><div class="s">'+plural(bags,'bag')+'</div><div class="big">'+fmt(t)+'</div></div><div class="s" style="text-align:right;">paid at pickup</div></div>':'';
 }
 async function placeOrder(){
+  if(O.preview)return;
+  if(O.self&&!confirm('This places a customer pre-order on your own link. It does not get you pasta from the kitchen (book the event on your Highlander page for that). Place it anyway?'))return;
   const msg=$('oMsg'),btn=$('oBtn');msg.textContent='';
   const items=Object.entries(O.qty).filter(([,q])=>q>0).map(([product_id,qty])=>({product_id,qty}));
   if(!items.length){msg.textContent='Choose at least one bag.';return;}
