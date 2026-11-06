@@ -8084,6 +8084,7 @@ async function pvServiceStatus(){
   try{list=(await sb('business_services?select=id,name,blurb,price_label,status,sort,pay_url&order=sort.asc'))
     .filter(x=>x.status==='available'&&x.id!=='hub'&&x.id!=='operations-hub'&&!/operations-hub/.test(x.pay_url||''));}catch(e){}
   try{mine=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});}catch(e){mine=[];}
+  try{mine=await alWithHub(mine);}catch(e){}
   if(!list.length)list=PV_FALLBACK;
   const on={};
   (mine||[]).forEach(b=>(b.services||[]).forEach(x=>{if(on[x]!=='active')on[x]=b.status;}));
@@ -9330,9 +9331,19 @@ function alMine(){
 }
 function alLive(){return alMine().find(r=>r.status==='active')||null;}
 function alSvcName(id){const s=(AL.svc||[]).find(x=>x.id===id)||(typeof PV_FALLBACK!=='undefined'?PV_FALLBACK.find(x=>x.id===id):null);return s?s.name:({watch:'Watch alerts',bids:'Bid & grant finder',explainer:'Rule explainers',roundup:'Weekly roundup'}[id]||id);}
+// the Hub's own Bids & Alerts sign-up, whichever owner or manager made it (so a co-owner never makes a second one)
+async function alWithHub(rows){
+  rows=Array.isArray(rows)?rows:[];
+  if(!BIZ.id||(typeof isDemo==='function'&&isDemo()))return rows;
+  let hub=[];try{hub=await sb('rpc/ohb_hub_signups',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});}catch(e){hub=[];}
+  if(!Array.isArray(hub))hub=hub?[hub]:[];
+  const seen=new Set(rows.map(r=>r.id));
+  return rows.concat(hub.filter(r=>r&&!seen.has(r.id)));
+}
 async function loadAlerts(){
   let rows;
   try{rows=await sb('rpc/tpv_my_business',{method:'POST',body:'{}'});}catch(e){rows=null;}
+  if(Array.isArray(rows))rows=await alWithHub(rows);
   AL.rows=Array.isArray(rows)?rows:(rows==null?null:[]);
   try{AL.svc=await sb('business_services?select=id,name,status,sort&order=sort.asc');}catch(e){AL.svc=[];}
   AL.logs=[];
@@ -9481,7 +9492,9 @@ async function alSaveWatch(id,btn){
   if(!id)return;
   const watch=(document.getElementById('alWatch2').value||'').trim(),trade=(document.getElementById('alTrade2').value||'').trim();
   btn.disabled=true;
-  try{await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:id,p_watch_for:watch,p_trade:trade})});toast('Saved. The next alerts use this.');await renderAlertsTab();}
+  try{try{await sb('rpc/tpv_business_update',{method:'POST',body:JSON.stringify({p_id:id,p_watch_for:watch,p_trade:trade})});}
+    catch(e1){const r=await sb('rpc/ohb_turn_on_services',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_watch_for:watch||null,p_trade:trade||null,p_not_political:true})});const d=Array.isArray(r)?r[0]:r;if(!d||!d.ok)throw e1;}
+    toast('Saved. The next alerts use this.');await renderAlertsTab();}
   catch(e){toast('Didn’t save: '+e.message,true);btn.disabled=false;}
 }
 async function alExplain(btn){
