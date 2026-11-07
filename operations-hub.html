@@ -829,6 +829,8 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
 .tr-status{font-size:13px;color:var(--mid);margin-top:8px;}
 #trKind{margin-top:2px;}
 @media(max-width:520px){#trKind button{font-size:12px;padding:8px 6px;white-space:normal;}}
+
+.bank-help div{margin-top:3px;}
 </style>
 </head>
 <body>
@@ -2244,8 +2246,8 @@ function parseISO(s){if(!s)return null;const m=String(s).match(/^(\d{4})-(\d{2})
 function prettyDate(s){const d=parseISO(s);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
 function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
 
-let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Other Expense'];
-let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Tips','Other'];
+let EXPENSE_CATS=['Ingredients','Packaging','Kitchen Rental','Market Fees','Equipment','Supplies','Fuel & Mileage','Advertising','Licenses & Permits','Insurance','Utilities','Software & Subscriptions','Repairs & Maintenance','Bank & Card Fees','Meals','Loan Interest','Other Expense'];
+let INCOME_CATS=['Farmers Market','Wholesale Account','Online Order','CSA','Catering','Tips','Grants & Reimbursements','Other'];
 const MOVEMENT_CATS=['Member Distribution','Owner Contribution','Loan','Transfer']; // money that moves but isn't profit or loss
 let COGS_CATS=['Ingredients','Packaging'];
 const PAY_METHODS=['Card','Cash','Check','Square','Venmo / PayPal','Bank Transfer','Other'];
@@ -3074,7 +3076,7 @@ function fillTxnCats(selected){
 }
 function onTxnCatChange(){
   _txn.catTouched=true;
-  if(MOVEMENT_CATS.includes($v('txnCategory'))){document.getElementById('txnPool').checked=false;refreshTxnPoolUI();}
+  if(MOVEMENT_CATS.includes($v('txnCategory'))||isNotPoolRev({source:$v('txnCategory')})){document.getElementById('txnPool').checked=false;refreshTxnPoolUI();}
 }
 function onTxnDateChange(){
   _txn.dateTouched=true;
@@ -3331,6 +3333,7 @@ const TAX_LINES={
   'Repairs & Maintenance':{p:'11',c:'21',n:'Repairs & maintenance'},
   'Bank & Card Fees':{p:'20',c:'27a',n:'Bank & card fees'},
   'Meals':{p:'20',c:'24b',n:'Meals (50% deductible)',factor:0.5},
+  'Loan Interest':{p:'15',c:'16b',n:'Interest on business loans'},
   'Other Expense':{p:'20',c:'27a',n:'Other expenses'}
 };
 function taxPicture(y){
@@ -3774,6 +3777,20 @@ function addFromBank(id){
     category:l.amount>0?'':(guessCategory(l.description)||guessCategory(payee)||''),notes:'From bank: '+l.description.slice(0,80),bankLine:id,
     method:/check\b|chk/i.test(l.description)?'Check':'Card'});
 }
+// lines a bank statement makes obvious: fill them in the right way (and keep them out of the team's pay)
+const BANK_HINTS=[
+  {dir:'in',re:/state of michigan|\bgrant\b|reimburs/i,cat:()=>GRANT_CAT,payee:d=>/state of michigan/i.test(d)?'State of Michigan':'',noPool:true},
+  {dir:'in',re:/apy earned|interest|dividend/i,cat:()=>'Other',payee:()=>'Bank interest',noPool:true},
+  {dir:'out',re:/business fee|service charge|maintenance fee|trancode fee|wire fee|overdraft|\bnsf\b|monthly fee/i,cat:()=>'Bank & Card Fees',payee:()=>'Bank fee'}
+];
+function bankHint(l){const dir=+l.amount>0?'in':'out';return BANK_HINTS.find(h=>h.dir===dir&&h.re.test(String(l.description||'')))||null;}
+(function(){const _afb=addFromBank;addFromBank=function(id){
+  _afb(id);
+  const l=(BOOKS.bank||[]).find(x=>x.id===id);const h=l&&bankHint(l);if(!h)return;
+  const pay=h.payee(String(l.description||''));if(pay){const el=document.getElementById('txnPayee');if(el)el.value=pay;}
+  if(h.noPool){const box=document.getElementById('txnPool');if(box&&!box.disabled){box.checked=false;refreshTxnPoolUI();}}
+  fillTxnCats(h.cat());_txn.catTouched=true;
+};})();
 function renderBooksBank(){
   if(!BOOKS.schema.acct)return '<div class="card"><div class="bk-empty">Bank matching turns on after the one-time setup at the top of this tab.</div></div>';
   const lines=BOOKS.bank||[];
@@ -3802,7 +3819,12 @@ function renderBooksBank(){
   if(!lines.length)h+='<div class="bk-empty">No statements yet. Import last month’s to start.</div>';
   else if(!open.length)h+='<div class="ck-ok">✓ Every bank transaction is accounted for.</div>';
   else{
-    h+='<div class="card-sub">Tap what each one is. <b>Add</b> puts it in the books; <b>Already logged</b> is for market deposits and sales you entered another way; <b>Pay-out</b> is a member’s weekly share; <b>Skip</b> is for moving money between your own accounts. Three or more from the same place are grouped so you can handle them in one tap.</div>';
+    h+='<div class="card-sub bank-help">For each one, pick what it was:'
+      +'<div><b>+ Add</b> — it’s not in your books yet. Use it for income (a check from a customer, a grant) and costs (a bank fee, supplies).</div>'
+      +'<div><b>Already logged</b> — money in that’s already counted, like market cash or sales you imported.</div>'
+      +'<div><b>Pay-out</b> — money out that went to you or a team member as pay.</div>'
+      +'<div><b>Skip</b> — money moving between your own accounts (to your personal account, savings, back and forth). It isn’t income or a cost.</div>'
+      +'<div style="margin-top:4px;">Not sure? Skip it for now. Nothing changes until you pick.</div></div>';
     const lineHTML=l=>{let h='';
       const amt=+l.amount,cands=bankCandidates(l,used);
       h+='<div class="bank-line open"><div class="bank-main"><div class="bk-payee">'+esc(cleanBankDesc(l.description)||'(no description)')+'</div>'
@@ -4555,6 +4577,9 @@ const MI_CITY_TAX=['Albion','Battle Creek','Benton Harbor','Big Rapids','Detroit
 // ═══════════════════════════════════════════════════════
 const PAY_DEFAULTS={workers:'employees',commissionPct:null,tipMode:'pool',minWage:{'2025':12.48,'2026':13.73,'2027':15.00}};
 const isTipRev=r=>/^tips?$|gratuit/i.test(String(r&&r.source||'').trim());
+// grants, reimbursements and the like are the business's income, but not money the team earned that week
+const GRANT_CAT='Grants & Reimbursements';
+const isNotPoolRev=r=>/grant|reimburse|rebate|insurance (payout|claim)|refund from/i.test(String(r&&r.source||'').trim());
 function payRules(){
   const saved=(typeof BOOKS!=='undefined'&&BOOKS.acct&&BOOKS.acct.pay)||{};
   const p=Object.assign({},PAY_DEFAULTS,saved);
@@ -4599,7 +4624,7 @@ function entryHours(t){
 // revs: revenue rows for the week · expTotal: number · times: time rows · endISO: week's Sunday
 function computeWeekPay(revs,expTotal,times,endISO){
   // Tips belong to the workers, not the business: they stay out of sales, commission and the pool
-  const tipRevs=revs.filter(isTipRev);revs=revs.filter(r=>!isTipRev(r));
+  const tipRevs=revs.filter(isTipRev);revs=revs.filter(r=>!isTipRev(r)&&!isNotPoolRev(r));
   const rules=payRules();const rate=commissionOn()?+rules.commissionPct:0;
   const employees=rules.workers==='employees';
   const people={};
@@ -8097,7 +8122,9 @@ function applyBizConfig(){
   HUB.allergens=s.allergens||'Some of what we make contains common allergens like wheat, eggs, milk, nuts, or soy.';
   HUB.rhythm=s.rhythm||(HUB.payStyle==='shared'?SHARED_RHYTHM:'Pay is figured each week from the hours logged.');
   EXPENSE_CATS=s.expense.includes('Other Expense')?s.expense.slice():s.expense.concat('Other Expense');
+  if(!EXPENSE_CATS.includes('Loan Interest'))EXPENSE_CATS.splice(Math.max(0,EXPENSE_CATS.indexOf('Other Expense')),0,'Loan Interest');
   INCOME_CATS=s.income.includes('Other')?s.income.slice():s.income.concat('Other');
+  if(!INCOME_CATS.includes(GRANT_CAT))INCOME_CATS.splice(Math.max(0,INCOME_CATS.indexOf('Other')),0,GRANT_CAT);
   COGS_CATS=(s.cogs||[]).filter(c=>EXPENSE_CATS.includes(c));
   CT=HUB.payStyle==='shared'?Math.max(0,Math.min(50,+s.ct||0))/100:0;
   document.title=BIZ.row.name+' — Operations Hub';
