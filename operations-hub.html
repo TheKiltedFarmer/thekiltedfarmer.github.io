@@ -6529,10 +6529,10 @@ if(typeof openInvItem==='function'){const _oii=openInvItem;openInvItem=async fun
 const POS={preview:null};
 function posCardHTML(){
   return '<div class="card pos-card"><div class="card-title"><div class="card-title-dot"></div>Import sales from your card reader</div>'
-    +'<div class="card-sub">Using Square, Clover, SumUp or another card reader? Download its sales report as a CSV and bring it in. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
+    +'<div class="card-sub">Using Square, Clover, SumUp, Goodfynd or another register? Download its sales or orders report (CSV or Excel) and bring it in. If the Hub doesn’t recognize the layout, it asks you which column is the date and which is the amount, then remembers for next time. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
     +' Square: <b>Reports → Transactions → pick your dates → Export → Transactions CSV</b> (a whole year at once is fine). For stock, also export <b>Item sales</b>.</div>'
-    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import a sales CSV</button></div>'
-    +'<input type="file" id="posFile" accept=".csv,text/csv" style="display:none;" onchange="onPosFile(this)"></div>';
+    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import a sales file</button></div>'
+    +'<input type="file" id="posFile" accept=".csv,text/csv,.txt,.xlsx,.xls" style="display:none;" onchange="onPosFile(this)"></div>';
 }
 function posMount(){
   const tab=document.getElementById('tab-log');if(!tab||document.getElementById('posImportCard'))return;
@@ -6542,19 +6542,32 @@ function posMount(){
 const posH=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function posFind(h,...res){return h.findIndex(c=>res.some(r=>r.test(c)));}
 function posDetect(rows,forceSales){
-  let hi=-1;for(let i=0;i<Math.min(rows.length,15);i++){const h=rows[i].map(posH);if(h.some(c=>/date/.test(c))&&h.some(c=>/sales|amount|total|qty|collected/.test(c))){hi=i;break;}}
+  let hi=-1;for(let i=0;i<Math.min(rows.length,15);i++){const h=rows[i].map(posH);if(h.some(c=>/date|time|created|ordered|placed/.test(c))&&h.some(c=>/sales|amount|total|qty|collected|paid|revenue/.test(c))){hi=i;break;}}
   if(hi<0)return null;
   const h=rows[hi].map(posH);
   const itemCol=posFind(h,/^item$/,/^item name$/,/^product$/);const qtyCol=posFind(h,/^qty$/,/^quantity$/,/^units sold$/,/^count$/);
   if(!forceSales&&itemCol>=0&&qtyCol>=0)return{kind:'items',hi,C:{date:posFind(h,/^date$/,/date/),item:itemCol,qty:qtyCol,variant:posFind(h,/price point/,/variation/),sku:posFind(h,/^sku$/),event:posFind(h,/event type/),tx:posFind(h,/transaction id/,/payment id/)}};
-  return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),net:posFind(h,/^net sales$/),amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/),
-    tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/),tip:posFind(h,/^tips?$/,/gratuity/),fee:posFind(h,/^fees?$/,/processing fee/),refunds:posFind(h,/partial refunds/),
+  return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/,/^(created|ordered|placed|paid|completed|closed)( at| on| time)?$/,/placed|created|ordered/,/time/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),
+    net:posFind(h,/^net sales$/,/^net( amount| total)?$/,/^sub ?total$/,/^item total$/),
+    amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/,/^(order|grand|payment|transaction|sale) total$/,/^total (amount|paid|charged|sales)$/,/^amount (paid|charged|collected)$/,/^paid$/,/^revenue$/),
+    tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/,/^tax (amount|total)$/),tip:posFind(h,/^tips?$/,/gratuity/,/^tip (amount|total)$/),fee:posFind(h,/^fees?$/,/processing fee/,/^(card|service|platform|transaction) fees?$/,/^fee (amount|total)$/),refunds:posFind(h,/partial refunds/),
+    status:posFind(h,/^(order |payment )?status$/),
     staff:posFind(h,/staff name/,/employee/,/team member/,/^server$/,/^device name$/),event:posFind(h,/event type/,/^type$/),tx:posFind(h,/^transaction id$/,/^payment id$/,/transaction id/),
     location:posFind(h,/^location$/),cash:posFind(h,/^cash$/),card:posFind(h,/^card$/)}};
 }
 async function onPosFile(input){
   const file=input.files[0];input.value='';if(!file)return;
-  let rows;try{rows=parseCSV(await file.text());}catch(e){toast('Couldn’t read that file',true);return;}
+  let rows;
+  try{
+    if(/\.xlsx?$/i.test(file.name)){
+      if(!window.XLSX)await loadScriptOnce(XLSX_URL);
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      // the sheet with the most rows is the one with the sales
+      rows=wb.SheetNames.map(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:''}).map(r=>r.map(c=>String(c==null?'':c))).filter(r=>r.some(x=>x.trim()!=='')))
+        .sort((a,b)=>b.length-a.length)[0]||[];
+    }else rows=parseCSV(await file.text());
+  }catch(e){toast('Couldn’t read that file. If it’s from Excel, try saving it as a CSV.',true);return;}
+  if(!rows.length){toast('That file looks empty',true);return;}
   posHandleRows(file.name,rows);
 }
 // Shared by the sales importer and the bank importer (when a sales report lands there by mistake)
@@ -6618,7 +6631,9 @@ function posHandleRows(name,rows){
       cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
     return posPrepThenShow();
   }
+  const saved=posSavedMap(rows);if(saved)return posSalesPreview(name,rows,saved);
   const d=posDetect(rows);
+  if(!d&&posGuessHeader(rows)>=0)return posMapper(name,rows);
   if(!d){return posHelp('That file doesn’t have sales by day','<p style="margin:0 0 8px;">The Hub needs a file with a <b>date</b> on each sale. From Square:</p>'+POS_HOW
     +'<p class="bk-sub" style="margin-top:8px;">Clover, SumUp and other card readers have a similar transactions or sales export. Any CSV with a date and an amount on each line works.</p>');}
   if(d.kind==='items'){
@@ -6632,6 +6647,64 @@ function posHandleRows(name,rows){
     return posItemsPreview(name,rows,d);
   }
   posSalesPreview(name,rows,d);
+}
+// ─── Any register's file: ask which column is which (and remember it for next time) ───
+function posGuessHeader(rows){
+  // the header is the row just above where dates start
+  for(let i=0;i<Math.min(rows.length-1,15);i++){
+    const next=rows.slice(i+1,i+21);if(!next.length)break;
+    const w=rows[i].length;
+    for(let c=0;c<w;c++){const hits=next.filter(r=>dateVal(r[c])).length;if(hits>=Math.max(1,Math.ceil(next.length*0.6))&&!dateVal(rows[i][c]))return i;}
+  }
+  return -1;
+}
+function posMapSig(h){return h.map(posH).join('|');}
+function posSavedMap(rows){
+  let all=Object.assign({},POS.maps||{});try{Object.assign(all,JSON.parse(localStorage.getItem('ohb_pos_maps')||'{}'));}catch(e){}
+  for(let i=0;i<Math.min(rows.length,15);i++){const m=all[posMapSig(rows[i])];if(m)return{kind:'sales',hi:i,mapped:true,C:Object.assign(posBlankC(),m)};}
+  return null;
+}
+function posBlankC(){return{date:-1,gross:-1,disc:-1,net:-1,amount:-1,tax:-1,tip:-1,fee:-1,refunds:-1,staff:-1,event:-1,tx:-1,location:-1,cash:-1,card:-1,status:-1};}
+function posMapper(name,rows,again){
+  let hi=posGuessHeader(rows);if(hi<0)hi=0;
+  const h=rows[hi].map((c,i)=>String(c||'').trim()||'Column '+(i+1));
+  const data=rows.slice(hi+1,hi+41);
+  const sample=i=>{const v=data.map(r=>String(r[i]==null?'':r[i]).trim()).find(Boolean);return v?v.slice(0,24):'';};
+  const share=(i,fn)=>{let n=0,t=0;data.forEach(r=>{const v=String(r[i]==null?'':r[i]).trim();if(!v)return;t++;if(fn(v))n++;});return t?n/t:0;};
+  const isMoney=i=>share(i,v=>moneyVal(v)!==null)>0.7&&share(i,v=>dateVal(v))<0.2;
+  const hl=h.map(posH);
+  const pick=(...res)=>{for(const re of res){const i=hl.findIndex((c,j)=>re.test(c)&&isMoney(j));if(i>=0)return i;}return -1;};
+  let dateC=h.findIndex((c,i)=>/date|time|created|ordered|placed/.test(hl[i])&&share(i,v=>dateVal(v))>0.6);
+  if(dateC<0)dateC=h.findIndex((c,i)=>share(i,v=>dateVal(v))>0.6);
+  let amt=pick(/total|amount|paid|collected|sales|revenue/,/price/);
+  if(amt<0){let best=-1,sum=-1;h.forEach((c,i)=>{if(!isMoney(i))return;const t=data.reduce((a,r)=>a+Math.abs(moneyVal(r[i])||0),0);if(t>sum){sum=t;best=i;}});amt=best;}
+  const incl=amt>=0&&/total|paid|collected|charged/.test(hl[amt])&&!/sub ?total|net/.test(hl[amt]);
+  const tax=pick(/tax/),tip=pick(/tip|gratuity/),fee=pick(/fee/);
+  const staff=hl.findIndex(c=>/staff|employee|cashier|server|team member|sold by/.test(c));
+  const opts=(sel,none)=>(none?'<option value="-1">'+none+'</option>':'')+h.map((c,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+esc(c)+(sample(i)?' (e.g. '+esc(sample(i))+')':'')+'</option>').join('');
+  POS.map={name,rows,hi,status:hl.findIndex(c=>/^(order |payment )?status$/.test(c))};
+  const m=posModal();document.getElementById('posTitle').textContent='Match up the columns';
+  document.getElementById('posBody').innerHTML='<p class="bk-sub" style="margin:0 0 10px;">'+(again?'That didn’t turn up any sales. ':'')+'The Hub doesn’t know this file’s layout yet ('+esc(name)+'). Tell it which column is which and it’ll remember next time.</p>'
+    +'<label class="ch-lbl">Date of each sale</label><select id="pmDate" class="period-input" style="width:100%;">'+opts(dateC)+'</select>'
+    +'<label class="ch-lbl">Sale amount</label><select id="pmAmt" class="period-input" style="width:100%;">'+opts(amt)+'</select>'
+    +'<label class="ch-check" style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;"><input type="checkbox" id="pmIncl"'+(incl?' checked':'')+'> That amount already includes sales tax and tips</label>'
+    +'<details style="margin-top:10px;"'+(tax>=0||tip>=0||fee>=0?' open':'')+'><summary style="cursor:pointer;font-weight:700;color:var(--green-dark);">Tax, tips, fees and who sold it (if the file has them)</summary>'
+    +'<label class="ch-lbl">Sales tax</label><select id="pmTax" class="period-input" style="width:100%;">'+opts(tax,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Tips</label><select id="pmTip" class="period-input" style="width:100%;">'+opts(tip,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Card or processing fees</label><select id="pmFee" class="period-input" style="width:100%;">'+opts(fee,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Who made the sale</label><select id="pmStaff" class="period-input" style="width:100%;">'+opts(staff,'Not in this file')+'</select></details>'
+    +'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" onclick="posMapGo()">Next</button></div>';
+  m.classList.add('open');
+}
+function posMapGo(){
+  const M=POS.map;if(!M)return;const v=id=>+document.getElementById(id).value;
+  const date=v('pmDate'),amt=v('pmAmt'),incl=document.getElementById('pmIncl').checked;
+  if(date===amt){toast('Pick different columns for the date and the amount',true);return;}
+  const m={date,tax:v('pmTax'),tip:v('pmTip'),fee:v('pmFee'),staff:v('pmStaff'),status:M.status};
+  if(incl)m.amount=amt;else m.net=amt;
+  (POS.maps=POS.maps||{})[posMapSig(M.rows[M.hi])]=m;
+  try{const all=JSON.parse(localStorage.getItem('ohb_pos_maps')||'{}');all[posMapSig(M.rows[M.hi])]=m;localStorage.setItem('ohb_pos_maps',JSON.stringify(all));}catch(e){}
+  posSalesPreview(M.name,M.rows,{kind:'sales',hi:M.hi,mapped:true,C:Object.assign(posBlankC(),m)});
 }
 // A card reader's sales report, not a bank statement?
 function looksLikeSalesReport(rows){
@@ -6653,6 +6726,7 @@ function posSalesPreview(name,rows,d){
   const C=d.C;const byKey={};let skipped=0,refunds=0;
   rows.slice(d.hi+1).forEach(r=>{
     const date=dateVal(r[C.date]);if(!date){skipped++;return;}
+    if(C.status>=0&&/cancel|void|declin|fail|abandon|reject/i.test(String(r[C.status]||''))){skipped++;return;}
     let net=C.net>=0?posMoney(r[C.net]):C.gross>=0?posMoney(r[C.gross])+(C.disc>=0?posMoney(r[C.disc]):0):C.amount>=0?posMoney(r[C.amount]):0;
     const tax=C.tax>=0?posMoney(r[C.tax]):0,tip=C.tip>=0?posMoney(r[C.tip]):0,fee=C.fee>=0?Math.abs(posMoney(r[C.fee])):0;
     if(C.net<0&&C.gross<0&&C.amount>=0)net=net-tax-tip;   // a plain "amount" usually includes tax and tip
@@ -6663,7 +6737,7 @@ function posSalesPreview(name,rows,d){
     g.net+=net;g.tax+=tax;g.tip+=tip;g.fee+=fee;g.n++;
   });
   const days=Object.values(byKey).sort((a,b)=>a.date<b.date?-1:1);
-  if(!days.length){toast('No sales found in that file',true);return;}
+  if(!days.length){if(!d.mapped)return posMapper(name,rows);toast('No sales found with those columns. Try picking a different amount column.',true);return posMapper(name,rows,true);}
   POS.preview={name,kind:'sales',days,refunds,skipped,cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
   posPrepThenShow();
 }
@@ -10454,9 +10528,42 @@ async function chLoadList(){
   try{
     const [rooms,people]=await Promise.all([chRpc('list',{p_biz:chBiz()}),CH.people.length&&CH.loaded?Promise.resolve(CH.people):chRpc('people',{p_biz:chBiz()})]);
     CH.rooms=(Array.isArray(rooms)?rooms:[]).filter(r=>r&&r.id);CH.people=(Array.isArray(people)?people:[]).filter(p=>p&&p.user_id);
-    CH.loaded=true;CH.missing=false;
+    CH.loaded=true;CH.missing=false;chPopNew();
   }catch(e){if(typeof tableMissing==='function'&&(tableMissing(e)||/Could not find the function|PGRST202/i.test(e.message))){CH.missing=true;CH.loaded=true;}else throw e;}
   chBadge();
+}
+// ─── notifications: email (sent by the chat-notify function) and pop-ups on this device ───
+CH.emailPref=null;CH.seen=null;
+function chPopNew(){
+  const sig={};CH.rooms.forEach(r=>{if(r.last&&!r.last.mine&&+r.unread)sig[r.id]=r.last.at;});
+  if(CH.seen===null){CH.seen=sig;return;}
+  const fresh=CH.rooms.filter(r=>sig[r.id]&&sig[r.id]!==CH.seen[r.id]);CH.seen=sig;
+  if(!fresh.length||!document.hidden||!('Notification' in window)||Notification.permission!=='granted')return;
+  const r=fresh[0];
+  try{const n=new Notification(r.kind==='dm'?(r.last.name||chRoomLabel(r)):chRoomLabel(r)+(r.kind==='rep'?' (Highlander)':''),{body:(r.kind==='dm'?'':chFirst(r.last.name)+': ')+r.last.body,tag:'chat-'+r.id});
+    n.onclick=()=>{window.focus();const t=document.getElementById('chatTab')||document.querySelector('.tab[onclick*="\'chat\'"]');if(t)t.click();setTimeout(()=>chOpenRoom(r.id),400);n.close();};}catch(e){}
+}
+async function chLoadPref(){
+  if(chDemo()||CH.emailPref)return;
+  try{const r=await sb('rpc/chat_notify_get',{method:'POST',body:'{}'});CH.emailPref=(Array.isArray(r)?r[0]:r)||'all';if(typeof CH.emailPref==='object')CH.emailPref=CH.emailPref.chat_notify_get||'all';}
+  catch(e){CH.emailPref='none';}
+}
+function chNotifyHTML(){
+  if(chDemo()||!CH.emailPref||CH.emailPref==='none')return '';
+  const o=[['all','Every new message'],['direct','Only messages to me'],['off','Off']];
+  let h='<div class="ch-notify"><label class="ch-lbl" for="chEmailPref">✉️ Email me about</label><select id="chEmailPref" class="period-input" style="width:100%;" onchange="chSetPref(this.value)">'
+    +o.map(([k,l])=>'<option value="'+k+'"'+(CH.emailPref===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<div class="bk-sub" style="margin-top:4px;">Sent if you haven’t read it here within a few minutes.</div>';
+  if('Notification' in window&&Notification.permission==='default')h+='<button class="link-btn" style="margin-top:6px;" onclick="chAskPop()">🔔 Also pop up on this device while the Hub is open</button>';
+  return h+'</div>';
+}
+async function chSetPref(v){
+  try{await sb('rpc/chat_notify_set',{method:'POST',body:JSON.stringify({p_email:v})});CH.emailPref=v;toast(v==='off'?'No more message emails.':v==='direct'?'You’ll get emails for messages to you.':'You’ll get an email for new messages.');}
+  catch(e){toast('Didn’t save: '+e.message,true);}
+}
+async function chAskPop(){
+  try{const p=await Notification.requestPermission();toast(p==='granted'?'Pop-ups are on for this device.':'Pop-ups are blocked. You can allow them in your browser’s site settings.',p!=='granted');}catch(e){}
+  chDrawSide();
 }
 async function chatBadgeLoad(){
   try{await chLoadList();}catch(e){}
@@ -10469,6 +10576,7 @@ async function renderChat(){
   const el=document.getElementById('chatBody');if(!el)return;
   if(!CH.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading messages…</div></div>';
   try{await chLoadList();}catch(e){el.innerHTML='<div class="card"><div class="bk-empty">Messages didn’t load: '+esc(e.message)+'</div></div>';return;}
+  await chLoadPref();
   chDraw();chStartPolling();
 }
 function chStartPolling(){
@@ -10510,6 +10618,7 @@ function chDrawSide(){
   h+='<div class="ch-rows">'+open.map(row).join('')+'</div>';
   if(closed.length)h+='<div class="bk-foot"><button class="link-btn" onclick="CH.showClosed=!CH.showClosed;chDrawSide()">'+(CH.showClosed?'Hide':'Show')+' '+closed.length+' closed group'+(closed.length===1?'':'s')+'</button></div>'+(CH.showClosed?'<div class="ch-rows">'+closed.map(row).join('')+'</div>':'');
   if(CH.people.length<2)h+='<div class="bk-sub" style="margin-top:10px;">Only people with their own login show up here. '+(CH_CFG.biz?'Invite your team in <b>Settings → People &amp; logins</b>.':'Give your team a login and they’ll show up.')+'</div>';
+  h+=chNotifyHTML();
   el.innerHTML=h;
 }
 function chDrawMain(){
@@ -10718,6 +10827,8 @@ function chDemoSend(room,body){chDemoSeed();const me=chMe()||'me';(CHD.msgs[room
 .ch-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--cream-dark);padding-top:10px;}
 .ch-compose textarea{flex:1;resize:none;border:1.5px solid var(--rule,#ddd);border-radius:12px;padding:9px 12px;font:inherit;font-size:16px;min-height:42px;max-height:140px;}
 .ch-compose .btn-green{padding:10px 16px;}
+.ch-notify{margin-top:14px;padding-top:10px;border-top:1px solid var(--cream-dark);}
+.ch-notify .ch-lbl{margin-top:0;}
 .ch-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;font-weight:700;}
 .ch-pick{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
 .ch-check{display:flex;gap:8px;align-items:center;font-size:14px;padding:4px 0;cursor:pointer;}

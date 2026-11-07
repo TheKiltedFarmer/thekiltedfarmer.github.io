@@ -283,9 +283,12 @@ async function boot(){
   setWho();
   if(!S.rep||S.rep.status==='declined'){renderApply();return;}
   try{await hcLoad();}catch(e){}
-  if(S.rep.status==='pending'){renderPending();return;}
-  if(S.rep.status==='paused'){renderPaused();return;}
+  const fromLink=/[?&]chat=1/.test(location.search);
+  if(fromLink){try{const u=new URL(location.href);u.searchParams.delete('chat');history.replaceState(null,'',u.pathname+u.search);}catch(e){}}
+  if(S.rep.status==='pending'){renderPending();if(fromLink)hcFromScreen('pending');return;}
+  if(S.rep.status==='paused'){renderPaused();if(fromLink)hcFromScreen('paused');return;}
   await loadAll();
+  if(fromLink){const r=(HC.rooms||[]).filter(x=>+x.unread).sort((a,b)=>String(b.last&&b.last.at).localeCompare(String(a.last&&a.last.at)))[0];if(r)HC.pending=r.id;go('chat');return;}
   go(S.view||'home');
 }
 async function loadAll(){
@@ -1052,10 +1055,32 @@ function hcUnread(){return (HC.rooms||[]).reduce((a,r)=>a+(+r.unread||0),0);}
 async function hcLoad(){
   if(!S.rep||S.rep.status==='declined')return;
   try{const r=await rpc('kf_hl_chat_list');HC.rooms=(Array.isArray(r)?r:[]).filter(x=>x&&x.id);HC.missing=false;
-    if(HC.room){const n=HC.rooms.find(x=>x.id===HC.room.id);if(n){n.unread=HC.room.unread;HC.room=n;}}}
+    if(HC.room){const n=HC.rooms.find(x=>x.id===HC.room.id);if(n){n.unread=HC.room.unread;HC.room=n;}}
+    hcPopNew();}
   catch(e){if(/kf_hl_chat_list|schema cache|PGRST202|Could not find/i.test(e.message)){HC.missing=true;HC.rooms=[];}else throw e;}
   hcBadge();
 }
+function hcPopNew(){
+  const sig={};(HC.rooms||[]).forEach(r=>{if(r.last&&!r.last.mine&&+r.unread)sig[r.id]=r.last.at;});
+  if(HC.seen==null){HC.seen=sig;return;}
+  const fresh=(HC.rooms||[]).filter(r=>sig[r.id]&&sig[r.id]!==HC.seen[r.id]);HC.seen=sig;
+  if(!fresh.length||!document.hidden||!('Notification' in window)||Notification.permission!=='granted')return;
+  const r=fresh[0];
+  try{const n=new Notification(r.kind==='rep'?'The kitchen':'All Highlanders',{body:(r.kind==='rep'?'':hcFirst(r.last.name)+': ')+r.last.body,tag:'hl-'+r.id});
+    n.onclick=()=>{window.focus();HC.pending=r.id;go('chat');n.close();};}catch(e){}
+}
+async function hcLoadPref(){if(HC.pref)return;try{HC.pref=await rpc('chat_notify_get');if(Array.isArray(HC.pref))HC.pref=HC.pref[0];if(HC.pref&&typeof HC.pref==='object')HC.pref=HC.pref.chat_notify_get;HC.pref=HC.pref||'all';}catch(e){HC.pref='none';}}
+function hcPrefHTML(){
+  if(!HC.pref||HC.pref==='none')return '';
+  const o=[['all','Every new message'],['direct','Only messages from the kitchen'],['off','Off']];
+  let h='<div class="card"><label for="hcPref" style="font-weight:700;">✉️ Email me about</label><select id="hcPref" class="inp" style="margin-top:6px;" onchange="hcSetPref(this.value)">'
+    +o.map(([k,l])=>'<option value="'+k+'"'+(HC.pref===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<p class="muted" style="margin-top:6px;">We email '+esc((S.user&&S.user.email)||'you')+' if you haven’t read a message here within a few minutes.</p>';
+  if('Notification' in window&&Notification.permission==='default')h+='<div class="btns"><button class="btn soft" onclick="hcAskPop()">🔔 Also pop up on this device</button></div>';
+  return h+'</div>';
+}
+async function hcSetPref(v){try{await rpc('chat_notify_set',{p_email:v});HC.pref=v;toast(v==='off'?'No more message emails.':v==='direct'?'You’ll get emails when the kitchen writes.':'You’ll get an email for new messages.');}catch(e){toast('Didn’t save: '+e.message,true);}}
+async function hcAskPop(){try{const p=await Notification.requestPermission();toast(p==='granted'?'Pop-ups are on for this device.':'Pop-ups are blocked. You can allow them in your browser’s settings.',p!=='granted');}catch(e){}if(!HC.room)hcDrawList();}
 function hcBadge(){
   const n=hcUnread();
   const t=document.title.replace(/^\(\d+\+?\) /,'');document.title=(n?'('+(n>99?'99+':n)+') ':'')+t;
@@ -1082,6 +1107,7 @@ async function renderChat(){
   if(!HC.rooms)$('app').innerHTML='<div class="loading">Loading messages…</div>';
   try{await hcLoad();}catch(e){$('app').innerHTML='<div class="card"><h2>Messages didn’t load</h2><p class="muted">'+esc(e.message)+'</p><div class="btns"><button class="btn primary" onclick="renderChat()">Try again</button></div></div>';return;}
   if(S.view!=='chat'&&!HC.from)return;
+  await hcLoadPref();
   if(HC.room)return;                       // a conversation was opened while the list loaded
   const want=HC.pending;HC.pending=null;
   if(want&&HC.rooms.some(r=>r.id===want)){hcOpen(want);return;}
@@ -1101,6 +1127,7 @@ function hcDrawList(){
   }).join('')+'</div>';
   if((HC.rooms||[]).length===1&&S.rep.status!=='active')h+='<p class="muted" style="text-align:center;">Once you’re an active Highlander, you’ll also see the room for all Highlanders here.</p>';
   else h+='<p class="muted" style="text-align:center;">Messages to the kitchen go to Justin and Jessica. Only they see them.</p>';
+  h+=hcPrefHTML();
   $('app').innerHTML=h;
 }
 async function hcOpen(id){

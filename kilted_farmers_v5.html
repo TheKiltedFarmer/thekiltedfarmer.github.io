@@ -5245,6 +5245,10 @@ async function autoInit(){
   await step('reps',repsBadgeLoad);
   await step('training',trainingBadgeLoad);
   await step('messages',chatBadgeLoad);
+  await step('open from link',()=>{const want=(new URLSearchParams(location.search).get('tab')||'').toLowerCase();if(!want)return;
+    const t=want==='chat'?document.getElementById('chatTab'):document.querySelector('.tab[onclick*="\''+want+'\'"]');
+    if(t&&t.style.display!=='none')setTimeout(()=>t.click(),200);
+    try{const u=new URL(location.href);u.searchParams.delete('tab');history.replaceState(null,'',u.pathname+u.search+u.hash);}catch(e){}});
   if(dashInterval)clearInterval(dashInterval);
   dashInterval=setInterval(refreshDashboard,60000);
   loadOnboarding(true);
@@ -9197,9 +9201,42 @@ async function chLoadList(){
   try{
     const [rooms,people]=await Promise.all([chRpc('list',{p_biz:chBiz()}),CH.people.length&&CH.loaded?Promise.resolve(CH.people):chRpc('people',{p_biz:chBiz()})]);
     CH.rooms=(Array.isArray(rooms)?rooms:[]).filter(r=>r&&r.id);CH.people=(Array.isArray(people)?people:[]).filter(p=>p&&p.user_id);
-    CH.loaded=true;CH.missing=false;
+    CH.loaded=true;CH.missing=false;chPopNew();
   }catch(e){if(typeof tableMissing==='function'&&(tableMissing(e)||/Could not find the function|PGRST202/i.test(e.message))){CH.missing=true;CH.loaded=true;}else throw e;}
   chBadge();
+}
+// ─── notifications: email (sent by the chat-notify function) and pop-ups on this device ───
+CH.emailPref=null;CH.seen=null;
+function chPopNew(){
+  const sig={};CH.rooms.forEach(r=>{if(r.last&&!r.last.mine&&+r.unread)sig[r.id]=r.last.at;});
+  if(CH.seen===null){CH.seen=sig;return;}
+  const fresh=CH.rooms.filter(r=>sig[r.id]&&sig[r.id]!==CH.seen[r.id]);CH.seen=sig;
+  if(!fresh.length||!document.hidden||!('Notification' in window)||Notification.permission!=='granted')return;
+  const r=fresh[0];
+  try{const n=new Notification(r.kind==='dm'?(r.last.name||chRoomLabel(r)):chRoomLabel(r)+(r.kind==='rep'?' (Highlander)':''),{body:(r.kind==='dm'?'':chFirst(r.last.name)+': ')+r.last.body,tag:'chat-'+r.id});
+    n.onclick=()=>{window.focus();const t=document.getElementById('chatTab')||document.querySelector('.tab[onclick*="\'chat\'"]');if(t)t.click();setTimeout(()=>chOpenRoom(r.id),400);n.close();};}catch(e){}
+}
+async function chLoadPref(){
+  if(chDemo()||CH.emailPref)return;
+  try{const r=await sb('rpc/chat_notify_get',{method:'POST',body:'{}'});CH.emailPref=(Array.isArray(r)?r[0]:r)||'all';if(typeof CH.emailPref==='object')CH.emailPref=CH.emailPref.chat_notify_get||'all';}
+  catch(e){CH.emailPref='none';}
+}
+function chNotifyHTML(){
+  if(chDemo()||!CH.emailPref||CH.emailPref==='none')return '';
+  const o=[['all','Every new message'],['direct','Only messages to me'],['off','Off']];
+  let h='<div class="ch-notify"><label class="ch-lbl" for="chEmailPref">✉️ Email me about</label><select id="chEmailPref" class="period-input" style="width:100%;" onchange="chSetPref(this.value)">'
+    +o.map(([k,l])=>'<option value="'+k+'"'+(CH.emailPref===k?' selected':'')+'>'+l+'</option>').join('')+'</select>'
+    +'<div class="bk-sub" style="margin-top:4px;">Sent if you haven’t read it here within a few minutes.</div>';
+  if('Notification' in window&&Notification.permission==='default')h+='<button class="link-btn" style="margin-top:6px;" onclick="chAskPop()">🔔 Also pop up on this device while the Hub is open</button>';
+  return h+'</div>';
+}
+async function chSetPref(v){
+  try{await sb('rpc/chat_notify_set',{method:'POST',body:JSON.stringify({p_email:v})});CH.emailPref=v;toast(v==='off'?'No more message emails.':v==='direct'?'You’ll get emails for messages to you.':'You’ll get an email for new messages.');}
+  catch(e){toast('Didn’t save: '+e.message,true);}
+}
+async function chAskPop(){
+  try{const p=await Notification.requestPermission();toast(p==='granted'?'Pop-ups are on for this device.':'Pop-ups are blocked. You can allow them in your browser’s site settings.',p!=='granted');}catch(e){}
+  chDrawSide();
 }
 async function chatBadgeLoad(){
   try{await chLoadList();}catch(e){}
@@ -9212,6 +9249,7 @@ async function renderChat(){
   const el=document.getElementById('chatBody');if(!el)return;
   if(!CH.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading messages…</div></div>';
   try{await chLoadList();}catch(e){el.innerHTML='<div class="card"><div class="bk-empty">Messages didn’t load: '+esc(e.message)+'</div></div>';return;}
+  await chLoadPref();
   chDraw();chStartPolling();
 }
 function chStartPolling(){
@@ -9257,6 +9295,7 @@ function chDrawSide(){
   h+='<div class="ch-rows">'+open.map(row).join('')+'</div>';
   if(closed.length)h+='<div class="bk-foot"><button class="link-btn" onclick="CH.showClosed=!CH.showClosed;chDrawSide()">'+(CH.showClosed?'Hide':'Show')+' '+closed.length+' closed group'+(closed.length===1?'':'s')+'</button></div>'+(CH.showClosed?'<div class="ch-rows">'+closed.map(row).join('')+'</div>':'');
   if(CH.people.length<2)h+='<div class="bk-sub" style="margin-top:10px;">Only people with their own login show up here. '+(CH_CFG.biz?'Invite your team in <b>Settings → People &amp; logins</b>.':'Give your team a login and they’ll show up.')+'</div>';
+  h+=chNotifyHTML();
   el.innerHTML=h;
 }
 function chDrawMain(){
@@ -9499,6 +9538,8 @@ function chDemoSend(room,body){chDemoSeed();const me=chMe()||'me';(CHD.msgs[room
 .ch-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--cream-dark);padding-top:10px;}
 .ch-compose textarea{flex:1;resize:none;border:1.5px solid var(--rule,#ddd);border-radius:12px;padding:9px 12px;font:inherit;font-size:16px;min-height:42px;max-height:140px;}
 .ch-compose .btn-green{padding:10px 16px;}
+.ch-notify{margin-top:14px;padding-top:10px;border-top:1px solid var(--cream-dark);}
+.ch-notify .ch-lbl{margin-top:0;}
 .ch-lbl{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);margin:12px 0 4px;font-weight:700;}
 .ch-pick{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
 .ch-check{display:flex;gap:8px;align-items:center;font-size:14px;padding:4px 0;cursor:pointer;}
