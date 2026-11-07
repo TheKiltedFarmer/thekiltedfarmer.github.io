@@ -6971,7 +6971,8 @@ async function posNext(){
       POS.last=null;
       POS.preview=Object.assign(posMetaFor(r.provider==='square'?'square':'shopify '+r.account,[[]],0),
         r.provider==='square'?{src:'pos',platLabel:'Square',method:'Card reader',vendor:'Square',feeName:'Square processing fees'}:{src:'shopify',platLabel:'Shopify',method:'Shopify',vendor:'Shopify',feeName:'Shopify Payments fees'},
-        {name:(r.provider==='square'?'Square':'Shopify')+(r.account?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0});
+        {name:(r.provider==='square'?'Square':'Shopify')+(r.account?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0,
+         syncNote:r.check&&(r.check.cash||r.check.other)?'Of these sales, '+r.check.card+' were card'+(r.check.cash?', '+r.check.cash+' cash':'')+(r.check.other?', '+r.check.other+' other (invoices, gift cards, outside payments)':'')+'. Square only charges fees on card sales.':''});
       posPrepThenShow();
     }
   }catch(e){toast(e.message,true);posNext();}
@@ -7075,11 +7076,13 @@ async function posSyncNow(){
     (d.results||[]).forEach(r=>{
       const nm=r.provider==='square'?'Square':'Shopify';
       if(r.error){notes.push(nm+': '+r.error);return;}
-      const days=(r.days||[]).filter(g=>g.net||g.tax||g.tip||g.fee);
+      if(r.check&&r.check.needsReconnect)notes.push(nm+' needs one more permission to see fees and loan payments: tap Reconnect');
+      const days=(r.days||[]).filter(g=>g.net||g.tax||g.tip||g.fee||g.loan);
       if(!days.length){notes.push(nm+' is up to date');return;}
       items.push({sync:Object.assign({},r,{days}),label:nm+' sales'});
     });
     if(notes.length)toast(notes.join(' · '),notes.some(n=>!/up to date/.test(n)));
+    POS.lastSync=d.results;
     posStartQueue(items);
     posConnRender();
   }catch(e){toast(e.message,true);}
@@ -7184,9 +7187,11 @@ function posShowSales(){
     +(t('tax')?'Sales tax is kept out of your income and tracked for your sales tax return. ':'')
     +(t('tip')?'Tips are filed as Tips so they go to the tip pool, not the sales pool. ':'')
     +(t('fee')||t('ads')||t('ship')?(p.feeNote||'Card fees are filed as Bank & Card Fees. '):'')
+    +(t('loan')?fmt(t('loan'))+' was held back to repay your '+esc(p.vendor||'Square')+' Loan. It’s filed as a loan payment, which moves money but isn’t a business expense, so it doesn’t lower your profit. (The loan’s one-time fee is deductible; log it once as Bank & Card Fees.) ':'')
+    +(p.syncNote?esc(p.syncNote)+' ':'')
     +(p.payoutTotal!=null?'Sales and tax minus what was kept comes to '+fmt(p.payoutTotal)+', what '+esc(p.platLabel)+' paid you. ':'')
     +(p.refunds?p.refunds+' refund'+(p.refunds===1?'':'s')+' are subtracted. ':'')+'</div>'
-    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(g.who):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+(g.ads?' · ads '+fmt(g.ads):'')+(g.ship?' · labels '+fmt(g.ship):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
+    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(g.who):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+(g.ads?' · ads '+fmt(g.ads):'')+(g.ship?' · labels '+fmt(g.ship):'')+(g.loan?' · loan '+fmt(g.loan):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
     +(p.days.length>8?'<div class="bk-sub" style="text-align:center;padding:6px;">…and '+(p.days.length-8)+' more days</div>':'')+'</div>'
     +'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" id="posGo" onclick="posImportSales()">Import</button></div>';
   m.classList.add('open');
@@ -7202,6 +7207,7 @@ async function posImportSales(){
     if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null}});
     if(g.fee>=0.005)exps.push({key:tag+':fees',date:g.date,label,fee:r2(g.fee),name:p.feeName||'Card processing fees',cat:p.feeCat||'Bank & Card Fees'});
     if(g.ads>=0.005)exps.push({key:tag+':ads',date:g.date,label,fee:r2(g.ads),name:(p.vendor||'')+' ads',cat:'Advertising'});
+    if(g.loan>=0.005)exps.push({key:tag+':loan',date:g.date,label,fee:r2(g.loan),name:(p.vendor||'Square')+' Loan repayment (held back from sales)',cat:'Loan'});
     if(g.ship>=0.005)exps.push({key:tag+':ship',date:g.date,label,fee:r2(g.ship),name:'Shipping labels ('+(p.vendor||'')+')',cat:'Other Expense'});
   });
   try{
