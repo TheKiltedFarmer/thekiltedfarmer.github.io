@@ -3703,6 +3703,12 @@ async function onBankFile(input){
       toast('That’s a sales report from your card reader, not a bank statement. Opening it as sales instead.');
       posHandleRows(file.name,rows);return;
     }
+    bankHandleRows(file.name,rows);
+  }catch(e){toast('Couldn’t read that file: '+e.message,true);}
+}
+function bankHandleRows(name,rows){
+  const file={name};
+  try{
     const C=detectBankCols(rows);
     const lines=bankLinesFrom(rows,C);
     if(!lines.length){toast('Couldn’t find transactions in that file — it needs to be a CSV download from your bank',true);return;}
@@ -3781,8 +3787,8 @@ async function autoMatchBank(){
   }
   // payouts from a register, delivery app, shop or payment app whose sales came in by import are already in the books
   try{
-    const plats=[['pos',/square|sq \*|sq\*/i],['doordash',/doordash/i],['ubereats',/uber ?eats|uber technologies/i],['grubhub',/grubhub/i],['etsy',/etsy/i],['shopify',/shopify/i],
-      ['venmo',/venmo/i],['cashapp',/cash ?app|square cash/i],['paypal',/paypal/i],['goodfynd',/goodfynd/i],['toast',/toast/i],['clover',/clover/i],['sumup',/sumup/i]];
+    const plats=[['pos',/^(?!.*(square cash|sqc\*)).*(square|sq \*|sq\*)/i],['doordash',/doordash/i],['ubereats',/uber ?eats|uber technologies/i],['grubhub',/grubhub/i],['etsy',/etsy/i],['shopify',/shopify/i],
+      ['venmo',/venmo/i],['cashapp',/cash ?app|square cash|sqc\*/i],['paypal',/paypal/i],['goodfynd',/goodfynd/i],['toast',/toast/i],['clover',/clover/i],['sumup',/sumup/i],['stripe',/stripe/i],['zettle',/zettle|izettle/i]];
     const cand=lines.filter(l=>bankEffectiveStatus(l)==='open'&&+l.amount>0&&!patches.some(p=>p.l===l));
     const marks=[];
     for(const [src,re] of plats){
@@ -6289,6 +6295,7 @@ function posHandleRows(name,rows){
   if(posEtsy(name,rows))return;
   if(posPayApp(name,rows))return;
   if(posMarketplace(name,rows))return;
+  if(looksLikeBankStatement(rows)){posToBank(name,rows);return;}
   const vs=posVerticalSummary(name,rows);
   if(vs){
     const span=vs.start&&vs.end?Math.round((parseISO(vs.end)-parseISO(vs.start))/864e5)+1:0;
@@ -6396,7 +6403,7 @@ const POS_PLATS=[
   ['etsy','Etsy',/etsy/,'shop'],['shopify','Shopify',/shopify|lineitem name/,'shop'],['faire','Faire',/\bfaire\b/,'shop'],['woo','WooCommerce',/woocommerce/,'shop'],
   ['venmo','Venmo',/venmo/,'pay'],['cashapp','Cash App',/cash ?app|cashapp/,'pay'],['paypal','PayPal',/paypal/,'pay'],
   ['goodfynd','Goodfynd',/goodfynd/,'pos'],['toast','Toast',/\btoast\b/,'pos'],['clover','Clover',/clover/,'pos'],['sumup','SumUp',/sumup/,'pos'],
-  ['zettle','Zettle',/zettle|izettle/,'pos'],['lightspeed','Lightspeed',/lightspeed/,'pos'],
+  ['zettle','Zettle',/zettle|izettle/,'pos'],['stripe','Stripe',/stripe/,'shop'],['lightspeed','Lightspeed',/lightspeed/,'pos'],
   ['localline','Local Line',/local ?line/,'shop'],['barn2door','Barn2Door',/barn ?2 ?door/,'shop'],['grazecart','GrazeCart',/grazecart/,'shop'],['harvie','Harvie',/harvie/,'shop'],
   ['square','Square',/square/,'pos']
 ];
@@ -6626,13 +6633,27 @@ async function posNext(){
     }else if(it.sync){
       const r=it.sync;
       POS.last=null;
-      POS.preview=Object.assign(posMetaFor(r.provider==='square'?'square':'shopify '+r.account,[[]],0),
-        r.provider==='square'?{src:'pos',platLabel:'Square',method:'Card reader',vendor:'Square',feeName:'Square processing fees'}:{src:'shopify',platLabel:'Shopify',method:'Shopify',vendor:'Shopify',feeName:'Shopify Payments fees'},
-        {name:(r.provider==='square'?'Square':'Shopify')+(r.account?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0,
-         syncNote:r.check&&(r.check.cash||r.check.other)?'Of these sales, '+r.check.card+' were card'+(r.check.cash?', '+r.check.cash+' cash':'')+(r.check.other?', '+r.check.other+' other (invoices, gift cards, outside payments)':'')+'. Square only charges fees on card sales.':''});
+      POS.preview=Object.assign(posMetaFor(r.provider,[[]],0),posSyncMeta(r),
+        {name:posProvName(r.provider)+(r.account&&r.account!==posProvName(r.provider)?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0,syncNote:posSyncNote(r)});
       posPrepThenShow();
     }
   }catch(e){toast(e.message,true);posNext();}
+}
+const POS_PROV={square:'Square',shopify:'Shopify',stripe:'Stripe',clover:'Clover',sumup:'SumUp',zettle:'Zettle'};
+function posProvName(p){return POS_PROV[p]||p;}
+// the tag each service's sales carry (Square keeps the one its files always had)
+function posProvSrc(p){return p==='square'?'pos':p;}
+function posSyncMeta(r){
+  const nm=posProvName(r.provider),online=r.provider==='shopify'||r.provider==='stripe';
+  return{src:posProvSrc(r.provider),platLabel:nm,method:online?nm:'Card reader',vendor:nm,feeName:nm+(r.provider==='shopify'?' Payments':'')+' processing fees',
+    cat:online?(INCOME_CATS.find(c=>/online/i.test(c))||INCOME_CATS[0]):(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+}
+function posSyncNote(r){
+  const c=r.check||{},nm=posProvName(r.provider);const bits=[];
+  if(c.card!=null&&(c.cash||c.other))bits.push('Of these sales, '+c.card+' were card'+(c.cash?', '+c.cash+' cash':'')+(c.other?', '+c.other+' other (invoices, gift cards, outside payments)':'')+'. '+nm+' only charges fees on card sales.');
+  if(c.noFees)bits.push(nm+' doesn’t share its card fees with other apps. They come out of your deposits, so log them from your monthly '+nm+' statement under Bank & Card Fees.');
+  if(c.taxIncluded)bits.push(nm+' doesn’t separate out sales tax, so any tax you charged is included in these sales.');
+  return bits.join(' ');
 }
 // the queue moves on whenever the import window closes (imported, cancelled or closed)
 (function(){
@@ -6683,20 +6704,22 @@ function posConnHTML(){
   if(!posConnCan())return '';
   if(POSC.list===null)return '';   // not set up yet: nothing to show
   const has=p=>POSC.list.find(c=>c.provider===p);
-  const name={square:'Square',shopify:'Shopify'};
+  const name=POS_PROV;
+  const avail=(POSC.avail||['square','shopify']).filter(p=>!has(p));
+  if(!POSC.list.length&&!avail.length)return '';
   let h='<div class="pos-conn"><div class="pos-conn-h">Connected services</div>';
-  if(!POSC.list.length)h+='<div class="bk-sub">Connect Square or Shopify once, and <b>Sync now</b> pulls your sales in without downloading anything.</div>';
+  if(!POSC.list.length)h+='<div class="bk-sub">Connect your register or online shop once, and <b>Sync now</b> pulls your sales in without downloading anything.</div>';
   POSC.list.forEach(c=>{h+='<div class="pos-conn-row"><span>'+(c.status==='reconnect'?'⚠️':'✓')+' <b>'+esc(name[c.provider]||c.provider)+'</b>'+(c.account_name&&c.account_name!==name[c.provider]?' · '+esc(c.account_name):'')
     +'<span class="bk-sub"> · '+(c.status==='reconnect'?'needs connecting again':c.last_sync_at?'synced '+esc(prettyDate(isoLocal(c.last_sync_at))):'not synced yet')+'</span></span>'
     +'<button class="link-btn" onclick="'+(c.status==='reconnect'?'posConnect(\''+c.provider+'\')':'posDisconnect(\''+c.provider+'\')')+'">'+(c.status==='reconnect'?'Reconnect':'Disconnect')+'</button></div>';});
   h+='<div class="bk-actions" style="margin-top:8px;">'+(POSC.list.length?'<button class="btn-green" id="posSyncBtn" onclick="posSyncNow()">⟳ Sync now</button>':'')
-    +(has('square')?'':'<button class="btn-secondary" onclick="posConnect(\'square\')">+ Connect Square</button>')
-    +(has('shopify')?'':'<button class="btn-secondary" onclick="posConnect(\'shopify\')">+ Connect Shopify</button>')+'</div></div>';
+    +avail.map(p=>'<button class="btn-secondary" onclick="posConnect(\''+p+'\')">+ Connect '+esc(name[p])+'</button>').join('')+'</div></div>';
   return h;
 }
 async function posConnRender(){
   const card=document.getElementById('posImportCard');if(!card)return;
   await posConnLoad();
+  if(POSC.list!==null&&!POSC.avail&&posConnCan()){try{const d=await posFn({action:'available'});POSC.avail=d.providers||null;}catch(e){POSC.avail=null;}}
   let box=document.getElementById('posConn');
   if(!box){box=document.createElement('div');box.id='posConn';const c=card.querySelector('.pos-card');(c||card).appendChild(box);}
   box.innerHTML=posConnHTML();
@@ -6708,7 +6731,7 @@ async function posConnect(provider){
   catch(e){toast(e.message,true);}
 }
 async function posDisconnect(provider){
-  if(!confirm('Disconnect '+(provider==='square'?'Square':'Shopify')+'? Sales already brought in stay. You can connect it again any time.'))return;
+  if(!confirm('Disconnect '+posProvName(provider)+'? Sales already brought in stay. You can connect it again any time.'))return;
   try{await posFn({action:'disconnect',provider});toast('Disconnected');posConnRender();}catch(e){toast(e.message,true);}
 }
 // from the day after the last sale already brought in from each service, through yesterday
@@ -6716,7 +6739,7 @@ async function posSyncRanges(){
   const today=isoLocal(new Date()),y=today.slice(0,4);
   const ranges={};
   for(const c of POSC.list||[]){
-    const src=c.provider==='square'?'pos':'shopify';
+    const src=posProvSrc(c.provider);
     let last='';
     try{const r=await sb('kf_revenue_entries?select=txn_date&import_key=like.'+encodeURIComponent(src+':*')+'&order=txn_date.desc&limit=1');last=r&&r[0]&&r[0].txn_date||'';}catch(e){}
     let from=last?isoLocal(new Date(parseISO(last).getTime()+864e5)):y+'-01-01';
@@ -6733,7 +6756,7 @@ async function posSyncNow(){
     const d=await posFn({action:'sync',ranges,offset:new Date().getTimezoneOffset()});
     const items=[];const notes=[];
     (d.results||[]).forEach(r=>{
-      const nm=r.provider==='square'?'Square':'Shopify';
+      const nm=posProvName(r.provider);
       if(r.error){notes.push(nm+': '+r.error);return;}
       if(r.check&&r.check.needsReconnect)notes.push(nm+' needs one more permission to see fees and loan payments: tap Reconnect');
       const days=(r.days||[]).filter(g=>g.net||g.tax||g.tip||g.fee||g.loan);
@@ -6752,7 +6775,7 @@ async function posSyncNow(){
   const q=new URLSearchParams(location.search);const ok=q.get('connected'),bad=q.get('connect_error');
   if(!ok&&!bad)return;
   try{const u=new URL(location.href);u.searchParams.delete('connected');u.searchParams.delete('connect_error');history.replaceState(null,'',u.pathname+u.search+u.hash);}catch(e){}
-  setTimeout(()=>{toast(ok?(ok==='square'?'Square':'Shopify')+' is connected. Tap Sync now on Revenue & Expenses to bring your sales in.':'Didn’t connect: '+bad,!ok);},2500);
+  setTimeout(()=>{toast(ok?posProvName(ok)+' is connected. Tap Sync now on Revenue & Expenses to bring your sales in.':'Didn’t connect: '+bad,!ok);},2500);
 })();
 // the import card: several files at once, drag and drop, and the connected services
 (function(){
@@ -6769,6 +6792,29 @@ async function posSyncNow(){
 })();
 
 // A card reader's sales report, not a bank statement?
+// a bank or credit union download: a running balance, check numbers, posting dates, or debit/credit columns
+function looksLikeBankStatement(rows){
+  for(let i=0;i<Math.min(rows.length,15);i++){
+    const h=rows[i].map(posH);
+    if(!h.some(c=>/date/.test(c)))continue;
+    const hasAmt=h.some(c=>/amount|debit|credit|withdraw|deposit/.test(c));if(!hasAmt)continue;
+    if(h.some(c=>/^(running |ending |available |ledger )?balance$/.test(c)))return true;
+    if(h.some(c=>/^check ?(number|no|num|#)?$/.test(c)))return true;
+    if(h.some(c=>/^(posting|posted|post) date$/.test(c)))return true;
+    if(h.some(c=>/^(debit|withdrawals?|money out)$/.test(c))&&h.some(c=>/^(credit|deposits?|money in)$/.test(c)))return true;
+  }
+  return false;
+}
+function posToBank(name,rows){
+  toast('That’s a bank statement, not a sales report. Opening it as bank transactions for your Books instead.');
+  if(POS.qState==='starting'){
+    POS.qState='bank';clearTimeout(POS.qTimer);
+    const m=document.getElementById('bankModal');
+    if(m&&!m._qWatch){m._qWatch=true;new MutationObserver(()=>{if(!m.classList.contains('open')&&POS.qState==='bank'){POS.qState='';setTimeout(posNext,250);}}).observe(m,{attributes:true,attributeFilter:['class']});}
+  }
+  bankHandleRows(name,rows);
+  setTimeout(()=>{const m=document.getElementById('bankModal');if(POS.qState==='bank'&&!(m&&m.classList.contains('open'))){POS.qState='';posNext();}},300);
+}
 function looksLikeSalesReport(rows){
   for(let i=0;i<Math.min(rows.length,15);i++){
     const h=rows[i].map(posH);
