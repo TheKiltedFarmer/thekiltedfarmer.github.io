@@ -6549,7 +6549,7 @@ function posCardHTML(){
   return '<div class="card pos-card"><div class="card-title"><div class="card-title-dot"></div>Import sales from your register, apps and shops</div>'
     +'<div class="card-sub">Square, Clover, Toast, Goodfynd or another register; DoorDash, Uber Eats or Grubhub; Etsy or Shopify; Venmo, Cash App or PayPal: download its sales, orders or payout report (CSV or Excel) and bring it in. If the Hub doesn’t recognize the layout, it asks you which column is the date and which is the amount, then remembers for next time. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
     +' Square: <b>Reports → Transactions → pick your dates → Export → Transactions CSV</b> (a whole year at once is fine). For stock, also export <b>Item sales</b>.</div>'
-    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import a sales file</button></div>'
+    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import sales files</button><span class="bk-sub" style="align-self:center;">Pick several at once, or drag them here.</span></div>'
     +'<input type="file" id="posFile" accept=".csv,text/csv,.txt,.xlsx,.xls" style="display:none;" onchange="onPosFile(this)"></div>';
 }
 function posMount(){
@@ -6923,6 +6923,188 @@ async function posSendFile(btn){
 .pos-send{margin-top:12px;padding:10px 12px;background:var(--cream);border-radius:10px;font-size:13.5px;}
 .pos-send .bk-sub{margin-top:4px;}
 `;document.head.appendChild(st);})();
+
+
+// ═══════════════════════════════════════════════════════
+// SEVERAL FILES AT ONCE, AND "SYNC NOW" FOR CONNECTED SERVICES
+// Pick or drag in every file at once: the Hub works out what each one is and takes
+// them one after another. Square and Shopify can be connected instead, so one tap on
+// Sync now pulls everything since the last import. Everything goes through the same
+// preview, so nothing counts twice.
+// ═══════════════════════════════════════════════════════
+POS.queue=[];POS.qTotal=0;POS.qState='';POS.qTimer=null;
+async function posReadFile(file){
+  if(/\.xlsx?$/i.test(file.name)){
+    if(!window.XLSX)await loadScriptOnce(XLSX_URL);
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    return wb.SheetNames.map(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:''}).map(r=>r.map(c=>String(c==null?'':c))).filter(r=>r.some(x=>x.trim()!=='')))
+      .sort((a,b)=>b.length-a.length)[0]||[];
+  }
+  return parseCSV(await file.text());
+}
+function posStartQueue(items){
+  items=items.filter(Boolean);if(!items.length)return;
+  POS.queue=items.slice();POS.qTotal=items.length;posNext();
+}
+function posQLabel(){
+  const el=document.getElementById('posQ');if(!el)return;
+  const at=POS.qTotal-POS.queue.length;
+  el.textContent=POS.qTotal>1?'File '+at+' of '+POS.qTotal+(POS.qCur?': '+POS.qCur:''):'';
+  el.style.display=POS.qTotal>1?'':'none';
+}
+async function posNext(){
+  clearTimeout(POS.qTimer);
+  const it=POS.queue.shift();
+  if(!it){if(POS.qTotal>1)toast('Done with all '+POS.qTotal+'.');POS.qTotal=0;POS.qState='';POS.qCur='';posQLabel();return;}
+  POS.qState='starting';POS.qCur=it.label||it.name||'';
+  posModal();posQLabel();
+  // if this one never opens a preview (an empty file, say), move on by itself
+  POS.qTimer=setTimeout(()=>{if(POS.qState==='starting'&&!document.getElementById('posModal').classList.contains('open'))posNext();},6000);
+  try{
+    if(it.file){
+      let rows;
+      try{rows=await posReadFile(it.file);}catch(e){toast('Couldn’t read '+it.file.name+'. If it’s from Excel, try saving it as a CSV.',true);return posNext();}
+      if(!rows.length){toast(it.file.name+' looks empty',true);return posNext();}
+      posHandleRows(it.file.name,rows);
+    }else if(it.sync){
+      const r=it.sync;
+      POS.last=null;
+      POS.preview=Object.assign(posMetaFor(r.provider==='square'?'square':'shopify '+r.account,[[]],0),
+        r.provider==='square'?{src:'pos',platLabel:'Square',method:'Card reader',vendor:'Square',feeName:'Square processing fees'}:{src:'shopify',platLabel:'Shopify',method:'Shopify',vendor:'Shopify',feeName:'Shopify Payments fees'},
+        {name:(r.provider==='square'?'Square':'Shopify')+(r.account?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0});
+      posPrepThenShow();
+    }
+  }catch(e){toast(e.message,true);posNext();}
+}
+// the queue moves on whenever the import window closes (imported, cancelled or closed)
+(function(){
+  const watch=()=>{const m=document.getElementById('posModal');if(!m||m._qWatch)return;m._qWatch=true;
+    new MutationObserver(()=>{const open=m.classList.contains('open');
+      if(open&&POS.qState==='starting'){POS.qState='open';posQLabel();}
+      else if(!open&&POS.qState==='open'){POS.qState='';setTimeout(posNext,250);}
+    }).observe(m,{attributes:true,attributeFilter:['class']});};
+  const _pm=posModal;posModal=function(){const m=_pm.apply(this,arguments);
+    if(!document.getElementById('posQ')){const t=document.getElementById('posTitle');if(t){const q=document.createElement('div');q.id='posQ';q.className='pos-q';q.style.display='none';t.insertAdjacentElement('afterend',q);}}
+    watch();return m;};
+})();
+// one or many files from the picker
+onPosFile=async function(input){
+  const files=[...(input.files||[])];input.value='';
+  if(!files.length)return;
+  posStartQueue(files.map(f=>({file:f,name:f.name})));
+};
+// drag files onto the import card
+function posWireDrop(){
+  const card=document.getElementById('posImportCard');if(!card||card._drop)return;card._drop=true;
+  card.addEventListener('dragover',e=>{e.preventDefault();card.classList.add('pos-drag');});
+  card.addEventListener('dragleave',()=>card.classList.remove('pos-drag'));
+  card.addEventListener('drop',e=>{e.preventDefault();card.classList.remove('pos-drag');
+    const files=[...(e.dataTransfer&&e.dataTransfer.files||[])].filter(f=>/\.(csv|txt|xlsx?|tsv)$/i.test(f.name));
+    if(!files.length){toast('Drop CSV or Excel files here',true);return;}
+    posStartQueue(files.map(f=>({file:f,name:f.name})));});
+}
+
+// ─── connected services ───
+const POSC={list:null,busy:false};
+function posConnCan(){try{return !(typeof isDemo==='function'&&isDemo())&&isStewardUser();}catch(e){return false;}}
+async function posFn(body){
+  const r=await fetch(SUPABASE_URL+'/functions/v1/pos-connect',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken},body:JSON.stringify(Object.assign({biz:BIZ.id},body))});
+  let d=null;try{d=await r.json();}catch(e){}
+  if(r.status===404)throw new Error('Connecting services needs a one-time setup. Please let The People’s Voices know.');
+  if(!d||d.ok===false)throw new Error((d&&d.error)||'That didn’t work ('+r.status+')');
+  return d;
+}
+async function posConnLoad(){
+  if(!posConnCan()||!BIZ.id){POSC.list=[];return;}
+  try{const r=await sb('rpc/ohb_my_connections',{method:'POST',body:JSON.stringify({p_biz:BIZ.id})});POSC.list=Array.isArray(r)?r:(r&&r.ohb_my_connections)||[];}
+  catch(e){POSC.list=null;}
+}
+function posConnHTML(){
+  if(!posConnCan())return '';
+  if(POSC.list===null)return '';   // not set up yet: nothing to show
+  const has=p=>POSC.list.find(c=>c.provider===p);
+  const name={square:'Square',shopify:'Shopify'};
+  let h='<div class="pos-conn"><div class="pos-conn-h">Connected services</div>';
+  if(!POSC.list.length)h+='<div class="bk-sub">Connect Square or Shopify once, and <b>Sync now</b> pulls your sales in without downloading anything.</div>';
+  POSC.list.forEach(c=>{h+='<div class="pos-conn-row"><span>'+(c.status==='reconnect'?'⚠️':'✓')+' <b>'+esc(name[c.provider]||c.provider)+'</b>'+(c.account_name&&c.account_name!==name[c.provider]?' · '+esc(c.account_name):'')
+    +'<span class="bk-sub"> · '+(c.status==='reconnect'?'needs connecting again':c.last_sync_at?'synced '+esc(prettyDate(isoLocal(c.last_sync_at))):'not synced yet')+'</span></span>'
+    +'<button class="link-btn" onclick="'+(c.status==='reconnect'?'posConnect(\''+c.provider+'\')':'posDisconnect(\''+c.provider+'\')')+'">'+(c.status==='reconnect'?'Reconnect':'Disconnect')+'</button></div>';});
+  h+='<div class="bk-actions" style="margin-top:8px;">'+(POSC.list.length?'<button class="btn-green" id="posSyncBtn" onclick="posSyncNow()">⟳ Sync now</button>':'')
+    +(has('square')?'':'<button class="btn-secondary" onclick="posConnect(\'square\')">+ Connect Square</button>')
+    +(has('shopify')?'':'<button class="btn-secondary" onclick="posConnect(\'shopify\')">+ Connect Shopify</button>')+'</div></div>';
+  return h;
+}
+async function posConnRender(){
+  const card=document.getElementById('posImportCard');if(!card)return;
+  await posConnLoad();
+  let box=document.getElementById('posConn');
+  if(!box){box=document.createElement('div');box.id='posConn';const c=card.querySelector('.pos-card');(c||card).appendChild(box);}
+  box.innerHTML=posConnHTML();
+}
+async function posConnect(provider){
+  let shop='';
+  if(provider==='shopify'){shop=prompt('Your Shopify store address (the part before .myshopify.com, or the whole thing):','');if(!shop)return;}
+  try{const d=await posFn({action:'start',provider,shop});location.href=d.url;}
+  catch(e){toast(e.message,true);}
+}
+async function posDisconnect(provider){
+  if(!confirm('Disconnect '+(provider==='square'?'Square':'Shopify')+'? Sales already brought in stay. You can connect it again any time.'))return;
+  try{await posFn({action:'disconnect',provider});toast('Disconnected');posConnRender();}catch(e){toast(e.message,true);}
+}
+// from the day after the last sale already brought in from each service, through yesterday
+async function posSyncRanges(){
+  const today=isoLocal(new Date()),y=today.slice(0,4);
+  const ranges={};
+  for(const c of POSC.list||[]){
+    const src=c.provider==='square'?'pos':'shopify';
+    let last='';
+    try{const r=await sb('ohb_revenue_entries?select=txn_date&import_key=like.'+encodeURIComponent(src+':*')+'&order=txn_date.desc&limit=1');last=r&&r[0]&&r[0].txn_date||'';}catch(e){}
+    let from=last?isoLocal(new Date(parseISO(last).getTime()+864e5)):y+'-01-01';
+    if(c.provider==='shopify'&&!last){const d=new Date();d.setDate(d.getDate()-59);from=isoLocal(d)>from?isoLocal(d):from;}
+    ranges[c.provider]={from,to:today};
+  }
+  return ranges;
+}
+async function posSyncNow(){
+  if(POSC.busy)return;POSC.busy=true;
+  const btn=document.getElementById('posSyncBtn');if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+  try{
+    const ranges=await posSyncRanges();
+    const d=await posFn({action:'sync',ranges,offset:new Date().getTimezoneOffset()});
+    const items=[];const notes=[];
+    (d.results||[]).forEach(r=>{
+      const nm=r.provider==='square'?'Square':'Shopify';
+      if(r.error){notes.push(nm+': '+r.error);return;}
+      const days=(r.days||[]).filter(g=>g.net||g.tax||g.tip||g.fee);
+      if(!days.length){notes.push(nm+' is up to date');return;}
+      items.push({sync:Object.assign({},r,{days}),label:nm+' sales'});
+    });
+    if(notes.length)toast(notes.join(' · '),notes.some(n=>!/up to date/.test(n)));
+    posStartQueue(items);
+    posConnRender();
+  }catch(e){toast(e.message,true);}
+  POSC.busy=false;if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent='⟳ Sync now';}
+}
+// coming back from Square or Shopify after connecting
+(function(){
+  const q=new URLSearchParams(location.search);const ok=q.get('connected'),bad=q.get('connect_error');
+  if(!ok&&!bad)return;
+  try{const u=new URL(location.href);u.searchParams.delete('connected');u.searchParams.delete('connect_error');history.replaceState(null,'',u.pathname+u.search+u.hash);}catch(e){}
+  setTimeout(()=>{toast(ok?(ok==='square'?'Square':'Shopify')+' is connected. Tap Sync now on Revenue & Expenses to bring your sales in.':'Didn’t connect: '+bad,!ok);},2500);
+})();
+// the import card: several files at once, drag and drop, and the connected services
+(function(){
+  const _mount=posMount;posMount=function(){const r=_mount.apply(this,arguments);
+    const inp=document.getElementById('posFile');if(inp)inp.multiple=true;
+    posWireDrop();posConnRender();return r;};
+  const st=document.createElement('style');st.textContent=`
+.pos-q{font-size:12px;font-weight:700;letter-spacing:.4px;color:var(--mid);margin:-4px 0 8px;}
+.pos-drag{outline:3px dashed var(--green);outline-offset:4px;border-radius:14px;}
+.pos-conn{margin-top:14px;padding-top:12px;border-top:1px solid var(--cream-dark);}
+.pos-conn-h{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:700;margin-bottom:6px;}
+.pos-conn-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0;font-size:14px;}
+`;document.head.appendChild(st);
+})();
 
 // A card reader's sales report, not a bank statement?
 function looksLikeSalesReport(rows){
