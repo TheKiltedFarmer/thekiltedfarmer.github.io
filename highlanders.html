@@ -282,6 +282,7 @@ async function boot(){
   }catch(e){$('app').innerHTML='<div class="card"><h2>Couldn’t load</h2><p class="muted">'+esc(e.message)+'</p><div class="btns"><button class="btn primary" onclick="boot()">Try again</button></div></div>';return;}
   setWho();
   if(!S.rep||S.rep.status==='declined'){renderApply();return;}
+  try{await hcLoad();}catch(e){}
   if(S.rep.status==='pending'){renderPending();return;}
   if(S.rep.status==='paused'){renderPaused();return;}
   await loadAll();
@@ -385,12 +386,13 @@ function renderPending(fresh){
   $('nav').style.display='none';
   $('app').innerHTML='<div class="card center"><div class="hero-ico">🌾</div><h2>'+(fresh?'Application sent':'We’re looking at your application')+'</h2>'
     +'<p class="muted">Thanks, '+esc((S.rep.name||'').split(' ')[0])+'. Once you’re approved, this page turns into your Highlander hub: book events, pick up pasta, and get your own order link. Check back here, or we’ll reach out at '+esc(S.rep.phone||S.rep.email||'the contact you gave')+'.</p>'
+    +(HC.missing?'':'<div class="btns" style="justify-content:center;"><button class="btn primary" onclick="hcFromScreen(\'pending\')">💬 Message the kitchen'+(hcUnread()?' ('+hcUnread()+' new)':'')+'</button></div>')
     +'<div class="btns" style="justify-content:center;"><button class="btn soft" onclick="boot()">Check again</button><button class="btn ghost" onclick="renderApply()">Edit my details</button></div>'
     +'<div class="btns" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
 }
 function renderPaused(){
   $('nav').style.display='none';
-  $('app').innerHTML='<div class="card center"><div class="hero-ico">⏸️</div><h2>Your Highlander account is paused</h2><p class="muted">'+(S.rep.team_note?esc(S.rep.team_note):'Reach out to the kitchen to pick things back up.')+'</p><div class="btns" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
+  $('app').innerHTML='<div class="card center"><div class="hero-ico">⏸️</div><h2>Your Highlander account is paused</h2><p class="muted">'+(S.rep.team_note?esc(S.rep.team_note):'Reach out to the kitchen to pick things back up.')+'</p>'+(HC.missing?'':'<div class="btns" style="justify-content:center;"><button class="btn primary" onclick="hcFromScreen(\'paused\')">💬 Message the kitchen'+(hcUnread()?' ('+hcUnread()+' new)':'')+'</button></div>')+'<div class="btns" style="justify-content:center;"><button class="link" onclick="signOut()">Sign out</button></div></div>';
 }
 
 // ─── commission math (same rule the database uses) ───
@@ -418,19 +420,20 @@ const NAV=[
   ['events','Events','<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'],
   ['find','Find','<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'],
   ['orders','Orders','<path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 016 0"/>'],
+  ['chat','Chat','<path d="M21 12a8 8 0 01-11.6 7.1L4 20l1.1-4.6A8 8 0 1121 12z"/>'],
   ['pay','Pay','<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>']
 ];
 function drawNav(){
   const n=$('nav');n.style.display='flex';
   const newOrders=S.preorders.filter(o=>o.status==='new').length;
-  n.innerHTML='<div class="nav-in">'+NAV.map(([k,l,ico])=>'<button class="'+(S.view===k?'on':'')+'" onclick="go(\''+k+'\')"><svg viewBox="0 0 24 24">'+ico+'</svg>'+l+(k==='orders'&&newOrders?'<span class="dot">'+newOrders+'</span>':'')+'</button>').join('')+'</div>';
+  n.innerHTML='<div class="nav-in">'+NAV.map(([k,l,ico])=>'<button class="'+(S.view===k?'on':'')+'" onclick="go(\''+k+'\')"><svg viewBox="0 0 24 24">'+ico+'</svg>'+l+(k==='orders'&&newOrders?'<span class="dot">'+newOrders+'</span>':'')+(k==='chat'&&hcUnread()?'<span class="dot">'+(hcUnread()>99?'99+':hcUnread())+'</span>':'')+'</button>').join('')+'</div>';
 }
 function go(v){
-  S.view=v;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;if(v!=='listing')S.ldraft=null;
-  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back',find:'Find events',listing:S.ldraft&&S.ldraft.id?'Fix an event':'Add an event'}[v]||'Pasta Highlanders';
+  S.view=v;hcStop();HC.room=null;HC.from=null;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;if(v!=='listing')S.ldraft=null;
+  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back',find:'Find events',chat:'Messages',listing:S.ldraft&&S.ldraft.id?'Fix an event':'Add an event'}[v]||'Pasta Highlanders';
   $('hSub').textContent=v==='home'?'Kilted Farmers Pasta Highlander':'The Kilted Farmers';
   drawNav();
-  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount,find:renderFind,listing:renderListingForm}[v]||renderHome)();
+  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount,find:renderFind,chat:renderChat,listing:renderListingForm}[v]||renderHome)();
   window.scrollTo(0,0);
 }
 async function reload(v){try{await loadAll();}catch(e){toast(e.message,true);}go(v||S.view);}
@@ -542,7 +545,7 @@ function calcDraw(){
 function renderHome(){
   const k=ym(today()),m=monthSummary(k),r=cfgRates(),c=S.cfg;
   const best=m.ev.reduce((a,e)=>Math.max(a,+e.sales||0),0);
-  let h=w9BannerHTML()+'<div class="card"><h2>'+monthName(k)+'</h2>'
+  let h=hcHomeCard()+w9BannerHTML()+'<div class="card"><h2>'+monthName(k)+'</h2>'
     +'<div class="stats"><div class="stat"><div class="l">You’ve sold</div><div class="v">'+fmt0(m.sales)+'</div><div class="s">settled this month</div></div>'
     +'<div class="stat"><div class="l">You’ve earned</div><div class="v">'+fmt0(m.commission)+'</div><div class="s">'+(m.sales?Math.round(m.commission/m.sales*1000)/10+'% overall':'commission')+'</div></div></div>'
     +(best?'<div class="meter'+(best>=r.th?' done':'')+'"><i style="width:'+Math.min(100,Math.round(best/r.th*100))+'%"></i></div><div class="meter-cap"><span>Best event this month: '+fmt0(best)+'</span><span>'+fmt0(r.th)+' → '+c.top_rate+'%</span></div>':'')
@@ -1040,6 +1043,172 @@ async function placeOrder(){
     window.scrollTo(0,0);
   }catch(e){msg.textContent=e.message;btn.disabled=false;btn.textContent='Reserve my pasta';}
 }
+
+// ─── messages: your thread with the kitchen, and the All Highlanders room ───
+// New messages show up by checking every few seconds while a conversation is open,
+// and every minute otherwise (for the badge on Chat).
+const HC={rooms:null,missing:false,room:null,msgs:[],sig:'',busy:false,draft:{},act:null,roomTimer:null,from:null};
+function hcUnread(){return (HC.rooms||[]).reduce((a,r)=>a+(+r.unread||0),0);}
+async function hcLoad(){
+  if(!S.rep||S.rep.status==='declined')return;
+  try{const r=await rpc('kf_hl_chat_list');HC.rooms=(Array.isArray(r)?r:[]).filter(x=>x&&x.id);HC.missing=false;
+    if(HC.room){const n=HC.rooms.find(x=>x.id===HC.room.id);if(n){n.unread=HC.room.unread;HC.room=n;}}}
+  catch(e){if(/kf_hl_chat_list|schema cache|PGRST202|Could not find/i.test(e.message)){HC.missing=true;HC.rooms=[];}else throw e;}
+  hcBadge();
+}
+function hcBadge(){
+  const n=hcUnread();
+  const t=document.title.replace(/^\(\d+\+?\) /,'');document.title=(n?'('+(n>99?'99+':n)+') ':'')+t;
+  if(S.view!=='chat'&&$('nav').style.display!=='none')drawNav();
+}
+setInterval(()=>{if(document.hidden||!S.rep||S.view==='chat')return;const before=hcUnread();hcLoad().then(()=>{if(hcUnread()!==before&&S.view==='home')go('home');}).catch(()=>{});},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.rep&&S.view!=='chat')hcLoad().catch(()=>{});});
+
+function hcWhen(iso){
+  if(!iso)return'';const d=new Date(iso),now=new Date();
+  if(d.toDateString()===now.toDateString())return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  const y=new Date(now);y.setDate(now.getDate()-1);if(d.toDateString()===y.toDateString())return'Yesterday';
+  if(now-d<6*864e5)return d.toLocaleDateString('en-US',{weekday:'short'});
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function hcDay(iso){const d=new Date(iso),now=new Date();if(d.toDateString()===now.toDateString())return'Today';const y=new Date(now);y.setDate(now.getDate()-1);if(d.toDateString()===y.toDateString())return'Yesterday';return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});}
+function hcText(s){return esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g,'<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g,'<br>');}
+function hcFirst(n){return String(n||'').trim().split(/\s+/)[0]||'';}
+
+// the Chat view (from the nav), or the same thing from the pending/paused screens
+async function renderChat(){
+  hcStop();
+  if(HC.room){hcDrawRoom();hcOpen(HC.room.id);return;}
+  if(!HC.rooms)$('app').innerHTML='<div class="loading">Loading messages…</div>';
+  try{await hcLoad();}catch(e){$('app').innerHTML='<div class="card"><h2>Messages didn’t load</h2><p class="muted">'+esc(e.message)+'</p><div class="btns"><button class="btn primary" onclick="renderChat()">Try again</button></div></div>';return;}
+  if(S.view!=='chat'&&!HC.from)return;
+  if(HC.room)return;                       // a conversation was opened while the list loaded
+  const want=HC.pending;HC.pending=null;
+  if(want&&HC.rooms.some(r=>r.id===want)){hcOpen(want);return;}
+  hcDrawList();
+}
+function hcBackBtn(){return HC.from?'<div class="btns" style="margin:0 0 12px;"><button class="link" onclick="hcLeave()">‹ Back</button></div>':'';}
+function hcLeave(){hcStop();HC.room=null;const f=HC.from;HC.from=null;if(f==='pending')renderPending();else if(f==='paused')renderPaused();else go('home');}
+function hcDrawList(){
+  let h=hcBackBtn();
+  if(HC.missing){$('app').innerHTML=h+'<div class="card"><h2>Messages are almost ready</h2><p class="muted">The kitchen is finishing an update. Check back a little later.</p></div>';return;}
+  h+='<div class="card hc-list">'+(HC.rooms||[]).map(r=>{
+    const last=r.last,kit=r.kind==='rep';
+    return '<button class="hc-row'+(+r.unread?' unread':'')+'" onclick="hcOpen(\''+r.id+'\')"><span class="hc-av">'+(kit?'🍝':'🌾')+'</span>'
+      +'<span class="hc-main"><span class="hc-top"><b>'+esc(r.name)+'</b><span class="hc-when">'+esc(last?hcWhen(last.at):'')+'</span></span>'
+      +'<span class="hc-sub">'+(last?(last.mine?'You: ':esc(hcFirst(last.name))+': ')+esc(last.body):(kit?'Questions, pickups, changes: ask the kitchen here.':'Every Highlander and the kitchen. Say hi!'))+'</span></span>'
+      +(+r.unread?'<span class="hc-dot">'+(+r.unread>99?'99+':+r.unread)+'</span>':'')+'</button>';
+  }).join('')+'</div>';
+  if((HC.rooms||[]).length===1&&S.rep.status!=='active')h+='<p class="muted" style="text-align:center;">Once you’re an active Highlander, you’ll also see the room for all Highlanders here.</p>';
+  else h+='<p class="muted" style="text-align:center;">Messages to the kitchen go to Justin and Jessica. Only they see them.</p>';
+  $('app').innerHTML=h;
+}
+async function hcOpen(id){
+  const r=(HC.rooms||[]).find(x=>x.id===id);if(!r)return;
+  if(HC.room!==r){HC.room=r;HC.msgs=[];HC.sig='';HC.act=null;}
+  $('hTitle').textContent=r.name;$('hSub').textContent=r.kind==='rep'?'Only you and the kitchen see this':'Every Highlander and the kitchen';
+  hcDrawRoom();
+  await hcLoadRoom(false);
+  hcStop();HC.roomTimer=setInterval(()=>{if(!HC.room||(S.view!=='chat'&&!HC.from)){hcStop();return;}if(!document.hidden)hcLoadRoom(true).catch(()=>{});},4000);
+}
+function hcStop(){clearInterval(HC.roomTimer);HC.roomTimer=null;}
+function hcClose(){hcStop();HC.room=null;$('hTitle').textContent='Messages';$('hSub').textContent='The Kilted Farmers';renderChat();}
+function hcDrawRoom(){
+  const r=HC.room;
+  $('app').innerHTML='<div class="card hc-room"><div class="hc-head"><button class="hc-back" onclick="hcClose()" aria-label="Back to messages">‹</button><span class="hc-av">'+(r.kind==='rep'?'🍝':'🌾')+'</span><div><b>'+esc(r.name)+'</b><div class="muted">'+(r.kind==='rep'?'Justin and Jessica · only you and the kitchen see this':(r.people?r.people+' people · ':'')+'every Highlander and the kitchen')+'</div></div></div>'
+    +'<div class="hc-msgs" id="hcMsgs">'+hcMsgsHTML()+'</div>'
+    +'<div class="hc-compose"><textarea id="hcInput" rows="1" placeholder="'+(r.kind==='rep'?'Message the kitchen':'Message all Highlanders')+'" oninput="hcGrow(this);HC.draft[HC.room.id]=this.value" onkeydown="hcKey(event)">'+esc(HC.draft[r.id]||'')+'</textarea><button class="btn primary" id="hcSend" onclick="hcSendMsg()">Send</button></div></div>';
+  const b=$('hcMsgs');if(b)b.scrollTop=b.scrollHeight;const i=$('hcInput');if(i)hcGrow(i);
+}
+function hcMsgsHTML(){
+  if(!HC.msgs.length)return '<div class="muted" style="text-align:center;padding:30px 10px;">'+(HC.room.kind==='rep'?'No messages yet. Need more pasta, a different pickup day, or have a question? Ask here.':'No messages yet. Say hello to the other Highlanders.')+'</div>';
+  const me=S.user&&S.user.id;let h='',day='',prev=null;
+  HC.msgs.forEach(m=>{
+    const d=hcDay(m.created_at);if(d!==day){day=d;h+='<div class="hc-day"><span>'+esc(d)+'</span></div>';prev=null;}
+    const mine=m.user_id===me,del=!!m.deleted_at,showName=!mine&&(!prev||prev.user_id!==m.user_id);
+    h+='<div class="hc-msg'+(mine?' mine':'')+'">'+(showName?'<div class="hc-who">'+esc(m.name||'')+'</div>':'')
+      +'<div class="hc-bub'+(del?' del':'')+'"'+(mine&&!del?' onclick="hcAct(\''+m.id+'\')"':'')+'>'+(del?'Message removed':hcText(m.body))+'</div>'
+      +'<div class="hc-meta">'+esc(new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}))+(m.edited_at&&!del?' · edited':'')
+      +(mine&&!del&&HC.act===m.id?' · <button class="link" onclick="hcEdit(\''+m.id+'\')">Edit</button> · <button class="link" style="color:var(--red);" onclick="hcDelete(\''+m.id+'\')">Delete</button>':'')+'</div></div>';
+    prev=m;
+  });
+  return h;
+}
+function hcAct(id){HC.act=HC.act===id?null:id;const b=$('hcMsgs');if(b){const t=b.scrollTop;b.innerHTML=hcMsgsHTML();b.scrollTop=t;}}
+function hcGrow(t){t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';}
+function hcKey(e){if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&window.innerWidth>=760){e.preventDefault();hcSendMsg();}}
+async function hcLoadRoom(quiet){
+  const r=HC.room;if(!r)return;
+  const rows=((await api('kf_chat_messages?room_id=eq.'+r.id+'&order=created_at.desc&limit=200'))||[]).slice().reverse();
+  if(HC.room!==r)return;
+  const sig=rows.map(m=>m.id+(m.edited_at||'')+(m.deleted_at||'')).join('|');const changed=sig!==HC.sig;HC.sig=sig;HC.msgs=rows;
+  if(changed||!quiet){const b=$('hcMsgs');if(b){const near=b.scrollHeight-b.scrollTop-b.clientHeight<120;b.innerHTML=hcMsgsHTML();if(near||!quiet)b.scrollTop=b.scrollHeight;}}
+  if(+r.unread||changed){try{await rpc('kf_chat_read',{p_room:r.id});}catch(e){}r.unread=0;hcBadge();}
+}
+async function hcSendMsg(){
+  const inp=$('hcInput'),r=HC.room;if(!inp||!r||HC.busy)return;
+  const body=inp.value.trim();if(!body)return;
+  if(body.length>4000){toast('That’s too long for one message. Split it up.',true);return;}
+  HC.busy=true;const btn=$('hcSend');if(btn)btn.disabled=true;
+  try{await api('kf_chat_messages',{method:'POST',body:JSON.stringify({room_id:r.id,body})});inp.value='';HC.draft[r.id]='';hcGrow(inp);await hcLoadRoom(false);}
+  catch(e){toast('Didn’t send: '+e.message,true);}
+  HC.busy=false;if(btn)btn.disabled=false;if(inp)inp.focus();
+}
+async function hcEdit(id){
+  const m=HC.msgs.find(x=>x.id===id);if(!m)return;
+  const b=prompt('Edit your message',m.body);if(b==null)return;const t=b.trim();if(!t||t===m.body)return;
+  try{await api('kf_chat_messages?id=eq.'+id,{method:'PATCH',body:JSON.stringify({body:t})});HC.act=null;await hcLoadRoom(true);}catch(e){toast(e.message,true);}
+}
+async function hcDelete(id){
+  if(!confirm('Delete this message for everyone?'))return;
+  try{await api('kf_chat_messages?id=eq.'+id,{method:'PATCH',body:JSON.stringify({deleted_at:new Date().toISOString()})});HC.act=null;await hcLoadRoom(true);}catch(e){toast(e.message,true);}
+}
+// from the pending or paused screen (no nav there)
+async function hcFromScreen(where){
+  HC.from=where;HC.room=null;$('hTitle').textContent='Message the kitchen';$('hSub').textContent='The Kilted Farmers';
+  const k=(HC.rooms||[]).find(r=>r.kind==='rep');if(k)HC.pending=k.id;
+  await renderChat();
+  if(!HC.room){const k2=(HC.rooms||[]).find(r=>r.kind==='rep');if(k2)hcOpen(k2.id);}
+}
+// the home page nudges when the kitchen has written
+function hcHomeCard(){
+  const n=hcUnread();if(!n)return '';
+  const r=(HC.rooms||[]).find(x=>+x.unread);const kit=r&&r.kind==='rep';
+  return '<div class="card" style="border-color:var(--green);"><h2>'+(n===1?'1 new message':n+' new messages')+'</h2><p class="muted">'+(kit?'The kitchen wrote you':'New in All Highlanders')+(r&&r.last?': “'+esc(r.last.body.slice(0,90))+(r.last.body.length>90?'…':'')+'”':'.')+'</p><div class="btns"><button class="btn primary" onclick="'+(r?'HC.pending=\''+r.id+'\';':'')+'go(\'chat\')">Read it</button></div></div>';
+}
+(function(){const st=document.createElement('style');st.textContent=`
+.hc-list{padding:6px;}
+.hc-row{display:flex;gap:12px;align-items:center;width:100%;background:none;border:none;text-align:left;padding:12px 10px;border-radius:10px;cursor:pointer;font:inherit;color:inherit;}
+.hc-row+.hc-row{border-top:1px solid var(--cream-dark);border-radius:0;}
+.hc-row:hover{background:var(--cream);}
+.hc-av{width:40px;height:40px;border-radius:12px;background:var(--cream-dark);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.hc-main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.hc-top{display:flex;justify-content:space-between;gap:8px;}
+.hc-when{font-size:11px;color:var(--mid);flex-shrink:0;}
+.hc-sub{font-size:13px;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hc-row.unread b,.hc-row.unread .hc-sub{color:var(--green-dark);font-weight:700;}
+.hc-dot{background:var(--red);color:#fff;border-radius:10px;font-size:11px;font-weight:800;padding:2px 7px;flex-shrink:0;}
+.hc-room{display:flex;flex-direction:column;padding:12px;height:calc(100vh - 230px);height:calc(100dvh - 230px);min-height:340px;}
+.hc-head{display:flex;gap:10px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--cream-dark);}
+.hc-head .muted{font-size:12px;}
+.hc-back{background:none;border:none;font-size:30px;line-height:1;color:var(--green-dark);cursor:pointer;padding:0 4px 0 0;}
+.hc-msgs{flex:1;overflow-y:auto;padding:10px 2px;display:flex;flex-direction:column;gap:2px;}
+.hc-day{text-align:center;margin:12px 0 6px;}
+.hc-day span{font-size:11px;color:var(--mid);background:var(--cream);border-radius:10px;padding:2px 10px;font-weight:700;}
+.hc-msg{display:flex;flex-direction:column;align-items:flex-start;max-width:84%;margin-top:4px;}
+.hc-msg.mine{align-self:flex-end;align-items:flex-end;}
+.hc-who{font-size:11.5px;font-weight:700;color:var(--mid);margin:6px 0 2px 4px;}
+.hc-bub{background:var(--cream);border-radius:14px 14px 14px 4px;padding:8px 12px;font-size:15px;line-height:1.45;word-break:break-word;}
+.hc-msg.mine .hc-bub{background:var(--green-dark);color:#fff;border-radius:14px 14px 4px 14px;cursor:pointer;}
+.hc-msg.mine .hc-bub a{color:#fff;}
+.hc-bub.del{background:transparent!important;color:var(--mid)!important;font-style:italic;border:1px dashed var(--rule);}
+.hc-meta{font-size:10.5px;color:var(--mid);margin:2px 6px 0;}
+.hc-meta .link{font-size:10.5px;}
+.hc-compose{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--cream-dark);padding-top:10px;}
+.hc-compose textarea{flex:1;resize:none;border:1.5px solid var(--rule);border-radius:12px;padding:10px 12px;font:inherit;font-size:16px;min-height:44px;max-height:140px;background:var(--cream);}
+.hc-compose textarea:focus{outline:none;border-color:var(--green);background:#fff;}
+.hc-compose .btn{padding:11px 16px;}
+`;document.head.appendChild(st);})();
 
 init();
 </script>

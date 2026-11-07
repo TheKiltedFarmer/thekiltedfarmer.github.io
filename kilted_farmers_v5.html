@@ -7847,6 +7847,7 @@ function repRepsHTML(){
     if(r.status==='pending')h+='<button class="btn-green" onclick="repSetStatus(\''+r.id+'\',\'active\')">Approve</button><button class="btn-secondary danger" onclick="repSetStatus(\''+r.id+'\',\'declined\')">Decline</button>';
     if(r.status==='active')h+='<button class="btn-secondary" onclick="repSetStatus(\''+r.id+'\',\'paused\')">Pause</button>';
     if(r.status==='paused'||r.status==='declined')h+='<button class="btn-green" onclick="repSetStatus(\''+r.id+'\',\'active\')">'+(r.status==='paused'?'Reactivate':'Approve')+'</button>';
+    if(r.status!=='declined'&&r.user_id&&typeof repMessage==='function'&&isStewardUser())h+='<button class="btn-secondary" onclick="repMessage(\''+r.id+'\')">💬 Message</button>';
     h+='</div></div>';
   });
   const nd=REPS.reps.filter(r=>r.status==='declined').length;
@@ -9231,9 +9232,12 @@ function chDraw(){
   chDrawSide();chDrawMain();
 }
 function chDrawList(){chDrawSide();}
-function chRoomLabel(r){return r.kind==='everyone'?'Everyone':(r.name||'Group');}
+function chRoomLabel(r){return r.kind==='everyone'?'Everyone':r.kind==='highlanders'?'All Highlanders':(r.name||'Group');}
+function chHL(r){return r&&(r.kind==='rep'||r.kind==='highlanders');}
 function chRoomIcon(r){
   if(r.kind==='everyone')return '<span class="ch-av ch-av-all">#</span>';
+  if(r.kind==='highlanders')return '<span class="ch-av ch-av-hl">🌾</span>';
+  if(r.kind==='rep')return '<span class="ch-av ch-av-rep">'+esc(chInitial(r.name))+'</span>';
   if(r.kind==='group')return '<span class="ch-av ch-av-grp">'+esc(chInitial(r.name))+'</span>';
   return '<span class="ch-av">'+esc(chInitial(r.name))+'</span>';
 }
@@ -9241,12 +9245,13 @@ function chDrawSide(){
   const el=document.getElementById('chSide');if(!el)return;
   const open=CH.rooms.filter(r=>!r.archived),closed=CH.rooms.filter(r=>r.archived);
   let h='<div class="ch-head"><div class="card-title" style="margin:0;"><div class="card-title-dot"></div>Messages</div></div>'
-    +'<div class="ch-new"><button class="btn-green" onclick="chPick(\'dm\')">+ Message someone</button><button class="btn-secondary" onclick="chPick(\'group\')">+ New group</button></div>';
+    +'<div class="ch-new"><button class="btn-green" onclick="chPick(\'dm\')">+ Message someone</button><button class="btn-secondary" onclick="chPick(\'group\')">+ New group</button>'
+    +(CH_CFG.p==='kf'&&chSteward()&&!chDemo()?'<button class="btn-secondary ch-new-hl" onclick="chPick(\'rep\')">🌾 Message a Highlander</button>':'')+'</div>';
   const row=r=>{
     const last=r.last;const sel=CH.room&&CH.room.id===r.id;
     return '<div class="ch-row'+(sel?' sel':'')+(+r.unread?' unread':'')+'" onclick="chOpenRoom(\''+r.id+'\')">'+chRoomIcon(r)
       +'<div class="ch-row-main"><div class="ch-row-top"><span class="ch-row-name">'+esc(chRoomLabel(r))+'</span><span class="ch-row-when">'+esc(last?chWhen(last.at):'')+'</span></div>'
-      +'<div class="ch-row-sub">'+(last?(last.mine?'You: ':(r.kind==='dm'?'':esc(chFirst(last.name))+': '))+esc(last.body):'<i>No messages yet</i>')+'</div></div>'
+      +'<div class="ch-row-sub">'+(r.kind==='rep'?'<span class="ch-tag">Highlander</span>':'')+(last?(last.mine?'You: ':(r.kind==='dm'?'':esc(chFirst(last.name))+': '))+esc(last.body):'<i>No messages yet</i>')+'</div></div>'
       +(+r.unread?'<span class="ch-dot">'+(+r.unread>99?'99+':+r.unread)+'</span>':'')+'</div>';
   };
   h+='<div class="ch-rows">'+open.map(row).join('')+'</div>';
@@ -9260,7 +9265,9 @@ function chDrawMain(){
   if(!CH.room){el.innerHTML='<div class="ch-empty"><div style="font-size:34px;">💬</div><div class="bk-payee" style="margin-top:6px;">Pick a conversation</div><div class="bk-sub">Or start one with <b>+ Message someone</b>.</div></div>';return;}
   const r=CH.room;const me=chMe();
   const canManage=r.kind==='group'&&(r.created_by===me||chSteward());
-  const who=r.kind==='everyone'?'The whole team · '+(CH.people.length)+' people':r.kind==='group'?(r.members||[]).map(chName).filter(Boolean).map(chFirst).join(', '):'';
+  const who=r.kind==='everyone'?'The whole team · '+(CH.people.length)+' people':r.kind==='group'?(r.members||[]).map(chName).filter(Boolean).map(chFirst).join(', ')
+    :r.kind==='highlanders'?'Every active Highlander and the Stewards'+(r.people?' · '+r.people+' people':'')
+    :r.kind==='rep'?'Highlander'+(r.rep_status&&r.rep_status!=='active'?' ('+r.rep_status+')':'')+' · only they and the Stewards see this':'';
   let h='<div class="ch-room-head"><button class="ch-back" onclick="chCloseRoom()" aria-label="Back">‹</button>'+chRoomIcon(r)
     +'<div class="ch-room-title"><div class="ch-row-name">'+esc(chRoomLabel(r))+'</div>'+(who?'<div class="ch-row-sub">'+esc(who)+'</div>':'')+'</div>'
     +(r.kind==='group'?'<button class="btn-secondary ch-mng" onclick="CH.manage=!CH.manage;chDrawMain()">'+(CH.manage?'Done':(canManage?'Manage':'Details'))+'</button>':'')+'</div>';
@@ -9279,11 +9286,12 @@ function chMsgsHTML(){
   CH.msgs.forEach(m=>{
     const d=chDay(m.created_at);if(d!==day){day=d;h+='<div class="ch-day"><span>'+esc(d)+'</span></div>';prev=null;}
     const mine=m.user_id===me;const showName=!mine&&r.kind!=='dm'&&(!prev||prev.user_id!==m.user_id);
-    const del=!!m.deleted_at;
+    const del=!!m.deleted_at;const canDel=!del&&!mine&&r.kind==='highlanders'&&chSteward();
     h+='<div class="ch-msg'+(mine?' mine':'')+'">'+(showName?'<div class="ch-who">'+esc(m.name||'')+'</div>':'')
       +'<div class="ch-bub'+(del?' del':'')+'"'+(mine&&!del?' onclick="chToggleAct(\''+m.id+'\')"':'')+'>'+(del?'Message deleted':chText(m.body))+'</div>'
       +'<div class="ch-meta">'+esc(new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}))+(m.edited_at&&!del?' · edited':'')
-      +(mine&&!del&&CH.act===m.id?' · <button class="link-btn" onclick="chEdit(\''+m.id+'\')">Edit</button> · <button class="link-btn" style="color:var(--red);" onclick="chDelete(\''+m.id+'\')">Delete</button>':'')+'</div></div>';
+      +(mine&&!del&&CH.act===m.id?' · <button class="link-btn" onclick="chEdit(\''+m.id+'\')">Edit</button> · <button class="link-btn" style="color:var(--red);" onclick="chDelete(\''+m.id+'\')">Delete</button>':'')
+      +(canDel?' · <button class="link-btn" style="color:var(--mid);" onclick="chDelete(\''+m.id+'\')">Remove</button>':'')+'</div></div>';
     prev=m;
   });
   return h;
@@ -9343,16 +9351,43 @@ async function chDelete(id){
 }
 
 // ─── start a conversation ───
-function chPick(kind){CH.picker={kind,name:''};CH.sel={};CH.room=null;const w=document.querySelector('#chatBody .ch-wrap');if(w)w.classList.add('in-room');chDrawSide();chDrawMain();}
+function chPick(kind){if(kind==='rep'){CH.reps=null;chLoadReps();}CH.picker={kind,name:''};CH.sel={};CH.room=null;const w=document.querySelector('#chatBody .ch-wrap');if(w)w.classList.add('in-room');chDrawSide();chDrawMain();}
 function chOthers(){const me=chMe();return CH.people.filter(p=>p.user_id!==me).sort((a,b)=>String(a.name).localeCompare(String(b.name)));}
 function chPickerHTML(){
   const k=CH.picker.kind,ppl=chOthers();
+  if(k==='rep')return chRepPickerHTML();
   let h='<div class="ch-room-head"><button class="ch-back" onclick="chCloseRoom()" aria-label="Back">‹</button><div class="ch-room-title"><div class="ch-row-name">'+(k==='dm'?'Message someone':'New group')+'</div></div></div>';
   if(!ppl.length)return h+'<div class="bk-empty">Nobody else on the team has a login yet. '+(CH_CFG.biz?'Invite them in <b>Settings → People &amp; logins</b>.':'')+'</div>';
   if(k==='dm')return h+'<div class="ch-rows">'+ppl.map(p=>'<div class="ch-row" onclick="chStartDM(\''+p.user_id+'\')"><span class="ch-av">'+esc(chInitial(p.name))+'</span><div class="ch-row-main"><div class="ch-row-name">'+esc(p.name)+'</div><div class="ch-row-sub">'+esc(chRoleName(p.role))+'</div></div></div>').join('')+'</div>';
   return h+'<label class="ch-lbl">Group name</label><input id="chGName" class="period-input" style="width:100%;" placeholder="Saturday market crew" value="'+esc(CH.picker.name)+'" oninput="CH.picker.name=this.value">'
     +'<label class="ch-lbl">Who’s in it</label><div class="ch-pick">'+ppl.map(p=>'<label class="ch-check"><input type="checkbox" '+(CH.sel[p.user_id]?'checked':'')+' onchange="CH.sel[\''+p.user_id+'\']=this.checked"> '+esc(p.name)+'</label>').join('')+'</div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="chStartGroup()">Start the group</button></div>';
+}
+// ─── Highlanders (Stewards only): each Highlander's thread with the kitchen ───
+function chRepPickerHTML(){
+  let h='<div class="ch-room-head"><button class="ch-back" onclick="chCloseRoom()" aria-label="Back">‹</button><div class="ch-room-title"><div class="ch-row-name">Message a Highlander</div><div class="ch-row-sub">Only they and the Stewards see it</div></div></div>';
+  if(!CH.reps)return h+'<div class="bk-empty">Loading Highlanders…</div>';
+  if(!CH.reps.length)return h+'<div class="bk-empty">No Highlanders yet. They show up here once they apply.</div>';
+  const lbl={active:'Active',pending:'Waiting for approval',paused:'Paused'};
+  return h+'<div class="ch-rows">'+CH.reps.map(p=>'<div class="ch-row" onclick="chStartRep(\''+p.id+'\')"><span class="ch-av ch-av-rep">'+esc(chInitial(p.name))+'</span><div class="ch-row-main"><div class="ch-row-name">'+esc(p.name)+'</div><div class="ch-row-sub">'+esc([lbl[p.status]||p.status,p.city].filter(Boolean).join(' · '))+(p.user_id?'':' · no login yet')+'</div></div></div>').join('')+'</div>';
+}
+async function chLoadReps(){
+  try{CH.reps=(await sb('kf_reps?select=id,name,status,city,user_id&status=neq.declined&order=name.asc'))||[];}catch(e){CH.reps=[];}
+  const order={active:0,pending:1,paused:2};CH.reps.sort((a,b)=>(order[a.status]??3)-(order[b.status]??3)||String(a.name).localeCompare(String(b.name)));
+  if(CH.picker&&CH.picker.kind==='rep')chDrawMain();
+}
+async function chStartRep(repId){
+  try{
+    const id=chOne(await chRpc('rep',{p_rep:repId}));const rid=typeof id==='object'&&id?id[chT('rep')]||id.id:id;
+    await chLoadList();CH.picker=null;
+    if(!document.querySelector('#chatBody .ch-wrap'))chDraw();
+    await chOpenRoom(rid);
+  }catch(e){toast(e.message,true);}
+}
+// from the Highlanders tab: jump straight into a Highlander's thread
+async function repMessage(repId){
+  const t=document.getElementById('chatTab');if(t)switchTab('chat',t);
+  await chStartRep(repId);
 }
 function chRoleName(r){r=String(r||'').toLowerCase();return r==='owner'||r==='steward'?'Owner':r==='manager'?'Manager':'Team';}
 async function chStartDM(uid){
@@ -9439,6 +9474,10 @@ function chDemoSend(room,body){chDemoSeed();const me=chMe()||'me';(CHD.msgs[room
 .ch-av{width:36px;height:36px;border-radius:50%;background:var(--cream-dark);color:var(--green-dark);display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;}
 .ch-av-all{background:var(--green-dark);color:#fff;}
 .ch-av-grp{background:#f6ede2;color:#7a5530;border-radius:10px;}
+.ch-new .ch-new-hl{flex-basis:100%;}
+.ch-av-hl{background:#f6ede2;font-size:18px;border-radius:10px;}
+.ch-av-rep{background:#f6ede2;color:#7a5530;}
+.ch-tag{display:inline-block;font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:800;color:#7a5530;background:#f6ede2;border-radius:6px;padding:1px 5px;margin-right:5px;vertical-align:1px;}
 .ch-dot{background:var(--green-dark);color:#fff;border-radius:10px;font-size:11px;font-weight:800;padding:2px 7px;flex-shrink:0;}
 .ch-empty{text-align:center;color:var(--mid);margin:auto;padding:40px 10px;}
 .ch-room-head{display:flex;gap:10px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--cream-dark);}
