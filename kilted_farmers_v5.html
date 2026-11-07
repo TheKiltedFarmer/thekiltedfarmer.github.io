@@ -3756,7 +3756,7 @@ async function importBankLines(){
     BOOKS.bank=await sbAll('kf_bank_lines?select=*&order=txn_date.desc');
     const matched=await autoMatchBank();
     const skipped=rows.length-added;
-    toast(added+' imported'+(skipped?' · '+skipped+' already here':'')+' · '+matched+' matched to the books');
+    toast(added+' imported'+(skipped?' · '+skipped+' already here':'')+' · '+matched+' matched to the books'+(BOOKS._autoLogged?' · '+BOOKS._autoLogged+' payouts already in your imported sales':''));BOOKS._autoLogged=0;
     renderBooks();
   }catch(e){toast('Import failed: '+e.message,true);btn.disabled=false;btn.textContent='Import';}
 }
@@ -3779,6 +3779,24 @@ async function autoMatchBank(){
     await Promise.all(patches.slice(i,i+8).map(({l,key})=>sb('kf_bank_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'matched',match_key:key})})
       .then(()=>{l.status='matched';l.match_key=key;}).catch(e=>console.warn('match',e))));
   }
+  // payouts from a register, delivery app, shop or payment app whose sales came in by import are already in the books
+  try{
+    const plats=[['pos',/square|sq \*|sq\*/i],['doordash',/doordash/i],['ubereats',/uber ?eats|uber technologies/i],['grubhub',/grubhub/i],['etsy',/etsy/i],['shopify',/shopify/i],
+      ['venmo',/venmo/i],['cashapp',/cash ?app|square cash/i],['paypal',/paypal/i],['goodfynd',/goodfynd/i],['toast',/toast/i],['clover',/clover/i],['sumup',/sumup/i]];
+    const cand=lines.filter(l=>bankEffectiveStatus(l)==='open'&&+l.amount>0&&!patches.some(p=>p.l===l));
+    const marks=[];
+    for(const [src,re] of plats){
+      const hits=cand.filter(l=>re.test(l.description||''));if(!hits.length)continue;
+      let have=false;try{have=(await sb('kf_revenue_entries?select=id&import_key=like.'+encodeURIComponent(src+':*')+'&limit=1')).length>0;}catch(e){}
+      if(have)hits.forEach(l=>marks.push(l));
+    }
+    for(let i=0;i<marks.length;i+=100){
+      const ids=marks.slice(i,i+100).map(l=>l.id);
+      await sb('kf_bank_lines?id=in.('+ids.join(',')+')',{method:'PATCH',body:JSON.stringify({status:'logged',match_key:null})});
+      marks.slice(i,i+100).forEach(l=>{l.status='logged';});
+    }
+    if(marks.length)BOOKS._autoLogged=marks.length;
+  }catch(e){console.warn('payout marking',e);}
   // stale links (books entry deleted) go back to open
   const stale=lines.filter(l=>(l.status==='matched'||l.status==='added')&&!BOOKS.byKey[l.match_key]&&!patches.some(p=>p.l===l));
   for(const l of stale){try{await sb('kf_bank_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'open',match_key:null})});l.status='open';l.match_key=null;}catch(e){}}
@@ -6165,6 +6183,17 @@ async function recMake(){
 // draw the recipe rows once the item window opens
 if(typeof openInvItem==='function'){const _oii=openInvItem;openInvItem=async function(){const r=_oii.apply(this,arguments);setTimeout(recDraw,0);return r;};}
 
+// spreadsheet reader for Excel sales files (loads only when someone brings one in)
+const XLSX_URL=['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+async function loadScriptOnce(srcs){
+  srcs=[].concat(srcs);
+  if(window.XLSX)return;
+  for(const src of srcs){
+    const ok=await new Promise(done=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>done(true);s.onerror=()=>{s.remove();done(false);};document.head.appendChild(s);});
+    if(ok)return;
+  }
+  throw new Error('Couldn’t load the spreadsheet reader. Check your connection and try again.');
+}
 // ═══════════════════════════════════════════════════════
 // SALES IMPORT — Square (or any card reader's) sales export into the books
 // A Transactions/sales export becomes one sale per day (per person, if the file
@@ -6173,11 +6202,11 @@ if(typeof openInvItem==='function'){const _oii=openInvItem;openInvItem=async fun
 // ═══════════════════════════════════════════════════════
 const POS={preview:null};
 function posCardHTML(){
-  return '<div class="card pos-card"><div class="card-title"><div class="card-title-dot"></div>Import sales from your card reader</div>'
-    +'<div class="card-sub">Using Square, Clover, SumUp or another card reader? Download its sales report as a CSV and bring it in. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
+  return '<div class="card pos-card"><div class="card-title"><div class="card-title-dot"></div>Import sales from your register, apps and shops</div>'
+    +'<div class="card-sub">Square, Clover, Toast, Goodfynd or another register; DoorDash, Uber Eats or Grubhub; Etsy or Shopify; Venmo, Cash App or PayPal: download its sales, orders or payout report (CSV or Excel) and bring it in. If the Hub doesn’t recognize the layout, it asks you which column is the date and which is the amount, then remembers for next time. Each day’s sales land in the right pay week, with sales tax, tips and card fees kept separate. Bring in the same file twice and nothing doubles up.'
     +' Square: <b>Reports → Transactions → pick your dates → Export → Transactions CSV</b> (a whole year at once is fine). For stock, also export <b>Item sales</b>.</div>'
-    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import a sales CSV</button></div>'
-    +'<input type="file" id="posFile" accept=".csv,text/csv" style="display:none;" onchange="onPosFile(this)"></div>';
+    +'<div class="bk-actions"><button class="btn-green" onclick="document.getElementById(\'posFile\').click()">⬆ Import sales files</button><span class="bk-sub" style="align-self:center;">Pick several at once, or drag them here.</span></div>'
+    +'<input type="file" id="posFile" accept=".csv,text/csv,.txt,.xlsx,.xls" style="display:none;" onchange="onPosFile(this)"></div>';
 }
 function posMount(){
   const tab=document.getElementById('tab-log');if(!tab||document.getElementById('posImportCard'))return;
@@ -6187,19 +6216,32 @@ function posMount(){
 const posH=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 function posFind(h,...res){return h.findIndex(c=>res.some(r=>r.test(c)));}
 function posDetect(rows,forceSales){
-  let hi=-1;for(let i=0;i<Math.min(rows.length,15);i++){const h=rows[i].map(posH);if(h.some(c=>/date/.test(c))&&h.some(c=>/sales|amount|total|qty|collected/.test(c))){hi=i;break;}}
+  let hi=-1;for(let i=0;i<Math.min(rows.length,15);i++){const h=rows[i].map(posH);if(h.some(c=>/date|time|created|ordered|placed/.test(c))&&h.some(c=>/sales|amount|total|qty|collected|paid|revenue/.test(c))){hi=i;break;}}
   if(hi<0)return null;
   const h=rows[hi].map(posH);
   const itemCol=posFind(h,/^item$/,/^item name$/,/^product$/);const qtyCol=posFind(h,/^qty$/,/^quantity$/,/^units sold$/,/^count$/);
   if(!forceSales&&itemCol>=0&&qtyCol>=0)return{kind:'items',hi,C:{date:posFind(h,/^date$/,/date/),item:itemCol,qty:qtyCol,variant:posFind(h,/price point/,/variation/),sku:posFind(h,/^sku$/),event:posFind(h,/event type/),tx:posFind(h,/transaction id/,/payment id/)}};
-  return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),net:posFind(h,/^net sales$/),amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/),
-    tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/),tip:posFind(h,/^tips?$/,/gratuity/),fee:posFind(h,/^fees?$/,/processing fee/),refunds:posFind(h,/partial refunds/),
+  return{kind:'sales',hi,C:{date:posFind(h,/^date$/,/date/,/^(created|ordered|placed|paid|completed|closed)( at| on| time)?$/,/placed|created|ordered/,/time/),gross:posFind(h,/^gross sales$/),disc:posFind(h,/^discounts?$/),
+    net:posFind(h,/^net sales$/,/^net( amount| total)?$/,/^sub ?total$/,/^item total$/),
+    amount:posFind(h,/^amount$/,/^total$/,/^sale amount$/,/^total collected$/,/^(order|grand|payment|transaction|sale) total$/,/^total (amount|paid|charged|sales)$/,/^amount (paid|charged|collected)$/,/^paid$/,/^revenue$/),
+    tax:posFind(h,/^tax$/,/sales tax/,/^taxes$/,/^tax (amount|total)$/),tip:posFind(h,/^tips?$/,/gratuity/,/^tip (amount|total)$/),fee:posFind(h,/^fees?$/,/processing fee/,/^(card|service|platform|transaction) fees?$/,/^fee (amount|total)$/),refunds:posFind(h,/partial refunds/),
+    status:posFind(h,/^(order |payment |financial )?status$/),ship:posFind(h,/^shipping$/),
     staff:posFind(h,/staff name/,/employee/,/team member/,/^server$/,/^device name$/),event:posFind(h,/event type/,/^type$/),tx:posFind(h,/^transaction id$/,/^payment id$/,/transaction id/),
     location:posFind(h,/^location$/),cash:posFind(h,/^cash$/),card:posFind(h,/^card$/)}};
 }
 async function onPosFile(input){
   const file=input.files[0];input.value='';if(!file)return;
-  let rows;try{rows=parseCSV(await file.text());}catch(e){toast('Couldn’t read that file',true);return;}
+  let rows;
+  try{
+    if(/\.xlsx?$/i.test(file.name)){
+      if(!window.XLSX)await loadScriptOnce(XLSX_URL);
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      // the sheet with the most rows is the one with the sales
+      rows=wb.SheetNames.map(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:''}).map(r=>r.map(c=>String(c==null?'':c))).filter(r=>r.some(x=>x.trim()!=='')))
+        .sort((a,b)=>b.length-a.length)[0]||[];
+    }else rows=parseCSV(await file.text());
+  }catch(e){toast('Couldn’t read that file. If it’s from Excel, try saving it as a CSV.',true);return;}
+  if(!rows.length){toast('That file looks empty',true);return;}
   posHandleRows(file.name,rows);
 }
 // Shared by the sales importer and the bank importer (when a sales report lands there by mistake)
@@ -6235,14 +6277,18 @@ function posVerticalSummary(name,rows){
     tax:v('taxes')||v('tax'),tip:v('tips'),fee:Math.abs(v('fees')),
     n:parseInt(String(map['total sales transactions']||map['sales transactions']||'').replace(/\D/g,''))||0};
 }
-const POS_HOW='<ol style="margin:6px 0 10px;padding-left:20px;line-height:1.7;"><li>In your Square Dashboard, open <b>Reports → Transactions</b>.</li><li>Set the dates you want. A whole year at once is fine.</li><li>Tap <b>Export</b>, then <b>Transactions CSV</b>.</li><li>Come back here and tap <b>Import a sales CSV</b>.</li></ol>'
+const POS_HOW='<ol style="margin:6px 0 10px;padding-left:20px;line-height:1.7;"><li>In your Square Dashboard, open <b>Reports → Transactions</b>.</li><li>Set the dates you want. A whole year at once is fine.</li><li>Tap <b>Export</b>, then <b>Transactions CSV</b>.</li><li>Come back here and tap <b>Import a sales file</b>.</li></ol>'
   +'<div class="bk-sub">Each sale lands on its own day and in the right pay week, with tips, sales tax and card fees kept separate. Weeks you already logged by hand are skipped, so nothing counts twice.</div>';
 function posHelp(title,html){
   const m=posModal();document.getElementById('posTitle').textContent=title;
-  document.getElementById('posBody').innerHTML=html+'<div class="txn-actions"><button class="btn-green" onclick="document.getElementById(\'posModal\').classList.remove(\'open\');const f=document.getElementById(\'posFile\');if(f)f.click();">Choose the file</button></div>';
+  document.getElementById('posBody').innerHTML=html+posSendHTML()+'<div class="txn-actions"><button class="btn-green" onclick="document.getElementById(\'posModal\').classList.remove(\'open\');const f=document.getElementById(\'posFile\');if(f)f.click();">Choose the file</button></div>';
   m.classList.add('open');
 }
 function posHandleRows(name,rows){
+  POS.last={name,rows};POS.pay=null;
+  if(posEtsy(name,rows))return;
+  if(posPayApp(name,rows))return;
+  if(posMarketplace(name,rows))return;
   const vs=posVerticalSummary(name,rows);
   if(vs){
     const span=vs.start&&vs.end?Math.round((parseISO(vs.end)-parseISO(vs.start))/864e5)+1:0;
@@ -6263,7 +6309,9 @@ function posHandleRows(name,rows){
       cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
     return posPrepThenShow();
   }
+  const saved=posSavedMap(rows);if(saved)return posSalesPreview(name,rows,saved);
   const d=posDetect(rows);
+  if(!d&&posGuessHeader(rows)>=0)return posMapper(name,rows);
   if(!d){return posHelp('That file doesn’t have sales by day','<p style="margin:0 0 8px;">The Hub needs a file with a <b>date</b> on each sale. From Square:</p>'+POS_HOW
     +'<p class="bk-sub" style="margin-top:8px;">Clover, SumUp and other card readers have a similar transactions or sales export. Any CSV with a date and an amount on each line works.</p>');}
   if(d.kind==='items'){
@@ -6278,6 +6326,445 @@ function posHandleRows(name,rows){
   }
   posSalesPreview(name,rows,d);
 }
+// ─── Any register's file: ask which column is which (and remember it for next time) ───
+function posGuessHeader(rows){
+  // the header is the row just above where dates start
+  for(let i=0;i<Math.min(rows.length-1,15);i++){
+    const next=rows.slice(i+1,i+21);if(!next.length)break;
+    const w=rows[i].length;
+    for(let c=0;c<w;c++){const hits=next.filter(r=>dateVal(r[c])).length;if(hits>=Math.max(1,Math.ceil(next.length*0.6))&&!dateVal(rows[i][c]))return i;}
+  }
+  return -1;
+}
+function posMapSig(h){return h.map(posH).join('|');}
+function posSavedMap(rows){
+  let all=Object.assign({},POS.maps||{});try{Object.assign(all,JSON.parse(localStorage.getItem('ohb_pos_maps')||'{}'));}catch(e){}
+  for(let i=0;i<Math.min(rows.length,15);i++){const m=all[posMapSig(rows[i])];if(m)return{kind:'sales',hi:i,mapped:true,C:Object.assign(posBlankC(),m)};}
+  return null;
+}
+function posBlankC(){return{ship:-1,date:-1,gross:-1,disc:-1,net:-1,amount:-1,tax:-1,tip:-1,fee:-1,refunds:-1,staff:-1,event:-1,tx:-1,location:-1,cash:-1,card:-1,status:-1};}
+function posMapper(name,rows,again){
+  let hi=posGuessHeader(rows);if(hi<0)hi=0;
+  const h=rows[hi].map((c,i)=>String(c||'').trim()||'Column '+(i+1));
+  const data=rows.slice(hi+1,hi+41);
+  const sample=i=>{const v=data.map(r=>String(r[i]==null?'':r[i]).trim()).find(Boolean);return v?v.slice(0,24):'';};
+  const share=(i,fn)=>{let n=0,t=0;data.forEach(r=>{const v=String(r[i]==null?'':r[i]).trim();if(!v)return;t++;if(fn(v))n++;});return t?n/t:0;};
+  const isMoney=i=>share(i,v=>moneyVal(v)!==null)>0.7&&share(i,v=>dateVal(v))<0.2;
+  const hl=h.map(posH);
+  const pick=(...res)=>{for(const re of res){const i=hl.findIndex((c,j)=>re.test(c)&&isMoney(j));if(i>=0)return i;}return -1;};
+  let dateC=h.findIndex((c,i)=>/date|time|created|ordered|placed/.test(hl[i])&&share(i,v=>dateVal(v))>0.6);
+  if(dateC<0)dateC=h.findIndex((c,i)=>share(i,v=>dateVal(v))>0.6);
+  let amt=pick(/total|amount|paid|collected|sales|revenue/,/price/);
+  if(amt<0){let best=-1,sum=-1;h.forEach((c,i)=>{if(!isMoney(i))return;const t=data.reduce((a,r)=>a+Math.abs(moneyVal(r[i])||0),0);if(t>sum){sum=t;best=i;}});amt=best;}
+  const incl=amt>=0&&/total|paid|collected|charged/.test(hl[amt])&&!/sub ?total|net/.test(hl[amt]);
+  const tax=pick(/tax/),tip=pick(/tip|gratuity/),fee=pick(/fee/);
+  const staff=hl.findIndex(c=>/staff|employee|cashier|server|team member|sold by/.test(c));
+  const opts=(sel,none)=>(none?'<option value="-1">'+none+'</option>':'')+h.map((c,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+esc(c)+(sample(i)?' (e.g. '+esc(sample(i))+')':'')+'</option>').join('');
+  POS.map={name,rows,hi,status:hl.findIndex(c=>/^(order |payment )?status$/.test(c))};
+  const m=posModal();document.getElementById('posTitle').textContent='Match up the columns';
+  document.getElementById('posBody').innerHTML='<p class="bk-sub" style="margin:0 0 10px;">'+(again?'That didn’t turn up any sales. ':'')+'The Hub doesn’t know this file’s layout yet ('+esc(name)+'). Tell it which column is which and it’ll remember next time.</p>'
+    +'<label class="ch-lbl">Date of each sale</label><select id="pmDate" class="period-input" style="width:100%;">'+opts(dateC)+'</select>'
+    +'<label class="ch-lbl">Sale amount</label><select id="pmAmt" class="period-input" style="width:100%;">'+opts(amt)+'</select>'
+    +'<label class="ch-check" style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;"><input type="checkbox" id="pmIncl"'+(incl?' checked':'')+'> That amount already includes sales tax and tips</label>'
+    +'<details style="margin-top:10px;"'+(tax>=0||tip>=0||fee>=0?' open':'')+'><summary style="cursor:pointer;font-weight:700;color:var(--green-dark);">Tax, tips, fees and who sold it (if the file has them)</summary>'
+    +'<label class="ch-lbl">Sales tax</label><select id="pmTax" class="period-input" style="width:100%;">'+opts(tax,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Tips</label><select id="pmTip" class="period-input" style="width:100%;">'+opts(tip,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Card or processing fees</label><select id="pmFee" class="period-input" style="width:100%;">'+opts(fee,'Not in this file')+'</select>'
+    +'<label class="ch-lbl">Who made the sale</label><select id="pmStaff" class="period-input" style="width:100%;">'+opts(staff,'Not in this file')+'</select></details>'
+    +posSendHTML()+'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" onclick="posMapGo()">Next</button></div>';
+  m.classList.add('open');
+}
+function posMapGo(){
+  const M=POS.map;if(!M)return;const v=id=>+document.getElementById(id).value;
+  const date=v('pmDate'),amt=v('pmAmt'),incl=document.getElementById('pmIncl').checked;
+  if(date===amt){toast('Pick different columns for the date and the amount',true);return;}
+  const m={date,tax:v('pmTax'),tip:v('pmTip'),fee:v('pmFee'),staff:v('pmStaff'),status:M.status};
+  if(incl)m.amount=amt;else m.net=amt;
+  (POS.maps=POS.maps||{})[posMapSig(M.rows[M.hi])]=m;
+  try{const all=JSON.parse(localStorage.getItem('ohb_pos_maps')||'{}');all[posMapSig(M.rows[M.hi])]=m;localStorage.setItem('ohb_pos_maps',JSON.stringify(all));}catch(e){}
+  posSalesPreview(M.name,M.rows,{kind:'sales',hi:M.hi,mapped:true,C:Object.assign(posBlankC(),m)});
+}
+
+// ═══════════════════════════════════════════════════════
+// MORE SALES SOURCES — delivery apps, Etsy, Shopify, Venmo / Cash App / PayPal
+// Each one lands as daily sales, with what the platform kept filed as its own expense,
+// tagged with where it came from so two sources on the same day never block each other.
+// ═══════════════════════════════════════════════════════
+const POS_PLATS=[
+  ['doordash','DoorDash',/doordash|door dash/,'delivery'],['ubereats','Uber Eats',/uber ?eats|ubereats|postmates|marketplace facilitator tax/,'delivery'],
+  ['grubhub','Grubhub',/grubhub|seamless|merchant net total/,'delivery'],['ezcater','ezCater',/ezcater/,'delivery'],
+  ['etsy','Etsy',/etsy/,'shop'],['shopify','Shopify',/shopify|lineitem name/,'shop'],['faire','Faire',/\bfaire\b/,'shop'],['woo','WooCommerce',/woocommerce/,'shop'],
+  ['venmo','Venmo',/venmo/,'pay'],['cashapp','Cash App',/cash ?app|cashapp/,'pay'],['paypal','PayPal',/paypal/,'pay'],
+  ['goodfynd','Goodfynd',/goodfynd/,'pos'],['toast','Toast',/\btoast\b/,'pos'],['clover','Clover',/clover/,'pos'],['sumup','SumUp',/sumup/,'pos'],
+  ['zettle','Zettle',/zettle|izettle/,'pos'],['lightspeed','Lightspeed',/lightspeed/,'pos'],
+  ['localline','Local Line',/local ?line/,'shop'],['barn2door','Barn2Door',/barn ?2 ?door/,'shop'],['grazecart','GrazeCart',/grazecart/,'shop'],['harvie','Harvie',/harvie/,'shop'],
+  ['square','Square',/square/,'pos']
+];
+function posPlatFrom(name,rows){
+  const head=(String(name||'')+' '+(rows||[]).slice(0,4).map(r=>r.join(' ')).join(' ')).toLowerCase();
+  const f=POS_PLATS.find(p=>p[2].test(head));
+  return f?{id:f[0],label:f[1],kind:f[3]}:null;
+}
+function posHash(s){let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))|0;return (h>>>0).toString(36);}
+// what goes on the preview and the entries for a file: its tag, how it was paid, what the fees are called
+function posMetaFor(name,rows,hi){
+  const pl=posPlatFrom(name,rows);
+  const h=(rows[hi>=0?hi:0]||[]).map(posH);
+  const squareLike=h.includes('payment id')||h.includes('gross sales')||h.includes('net sales')||h.includes('device name');
+  const id=pl&&pl.id!=='square'?pl.id:(squareLike||(pl&&pl.id==='square')?'pos':'pos-'+posHash(posMapSig(rows[hi>=0?hi:0]||[])));
+  const label=pl?pl.label:(squareLike?'Square':'your register');
+  return{src:id,platLabel:label,method:pl&&pl.kind!=='pos'?label:'Card reader',vendor:pl?label:'Card reader',
+    feeName:'Card processing fees',feeCat:'Bank & Card Fees',feeLabel:'Card fees',
+    cat:pl&&(pl.kind==='delivery'||pl.kind==='shop')?(INCOME_CATS.find(c=>/online/i.test(c))||INCOME_CATS[0]):(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+}
+function posCatOn(cat,line){
+  if(!EXPENSE_CATS.includes(cat))EXPENSE_CATS.splice(Math.max(0,EXPENSE_CATS.length-1),0,cat);
+  if(typeof TAX_LINES!=='undefined'&&line&&!TAX_LINES[cat])TAX_LINES[cat]=line;
+}
+const COMMISSION_CAT='Commissions & Fees';
+if(typeof TAX_LINES!=='undefined'&&!TAX_LINES[COMMISSION_CAT])TAX_LINES[COMMISSION_CAT]={p:'20',c:'10',n:'Commissions & fees (delivery apps, marketplaces)'};
+function posCol(h,res,not){for(const re of res){const i=h.findIndex(c=>re.test(c)&&!(not&&not.test(c)));if(i>=0)return i;}return -1;}
+
+// ─── delivery apps & marketplaces that pay out: sales, minus what they kept, = the payout ───
+function posMarketplace(name,rows){
+  for(let hi=0;hi<Math.min(rows.length,15);hi++){
+    const h=rows[hi].map(posH);
+    const sales=posCol(h,[/^(subtotal|food sales|item subtotal|order subtotal|sales subtotal|pre adjusted subtotal)$/,/^food sales( excl(uding)?( of)? tax(es)?)?$/,/^sales( excl(uding)?( of)?| ex)? tax(es)?$/,/^(gross )?sales$/,/subtotal/,/food sales/],/^(?!.*excl).*tax|count|\bid\b|date|%|rate/);
+    const net=posCol(h,[/^net total$/,/^total payout$/,/^merchant net total$/,/^net payout$/,/^payout( amount)?$/,/^estimated payout$/,/^net( amount)?$/,/payout/],/date|id|status|method/);
+    const fees=h.filter(c=>/commission|marketplace fee|service fee|processing fee|marketing|delivery fee|merchant fee|tablet fee|error charge|platform fee|network fee/.test(c)&&!/%|rate|percent/.test(c));
+    if(sales<0||net<0||!fees.length)continue;
+    const date=posCol(h,[/local date/,/^(order|transaction|accepted|delivery)( |_)?date$/,/^date$/,/order date/,/^timestamp local/,/date/,/time/],/payout|utc/);
+    if(date<0)continue;
+    const tax=posCol(h,[/^tax( \(subtotal\))?$/,/subtotal tax passed to merchant/,/^tax on food sales$/,/^(sales )?tax( on (food )?sales)?$/,/^subtotal (sales )?tax$/],/remit|facilitator|withheld|commission|fee|rate|%|exempt/);
+    const remitted=posCol(h,[/remitted by/,/facilitator/,/withheld tax/,/tax withheld/],/rate|%/);
+    const type=posCol(h,[/^transaction type$/,/^type$/,/^order status$/,/^status$/]);
+    const meta=posMetaFor(name,rows,hi);
+    const byDay={};let skipped=0;
+    rows.slice(hi+1).forEach(r=>{
+      const d=dateVal(r[date]);if(!d){skipped++;return;}
+      const ty=type>=0?String(r[type]||''):'';if(/payout|transfer|deposit/i.test(ty)){skipped++;return;}
+      const s=posMoney(r[sales]),n=posMoney(r[net]);let t=tax>=0?posMoney(r[tax]):0;
+      if(remitted>=0)t=Math.max(0,t-Math.abs(posMoney(r[remitted])));
+      if(!s&&!n&&!t)return;
+      const g=byDay[d]||(byDay[d]={date:d,who:'',net:0,tax:0,tip:0,fee:0,payout:0,n:0});
+      g.net+=s;g.tax+=t;g.payout+=n;if(s)g.n++;
+    });
+    const days=Object.values(byDay).sort((a,b)=>a.date<b.date?-1:1);
+    if(!days.length)return null;
+    days.forEach(g=>{g.fee=r2(g.net+g.tax-g.payout);if(g.fee<0){g.net-=g.fee;g.fee=0;}g.net=r2(g.net);g.tax=r2(g.tax);});
+    const lab=meta.platLabel==='your register'?'the app':meta.platLabel;
+    posCatOn(COMMISSION_CAT,TAX_LINES[COMMISSION_CAT]);
+    POS.preview=Object.assign(meta,{name,kind:'sales',days,refunds:0,skipped,payoutTotal:r2(days.reduce((a,g)=>a+g.payout,0)),
+      feeName:lab+' commission & fees',feeCat:COMMISSION_CAT,feeLabel:'Kept by '+lab,
+      feeNote:'What '+lab+' kept (commission, fees, promos you paid for) is filed as '+COMMISSION_CAT+', so sales minus that matches what it paid you. '});
+    return posPrepThenShow();
+  }
+  return null;
+}
+
+// ─── Etsy's monthly statement: sales, fees, ads and shipping labels each on their own line ───
+function posEtsy(name,rows){
+  for(let hi=0;hi<Math.min(rows.length,10);hi++){
+    const h=rows[hi].map(posH);
+    const type=h.indexOf('type'),date=h.indexOf('date'),net=h.indexOf('net'),amt=h.indexOf('amount'),feeT=posCol(h,[/^fees taxes$/,/^fees and taxes$/]);
+    if(type<0||date<0||net<0||feeT<0||h.indexOf('title')<0)continue;
+    const meta=posMetaFor(name.match(/etsy/i)?name:'etsy '+name,rows,hi);
+    const byDay={};let skipped=0,refunds=0;
+    const val=v=>{const n=moneyVal(v);return n===null?0:n;};
+    rows.slice(hi+1).forEach(r=>{
+      const d=dateVal(r[date]);if(!d){skipped++;return;}
+      const t=String(r[type]||'').trim().toLowerCase();const n=val(r[net]),a=val(r[amt]);
+      if(/deposit|payment|transfer/.test(t))return;
+      const g=byDay[d]||(byDay[d]={date:d,who:'',net:0,tax:0,tip:0,fee:0,ads:0,ship:0,n:0});
+      if(t==='sale'){g.net+=a||n;g.n++;}
+      else if(t==='refund'){g.net+=n||-Math.abs(a);refunds++;}
+      else if(t==='tax'){g.net+=n;}                 // Etsy collects and pays the sales tax itself
+      else if(t==='marketing'){g.ads+=-n;}
+      else if(t==='shipping'){g.ship+=-n;}
+      else if(t==='fee'){g.fee+=-n;}
+      else if(n>0)g.net+=n;else g.fee+=-n;
+    });
+    const days=Object.values(byDay).filter(g=>g.net||g.fee||g.ads||g.ship).sort((a,b)=>a.date<b.date?-1:1);
+    if(!days.length)return null;
+    days.forEach(g=>['net','fee','ads','ship'].forEach(k=>g[k]=r2(g[k])));
+    posCatOn(COMMISSION_CAT,TAX_LINES[COMMISSION_CAT]);
+    POS.preview=Object.assign(meta,{name,kind:'sales',days,refunds,skipped,
+      feeName:'Etsy fees',feeCat:COMMISSION_CAT,feeLabel:'Etsy fees, ads & labels',
+      feeNote:'Listing, transaction and payment fees are filed as '+COMMISSION_CAT+', Etsy Ads as Advertising, and shipping labels you bought as Other Expense. Etsy collects and pays the sales tax for these orders, so none is added to your sales tax. '});
+    return posPrepThenShow();
+  }
+  return null;
+}
+
+// ─── Venmo, Cash App and PayPal statements: pick which payments were for the business ───
+function posPayApp(name,rows){
+  for(let hi=0;hi<Math.min(rows.length,10);hi++){
+    const h=rows[hi].map(posH);
+    const isVenmo=h.includes('datetime')&&h.some(c=>/^amount total/.test(c));
+    const isPaypal=h.includes('gross')&&h.includes('fee')&&h.includes('net')&&h.includes('type')&&h.includes('status');
+    const isCash=h.includes('transaction type')&&h.includes('net amount');
+    if(!isVenmo&&!isPaypal&&!isCash)continue;
+    const app=isVenmo?'Venmo':isPaypal?'PayPal':'Cash App';
+    const C={date:posCol(h,[/^datetime$/,/^date$/,/date/]),type:posCol(h,[/^type$/,/^transaction type$/]),status:posCol(h,[/^status$/]),
+      who:isVenmo?h.indexOf('from'):posCol(h,[/^name of sender receiver$/,/^name$/,/^from email address$/]),
+      note:posCol(h,[/^note$/,/^notes$/,/^item title$/,/^subject$/]),
+      amt:isVenmo?posCol(h,[/^amount total/]):isPaypal?h.indexOf('gross'):posCol(h,[/^amount$/]),
+      fee:isVenmo?posCol(h,[/^amount fee/]):h.indexOf('fee'),tip:isVenmo?posCol(h,[/^amount tip/]):-1,tax:isVenmo?posCol(h,[/^amount tax$/,/^amount tax /]):-1,
+      id:posCol(h,[/^id$/,/^transaction id$/])};
+    const list=[];
+    rows.slice(hi+1).forEach((r,i)=>{
+      const d=dateVal(String(r[C.date]||'').replace('T',' '));if(!d)return;
+      const a=moneyVal(String(r[C.amt]||'').replace(/\s/g,''));if(a===null||a<=0)return;
+      const ty=C.type>=0?String(r[C.type]||''):'',st=C.status>=0?String(r[C.status]||''):'';
+      if(/transfer|withdraw|deposit|cash ?out|cash ?in|conversion|hold|authori|bitcoin|stock|boost|reversal|cashback|interest/i.test(ty))return;
+      if(/pend|fail|cancel|denied|declin|refund|revers/i.test(st))return;
+      list.push({i,date:d,who:C.who>=0?String(r[C.who]||'').trim():'',note:C.note>=0?String(r[C.note]||'').trim():'',amt:r2(a),
+        fee:C.fee>=0?Math.abs(posMoney(String(r[C.fee]||'').replace(/\s/g,''))):0,tip:C.tip>=0?posMoney(String(r[C.tip]||'').replace(/\s/g,'')):0,
+        tax:C.tax>=0?posMoney(String(r[C.tax]||'').replace(/\s/g,'')):0,on:true});
+    });
+    if(!list.length){toast('No money coming in found in that '+app+' file',true);return true;}
+    const meta=posMetaFor(app+' '+name,rows,hi);
+    POS.pay={name,app,list,meta};
+    posPayPick();
+    return true;
+  }
+  return null;
+}
+function posPayPick(){
+  const P=POS.pay;const on=P.list.filter(x=>x.on);
+  const m=posModal();document.getElementById('posTitle').textContent='Which '+P.app+' payments were for the business?';
+  document.getElementById('posBody').innerHTML='<p class="bk-sub" style="margin:0 0 8px;">These are the payments that came in. Uncheck anything personal (rent from a roommate, a friend paying you back). Money you sent isn’t brought in here.</p>'
+    +'<div class="bk-actions" style="margin:0 0 8px;"><button class="link-btn" onclick="POS.pay.list.forEach(x=>x.on=true);posPayPick()">Check all</button> · <button class="link-btn" onclick="POS.pay.list.forEach(x=>x.on=false);posPayPick()">Uncheck all</button></div>'
+    +'<div class="bank-prev" style="max-height:46vh;overflow:auto;">'+P.list.map((x,k)=>'<label class="bank-line" style="cursor:pointer;gap:10px;"><input type="checkbox" '+(x.on?'checked ':'')+'onchange="POS.pay.list['+k+'].on=this.checked;document.getElementById(\'payGoN\').textContent=POS.pay.list.filter(y=>y.on).length" style="width:18px;height:18px;flex-shrink:0;">'
+      +'<div class="bank-main"><div class="bk-payee">'+esc(x.who||'Payment')+'</div><div class="bk-sub">'+esc(prettyDate(x.date))+(x.note?' · '+esc(x.note.slice(0,60)):'')+(x.fee?' · fee '+fmt(x.fee):'')+'</div></div><div class="bk-amt in">'+fmt(x.amt)+'</div></label>').join('')+'</div>'
+    +'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" onclick="posPayGo()">Next: <span id="payGoN">'+on.length+'</span> payments</button></div>';
+  m.classList.add('open');
+}
+function posPayGo(){
+  const P=POS.pay;const on=P.list.filter(x=>x.on);if(!on.length){toast('Check at least one payment',true);return;}
+  const byDay={};
+  on.forEach(x=>{const g=byDay[x.date]||(byDay[x.date]={date:x.date,who:'',net:0,tax:0,tip:0,fee:0,n:0});
+    g.net+=x.amt-x.tip-x.tax;g.tip+=x.tip;g.tax+=x.tax;g.fee+=x.fee;g.n++;});
+  const days=Object.values(byDay).sort((a,b)=>a.date<b.date?-1:1);days.forEach(g=>['net','tax','tip','fee'].forEach(k=>g[k]=r2(g[k])));
+  // a different set of payments from the same day still counts: tag days by which payments they hold
+  POS.preview=Object.assign({},P.meta,{name:P.name,kind:'sales',days,refunds:0,skipped:P.list.length-on.length,
+    feeName:P.app+' fees',feeLabel:P.app+' fees',feeNote:P.app+' fees are filed as Bank & Card Fees. ',
+    cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])});
+  posPrepThenShow();
+}
+
+// ─── "Send us this file": when the Hub can't read something, it goes to The People's Voices to teach it ───
+POS.last=null;
+function posSendHTML(){
+  if(typeof BIZ==='undefined'||!BIZ.id)return '';
+  if(!POS.last||(typeof isDemo==='function'&&isDemo()))return '';
+  return '<div class="pos-send"><b>Still not right?</b> Send this file to The People’s Voices and we’ll teach the Hub to read it. '
+    +'<button class="link-btn" onclick="posSendFile(this)">Send us this file</button>'
+    +'<div class="bk-sub">It may include customer names or order details. It’s only used to add your register to the Hub.</div></div>';
+}
+async function posSendFile(btn){
+  const L=POS.last;if(!L)return;
+  const note=prompt('Anything we should know? (Which app or register it’s from, what you were trying to bring in.)','')||'';
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    const csv=L.rows.map(r=>r.map(c=>{c=String(c==null?'':c);return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\n');
+    await sb('rpc/ohb_send_import_sample',{method:'POST',body:JSON.stringify({p_biz:BIZ.id,p_name:L.name,p_content:csv.slice(0,1500000),p_note:note.slice(0,500)})});
+    if(btn)btn.textContent='Sent ✓';
+    toast('Sent. We’ll let you know when the Hub can read it.');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='Send us this file';}
+    toast(/ohb_send_import_sample|schema cache|PGRST202/i.test(e.message)?'This needs the Hub’s latest update. Please let The People’s Voices know.':'Didn’t send: '+e.message,true);
+  }
+}
+(function(){const st=document.createElement('style');st.textContent=`
+.pos-send{margin-top:12px;padding:10px 12px;background:var(--cream);border-radius:10px;font-size:13.5px;}
+.pos-send .bk-sub{margin-top:4px;}
+`;document.head.appendChild(st);})();
+
+
+// ═══════════════════════════════════════════════════════
+// SEVERAL FILES AT ONCE, AND "SYNC NOW" FOR CONNECTED SERVICES
+// Pick or drag in every file at once: the Hub works out what each one is and takes
+// them one after another. Square and Shopify can be connected instead, so one tap on
+// Sync now pulls everything since the last import. Everything goes through the same
+// preview, so nothing counts twice.
+// ═══════════════════════════════════════════════════════
+POS.queue=[];POS.qTotal=0;POS.qState='';POS.qTimer=null;
+async function posReadFile(file){
+  if(/\.xlsx?$/i.test(file.name)){
+    if(!window.XLSX)await loadScriptOnce(XLSX_URL);
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    return wb.SheetNames.map(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:''}).map(r=>r.map(c=>String(c==null?'':c))).filter(r=>r.some(x=>x.trim()!=='')))
+      .sort((a,b)=>b.length-a.length)[0]||[];
+  }
+  return parseCSV(await file.text());
+}
+function posStartQueue(items){
+  items=items.filter(Boolean);if(!items.length)return;
+  POS.queue=items.slice();POS.qTotal=items.length;posNext();
+}
+function posQLabel(){
+  const el=document.getElementById('posQ');if(!el)return;
+  const at=POS.qTotal-POS.queue.length;
+  el.textContent=POS.qTotal>1?'File '+at+' of '+POS.qTotal+(POS.qCur?': '+POS.qCur:''):'';
+  el.style.display=POS.qTotal>1?'':'none';
+}
+async function posNext(){
+  clearTimeout(POS.qTimer);
+  const it=POS.queue.shift();
+  if(!it){if(POS.qTotal>1)toast('Done with all '+POS.qTotal+'.');POS.qTotal=0;POS.qState='';POS.qCur='';posQLabel();return;}
+  POS.qState='starting';POS.qCur=it.label||it.name||'';
+  posModal();posQLabel();
+  // if this one never opens a preview (an empty file, say), move on by itself
+  POS.qTimer=setTimeout(()=>{if(POS.qState==='starting'&&!document.getElementById('posModal').classList.contains('open'))posNext();},6000);
+  try{
+    if(it.file){
+      let rows;
+      try{rows=await posReadFile(it.file);}catch(e){toast('Couldn’t read '+it.file.name+'. If it’s from Excel, try saving it as a CSV.',true);return posNext();}
+      if(!rows.length){toast(it.file.name+' looks empty',true);return posNext();}
+      posHandleRows(it.file.name,rows);
+    }else if(it.sync){
+      const r=it.sync;
+      POS.last=null;
+      POS.preview=Object.assign(posMetaFor(r.provider==='square'?'square':'shopify '+r.account,[[]],0),
+        r.provider==='square'?{src:'pos',platLabel:'Square',method:'Card reader',vendor:'Square',feeName:'Square processing fees'}:{src:'shopify',platLabel:'Shopify',method:'Shopify',vendor:'Shopify',feeName:'Shopify Payments fees'},
+        {name:(r.provider==='square'?'Square':'Shopify')+(r.account?' · '+r.account:'')+' (synced)',kind:'sales',days:r.days,refunds:0,skipped:0});
+      posPrepThenShow();
+    }
+  }catch(e){toast(e.message,true);posNext();}
+}
+// the queue moves on whenever the import window closes (imported, cancelled or closed)
+(function(){
+  const watch=()=>{const m=document.getElementById('posModal');if(!m||m._qWatch)return;m._qWatch=true;
+    new MutationObserver(()=>{const open=m.classList.contains('open');
+      if(open&&POS.qState==='starting'){POS.qState='open';posQLabel();}
+      else if(!open&&POS.qState==='open'){POS.qState='';setTimeout(posNext,250);}
+    }).observe(m,{attributes:true,attributeFilter:['class']});};
+  const _pm=posModal;posModal=function(){const m=_pm.apply(this,arguments);
+    if(!document.getElementById('posQ')){const t=document.getElementById('posTitle');if(t){const q=document.createElement('div');q.id='posQ';q.className='pos-q';q.style.display='none';t.insertAdjacentElement('afterend',q);}}
+    watch();return m;};
+})();
+// one or many files from the picker
+onPosFile=async function(input){
+  const files=[...(input.files||[])];input.value='';
+  if(!files.length)return;
+  posStartQueue(files.map(f=>({file:f,name:f.name})));
+};
+// drag files onto the import card
+function posWireDrop(){
+  const card=document.getElementById('posImportCard');if(!card||card._drop)return;card._drop=true;
+  card.addEventListener('dragover',e=>{e.preventDefault();card.classList.add('pos-drag');});
+  card.addEventListener('dragleave',()=>card.classList.remove('pos-drag'));
+  card.addEventListener('drop',e=>{e.preventDefault();card.classList.remove('pos-drag');
+    const files=[...(e.dataTransfer&&e.dataTransfer.files||[])].filter(f=>/\.(csv|txt|xlsx?|tsv)$/i.test(f.name));
+    if(!files.length){toast('Drop CSV or Excel files here',true);return;}
+    posStartQueue(files.map(f=>({file:f,name:f.name})));});
+}
+
+// ─── connected services ───
+const POSC={list:null,busy:false};
+// The Kilted Farmers' own books use a fixed id for its connections
+function posBizId(){return (typeof BIZ!=='undefined'&&BIZ.id)||'00000000-0000-0000-0000-0000000000f1';}
+function posConnCan(){try{return !(typeof isDemo==='function'&&isDemo())&&isStewardUser();}catch(e){return false;}}
+async function posFn(body){
+  const r=await fetch(SUPABASE_URL+'/functions/v1/pos-connect',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_KEY,Authorization:'Bearer '+window._authToken},body:JSON.stringify(Object.assign({biz:posBizId()},body))});
+  let d=null;try{d=await r.json();}catch(e){}
+  if(r.status===404)throw new Error('Connecting services needs a one-time setup. Please let The People’s Voices know.');
+  if(!d||d.ok===false)throw new Error((d&&d.error)||'That didn’t work ('+r.status+')');
+  return d;
+}
+async function posConnLoad(){
+  if(!posConnCan()){POSC.list=[];return;}
+  try{const r=await sb('rpc/ohb_my_connections',{method:'POST',body:JSON.stringify({p_biz:posBizId()})});POSC.list=Array.isArray(r)?r:(r&&r.ohb_my_connections)||[];}
+  catch(e){POSC.list=null;}
+}
+function posConnHTML(){
+  if(!posConnCan())return '';
+  if(POSC.list===null)return '';   // not set up yet: nothing to show
+  const has=p=>POSC.list.find(c=>c.provider===p);
+  const name={square:'Square',shopify:'Shopify'};
+  let h='<div class="pos-conn"><div class="pos-conn-h">Connected services</div>';
+  if(!POSC.list.length)h+='<div class="bk-sub">Connect Square or Shopify once, and <b>Sync now</b> pulls your sales in without downloading anything.</div>';
+  POSC.list.forEach(c=>{h+='<div class="pos-conn-row"><span>'+(c.status==='reconnect'?'⚠️':'✓')+' <b>'+esc(name[c.provider]||c.provider)+'</b>'+(c.account_name&&c.account_name!==name[c.provider]?' · '+esc(c.account_name):'')
+    +'<span class="bk-sub"> · '+(c.status==='reconnect'?'needs connecting again':c.last_sync_at?'synced '+esc(prettyDate(isoLocal(c.last_sync_at))):'not synced yet')+'</span></span>'
+    +'<button class="link-btn" onclick="'+(c.status==='reconnect'?'posConnect(\''+c.provider+'\')':'posDisconnect(\''+c.provider+'\')')+'">'+(c.status==='reconnect'?'Reconnect':'Disconnect')+'</button></div>';});
+  h+='<div class="bk-actions" style="margin-top:8px;">'+(POSC.list.length?'<button class="btn-green" id="posSyncBtn" onclick="posSyncNow()">⟳ Sync now</button>':'')
+    +(has('square')?'':'<button class="btn-secondary" onclick="posConnect(\'square\')">+ Connect Square</button>')
+    +(has('shopify')?'':'<button class="btn-secondary" onclick="posConnect(\'shopify\')">+ Connect Shopify</button>')+'</div></div>';
+  return h;
+}
+async function posConnRender(){
+  const card=document.getElementById('posImportCard');if(!card)return;
+  await posConnLoad();
+  let box=document.getElementById('posConn');
+  if(!box){box=document.createElement('div');box.id='posConn';const c=card.querySelector('.pos-card');(c||card).appendChild(box);}
+  box.innerHTML=posConnHTML();
+}
+async function posConnect(provider){
+  let shop='';
+  if(provider==='shopify'){shop=prompt('Your Shopify store address (the part before .myshopify.com, or the whole thing):','');if(!shop)return;}
+  try{const d=await posFn({action:'start',provider,shop});location.href=d.url;}
+  catch(e){toast(e.message,true);}
+}
+async function posDisconnect(provider){
+  if(!confirm('Disconnect '+(provider==='square'?'Square':'Shopify')+'? Sales already brought in stay. You can connect it again any time.'))return;
+  try{await posFn({action:'disconnect',provider});toast('Disconnected');posConnRender();}catch(e){toast(e.message,true);}
+}
+// from the day after the last sale already brought in from each service, through yesterday
+async function posSyncRanges(){
+  const today=isoLocal(new Date()),y=today.slice(0,4);
+  const ranges={};
+  for(const c of POSC.list||[]){
+    const src=c.provider==='square'?'pos':'shopify';
+    let last='';
+    try{const r=await sb('kf_revenue_entries?select=txn_date&import_key=like.'+encodeURIComponent(src+':*')+'&order=txn_date.desc&limit=1');last=r&&r[0]&&r[0].txn_date||'';}catch(e){}
+    let from=last?isoLocal(new Date(parseISO(last).getTime()+864e5)):y+'-01-01';
+    if(c.provider==='shopify'&&!last){const d=new Date();d.setDate(d.getDate()-59);from=isoLocal(d)>from?isoLocal(d):from;}
+    ranges[c.provider]={from,to:today};
+  }
+  return ranges;
+}
+async function posSyncNow(){
+  if(POSC.busy)return;POSC.busy=true;
+  const btn=document.getElementById('posSyncBtn');if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+  try{
+    const ranges=await posSyncRanges();
+    const d=await posFn({action:'sync',ranges,offset:new Date().getTimezoneOffset()});
+    const items=[];const notes=[];
+    (d.results||[]).forEach(r=>{
+      const nm=r.provider==='square'?'Square':'Shopify';
+      if(r.error){notes.push(nm+': '+r.error);return;}
+      const days=(r.days||[]).filter(g=>g.net||g.tax||g.tip||g.fee);
+      if(!days.length){notes.push(nm+' is up to date');return;}
+      items.push({sync:Object.assign({},r,{days}),label:nm+' sales'});
+    });
+    if(notes.length)toast(notes.join(' · '),notes.some(n=>!/up to date/.test(n)));
+    posStartQueue(items);
+    posConnRender();
+  }catch(e){toast(e.message,true);}
+  POSC.busy=false;if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent='⟳ Sync now';}
+}
+// coming back from Square or Shopify after connecting
+(function(){
+  const q=new URLSearchParams(location.search);const ok=q.get('connected'),bad=q.get('connect_error');
+  if(!ok&&!bad)return;
+  try{const u=new URL(location.href);u.searchParams.delete('connected');u.searchParams.delete('connect_error');history.replaceState(null,'',u.pathname+u.search+u.hash);}catch(e){}
+  setTimeout(()=>{toast(ok?(ok==='square'?'Square':'Shopify')+' is connected. Tap Sync now on Revenue & Expenses to bring your sales in.':'Didn’t connect: '+bad,!ok);},2500);
+})();
+// the import card: several files at once, drag and drop, and the connected services
+(function(){
+  const _mount=posMount;posMount=function(){const r=_mount.apply(this,arguments);
+    const inp=document.getElementById('posFile');if(inp)inp.multiple=true;
+    posWireDrop();posConnRender();return r;};
+  const st=document.createElement('style');st.textContent=`
+.pos-q{font-size:12px;font-weight:700;letter-spacing:.4px;color:var(--mid);margin:-4px 0 8px;}
+.pos-drag{outline:3px dashed var(--green);outline-offset:4px;border-radius:14px;}
+.pos-conn{margin-top:14px;padding-top:12px;border-top:1px solid var(--cream-dark);}
+.pos-conn-h{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mid);font-weight:700;margin-bottom:6px;}
+.pos-conn-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0;font-size:14px;}
+`;document.head.appendChild(st);
+})();
+
 // A card reader's sales report, not a bank statement?
 function looksLikeSalesReport(rows){
   for(let i=0;i<Math.min(rows.length,15);i++){
@@ -6298,9 +6785,11 @@ function posSalesPreview(name,rows,d){
   const C=d.C;const byKey={};let skipped=0,refunds=0;
   rows.slice(d.hi+1).forEach(r=>{
     const date=dateVal(r[C.date]);if(!date){skipped++;return;}
+    if(C.status>=0&&/cancel|void|declin|fail|abandon|reject|^refunded$|^pending$|^unpaid$/i.test(String(r[C.status]||'').trim())){skipped++;return;}
     let net=C.net>=0?posMoney(r[C.net]):C.gross>=0?posMoney(r[C.gross])+(C.disc>=0?posMoney(r[C.disc]):0):C.amount>=0?posMoney(r[C.amount]):0;
     const tax=C.tax>=0?posMoney(r[C.tax]):0,tip=C.tip>=0?posMoney(r[C.tip]):0,fee=C.fee>=0?Math.abs(posMoney(r[C.fee])):0;
     if(C.net<0&&C.gross<0&&C.amount>=0)net=net-tax-tip;   // a plain "amount" usually includes tax and tip
+    else if(C.net>=0&&C.ship>=0)net+=posMoney(r[C.ship]); // shipping you charged is income too
     const ev=C.event>=0?String(r[C.event]||''):'';if(/refund/i.test(ev))refunds++;
     if(!net&&!tax&&!tip&&!fee)return;
     const who=C.staff>=0?posStaffName(r[C.staff]):'';
@@ -6308,8 +6797,8 @@ function posSalesPreview(name,rows,d){
     g.net+=net;g.tax+=tax;g.tip+=tip;g.fee+=fee;g.n++;
   });
   const days=Object.values(byKey).sort((a,b)=>a.date<b.date?-1:1);
-  if(!days.length){toast('No sales found in that file',true);return;}
-  POS.preview={name,kind:'sales',days,refunds,skipped,cat:(INCOME_CATS.find(c=>/market|in-store|sales|services/i.test(c))||INCOME_CATS[0])};
+  if(!days.length){if(!d.mapped)return posMapper(name,rows);toast('No sales found with those columns. Try picking a different amount column.',true);return posMapper(name,rows,true);}
+  POS.preview=Object.assign(posMetaFor(name,rows,d.hi),{name,kind:'sales',days,refunds,skipped});
   posPrepThenShow();
 }
 // Before the preview: weeks already logged by hand (so they don't count twice), and days far bigger than usual
@@ -6337,25 +6826,26 @@ function posModal(){
   document.body.appendChild(m);return m;
 }
 function posShowSales(){
-  const p=POS.preview;const t=k=>p.days.reduce((a,g)=>a+g[k],0);
+  const p=POS.preview;const t=k=>p.days.reduce((a,g)=>a+(+g[k]||0),0);
   const m=posModal();document.getElementById('posTitle').textContent=p.summary?'Import a sales summary':'Import sales';
   const dates=p.days.map(g=>g.date);
   document.getElementById('posBody').innerHTML='<div class="bk-sub" style="margin-bottom:10px;">'+esc(p.name)+' · '+esc(prettyDate(dates[0]))+' – '+esc(prettyDate(dates[dates.length-1]))+'</div>'
     +'<div class="bk-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">'
-    +[['Sales',t('net'),'var(--green)'],['Sales tax',t('tax')],['Tips',t('tip')],['Card fees',t('fee'),'var(--red)']].map(([l,v,c])=>'<div class="bk-stat"><div class="bk-stat-l">'+l+'</div><div class="bk-stat-v"'+(c?' style="color:'+c+';"':'')+'>'+fmt(v)+'</div></div>').join('')+'</div>'
+    +[['Sales',t('net'),'var(--green)'],['Sales tax',t('tax')],['Tips',t('tip')],[p.feeLabel||'Card fees',t('fee')+(t('ads')||0)+(t('ship')||0),'var(--red)']].map(([l,v,c])=>'<div class="bk-stat"><div class="bk-stat-l">'+l+'</div><div class="bk-stat-v"'+(c?' style="color:'+c+';"':'')+'>'+fmt(v)+'</div></div>').join('')+'</div>'
     +'<div class="txn-grid"><div><label>File the sales under</label><select class="period-select" onchange="POS.preview.cat=this.value">'+INCOME_CATS.filter(c=>!/tip/i.test(c)).map(c=>'<option'+(c===p.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div></div>'
     +(p.summary?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">This is a <b>summary</b>'+(p.summary.start?' for '+esc(prettyDate(p.summary.start))+' – '+esc(prettyDate(p.summary.end)):'')+', with no day-by-day detail. It goes in as one entry per person, dated '+esc(prettyDate(p.summary.end))+', so it all lands in that pay week. For sales spread over the right weeks, export <b>Transactions</b> from Square instead (Reports → Transactions → Export → Transactions CSV). Don’t import both for the same dates, or sales count twice.</span></div>':'')
     +(posManualWeeks(p).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipManual?'checked ':'')+'onchange="POS.preview.skipManual=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Skip the '+posManualWeeks(p).length+' week'+(posManualWeeks(p).length===1?'':'s')+' you already logged by hand</b> ('+fmt(posManualWeeks(p).reduce((a,l)=>a+p.manual[l],0))+' entered already), so those sales don’t count twice. Uncheck to bring them in too.</span></label>':'')
     +((p.odd||[]).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipOdd?'checked ':'')+'onchange="POS.preview.skipOdd=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Leave out '+(p.odd.length===1?'a day that looks':p.odd.length+' days that look')+' like a mistake:</b> '
       +p.odd.slice(0,4).map(k=>{const g=p.days.find(x=>x.date+'|'+(x.who||'')===k);return esc(prettyDate(g.date))+' ('+(g.net<0?'−':'')+fmt(Math.abs(g.net))+')';}).join(', ')+(p.odd.length>4?'…':'')
-      +'. That’s far more than a usual day. A sale typed in wrong and refunded on another day does this. Check it in Square, and uncheck if it’s real.</span></label>':'')
+      +'. That’s far more than a usual day. A sale typed in wrong and refunded on another day does this. Check it in '+esc(p.platLabel&&p.platLabel!=='your register'?p.platLabel:'your register')+', and uncheck if it’s real.</span></label>':'')
     +'<div class="bk-sub" style="margin:8px 0;">Becomes '+p.days.length+(p.summary?' entr'+(p.days.length===1?'y':'ies'):' daily entr'+(p.days.length===1?'y':'ies'))
     +(p.days.some(g=>g.who)?', split by who made the sale (so market commission goes to the right person)':'')+'. '
     +(t('tax')?'Sales tax is kept out of your income and tracked for your sales tax return. ':'')
     +(t('tip')?'Tips are filed as Tips so they go to the tip pool, not the sales pool. ':'')
-    +(t('fee')?'Card fees are filed as Bank & Card Fees. ':'')
+    +(t('fee')||t('ads')||t('ship')?(p.feeNote||'Card fees are filed as Bank & Card Fees. '):'')
+    +(p.payoutTotal!=null?'Sales and tax minus what was kept comes to '+fmt(p.payoutTotal)+', what '+esc(p.platLabel)+' paid you. ':'')
     +(p.refunds?p.refunds+' refund'+(p.refunds===1?'':'s')+' are subtracted. ':'')+'</div>'
-    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(g.who):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
+    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(g.who):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+(g.ads?' · ads '+fmt(g.ads):'')+(g.ship?' · labels '+fmt(g.ship):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
     +(p.days.length>8?'<div class="bk-sub" style="text-align:center;padding:6px;">…and '+(p.days.length-8)+' more days</div>':'')+'</div>'
     +'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" id="posGo" onclick="posImportSales()">Import</button></div>';
   m.classList.add('open');
@@ -6367,9 +6857,11 @@ async function posImportSales(){
   let leftOut=0;
   p.days.filter(g=>{const out=skipWeeks.has(getWeekLabel(parseISO(g.date)))||skipOdd.has(g.date+'|'+(g.who||''));if(out)leftOut++;return !out;}).forEach(g=>{
     const label=getWeekLabel(parseISO(g.date));const tag=src+':'+g.date+':'+(g.who||'all');
-    if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
-    if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:'Card reader',worked_by:g.who||null}});
-    if(g.fee>=0.005)exps.push({key:tag+':fees',date:g.date,label,fee:r2(g.fee)});
+    if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
+    if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null}});
+    if(g.fee>=0.005)exps.push({key:tag+':fees',date:g.date,label,fee:r2(g.fee),name:p.feeName||'Card processing fees',cat:p.feeCat||'Bank & Card Fees'});
+    if(g.ads>=0.005)exps.push({key:tag+':ads',date:g.date,label,fee:r2(g.ads),name:(p.vendor||'')+' ads',cat:'Advertising'});
+    if(g.ship>=0.005)exps.push({key:tag+':ship',date:g.date,label,fee:r2(g.ship),name:'Shipping labels ('+(p.vendor||'')+')',cat:'Other Expense'});
   });
   try{
     const keys=revs.map(x=>x.key).concat(exps.map(x=>x.key));
@@ -6399,7 +6891,7 @@ async function posImportSales(){
     for(let i=0;i<newRevs.length;i+=200)await sb('kf_revenue_entries',{method:'POST',body:JSON.stringify(newRevs.slice(i,i+200))});
     let nf=0;
     for(const f of exps.filter(x=>!have.has(x.key))){
-      await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:await getOrCreatePeriodId(f.label),name:'Card processing fees',amount:f.fee,category:'Bank & Card Fees',vendor:'Card reader',txn_date:f.date,payment_method:'Card reader',import_key:f.key,receipt_url:''})});nf++;
+      await sb('kf_expenses',{method:'POST',body:JSON.stringify({period_id:await getOrCreatePeriodId(f.label),name:f.name,amount:f.fee,category:f.cat,vendor:p.vendor||'Card reader',txn_date:f.date,payment_method:p.method||'Card reader',import_key:f.key,receipt_url:''})});nf++;
     }
     const skipped=revs.length+exps.length-newRevs.length-nf;
     document.getElementById('posModal').classList.remove('open');
