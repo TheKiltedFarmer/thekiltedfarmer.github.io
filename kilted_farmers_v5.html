@@ -1936,7 +1936,8 @@ async function loadRevLogEntries(){
     const revTotalEl=document.getElementById('revTotal');if(revTotalEl)revTotalEl.textContent=fmt(total);
     if(!entries.length){el.innerHTML='<div style="color:var(--mid);font-size:13px;padding:12px 0;">No revenue logged yet.</div>';return;}
     el.innerHTML=entries.map(e=>{
-      const t=new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+      // the day the money came in when we know it (bank or import); otherwise when it was typed in
+      const t=e.txn_date&&String(e.txn_date).slice(0,10)!==isoLocal(e.created_at)?'Received '+prettyDate(String(e.txn_date).slice(0,10)):new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
       const amt=parseFloat(e.amount)||0;
       // Store entry in a global map so buttons can reference by index
       window._revEntries=window._revEntries||{};
