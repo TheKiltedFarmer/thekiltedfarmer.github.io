@@ -2562,16 +2562,70 @@ function bwBuild(){
   if(by.cash.length)steps.push({type:'cash',lines:by.cash});
   const stores={};by.store.forEach(l=>{const k=cleanBankDesc(l.description)||'Purchase';(stores[k]=stores[k]||[]).push(l);});
   Object.entries(stores).sort((a,b)=>b[1].reduce((s,l)=>s-l.amount,0)-a[1].reduce((s,l)=>s-l.amount,0)).forEach(([name,lines])=>steps.push({type:'store',name,lines}));
-  by.other.forEach(l=>steps.push({type:'one',l}));
+  // the same payer (or the same place) showing up again and again is one question, not twenty
+  const payers={},outs={},singles=[];
+  by.other.forEach(l=>{const k=cleanBankDesc(l.description)||(+l.amount>0?'Deposit':'Payment');const g=+l.amount>0?payers:outs;(g[k]=g[k]||[]).push(l);});
+  const tot=ls=>Math.abs(ls.reduce((s,l)=>s+(+l.amount),0));
+  Object.entries(payers).sort((a,b)=>tot(b[1])-tot(a[1])).forEach(([name,lines])=>{if(lines.length>1)steps.push({type:'payer',name,lines});else singles.push(lines[0]);});
+  Object.entries(outs).sort((a,b)=>tot(b[1])-tot(a[1])).forEach(([name,lines])=>{if(lines.length>1)steps.push({type:'store',name,lines});else singles.push(lines[0]);});
+  singles.forEach(l=>steps.push({type:'one',l}));
   return steps;
 }
-function bankWizard(){
+// ── answers the Hub remembers: "Horrocks Market is a wholesale customer" sorts every future Horrocks deposit by itself
+function bwRuleKey(l){return(+l.amount>0?'in:':'out:')+String(cleanBankDesc(l.description)||'').toLowerCase().trim();}
+function bwGeneric(name){return !name||name.length<4||/^(deposit|payment|check|withdrawal|transfer|purchase|debit|credit|atm|cash|ach|pos)\b/i.test(name);}
+function bwRules(){
+  const r=Object.assign({},(BOOKS.acct&&BOOKS.acct.bankRules)||{});
+  // and the ones it can see from how you already sorted things: two or more from the same place, all the same way
+  const seen={};
+  (BOOKS.bank||[]).forEach(l=>{
+    if(l.status!=='added'&&l.status!=='matched')return;const row=(BOOKS.byKey||{})[l.match_key];if(!row||!row.category)return;
+    const k=bwRuleKey(l);if(bwGeneric(k.slice(k.indexOf(':')+1)))return;(seen[k]=seen[k]||{})[row.category]=(seen[k][row.category]||0)+1;
+  });
+  Object.entries(seen).forEach(([k,cs])=>{
+    if(r[k])return;const cats=Object.keys(cs);if(cats.length!==1||cs[cats[0]]<2)return;
+    const cat=cats[0];r[k]={do:'add',dir:k.startsWith('in:')?'in':'out',cat,pool:bwPoolable(cat)};
+  });
+  return r;
+}
+function bwPoolable(cat){return !MOVEMENT_CATS.includes(cat)&&cat!==GRANT_CAT&&cat!=='Equipment'&&!isNotPoolRev({source:cat});}
+async function bwRemember(lines,rule){
+  try{
+    const r=Object.assign({},(BOOKS.acct&&BOOKS.acct.bankRules)||{});let ch=false;
+    new Set(lines.map(bwRuleKey)).forEach(k=>{if(!bwGeneric(k.slice(k.indexOf(':')+1))){r[k]=rule;ch=true;}});
+    if(ch)await saveAcct({bankRules:r},true);
+  }catch(e){console.warn('remember',e);}
+}
+// sort everything the Hub already knows the answer to (never anything $1,000 or more: those always get asked)
+async function bwAutoApply(onStep){
+  const rules=bwRules();BW.auto={n:0,names:{}};
+  const todo=(BOOKS.bank||[]).filter(l=>bankEffectiveStatus(l)==='open'&&Math.abs(+l.amount)<1000&&rules[bwRuleKey(l)]);
+  for(let i=0;i<todo.length;i++){
+    const l=todo[i],r=rules[bwRuleKey(l)];if(onStep)onStep(i+1,todo.length);
+    try{
+      if(r.do==='status'){await sb(BW_T.bank+'?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:r.status,match_key:null})});l.status=r.status;l.match_key=null;}
+      else await bwAdd(l,r.dir,r.cat,r.pool);
+    }catch(e){console.warn('auto sort',e);break;}
+    const nm=cleanBankDesc(l.description);const a=BW.auto.names[nm]=BW.auto.names[nm]||{n:0,what:r.do==='status'?(r.status==='ignored'?'Left out (personal)':'Pay-out'):r.cat};a.n++;BW.auto.n++;
+  }
+  return BW.auto.n;
+}
+async function bankWizard(){
   if(!BOOKS.schema.txns){toast('Run the one-time setup at the top of Books first',true);return;}
-  BW.steps=bwBuild();BW.at=0;BW.done=0;
-  if(!BW.steps.length){toast('Nothing left to sort. Nice.');return;}
+  if(BW.busy)return;BW.busy=true;
   let m=document.getElementById('bwModal');
   if(!m){m=document.createElement('div');m.id='bwModal';m.className='modal-overlay';m.innerHTML='<div class="modal" style="max-width:560px;"><button class="modal-close" onclick="bwClose()" aria-label="Close">×</button><div id="bwBody"></div></div>';document.body.appendChild(m);}
-  m.classList.add('open');bwDraw();
+  m.classList.add('open');
+  const body=document.getElementById('bwBody');
+  body.innerHTML='<h2 class="bw-h">One moment…</h2><p class="bk-sub">Matching up what you already typed in, and sorting anything you’ve answered before.</p>';
+  BW.at=0;BW.done=0;
+  try{await autoMatchBank();}catch(e){console.warn('match',e);}
+  try{await bwAutoApply((i,n)=>{body.innerHTML='<h2 class="bw-h">Sorting the ones you already taught it…</h2><p class="bk-sub">'+i+' of '+n+'</p>';});}catch(e){console.warn('auto',e);}
+  BW.busy=false;
+  BW.steps=bwBuild();
+  if(BW.auto&&BW.auto.n)BW.steps.unshift({type:'auto'});
+  if(!BW.steps.length){m.classList.remove('open');toast('Nothing left to sort. Nice.');try{renderBooks();}catch(e){}return;}
+  bwDraw();
 }
 function bwClose(){const m=document.getElementById('bwModal');if(m)m.classList.remove('open');try{renderBooks();}catch(e){}}
 const bwMoney=n=>(n<0?'−':'+')+fmt(Math.abs(n));
@@ -2597,6 +2651,23 @@ function bwDraw(){
     return;
   }
   const s=BW.steps[BW.at];let h=bwHead();
+  if(s.type==='auto'){
+    const rows=Object.entries(BW.auto.names).sort((a,b)=>b[1].n-a[1].n);
+    h+='<h2 class="bw-h">'+BW.auto.n+' sorted by themselves</h2><p class="bk-sub">Same way you sorted them before, so you don’t have to answer twice.</p>'
+      +'<div class="bw-lines">'+rows.slice(0,12).map(([nm,a])=>'<div><span>'+esc(nm)+' ('+a.n+')</span><b>'+esc(a.what)+'</b></div>').join('')+(rows.length>12?'<div class="bk-sub">…and '+(rows.length-12)+' more</div>':'')+'</div>'
+      +'<div class="bw-choices">'+bwBtn(BW.steps.length>1?'Great, show me the rest':'Done','bwNext()','btn-green')+'</div>'
+      +'<p class="bk-sub">Something wrong? Any line can still be changed under Bank Matching.</p>';
+    el.innerHTML=h;return;
+  }
+  if(s.type==='payer'){
+    const n=s.lines.length;
+    h+='<h2 class="bw-h">'+esc(s.name)+' · '+n+' deposits · '+fmt(bwSum(s.lines))+'</h2>'+bwLineList(s.lines)
+      +'<p><b>What are these?</b></p><div class="bw-choices">'
+      +bwBtn('A customer or store paying me','bwPayer(\'sale\')','btn-green')+bwBtn('A grant or reimbursement','bwPayer(\'grant\')')
+      +bwBtn('My own money, put into the business','bwPayer(\'ownin\')')+bwBtn('A mix: go one by one','bwExplode()')+bwBtn('Not sure yet','bwNext()')+'</div><div id="bwMore"></div>'
+      +'<p class="bk-sub">Anything you already typed in by hand was matched up first, so nothing counts twice. After this, new deposits from '+esc(s.name)+' sort themselves.</p>';
+    el.innerHTML=h;return;
+  }
   if(s.type==='sure'){
     const parts=[];
     if(s.fee.length)parts.push('<li><b>'+s.fee.length+' bank fee'+(s.fee.length>1?'s':'')+'</b> ('+fmt(-bwSum(s.fee))+') go in as Bank & Card Fees.</li>');
@@ -2636,6 +2707,24 @@ function bwDraw(){
   el.innerHTML=h;
 }
 function bwNext(){BW.at++;bwDraw();}
+function bwPayer(kind){
+  const s=BW.steps[BW.at];
+  if(kind==='sale'){
+    const known=bwRules()[bwRuleKey(s.lines[0])];
+    const def=(known&&known.dir==='in'&&known.cat)||INCOME_CATS.find(c=>/wholesale/i.test(c))||INCOME_CATS[0];
+    document.getElementById('bwMore').innerHTML='<p><b>What kind of sale?</b></p>'+bwCatSelect('bwCat','in',def)+'<div class="bw-choices">'+bwBtn('Save all '+s.lines.length,'bwPayerSave(\'sale\')','btn-green')+'</div>';
+    return;
+  }
+  bwPayerSave(kind);
+}
+async function bwPayerSave(kind){
+  const s=BW.steps[BW.at];
+  const cat=kind==='grant'?GRANT_CAT:kind==='ownin'?'Owner Contribution':document.getElementById('bwCat').value;
+  const pool=kind==='sale'&&bwPoolable(cat);
+  await bwRun(s.lines,'in',cat,pool);
+  await bwRemember(s.lines,{do:'add',dir:'in',cat,pool});
+  bwNext();
+}
 // split a group into one question per line, right here
 function bwExplode(){const s=BW.steps[BW.at];BW.steps.splice(BW.at,1,...s.lines.map(l=>({type:'one',l})));bwDraw();}
 // follow-up for a single line: which category (sales and purchases), or straight to saving
@@ -2660,8 +2749,9 @@ async function bwSaveOne(kind,dateOverride){
     buy:['out',cat,true],equip:['out','Equipment',false],loanout:['out','Loan',false]};
   try{
     if(kind==='paid')await bwStatus('payout',true);
-    else if(kind==='own'||kind==='personal')await bwStatus('ignored',true,kind==='personal'?'personal':'');
-    else{const m=map[kind];await bwAdd(l,m[0],m[1],m[2],dateOverride);BW.done++;}
+    else if(kind==='own'||kind==='personal'){await bwStatus('ignored',true,kind==='personal'?'personal':'');if(kind==='personal')await bwRemember([l],{do:'status',status:'ignored'});}
+    else{const m=map[kind];await bwAdd(l,m[0],m[1],m[2],dateOverride);BW.done++;
+      if(kind==='sale'||kind==='buy'||kind==='grant')await bwRemember([l],{do:'add',dir:m[0],cat:m[1],pool:m[2]&&bwPoolable(m[1])});}
   }catch(e){toast('Didn’t save: '+e.message,true);return;}
   bwNext();
 }
@@ -2678,10 +2768,10 @@ async function bwAdd(l,dir,cat,poolable,dateOverride){
   const date=dateOverride||String(l.txn_date).slice(0,10),amt=Math.abs(+l.amount);
   const payee=cleanBankDesc(l.description)||String(l.description).slice(0,40);
   const notes='From bank: '+String(l.description).slice(0,80)+(dateOverride?' (paid '+prettyDate(String(l.txn_date).slice(0,10))+')':'');
-  const recent=(Date.now()-parseISO(String(l.txn_date).slice(0,10)).getTime())<=14*864e5;
+  const wk=getWeekLabel(parseISO(String(l.txn_date).slice(0,10)));
+  const recent=!dateOverride&&(wk===getWeekLabel()||wk===getWeekLabel(new Date(Date.now()-7*864e5)));
   let key;
   if(poolable&&recent&&!MOVEMENT_CATS.includes(cat)&&!isNotPoolRev({source:cat})){
-    const wk=getWeekLabel();
     if(dir==='in'){const r=await sb(BW_T.rev,{method:'POST',body:JSON.stringify(Object.assign({amount:amt,source:cat,notes:payee+' · '+notes,period_label:wk,reported_by:currentProfile?.name||''},BOOKS.schema.v2?{txn_date:date,payment_method:/check/i.test(l.description)?'Check':'Card',payee}:{}))});key='rev:'+r[0].id;}
     else{const b={period_id:await getOrCreatePeriodId(wk),name:payee,amount:amt,receipt_url:''};if(BOOKS.schema.v2)Object.assign(b,{category:cat,vendor:payee,txn_date:date,payment_method:'Card',notes});
       const e=await sb(BW_T.exp,{method:'POST',body:JSON.stringify(b)});key='exp:'+e[0].id;}
@@ -2691,6 +2781,7 @@ async function bwAdd(l,dir,cat,poolable,dateOverride){
   }
   await sb(BW_T.bank+'?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'added',match_key:key})});
   l.status='added';l.match_key=key;BOOKS.stale=true;
+  if(BOOKS.byKey)BOOKS.byKey[key]={key,category:cat,dir};
 }
 async function bwRun(lines,dir,cat,poolable){
   BW.busy=true;const el=document.getElementById('bwBody');
@@ -2709,8 +2800,8 @@ async function bwSure(){
 async function bwChecks(){const s=BW.steps[BW.at];const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'in',cat,true);bwNext();}
 async function bwStore(biz){
   const s=BW.steps[BW.at];
-  if(!biz){await bwStatus('ignored',true);bwNext();return;}
-  const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'out',cat,true);bwNext();
+  if(!biz){await bwStatus('ignored',true);await bwRemember(s.lines,{do:'status',status:'ignored'});bwNext();return;}
+  const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'out',cat,true);await bwRemember(s.lines,{do:'add',dir:'out',cat,pool:bwPoolable(cat)});bwNext();
 }
 async function bwCash(kind){
   const s=BW.steps[BW.at];
@@ -3957,6 +4048,11 @@ async function importBankLines(){
     renderBooks();
   }catch(e){toast('Import failed: '+e.message,true);btn.disabled=false;btn.textContent='Import';}
 }
+// the days a hand-typed entry's pay week covers, plus a few days for the deposit to land
+function bkWeekSpan(r){
+  if(!r.payWeek)return null;const b=getWeekBoundsFromLabel(r.payWeek);if(!b)return null;
+  const end=new Date(b.sun);end.setDate(end.getDate()+3);return[isoLocal(b.mon),isoLocal(end)];
+}
 async function autoMatchBank(){
   const lines=BOOKS.bank||[];
   const used=new Set(lines.filter(l=>bankEffectiveStatus(l)!=='open'&&l.match_key).map(l=>l.match_key));
@@ -3967,10 +4063,24 @@ async function autoMatchBank(){
     let best=null,bd=99;
     BOOKS.rows.forEach(r=>{
       if(r.dir!==dir||used.has(r.key)||Math.abs(r.amount-amt)>0.005)return;
-      const dd=daysBetween(r.date,l.txn_date);if(dd<-3||dd>7)return;
-      if(Math.abs(dd)<bd){bd=Math.abs(dd);best=r;}
+      const dd=daysBetween(r.date,l.txn_date);const w=bkWeekSpan(r);
+      const inWeek=w&&l.txn_date>=w[0]&&l.txn_date<=w[1];
+      if(!inWeek&&(dd<-3||dd>7))return;
+      const sc=inWeek?Math.min(Math.abs(dd),3):Math.abs(dd);
+      if(sc<bd){bd=sc;best=r;}
     });
     if(best){used.add(best.key);patches.push({l,key:best.key});}
+  });
+  // one entry typed by hand for a week, paid as two deposits (two stores, same customer)
+  const left=open.filter(l=>!patches.some(p=>p.l===l));const taken=new Set();
+  BOOKS.rows.forEach(r=>{
+    if(used.has(r.key)||!r.payWeek)return;const w=bkWeekSpan(r);if(!w)return;
+    const c=left.filter(l=>!taken.has(l)&&(+l.amount>0)===(r.dir==='in')&&l.txn_date>=w[0]&&l.txn_date<=w[1]);
+    for(let i=0;i<c.length;i++)for(let j=i+1;j<c.length;j++){
+      if(Math.abs(Math.abs(+c[i].amount)+Math.abs(+c[j].amount)-r.amount)<0.005){
+        taken.add(c[i]);taken.add(c[j]);used.add(r.key);patches.push({l:c[i],key:r.key},{l:c[j],key:r.key});return;
+      }
+    }
   });
   for(let i=0;i<patches.length;i+=8){
     await Promise.all(patches.slice(i,i+8).map(({l,key})=>sb('ohb_bank_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'matched',match_key:key})})
