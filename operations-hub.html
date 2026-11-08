@@ -2495,6 +2495,7 @@ async function onScanFiles(input){
   try{
     for(;;){const item=_scanQueue.find(q=>q.status==='waiting');if(!item)break;await processScanItem(item);}
   }finally{_scanBusy=false;if(sel)sel.disabled=false;renderScanPanel();}
+  if(BOOKS.stale){try{loadBooks(true);}catch(e){}}
   const read=_scanQueue.filter(q=>q.amount!=null&&q.status!=='error');
   const total=read.reduce((s,q)=>s+q.amount,0);
   const manual=_scanQueue.filter(q=>q.status==='manual').length;
@@ -2507,6 +2508,9 @@ async function processScanItem(item){
   try{
     const r=await readReceiptFile(item.file,setStage);
     Object.assign(item,{url:r.url,thumb:r.thumb,amount:r.amount,vendor:r.vendor,date:r.date,category:r.category,confidence:r.confidence});
+    // already in the books or on a bank statement? put the receipt there instead of adding it twice
+    if(r.amount!=null&&r.url){let m=null;try{m=await scanMatch(r);}catch(e){console.warn('receipt match',e);}
+      if(m){item.status='done';item.stage=m;renderScanPanel();return;}}
     expenses=expenses.filter(e=>e.dbId||e.name||e.amount||e.receiptUrl);
     const exp={id:++expCounter,name:r.vendor||'Receipt',amount:r.amount!=null?r.amount.toFixed(2):'',receiptUrl:r.url,dbId:null,
       category:r.category||'',vendor:r.vendor||'',date:r.date||'',needsCheck:r.confidence!=='high'};
@@ -2517,6 +2521,53 @@ async function processScanItem(item){
     await saveExpenses();
   }catch(e){console.error('Scan:',e);item.status='error';item.stage=e.message||'Failed';}
   renderScanPanel();
+}
+// ─── receipts find their purchase ───
+// Same amount, within a week of the receipt's date (or the vendor name matches): a purchase already in the books
+// gets the receipt attached; a card charge still waiting on the bank statement gets added with its receipt.
+const SCAN_T={exp:'ohb_expenses',txn:'ohb_transactions'};
+function scanNameHit(a,b){const w=String(a||'').toLowerCase().match(/[a-z]{3,}/g)||[];const t=String(b||'').toLowerCase();return w.some(x=>!/^(the|and|inc|llc|store|market|receipt)$/.test(x)&&t.includes(x));}
+function scanDays(a,b){const x=parseISO(a),y=parseISO(b);return x&&y?Math.abs(x-y)/864e5:null;}
+async function scanMatch(r){
+  if(!BOOKS.rows||!BOOKS.rows.length||BOOKS.stale){try{await loadBooks(true);}catch(e){}}
+  const amt=+r.amount;if(!(amt>0))return null;
+  const near=(d)=>{if(!r.date)return null;return scanDays(r.date,d);};
+  const score=(date,name)=>{const dd=near(date),hit=scanNameHit(r.vendor,name);
+    if(dd!=null&&dd>7)return 0;if(dd==null&&!hit)return 0;return (hit?2:0)+(dd==null?0:(dd<=2?2:1));};
+  // 1. already in the books, no receipt yet
+  const rows=(BOOKS.rows||[]).filter(x=>x.dir==='out'&&!x.receipt&&(x.src==='exp'||x.src==='txn')&&Math.abs(x.amount-amt)<0.005)
+    .map(x=>({x,s:score(x.date,(x.payee||'')+' '+(x.notes||''))})).filter(o=>o.s>0).sort((a,b)=>b.s-a.s);
+  if(rows.length&&(rows.length===1||rows[0].s>rows[1].s)){
+    const x=rows[0].x;
+    await sb(SCAN_T[x.src]+'?id=eq.'+encodeURIComponent(x.id),{method:'PATCH',body:JSON.stringify({receipt_url:r.url})});
+    x.receipt=r.url;BOOKS.stale=true;
+    return 'Attached to '+(x.payee||x.category)+' · '+prettyDate(x.date)+' (already in your books)';
+  }
+  // the same purchase already has a receipt: this is a second copy, so don't count it again
+  const dup=(BOOKS.rows||[]).find(x=>x.dir==='out'&&x.receipt&&Math.abs(x.amount-amt)<0.005&&score(x.date,(x.payee||'')+' '+(x.notes||''))>=2);
+  if(dup)return 'Already have this one: '+(dup.payee||dup.category)+' · '+prettyDate(dup.date)+' has its receipt. Not added again.';
+  // 2. a card charge on the bank statement that hasn't been sorted yet
+  const lines=(BOOKS.bank||[]).filter(l=>bankEffectiveStatus(l)==='open'&&+l.amount<0&&Math.abs(-l.amount-amt)<0.005)
+    .map(l=>({l,s:score(String(l.txn_date).slice(0,10),l.description)})).filter(o=>o.s>0).sort((a,b)=>b.s-a.s);
+  if(lines.length&&(lines.length===1||lines[0].s>lines[1].s)){
+    const l=lines[0].l,date=String(l.txn_date).slice(0,10);
+    const payee=r.vendor||cleanBankDesc(l.description);
+    const cat=r.category||guessCategory(r.vendor)||guessCategory(l.description)||'Supplies';
+    const old=(Date.now()-parseISO(date).getTime())>14*864e5&&BOOKS.schema.txns;
+    let key;
+    if(old){
+      const t=await sb(SCAN_T.txn,{method:'POST',body:JSON.stringify({txn_date:date,direction:'out',amount:amt,payee,category:cat,payment_method:'Card',notes:'From bank: '+String(l.description).slice(0,80),receipt_url:r.url,created_by:currentProfile?.name||''})});
+      key='txn:'+t[0].id;
+    }else{
+      const body={period_id:await getOrCreatePeriodId(getWeekLabel(parseISO(date))),name:payee,amount:amt,receipt_url:r.url};
+      if(BOOKS.schema.v2)Object.assign(body,{category:cat,vendor:payee,txn_date:date,payment_method:'Card',notes:'From bank: '+String(l.description).slice(0,80)});
+      const e=await sb(SCAN_T.exp,{method:'POST',body:JSON.stringify(body)});key='exp:'+e[0].id;
+    }
+    await sb('ohb_bank_lines?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'added',match_key:key})});
+    l.status='added';l.match_key=key;BOOKS.stale=true;
+    return 'Matched to your bank: '+payee+' · '+prettyDate(date)+' · filed as '+cat;
+  }
+  return null;
 }
 function clearScanPanel(){if(_scanBusy)return;_scanQueue=[];renderScanPanel();}
 function renderScanPanel(){
@@ -3046,7 +3097,9 @@ function openTxnModal(key,preset){
   document.getElementById('txnFund').checked=!!(r&&r.fund==='common_table');
   _txn.payWeek=r&&r.payWeek?r.payWeek:getWeekLabel(parseISO($v('txnDate')));
   // Something found on a bank statement belongs to this week's pool — past weeks were already paid out
-  if(!r&&p.bankLine){_txn.payWeek=getWeekLabel();_txn.weekTouched=true;}
+  if(!r&&p.bankLine){_txn.payWeek=getWeekLabel();_txn.weekTouched=true;
+    // something older than two weeks goes in the books on its own date, not into this week's pay
+    if(p.date&&(Date.now()-parseISO(p.date).getTime())>14*864e5&&BOOKS.schema.txns){const box=document.getElementById('txnPool');if(box){box.checked=false;}}}
   setTxnDir(_txn.dir,r?r.category:(p.category||''));
   refreshTxnPoolUI();
   renderTxnReceipt();
