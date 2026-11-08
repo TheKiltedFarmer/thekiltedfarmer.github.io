@@ -472,7 +472,9 @@ body{background:var(--cream);font-family:'Source Sans 3',sans-serif;color:var(--
 .inv-cell.n{text-align:right;max-width:90px;}
 
 /* LAYOUT (tab bar + page width — these classes were never styled) */
-.tabs{display:flex;background:#fff;border-bottom:2px solid var(--rule);padding:0 16px;max-width:960px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tabs{display:flex;flex-wrap:wrap;justify-content:center;background:#fff;border-bottom:2px solid var(--rule);padding:4px 12px 0;max-width:1100px;margin:0 auto;}
+.tabs .tab{padding:9px 13px;margin-bottom:0;}
+@media(max-width:700px){.tabs{padding:4px 6px 0;}.tabs .tab{padding:8px 9px;font-size:12px;}}
 .container{max-width:960px;margin:0 auto;padding:16px 14px 80px;}
 
 /* EXPENSE ROWS + RECEIPT SCANNER */
