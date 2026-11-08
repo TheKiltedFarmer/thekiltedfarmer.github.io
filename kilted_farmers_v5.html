@@ -4061,7 +4061,7 @@ async function onBankFile(input){
     const rows=parseCSV(await file.text());
     if(looksLikeSalesReport(rows)){
       toast('That’s a sales report from your card reader, not a bank statement. Opening it as sales instead.');
-      posHandleRows(file.name,rows);return;
+      await posLoadDevices();posHandleRows(file.name,rows);return;
     }
     bankHandleRows(file.name,rows);
   }catch(e){toast('Couldn’t read that file: '+e.message,true);}
@@ -6650,6 +6650,7 @@ async function onPosFile(input){
     }else rows=parseCSV(await file.text());
   }catch(e){toast('Couldn’t read that file. If it’s from Excel, try saving it as a CSV.',true);return;}
   if(!rows.length){toast('That file looks empty',true);return;}
+  await posLoadDevices();
   posHandleRows(file.name,rows);
 }
 // Shared by the sales importer and the bank importer (when a sales report lands there by mistake)
@@ -7031,6 +7032,7 @@ async function posNext(){
       let rows;
       try{rows=await posReadFile(it.file);}catch(e){toast('Couldn’t read '+it.file.name+'. If it’s from Excel, try saving it as a CSV.',true);return posNext();}
       if(!rows.length){toast(it.file.name+' looks empty',true);return posNext();}
+      await posLoadDevices();
       posHandleRows(it.file.name,rows);
     }else if(it.sync){
       const r=it.sync;
@@ -7227,13 +7229,33 @@ function looksLikeSalesReport(rows){
   return false;
 }
 function posMoney(v){const n=moneyVal(v);return n===null?0:n;}
+// "iPhone (4)" means nothing to the Hub until you say whose it is; the answer is kept for every import after
+function posDevKey(s){return String(s||'').trim().toLowerCase();}
+async function posLoadDevices(force){
+  if(POS.devices&&!force)return;
+  try{const r=await sb('kf_settings?key=eq.pos_devices&select=value');POS.devices=(r[0]&&r[0].value)||{};}catch(e){POS.devices=POS.devices||{};}
+  POS.hl=[];try{POS.hl=(await sb('kf_reps?select=id,name,status&status=eq.active&order=name.asc')).filter(r=>!/^test$/i.test(r.name||''));}catch(e){}
+}
+async function posSetDevice(raw,val){
+  const k=posDevKey(raw);if(!k)return;
+  try{
+    const cur=await sb('kf_settings?key=eq.pos_devices&select=value');const m=Object.assign({},(cur[0]&&cur[0].value)||{});
+    if(val==='')delete m[k];else if(val==='__shared')m[k]={none:true};else if(val.startsWith('HL:'))m[k]={rep:val.slice(3),name:(POS.hl.find(h=>h.id===val.slice(3))||{}).name||''};else m[k]={member:val};
+    await sb('kf_settings?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'pos_devices',value:m,updated_at:new Date().toISOString()})});
+    POS.devices=m;
+  }catch(e){toast('Didn’t save: '+e.message,true);return;}
+  if(POS.last)posHandleRows(POS.last.name,POS.last.rows);
+}
+function posWhoLabel(w){if(!w)return'';if(String(w).startsWith('HL:')){const id=String(w).slice(3);const h=(POS.hl||[]).find(x=>x.id===id);const d=Object.values(POS.devices||{}).find(x=>x.rep===id);return'Highlander '+((h&&h.name)||(d&&d.name)||'');}return w;}
 function posStaffName(s){
+  const dm=(POS.devices||{})[posDevKey(s)];
+  if(dm){if(dm.rep)return'HL:'+dm.rep;if(dm.member)return dm.member;if(dm.none)return'';}
   const t=String(s||'').trim().toLowerCase().replace(/[’']s\b/g,'').replace(/\b(iphone|ipad|android|phone|note\d*|galaxy|pixel|tablet|register|terminal|reader)\b.*$/,'').replace(/\s+/g,' ').trim();if(!t)return'';
   const list=(typeof members!=='undefined'?members:[]).map(m=>m.name);
   return list.find(n=>n.toLowerCase()===t)||list.find(n=>t.startsWith(n.toLowerCase()+' ')||n.toLowerCase().startsWith(t.split(' ')[0]))||'';
 }
 function posSalesPreview(name,rows,d){
-  const C=d.C;const byKey={};let skipped=0,refunds=0;
+  const C=d.C;const byKey={};let skipped=0,refunds=0;const unknown={};
   rows.slice(d.hi+1).forEach(r=>{
     const date=dateVal(r[C.date]);if(!date){skipped++;return;}
     if(C.status>=0&&/cancel|void|declin|fail|abandon|reject|^refunded$|^pending$|^unpaid$/i.test(String(r[C.status]||'').trim())){skipped++;return;}
@@ -7244,12 +7266,13 @@ function posSalesPreview(name,rows,d){
     const ev=C.event>=0?String(r[C.event]||''):'';if(/refund/i.test(ev))refunds++;
     if(!net&&!tax&&!tip&&!fee)return;
     const who=C.staff>=0?posStaffName(r[C.staff]):'';
+    if(C.staff>=0&&!who){const raw=String(r[C.staff]||'').trim();if(raw&&!(POS.devices||{})[posDevKey(raw)])unknown[raw]=(unknown[raw]||0)+net;}
     const k=date+'|'+who;const g=byKey[k]||(byKey[k]={date,who,net:0,tax:0,tip:0,fee:0,n:0});
     g.net+=net;g.tax+=tax;g.tip+=tip;g.fee+=fee;g.n++;
   });
   const days=Object.values(byKey).sort((a,b)=>a.date<b.date?-1:1);
   if(!days.length){if(!d.mapped)return posMapper(name,rows);toast('No sales found with those columns. Try picking a different amount column.',true);return posMapper(name,rows,true);}
-  POS.preview=Object.assign(posMetaFor(name,rows,d.hi),{name,kind:'sales',days,refunds,skipped});
+  POS.preview=Object.assign(posMetaFor(name,rows,d.hi),{name,kind:'sales',days,refunds,skipped,unknown});
   posPrepThenShow();
 }
 // Before the preview: weeks already logged by hand (so they don't count twice), and days far bigger than usual
@@ -7260,14 +7283,25 @@ async function posPrepThenShow(){
     const labels=[...new Set(p.days.map(g=>getWeekLabel(parseISO(g.date))))];
     for(let i=0;i<labels.length;i+=40){
       const chunk=labels.slice(i,i+40).map(l=>'"'+String(l).replace(/"/g,'')+'"').join(',');
-      const rows=await sb('kf_revenue_entries?select=period_label,amount,source&import_key=is.null&period_label=in.('+encodeURIComponent(chunk)+')');
-      (rows||[]).forEach(r=>{if(/tip/i.test(r.source||''))return;p.manual[r.period_label]=(p.manual[r.period_label]||0)+(+r.amount||0);});
+      const rows=await sb('kf_revenue_entries?select=period_label,amount,source,notes&import_key=is.null&period_label=in.('+encodeURIComponent(chunk)+')');
+      // only register-type sales typed in by hand count: a wholesale deposit from the bank, a grant or a loan isn't the same money
+      (rows||[]).forEach(r=>{if(/tip/i.test(r.source||'')||/from bank:/i.test(r.notes||'')||/wholesale|invoice|grant|reimburse|loan|owner|refund|interest/i.test(r.source||''))return;p.manual[r.period_label]=(p.manual[r.period_label]||0)+(+r.amount||0);});
     }
   }catch(e){p.manual={};}
   const nets=p.days.map(g=>Math.abs(g.net)).filter(x=>x>0).sort((a,b)=>a-b);
   const med=nets.length?nets[Math.floor(nets.length/2)]:0;
   if(p.days.length>2)p.odd=p.days.filter(g=>Math.abs(g.net)>Math.max(2500,med*10)).map(g=>g.date+'|'+(g.who||''));
   posShowSales();
+}
+function posUnknownHTML(p){
+  const u=Object.entries(p.unknown||{});if(!u.length||!POS.last)return'';
+  const team=(typeof members!=='undefined'?members:[]).map(m=>m.name).filter(Boolean);
+  const opts=(raw)=>'<option value="">Pick one…</option>'+team.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('')
+    +((POS.hl||[]).length?'<optgroup label="Highlanders">'+POS.hl.map(h=>'<option value="HL:'+h.id+'">'+esc(h.name)+' (Highlander)</option>').join('')+'</optgroup>':'')
+    +'<option value="__shared">Shared: nobody in particular</option>';
+  return '<div class="ck-item warn" style="margin:8px 0;display:block;"><span class="ck-text"><b>Whose device is this?</b> The Hub only has to ask once.'
+    +((POS.hl||[]).length?' If a Highlander used your Square, pick them: their sales count toward their event instead of the team’s commission.':'')+'</span>'
+    +u.map(([raw,amt])=>'<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;"><span style="min-width:140px;"><b>'+esc(raw)+'</b> · '+fmt(amt)+'</span><select class="period-select" style="flex:1;min-width:180px;" onchange="posSetDevice(\''+esc(raw).replace(/'/g,"\\'")+'\',this.value)">'+opts(raw)+'</select></div>').join('')+'</div>';
 }
 const posManualWeeks=p=>Object.keys(p.manual||{}).filter(l=>Math.abs(p.manual[l])>0.004);
 function posModal(){
@@ -7285,6 +7319,7 @@ function posShowSales(){
     +[['Sales',t('net'),'var(--green)'],['Sales tax',t('tax')],['Tips',t('tip')],[p.feeLabel||'Card fees',t('fee')+(t('ads')||0)+(t('ship')||0),'var(--red)']].map(([l,v,c])=>'<div class="bk-stat"><div class="bk-stat-l">'+l+'</div><div class="bk-stat-v"'+(c?' style="color:'+c+';"':'')+'>'+fmt(v)+'</div></div>').join('')+'</div>'
     +'<div class="txn-grid"><div><label>File the sales under</label><select class="period-select" onchange="POS.preview.cat=this.value">'+INCOME_CATS.filter(c=>!/tip/i.test(c)).map(c=>'<option'+(c===p.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div></div>'
     +(p.summary?'<div class="ck-item warn" style="margin:8px 0;"><span class="ck-ico">!</span><span class="ck-text">This is a <b>summary</b>'+(p.summary.start?' for '+esc(prettyDate(p.summary.start))+' – '+esc(prettyDate(p.summary.end)):'')+', with no day-by-day detail. It goes in as one entry per person, dated '+esc(prettyDate(p.summary.end))+', so it all lands in that pay week. For sales spread over the right weeks, export <b>Transactions</b> from Square instead (Reports → Transactions → Export → Transactions CSV). Don’t import both for the same dates, or sales count twice.</span></div>':'')
+    +posUnknownHTML(p)
     +(posManualWeeks(p).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipManual?'checked ':'')+'onchange="POS.preview.skipManual=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Skip the '+posManualWeeks(p).length+' week'+(posManualWeeks(p).length===1?'':'s')+' you already logged by hand</b> ('+fmt(posManualWeeks(p).reduce((a,l)=>a+p.manual[l],0))+' entered already), so those sales don’t count twice. Uncheck to bring them in too.</span></label>':'')
     +((p.odd||[]).length?'<label class="ck-item warn" style="margin:8px 0;display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" '+(p.skipOdd?'checked ':'')+'onchange="POS.preview.skipOdd=this.checked" style="margin-top:3px;"><span class="ck-text"><b>Leave out '+(p.odd.length===1?'a day that looks':p.odd.length+' days that look')+' like a mistake:</b> '
       +p.odd.slice(0,4).map(k=>{const g=p.days.find(x=>x.date+'|'+(x.who||'')===k);return esc(prettyDate(g.date))+' ('+(g.net<0?'−':'')+fmt(Math.abs(g.net))+')';}).join(', ')+(p.odd.length>4?'…':'')
@@ -7298,7 +7333,7 @@ function posShowSales(){
     +(p.syncNote?esc(p.syncNote)+' ':'')
     +(p.payoutTotal!=null?'Sales and tax minus what was kept comes to '+fmt(p.payoutTotal)+', what '+esc(p.platLabel)+' paid you. ':'')
     +(p.refunds?p.refunds+' refund'+(p.refunds===1?'':'s')+' are subtracted. ':'')+'</div>'
-    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(g.who):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+(g.ads?' · ads '+fmt(g.ads):'')+(g.ship?' · labels '+fmt(g.ship):'')+(g.loan?' · loan '+fmt(g.loan):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
+    +'<div class="bank-prev">'+p.days.slice(0,8).map(g=>'<div class="bank-line"><div class="bank-main"><div class="bk-payee">'+esc(prettyDate(g.date))+(g.who?' · '+esc(posWhoLabel(g.who)):'')+'</div><div class="bk-sub">'+g.n+' sale'+(g.n===1?'':'s')+(g.tax?' · tax '+fmt(g.tax):'')+(g.tip?' · tips '+fmt(g.tip):'')+(g.fee?' · fees '+fmt(g.fee):'')+(g.ads?' · ads '+fmt(g.ads):'')+(g.ship?' · labels '+fmt(g.ship):'')+(g.loan?' · loan '+fmt(g.loan):'')+'</div></div><div class="bk-amt in">'+fmt(g.net)+'</div></div>').join('')
     +(p.days.length>8?'<div class="bk-sub" style="text-align:center;padding:6px;">…and '+(p.days.length-8)+' more days</div>':'')+'</div>'
     +'<div class="txn-actions"><button class="btn-secondary" onclick="document.getElementById(\'posModal\').classList.remove(\'open\')">Cancel</button><button class="btn-green" id="posGo" onclick="posImportSales()">Import</button></div>';
   m.classList.add('open');
@@ -7310,8 +7345,10 @@ async function posImportSales(){
   let leftOut=0;
   p.days.filter(g=>{const out=skipWeeks.has(getWeekLabel(parseISO(g.date)))||skipOdd.has(g.date+'|'+(g.who||''));if(out)leftOut++;return !out;}).forEach(g=>{
     const label=getWeekLabel(parseISO(g.date));const tag=src+':'+g.date+':'+(g.who||'all');
-    if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
-    if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null}});
+    const hl=String(g.who||'').startsWith('HL:');
+    if(Math.abs(g.net)>=0.005&&hl)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:'Highlander Sales',reported_by:currentProfile&&currentProfile.name||'',notes:posWhoLabel(g.who).replace(/^Highlander /,'Highlander: ')+' · paid by card through your Square · Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:null,sales_tax:g.tax?r2(g.tax):null}});
+    else if(Math.abs(g.net)>=0.005)revs.push({key:tag+':sales',body:{amount:r2(g.net),source:p.cat,reported_by:currentProfile&&currentProfile.name||'',notes:'Imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:g.who||null,sales_tax:g.tax?r2(g.tax):null}});
+    if(g.tip>=0.005)revs.push({key:tag+':tips',body:{amount:r2(g.tip),source:'Tips',reported_by:currentProfile&&currentProfile.name||'',notes:'Tips, imported from '+p.name,period_label:label,txn_date:g.date,payment_method:p.method||'Card reader',worked_by:hl?null:(g.who||null)}});
     if(g.fee>=0.005)exps.push({key:tag+':fees',date:g.date,label,fee:r2(g.fee),name:p.feeName||'Card processing fees',cat:p.feeCat||'Bank & Card Fees'});
     if(g.ads>=0.005)exps.push({key:tag+':ads',date:g.date,label,fee:r2(g.ads),name:(p.vendor||'')+' ads',cat:'Advertising'});
     if(g.loan>=0.005)exps.push({key:tag+':loan',date:g.date,label,fee:r2(g.loan),name:(p.vendor||'Square')+' Loan repayment (held back from sales)',cat:'Loan'});
@@ -8683,12 +8720,20 @@ function repSettleHTML(e){
 function repSettleValues(){
   const e=REPS.open;return e.lines.map(l=>{const i=document.querySelector('#repMBody .rp-num[data-id="'+l.id+'"]');let b=Math.max(0,parseInt(i&&i.value)||0);if(b>(+l.qty_out||0))b=+l.qty_out||0;return{l,back:b,sold:(+l.qty_out||0)-b};});
 }
+// card sales a Highlander rang up on your Square that day (brought in with a sales import)
+async function repCardSales(e){
+  try{const r=await sb('kf_revenue_entries?select=amount&source=eq.'+encodeURIComponent('Highlander Sales')+'&txn_date=eq.'+e.event_date+'&import_key=like.'+encodeURIComponent('*:HL:'+e.rep_id+':sales'));
+    return r2(r.reduce((a,x)=>a+(+x.amount||0),0));}catch(x){return 0;}
+}
 function repSettleCalc(){
   const e=REPS.open;if(!e)return;const v=repSettleValues();
-  const sold=v.reduce((a,x)=>a+x.sold,0),sales=r2(v.reduce((a,x)=>a+x.sold*(+x.l.unit_price||0),0)),com=repEstCommission(e,sales),owe=r2(sales-com);
+  if(e._card===undefined){e._card=0;repCardSales(e).then(c=>{e._card=c;repSettleCalc();});}
+  const card=+e._card||0;
+  const sold=v.reduce((a,x)=>a+x.sold,0),sales=r2(v.reduce((a,x)=>a+x.sold*(+x.l.unit_price||0),0)),com=repEstCommission(e,sales),owe=r2(sales-com),hand=r2(Math.max(0,owe-card));
   const t=document.getElementById('rpSetTotal');
-  if(t)t.innerHTML='<span>'+sold+' sold · '+fmt(sales)+'</span><span>'+repById(e.rep_id).name.split(' ')[0]+' keeps ~'+fmt(com)+'</span><b>owes '+fmt(owe)+'</b>';
-  const m=document.getElementById('rpMoney');if(m&&!m.dataset.touched){m.value=owe.toFixed(2);m.oninput=()=>{m.dataset.touched='1';};}
+  if(t)t.innerHTML='<span>'+sold+' sold · '+fmt(sales)+'</span><span>'+repById(e.rep_id).name.split(' ')[0]+' keeps ~'+fmt(com)+'</span><b>owes '+fmt(hand)+'</b>'
+    +(card?'<span style="flex-basis:100%;font-size:12.5px;color:var(--mid);">'+fmt(card)+' already came in by card through your Square, so that’s taken off.</span>':'');
+  const m=document.getElementById('rpMoney');if(m&&!m.dataset.touched){m.value=hand.toFixed(2);m.oninput=()=>{m.dataset.touched='1';};}
 }
 function repSettleAllBack(){document.querySelectorAll('#repMBody .rp-num').forEach(i=>{i.value=i.max;});const m=document.getElementById('rpMoney');if(m)delete m.dataset.touched;repSettleCalc();}
 async function repBookRevenue(e,r,sales){
@@ -8718,8 +8763,10 @@ async function repSettle(){
   const e=REPS.open;if(!e)return;const r=repById(e.rep_id),v=repSettleValues();
   const sales=r2(v.reduce((a,x)=>a+x.sold*(+x.l.unit_price||0),0));
   const method=document.getElementById('rpMethod').value,mv=document.getElementById('rpMoney').value;
-  const money=method==='Not yet'||mv===''?null:r2(mv);
-  if(!confirm('Settle '+e.name+': '+fmt(sales)+' in sales'+(money!=null?', '+fmt(money)+' received':', money not in yet')+'?'))return;
+  const card=e._card!==undefined?+e._card||0:await repCardSales(e);
+  const handed=method==='Not yet'||mv===''?null:r2(mv);
+  const money=handed==null?(card?card:null):r2(handed+card);
+  if(!confirm('Settle '+e.name+': '+fmt(sales)+' in sales'+(handed!=null?', '+fmt(handed)+' received':', money not in yet')+(card?' (plus '+fmt(card)+' by card through your Square)':'')+'?'))return;
   try{
     for(const x of v)await sb('kf_rep_event_lines?id=eq.'+x.l.id,{method:'PATCH',body:JSON.stringify({qty_back:x.back})});
     await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({status:'settled',sales,settled_at:new Date().toISOString(),settled_by:currentProfile&&currentProfile.name||null,
@@ -8728,7 +8775,8 @@ async function repSettle(){
     const items=await repInvItems(v.map(x=>repProdInv(x.l.product_id)));
     for(const x of v){const it=items[repProdInv(x.l.product_id)];if(it&&x.back)try{await invMove(it,x.back,'rep_back','Back from '+r.name+' · '+e.name);}catch(err){console.warn('inventory',err);}}
     if(sales>0){
-      const rev=await repBookRevenue(e,r,sales);const com=r2(fresh.commission||0);
+      // card sales already in from the Square import aren't booked twice
+      const rest=r2(sales-card);const rev=rest>0.004?await repBookRevenue(e,r,rest):null;const com=r2(fresh.commission||0);
       const ex=com>0?await repBookCommission(e,r,com):null;
       await sb('kf_rep_events?id=eq.'+e.id,{method:'PATCH',body:JSON.stringify({revenue_id:rev&&rev.id||null,expense_id:ex&&ex.id||null,commission_booked:com})});
     }
