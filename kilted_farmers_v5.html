@@ -2597,6 +2597,216 @@ async function processScanItem(item){
   }catch(e){console.error('Scan:',e);item.status='error';item.stage=e.message||'Failed';}
   renderScanPanel();
 }
+
+// ═══════════════════════════════════════════════════════
+// "HELP ME SORT" — bank lines sorted by plain questions instead of bookkeeping words
+// The sure things (bank fees, interest, money moving between your own accounts) are done in one tap.
+// Big or unusual amounts get one plain question each. Store purchases are asked about by store.
+// Anything you're not sure about stays where it is.
+// ═══════════════════════════════════════════════════════
+const BW={steps:[],at:0,done:0,busy:false};
+const BW_T={bank:'kf_bank_lines',rev:'kf_revenue_entries',exp:'kf_expenses',txn:'kf_transactions'};
+function bwOwnerWords(){
+  const names=[(typeof currentProfile!=='undefined'&&currentProfile&&currentProfile.name)||''].concat((typeof members!=='undefined'?members:[]).map(m=>m.name||''));
+  if(typeof BIZ!=='undefined'&&BIZ.row&&BIZ.row.name)names.push(BIZ.row.name);
+  const w=new Set();names.forEach(n=>String(n).toLowerCase().split(/[^a-z]+/).forEach(x=>{if(x.length>=4&&!/^(the|farm|farms|llc|kitchen|company|shop|store)$/.test(x))w.add(x);}));
+  return [...w];
+}
+function bwKind(l){
+  const d=String(l.description||''),a=+l.amount,low=d.toLowerCase();
+  if(/business fee|service charge|maintenance fee|monthly fee|trancode fee|wire fee|overdraft|\bnsf\b|atm fee/i.test(d)&&a<0)return 'fee';
+  if(/apy earned|interest (paid|earned)|dividend/i.test(d)&&a>0)return 'interest';
+  const own=bwOwnerWords().some(w=>low.includes(w));
+  if((/share \d{3,4}|savings|\bxfer\b|transfer (to|from)|online transfer|to checking|from checking/i.test(d))&&(own||/share \d{3,4}|savings/i.test(d)))return 'own';
+  if(/withdrawal tcode|atm|withdrawal ctr|cash withdrawal/i.test(d)&&a<0)return 'cash';
+  if(/deposit by check|mobile deposit|check deposit|remote deposit/i.test(d)&&a>0)return 'checks';
+  if(Math.abs(a)>=1000)return 'big';
+  if(a<0&&(guessCategory(d)||guessCategory(cleanBankDesc(d))||/debit|pos|purchase|card/i.test(d)))return 'store';
+  return 'other';
+}
+function bwBuild(){
+  const open=(BOOKS.bank||[]).filter(l=>bankEffectiveStatus(l)==='open');
+  const by={fee:[],interest:[],own:[],cash:[],checks:[],big:[],store:[],other:[]};
+  open.forEach(l=>by[bwKind(l)].push(l));
+  const steps=[];
+  if(by.fee.length||by.interest.length||by.own.length)steps.push({type:'sure',fee:by.fee,interest:by.interest,own:by.own});
+  by.big.sort((a,b)=>Math.abs(b.amount)-Math.abs(a.amount)).forEach(l=>steps.push({type:'one',l}));
+  if(by.checks.length)steps.push({type:'checks',lines:by.checks});
+  if(by.cash.length)steps.push({type:'cash',lines:by.cash});
+  const stores={};by.store.forEach(l=>{const k=cleanBankDesc(l.description)||'Purchase';(stores[k]=stores[k]||[]).push(l);});
+  Object.entries(stores).sort((a,b)=>b[1].reduce((s,l)=>s-l.amount,0)-a[1].reduce((s,l)=>s-l.amount,0)).forEach(([name,lines])=>steps.push({type:'store',name,lines}));
+  by.other.forEach(l=>steps.push({type:'one',l}));
+  return steps;
+}
+function bankWizard(){
+  if(!BOOKS.schema.txns){toast('Run the one-time setup at the top of Books first',true);return;}
+  BW.steps=bwBuild();BW.at=0;BW.done=0;
+  if(!BW.steps.length){toast('Nothing left to sort. Nice.');return;}
+  let m=document.getElementById('bwModal');
+  if(!m){m=document.createElement('div');m.id='bwModal';m.className='modal-overlay';m.innerHTML='<div class="modal" style="max-width:560px;"><button class="modal-close" onclick="bwClose()" aria-label="Close">×</button><div id="bwBody"></div></div>';document.body.appendChild(m);}
+  m.classList.add('open');bwDraw();
+}
+function bwClose(){const m=document.getElementById('bwModal');if(m)m.classList.remove('open');try{renderBooks();}catch(e){}}
+const bwMoney=n=>(n<0?'−':'+')+fmt(Math.abs(n));
+const bwSum=ls=>ls.reduce((s,l)=>s+(+l.amount),0);
+function bwHead(){
+  const total=BW.steps.length;
+  return '<div class="bw-prog"><span>'+(BW.at+1)+' of '+total+'</span><div class="bw-bar"><i style="width:'+Math.round(BW.at/total*100)+'%"></i></div></div>';
+}
+function bwLineList(ls,max){
+  max=max||5;
+  return '<div class="bw-lines">'+ls.slice(0,max).map(l=>'<div><span>'+esc(prettyDate(String(l.txn_date).slice(0,10)))+' · '+esc(String(l.description).slice(0,46))+'</span><b class="'+(+l.amount>0?'in':'out')+'">'+bwMoney(+l.amount)+'</b></div>').join('')
+    +(ls.length>max?'<div class="bk-sub">…and '+(ls.length-max)+' more</div>':'')+'</div>';
+}
+function bwBtn(label,fn,cls){return '<button class="'+(cls||'btn-secondary')+' bw-choice" onclick="'+fn+'">'+label+'</button>';}
+function bwCatSelect(id,dir,sel){
+  const cats=(dir==='in'?INCOME_CATS:EXPENSE_CATS).filter(c=>!/^tips?$/i.test(c));
+  return '<select id="'+id+'" class="period-select" style="width:100%;margin-top:6px;">'+cats.map(c=>'<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select>';
+}
+function bwDraw(){
+  const el=document.getElementById('bwBody');if(!el)return;
+  if(BW.at>=BW.steps.length){
+    el.innerHTML='<h2 class="bw-h">All sorted</h2><p class="bk-sub">'+BW.done+' bank lines handled. Anything you skipped is still under Bank Matching whenever you’re ready.</p><div class="txn-actions">'+bwBtn('Done','bwClose()','btn-green')+'</div>';
+    return;
+  }
+  const s=BW.steps[BW.at];let h=bwHead();
+  if(s.type==='sure'){
+    const parts=[];
+    if(s.fee.length)parts.push('<li><b>'+s.fee.length+' bank fee'+(s.fee.length>1?'s':'')+'</b> ('+fmt(-bwSum(s.fee))+') go in as Bank & Card Fees.</li>');
+    if(s.interest.length)parts.push('<li><b>'+s.interest.length+' interest payment'+(s.interest.length>1?'s':'')+'</b> from the bank ('+fmt(bwSum(s.interest))+') go in as income.</li>');
+    if(s.own.length)parts.push('<li><b>'+s.own.length+' move'+(s.own.length>1?'s':'')+' between your own accounts</b> are left out. That’s your money changing pockets, not income or a cost.</li>');
+    h+='<h2 class="bw-h">Let’s start with the easy ones</h2><ul class="bw-ul">'+parts.join('')+'</ul>'
+      +(s.own.length?'<details class="bw-det"><summary>See the moves between accounts</summary>'+bwLineList(s.own,40)+'</details>':'')
+      +'<div class="bw-choices">'+bwBtn('Looks right, do it','bwSure()','btn-green')+bwBtn('Skip these for now','bwNext()')+'</div>';
+  }else if(s.type==='one'){
+    const l=s.l,a=+l.amount,name=cleanBankDesc(l.description)||String(l.description).slice(0,40);
+    h+='<h2 class="bw-h">'+(a>0?'Money in':'Money out')+': '+esc(fmt(Math.abs(a)))+'</h2>'
+      +'<p class="bw-sub">'+esc(prettyDate(String(l.txn_date).slice(0,10)))+' · '+esc(String(l.description).slice(0,80))+'</p><p><b>What was this?</b></p><div class="bw-choices">';
+    if(a>0){
+      h+=bwBtn('A customer paid me','bwPick(\'sale\')')+bwBtn('A grant or reimbursement','bwPick(\'grant\')')+bwBtn('A loan I got','bwPick(\'loanin\')')
+        +bwBtn('My own money, put into the business','bwPick(\'ownin\')')+bwBtn('A refund or something else','bwPick(\'otherin\')')+bwBtn('Not sure yet','bwNext()');
+    }else{
+      h+=bwBtn('Something for the business','bwPick(\'buy\')')+bwBtn('Equipment','bwPick(\'equip\')')+bwBtn('Paying back a loan','bwPick(\'loanout\')')
+        +bwBtn('I paid myself or a partner','bwPick(\'paid\')')+bwBtn('Moved to my own account','bwPick(\'own\')')+bwBtn('Personal, not the business','bwPick(\'personal\')')+bwBtn('Not sure yet','bwNext()');
+    }
+    h+='</div><div id="bwMore"></div>';
+  }else if(s.type==='checks'){
+    h+='<h2 class="bw-h">'+s.lines.length+' check deposit'+(s.lines.length>1?'s':'')+' · '+fmt(bwSum(s.lines))+'</h2>'+bwLineList(s.lines)
+      +'<p><b>Were these customers paying you?</b></p>'+bwCatSelect('bwCat','in',INCOME_CATS.find(c=>/wholesale/i.test(c))||INCOME_CATS[0])
+      +'<div class="bw-choices">'+bwBtn('Yes, all of them','bwChecks()','btn-green')+bwBtn('Let me go one by one','bwExplode()')+bwBtn('Not sure yet','bwNext()')+'</div>'
+      +'<p class="bk-sub">If you already entered any of these sales by hand, go one by one and pick “Already counted” for those.</p>';
+  }else if(s.type==='cash'){
+    h+='<h2 class="bw-h">'+s.lines.length+' cash withdrawal'+(s.lines.length>1?'s':'')+' · '+fmt(-bwSum(s.lines))+'</h2>'+bwLineList(s.lines)
+      +'<p><b>What did the cash go to?</b></p><div class="bw-choices">'+bwBtn('I paid myself or a partner','bwCash(\'paid\')')+bwBtn('Business supplies or costs','bwCash(\'buy\')')
+      +bwBtn('Personal','bwCash(\'personal\')')+bwBtn('A mix: go one by one','bwExplode()')+bwBtn('Not sure yet','bwNext()')+'</div><div id="bwMore"></div>';
+  }else if(s.type==='store'){
+    const g=guessCategory(s.name)||guessCategory(s.lines[0].description)||'Supplies';
+    h+='<h2 class="bw-h">'+esc(s.name)+' · '+s.lines.length+' purchase'+(s.lines.length>1?'s':'')+' · '+fmt(-bwSum(s.lines))+'</h2>'+bwLineList(s.lines)
+      +'<p><b>Were these for the business?</b></p>'+bwCatSelect('bwCat','out',g)
+      +'<div class="bw-choices">'+bwBtn('Yes, business','bwStore(true)','btn-green')+bwBtn('No, personal','bwStore(false)')+(s.lines.length>1?bwBtn('Some of each: one by one','bwExplode()'):'')+bwBtn('Not sure yet','bwNext()')+'</div>'
+      +'<p class="bk-sub">Have the receipts? Scanning them later matches them to these by themselves.</p>';
+  }
+  el.innerHTML=h;
+}
+function bwNext(){BW.at++;bwDraw();}
+// split a group into one question per line, right here
+function bwExplode(){const s=BW.steps[BW.at];BW.steps.splice(BW.at,1,...s.lines.map(l=>({type:'one',l})));bwDraw();}
+// follow-up for a single line: which category (sales and purchases), or straight to saving
+function bwPick(kind){
+  const s=BW.steps[BW.at],l=s.l,more=document.getElementById('bwMore');
+  if(kind==='sale'||kind==='buy'){
+    more.innerHTML='<p><b>'+(kind==='sale'?'What kind of sale?':'What was it for?')+'</b></p>'+bwCatSelect('bwCat',kind==='sale'?'in':'out',kind==='sale'?INCOME_CATS[0]:(guessCategory(l.description)||'Supplies'))
+      +'<div class="bw-choices">'+bwBtn('Save','bwSaveOne(\''+kind+'\')','btn-green')+(kind==='sale'?bwBtn('Already counted (I entered it already)','bwStatus(\'logged\')'):'')+'</div>';
+    return;
+  }
+  if(kind==='equip'){
+    const y=String(l.txn_date).slice(0,4),ny=String(+y+1);
+    more.innerHTML='<p><b>Which year should it count in?</b> Usually the year you started using it. If a grant or loan for it came the next year, ask your tax person.</p>'
+      +'<div class="bw-choices">'+bwBtn(y+' (when it was paid)','bwSaveOne(\'equip\')','btn-green')+bwBtn(ny,'bwSaveOne(\'equip\',\''+ny+'-01-01\')')+'</div>';
+    return;
+  }
+  bwSaveOne(kind);
+}
+async function bwSaveOne(kind,dateOverride){
+  const s=BW.steps[BW.at],l=s.l;const cat=(document.getElementById('bwCat')||{}).value;
+  const map={sale:['in',cat,true],grant:['in',GRANT_CAT,false],loanin:['in','Loan',false],ownin:['in','Owner Contribution',false],otherin:['in','Other',false],
+    buy:['out',cat,true],equip:['out','Equipment',false],loanout:['out','Loan',false]};
+  try{
+    if(kind==='paid')await bwStatus('payout',true);
+    else if(kind==='own'||kind==='personal')await bwStatus('ignored',true,kind==='personal'?'personal':'');
+    else{const m=map[kind];await bwAdd(l,m[0],m[1],m[2],dateOverride);BW.done++;}
+  }catch(e){toast('Didn’t save: '+e.message,true);return;}
+  bwNext();
+}
+async function bwStatus(status,quiet){
+  const s=BW.steps[BW.at];const ls=s.l?[s.l]:s.lines;
+  for(let i=0;i<ls.length;i+=100){
+    await sb(BW_T.bank+'?id=in.('+ls.slice(i,i+100).map(l=>l.id).join(',')+')',{method:'PATCH',body:JSON.stringify({status,match_key:null})});
+  }
+  ls.forEach(l=>{l.status=status;l.match_key=null;});BW.done+=ls.length;
+  if(!quiet)bwNext();
+}
+// put one bank line in the books: recent business sales and costs count in their week's pay; older ones, loans, grants and the like go in on their own date
+async function bwAdd(l,dir,cat,poolable,dateOverride){
+  const date=dateOverride||String(l.txn_date).slice(0,10),amt=Math.abs(+l.amount);
+  const payee=cleanBankDesc(l.description)||String(l.description).slice(0,40);
+  const notes='From bank: '+String(l.description).slice(0,80)+(dateOverride?' (paid '+prettyDate(String(l.txn_date).slice(0,10))+')':'');
+  const recent=(Date.now()-parseISO(String(l.txn_date).slice(0,10)).getTime())<=14*864e5;
+  let key;
+  if(poolable&&recent&&!MOVEMENT_CATS.includes(cat)&&!isNotPoolRev({source:cat})){
+    const wk=getWeekLabel();
+    if(dir==='in'){const r=await sb(BW_T.rev,{method:'POST',body:JSON.stringify(Object.assign({amount:amt,source:cat,notes:payee+' · '+notes,period_label:wk,reported_by:currentProfile?.name||''},BOOKS.schema.v2?{txn_date:date,payment_method:/check/i.test(l.description)?'Check':'Card',payee}:{}))});key='rev:'+r[0].id;}
+    else{const b={period_id:await getOrCreatePeriodId(wk),name:payee,amount:amt,receipt_url:''};if(BOOKS.schema.v2)Object.assign(b,{category:cat,vendor:payee,txn_date:date,payment_method:'Card',notes});
+      const e=await sb(BW_T.exp,{method:'POST',body:JSON.stringify(b)});key='exp:'+e[0].id;}
+  }else{
+    const t=await sb(BW_T.txn,{method:'POST',body:JSON.stringify({txn_date:date,direction:dir,amount:amt,payee,category:cat,payment_method:/check/i.test(l.description)?'Check':/wire|ach|transfer/i.test(l.description)?'Bank Transfer':'Card',notes,created_by:currentProfile?.name||''})});
+    key='txn:'+t[0].id;
+  }
+  await sb(BW_T.bank+'?id=eq.'+l.id,{method:'PATCH',body:JSON.stringify({status:'added',match_key:key})});
+  l.status='added';l.match_key=key;BOOKS.stale=true;
+}
+async function bwRun(lines,dir,cat,poolable){
+  BW.busy=true;const el=document.getElementById('bwBody');
+  try{
+    for(let i=0;i<lines.length;i++){if(el)el.innerHTML='<h2 class="bw-h">Saving…</h2><p class="bk-sub">'+(i+1)+' of '+lines.length+'</p>';await bwAdd(lines[i],dir,cat,poolable);BW.done++;}
+  }catch(e){toast('Stopped: '+e.message,true);}
+  BW.busy=false;
+}
+async function bwSure(){
+  const s=BW.steps[BW.at];
+  await bwRun(s.fee,'out','Bank & Card Fees',true);
+  await bwRun(s.interest,'in','Other',false);
+  if(s.own.length){BW.steps[BW.at]={lines:s.own};await bwStatus('ignored',true);}
+  bwNext();
+}
+async function bwChecks(){const s=BW.steps[BW.at];const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'in',cat,true);bwNext();}
+async function bwStore(biz){
+  const s=BW.steps[BW.at];
+  if(!biz){await bwStatus('ignored',true);bwNext();return;}
+  const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'out',cat,true);bwNext();
+}
+async function bwCash(kind){
+  const s=BW.steps[BW.at];
+  if(kind==='paid'){await bwStatus('payout',true);bwNext();return;}
+  if(kind==='personal'){await bwStatus('ignored',true);bwNext();return;}
+  document.getElementById('bwMore').innerHTML='<p><b>What kind of cost?</b></p>'+bwCatSelect('bwCat','out','Supplies')+'<div class="bw-choices">'+bwBtn('Save','bwCashSave()','btn-green')+'</div>';
+}
+async function bwCashSave(){const s=BW.steps[BW.at];const cat=document.getElementById('bwCat').value;await bwRun(s.lines,'out',cat,true);bwNext();}
+(function(){const st=document.createElement('style');st.textContent=`
+.bw-h{font-family:'Playfair Display',serif;font-size:22px;color:var(--green-dark);margin:6px 0 6px;}
+.bw-sub{color:var(--mid);font-size:13.5px;margin:0 0 10px;word-break:break-word;}
+.bw-prog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mid);font-weight:700;margin-right:30px;}
+.bw-bar{flex:1;height:6px;background:var(--cream-dark);border-radius:4px;overflow:hidden;}
+.bw-bar i{display:block;height:100%;background:var(--green);}
+.bw-choices{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.bw-choice{width:100%;text-align:left;padding:12px 14px;font-size:15px;}
+.bw-lines{background:var(--cream);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13px;}
+.bw-lines div{display:flex;justify-content:space-between;gap:10px;padding:3px 0;}
+.bw-lines b.in{color:var(--green);}.bw-lines b.out{color:var(--red);}
+.bw-ul{padding-left:18px;margin:8px 0;line-height:1.5;}
+.bw-det summary{cursor:pointer;color:var(--green-dark);font-weight:700;font-size:13.5px;}
+`;document.head.appendChild(st);})();
+
 // ─── receipts find their purchase ───
 // Same amount, within a week of the receipt's date (or the vendor name matches): a purchase already in the books
 // gets the receipt attached; a card charge still waiting on the bank statement gets added with its receipt.
@@ -3819,6 +4029,7 @@ async function importBankLines(){
     const matched=await autoMatchBank();
     const skipped=rows.length-added;
     toast(added+' imported'+(skipped?' · '+skipped+' already here':'')+' · '+matched+' matched to the books'+(BOOKS._autoLogged?' · '+BOOKS._autoLogged+' payouts already in your imported sales':''));BOOKS._autoLogged=0;
+    setTimeout(()=>{if((BOOKS.bank||[]).some(l=>bankEffectiveStatus(l)==='open'))bankWizard();},600);
     renderBooks();
   }catch(e){toast('Import failed: '+e.message,true);btn.disabled=false;btn.textContent='Import';}
 }
@@ -3929,7 +4140,7 @@ function renderBooksBank(){
   const open=lines.filter(l=>bankEffectiveStatus(l)==='open');
   let h='<div class="card"><div class="bk-top"><div style="flex:1;min-width:200px;"><div class="card-title"><div class="card-title-dot"></div>Bank Matching</div>'
     +'<div class="card-sub" style="margin-bottom:0;">Download your transactions from the bank’s website as a <b>CSV</b> and bring them in. Anything that matches the books gets checked off by itself; the rest lands here for a quick decision.</div></div></div>'
-    +'<div class="bk-actions"><button class="btn-green" onclick="triggerBankImport()">⬆ Import bank statement</button></div>';
+    +'<div class="bk-actions"><button class="btn-green" onclick="triggerBankImport()">⬆ Import bank statement</button>'+(open.length?'<button class="btn-green" onclick="bankWizard()">✨ Help me sort ('+open.length+')</button>':'')+'</div>';
   // per account summary
   const accts={};lines.forEach(l=>{const a=accts[l.account]||(accts[l.account]={n:0,open:0,min:'9999',max:'0000',bal:null,balDate:''});a.n++;if(bankEffectiveStatus(l)==='open')a.open++;
     const d=String(l.txn_date).slice(0,10);if(d<a.min)a.min=d;if(d>a.max)a.max=d;if(l.balance!=null&&d>=a.balDate){a.bal=+l.balance;a.balDate=d;}});
