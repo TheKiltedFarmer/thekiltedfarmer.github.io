@@ -9790,7 +9790,8 @@ function openSwitch(src){
   const how={
     qb:'<ol><li>In QuickBooks Online, tap the <b>⚙ gear</b> and pick <b>Export Data</b> (under Tools).</li><li>On <b>Reports</b>, set the dates to <b>All dates</b>. Keep <b>General Ledger</b> and <b>Profit and Loss</b> switched on. On <b>Lists</b>, keep <b>Customers</b> on.</li><li>Tap <b>Export to Excel</b>. QuickBooks makes a ZIP file. Pick that ZIP below, just as it is.</li></ol>'
       +'<p class="bk-sub">Customers who still owe you: in QuickBooks, open the <b>A/R Aging Summary</b> report and export it to Excel, then add that file too.</p>',
-    wave:'<ol><li>In Wave, tap your business name (top right) → <b>Business settings</b> → <b>Data Export</b>.</li><li>Choose <b>Accounting</b>. Wave emails you a download link (it works for 24 hours).</li><li>Download it and pick the file below.</li></ol>'
+    wave:'<ol><li>In Wave, tap your business name (top right) → <b>Business settings</b> → <b>Data Export</b>.</li><li>Choose <b>Accounting</b>. Wave emails you a download link (it works for 24 hours).</li><li>Open that email <b>on a computer</b> if you can, click the link, and the file downloads. Pick it below.</li></ol>'
+      +'<p class="bk-sub"><b>Opened it and got a page of text and commas that looks like code?</b> That <i>is</i> the file: it’s a spreadsheet saved as plain text. On a phone, tap the Share button and <b>Save to Files</b>, then pick it below. Or select all of that text, copy it, and paste it in the box at the bottom.</p>'
       +'<p class="bk-sub">Customers who still owe you: open <b>Reports → Aged Receivables</b> in Wave, export it, and add that file too. A customer list export works as well.</p>',
     other:'<p>Any spreadsheet (CSV or Excel) of transactions with a <b>date</b>, a <b>description</b> and an <b>amount</b> (or money in and money out columns) works, and so does a customer list with names and emails.</p>'
   }[SW.src];
@@ -9800,7 +9801,16 @@ function openSwitch(src){
     +'<div class="sw-how">'+how+'</div>'
     +'<label class="btn-green sw-pick" for="swFiles">Pick the file'+(SW.src==='qb'?' (the ZIP)':'')+'</label>'
     +'<input type="file" id="swFiles" multiple accept=".zip,.csv,.xlsx,.xls,.txt" style="display:none;" onchange="swFiles(this)">'
-    +'<div id="swMsg" class="bk-sub" style="margin-top:8px;"></div>',true);
+    +'<div id="swMsg" class="bk-sub" style="margin-top:8px;"></div>'
+    +'<details style="margin-top:12px;"><summary class="bk-sub" style="cursor:pointer;">Or paste it in</summary>'
+    +'<textarea id="swPasteBox" rows="5" style="width:100%;box-sizing:border-box;margin-top:6px;font-family:monospace;font-size:12px;" placeholder="Paste the whole thing here, starting with the line of column names"></textarea>'
+    +'<button class="btn-secondary" style="margin-top:6px;" onclick="swPaste()">Use what I pasted</button></details>',true);
+}
+// phones often show the export as text instead of saving it: take the text straight from the clipboard
+function swPaste(){
+  const t=(document.getElementById('swPasteBox')||{}).value||'';
+  if(t.trim().split('\n').length<2){toast('Paste the whole file, including the first line with the column names',true);return;}
+  swFiles({files:[new File([t],(SW_SRC[SW.src]||'Pasted')+' export.csv',{type:'text/csv'})],set value(v){}});
 }
 async function swRead(file){
   const name=file.name||'file';const ext=(name.toLowerCase().match(/\.([a-z0-9]+)$/)||[])[1]||'';
@@ -9900,7 +9910,17 @@ function swDefaultCat(a){
   const list=a.cls==='in'?INCOME_CATS:EXPENSE_CATS;
   const exact=list.find(c=>c.toLowerCase()===nm.toLowerCase());if(exact)return exact;
   if(a.cls==='in'&&/tip/i.test(nm)&&list.includes('Tips'))return 'Tips';
-  if(a.cls==='out'){const g=guessCategory(nm);if(g&&EXPENSE_CATS.includes(g)&&g!=='Other Expense')return g;}
+  if(a.cls==='out'){const g=guessCategory(nm);if(g&&EXPENSE_CATS.includes(g)&&g!=='Other Expense')return g;
+    const syn=[[/cost of goods|cogs|cost of sales|food cost|groceries|ingredient|purchases? ?- ?food|inventory purchase|raw material/i,'Ingredients'],
+      [/packag|container|label|to-?go|disposable/i,'Packaging'],[/rent|lease|commissary|kitchen/i,'Kitchen Rental'],[/market fee|booth|vendor fee|event fee|festival/i,'Market Fees'],
+      [/equipment|tools|machinery|furniture/i,'Equipment'],[/suppl/i,'Supplies'],[/vehicle|fuel|gas|mileage|auto|travel|parking|truck/i,'Fuel & Mileage'],
+      [/advertis|marketing|promotion|website|social media/i,'Advertising'],[/licen[cs]e|permit|dues|registration|inspection/i,'Licenses & Permits'],[/insur/i,'Insurance'],
+      [/utilit|electric|propane|water|phone|internet|telephone/i,'Utilities'],[/software|subscription|computer|app\b|saas/i,'Software & Subscriptions'],
+      [/repair|maintenance/i,'Repairs & Maintenance'],[/bank|merchant|processing|payment fee|service charge|card fee|square fee|stripe fee|paypal fee/i,'Bank & Card Fees'],
+      [/meal|entertain|food & drink/i,'Meals'],[/interest/i,'Loan Interest']];
+    for(const [re,c] of syn)if(re.test(nm)&&EXPENSE_CATS.includes(c))return c;}
+  if(a.cls==='in'){const syn=[[/catering/i,'Catering'],[/wholesale/i,'Wholesale Account'],[/online|website|e-?commerce|shopify|etsy/i,'Online Order'],[/grant|reimburs/i,'Grants & Reimbursements']];
+    for(const [re,c] of syn)if(re.test(nm)&&INCOME_CATS.includes(c))return c;}
   return 'new:'+nm;
 }
 async function swFiles(input){
