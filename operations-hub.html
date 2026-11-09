@@ -1771,7 +1771,7 @@ async function loadExpensesFromDB(){
 function triggerReceipt(id){const i=document.getElementById('receipt-'+id);if(i)i.click();}
 
 async function uploadReceipt(id,input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   const exp=expenses.find(e=>e.id===id);if(!exp)return;
   const ind=document.getElementById('expSaveIndicator');
   const hasAmount=parseFloat(exp.amount)>0;
@@ -2489,7 +2489,7 @@ function ensureBlankExpenseRow(){
   if(!last||last.dbId||last.name||last.amount||last.receiptUrl)expenses.push({id:++expCounter,name:'',amount:'',receiptUrl:'',dbId:null,category:'',vendor:'',date:''});
 }
 async function onScanFiles(input){
-  const files=Array.from(input.files||[]);input.value='';
+  const files=Array.from(input.files||[]);
   if(!files.length)return;
   if(!window._authToken){toast('Sign in first',true);return;}
   const label=getLogPeriodLabel();
@@ -3463,7 +3463,7 @@ function renderTxnReceipt(status){
   el.innerHTML=_txn.receipt?'✓ Receipt attached · <a href="'+esc(_txn.receipt)+'" target="_blank" rel="noopener">view</a> · <a href="#" onclick="_txn.receipt=\'\';renderTxnReceipt();return false;">remove</a>':'';
 }
 async function txnReceiptChosen(input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   const wantOcr=!(parseFloat($v('txnAmount'))>0);
   try{
     const r=await readReceiptFile(file,s=>renderTxnReceipt('⟳ '+esc(s)),{skipOcr:!wantOcr});
@@ -3981,7 +3981,7 @@ function cleanBankDesc(d){
   return t.replace(/\b([A-Z])([A-Z]+)\b/g,(m,a,b)=>a+b.toLowerCase());
 }
 async function onBankFile(input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   try{
     const rows=parseCSV(await file.text());
     if(looksLikeSalesReport(rows)){
@@ -4552,7 +4552,7 @@ function mileTripsFrom(rows,C){
   return{trips:out,personal,unsorted,bad};
 }
 async function onMileFile(input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   if(/\.(xlsx?|pdf)$/i.test(file.name)){toast('Export the CSV version from your mileage app — this needs a .csv file',true);return;}
   try{
     const rows=parseCSV(await file.text());
@@ -7021,7 +7021,7 @@ function invExport(){
   downloadCSV(fileSlug()+'-inventory-'+isoLocal(new Date())+'.csv',[head].concat(INV.items.map(i=>[i.name,i.category||'',i.unit||'',qty(i.on_hand),i.par??'',i.order_qty??'',i.cost??'',i.price??'',i.supplier||'',i.sku||'',i.location||'',i.notes||''])));
 }
 async function invImport(input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   let rows;try{rows=parseCSV(await file.text());}catch(e){toast('Couldn’t read that file',true);return;}
   if(rows.length<2){toast('That file has no rows',true);return;}
   const h=rows[0].map(c=>String(c).trim().toLowerCase());
@@ -7143,7 +7143,7 @@ function posDetect(rows,forceSales){
     location:posFind(h,/^location$/),cash:posFind(h,/^cash$/),card:posFind(h,/^card$/)}};
 }
 async function onPosFile(input){
-  const file=input.files[0];input.value='';if(!file)return;
+  const file=input.files[0];if(!file)return;
   let rows;
   try{
     if(/\.xlsx?$/i.test(file.name)){
@@ -7576,7 +7576,7 @@ function posSyncNote(r){
 })();
 // one or many files from the picker
 onPosFile=async function(input){
-  const files=[...(input.files||[])];input.value='';
+  const files=[...(input.files||[])];
   if(!files.length)return;
   posStartQueue(files.map(f=>({file:f,name:f.name})));
 };
@@ -9924,7 +9924,7 @@ function swDefaultCat(a){
   return 'new:'+nm;
 }
 async function swFiles(input){
-  const files=[...(input.files||[])];input.value='';if(!files.length)return;
+  const files=[...(input.files||[])];if(!files.length)return;
   const msg=document.getElementById('swMsg');if(msg)msg.textContent='Reading '+files.map(f=>f.name).join(', ')+'…';
   try{
     let tables=[];for(const f of files)tables=tables.concat(await swRead(f));
@@ -9958,7 +9958,9 @@ async function swFiles(input){
       return;
     }
     swReview();
-  }catch(e){console.error(e);if(msg)msg.innerHTML='<span style="color:var(--red);">Couldn’t read that: '+esc(e.message)+'</span>';}
+  }catch(e){console.error(e);if(!msg)return;
+    if(e&&(e.name==='NotReadableError'||/could not be read|permission/i.test(e.message||'')))msg.innerHTML='<span style="color:var(--red);">Your phone wouldn’t hand over that file.</span> Pick it again (if it’s in iCloud or Google Drive, open it once in the Files app first so it downloads). Or open the file, select all, copy, and use <b>Or paste it in</b> below.';
+    else msg.innerHTML='<span style="color:var(--red);">Couldn’t read that: '+esc(e.message)+'</span>';}
 }
 function swParsePeople(t){
   const h=swHeader(t.rows);if(!h)return{people:[],owed:[]};const H=h.cols;
@@ -12026,6 +12028,12 @@ if(typeof loadBooks==='function'){const _lbY=loadBooks;loadBooks=async function(
 @media(max-width:560px){.ytd-stats{grid-template-columns:1fr;}.ytd-stat{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;}.ytd-s{flex-basis:100%;}.ytd-cols{grid-template-columns:1fr;}}
 `;document.head.appendChild(st);})();
 
+</script>
+<script>
+// clear a file picker when it opens, not right after a pick: on iPhones, clearing it straight away
+// can cut the Hub off from the file before it's read ("the requested file could not be read")
+document.addEventListener('click',e=>{const t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='file'){try{t.value='';}catch(x){}}},true);
+window.addEventListener('unhandledrejection',e=>{const r=e.reason;if(r&&(r.name==='NotReadableError'||/could not be read/i.test(r.message||''))){try{toast('Your phone wouldn’t hand over that file. If it lives in iCloud or Google Drive, open it once in the Files app so it downloads, then pick it again.',true);}catch(x){}}});
 </script>
 </body>
 </html>
