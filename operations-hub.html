@@ -833,6 +833,18 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
 @media(max-width:520px){#trKind button{font-size:12px;padding:8px 6px;white-space:normal;}}
 
 .bank-help div{margin-top:3px;}
+@media(max-width:640px){.gv-grid{grid-template-columns:1fr 1fr!important;}}
+.rc-grid{display:grid;gap:6px;align-items:center;margin-bottom:6px;}
+.rc-p{grid-template-columns:minmax(0,2fr) minmax(0,.9fr) minmax(0,.8fr) 72px minmax(0,1.5fr) 28px;}
+.rc-l{grid-template-columns:minmax(0,2fr) minmax(0,.9fr) 96px minmax(0,1fr) 28px;}
+.rc-grid .inp{min-width:0;width:100%;}
+.rc-per{font-size:12.5px;color:var(--mid);}
+.rc-fix{background:none;border:none;padding:0;color:var(--tan);font-weight:700;font-size:12.5px;cursor:pointer;text-decoration:underline;font-family:inherit;}
+.rc-rl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.55);}
+.rc-rv{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:#fff;}
+@media(max-width:640px){.rc-h{display:none;}.rc-p{grid-template-columns:minmax(0,1.4fr) minmax(0,.8fr) minmax(0,.7fr) 64px 24px;}
+  .rc-l{grid-template-columns:minmax(0,1.5fr) minmax(0,.8fr) 80px 24px;}.rc-grid .rc-per{grid-column:1/-1;order:10;margin:-2px 0 8px;}
+  .rc-res{grid-template-columns:1fr!important;}.rc-two{grid-template-columns:1fr!important;}}
 </style>
 </head>
 <body>
@@ -1037,6 +1049,13 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
     </div>
   </div>
 
+  <!-- Given away or traded -->
+  <div class="card" id="gvCard">
+    <div class="card-title"><div class="card-title-dot"></div>Product Given Away or Traded</div>
+    <div class="card-sub">Samples, gifts, donations, and trades with other vendors. They aren’t sales, so they don’t touch pay, and they come off Inventory.</div>
+    <div id="gvBody"><div style="color:var(--mid);font-size:13px;padding:10px 0;">Loading...</div></div>
+  </div>
+
   <!-- Expenses -->
   <div class="card">
     <div class="card-title"><div class="card-title-dot"></div>Expenses
@@ -1129,55 +1148,7 @@ textarea.tr-full{font-family:inherit;resize:vertical;}
 </div>
 
 <!-- ─── INGREDIENTS ─── -->
-<div class="tab-content" id="tab-ingredients">
-  <div style="margin-top:4px;" class="card">
-    <div class="card-title"><div class="card-title-dot"></div>Recipes</div>
-    <div class="card-sub">Save your recipes and products. Load and update ingredient prices anytime.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-      <select id="recipeSelect" class="period-select" style="flex:1;min-width:160px;" onchange="loadRecipe()">
-        <option value="">— Load a saved recipe —</option>
-      </select>
-      <button class="btn-green" onclick="saveRecipe()" style="padding:8px 16px;font-size:13px;">💾 Save Recipe</button>
-      <button class="btn-secondary" onclick="deleteRecipe()" style="padding:8px 16px;font-size:13px;">🗑 Delete</button>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center;">
-      <input type="text" id="recipeName" class="period-input" placeholder="Recipe name" style="flex:1;">
-      <div id="recipeStatus" style="font-size:12px;color:var(--green);font-weight:600;min-width:60px;"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><div class="card-title-dot"></div>Batch Settings</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
-      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:4px;">Batch Size</label><input type="number" id="batchSize" value="20" class="period-input" oninput="calcIngredients()"></div>
-      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:4px;">Markup %</label><input type="number" id="markupPct" value="40" class="period-input" oninput="calcIngredients()"></div>
-      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:4px;">Labor $/hr</label><input type="number" id="laborRate" value="0" class="period-input" oninput="calcIngredients()"></div>
-      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:4px;">Batch Hours</label><input type="number" id="batchHours" value="0" class="period-input" oninput="calcIngredients()"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><div class="card-title-dot"></div>Bulk Ingredients</div>
-    <div class="card-sub">Cost for the whole purchase ÷ how many items it makes.</div>
-    <div id="bulkIngList"></div>
-    <button class="add-btn" onclick="addBulkIng()">+ Add Bulk</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><div class="card-title-dot"></div>Specialty Ingredients</div>
-    <div class="card-sub">Cost per purchase size and how much you use per item.</div>
-    <div id="specIngList"></div>
-    <button class="add-btn" onclick="addSpecIng()">+ Add Specialty</button>
-  </div>
-
-  <div class="card" style="background:var(--green-dark);color:#fff;">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;text-align:center;">
-      <div><div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Cost per Item</div><div id="costPerPasta" style="font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:#fff;">—</div></div>
-      <div><div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Suggested Price</div><div id="suggestedPrice" style="font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:var(--tan);">—</div></div>
-      <div><div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.55);">Batch Cost</div><div id="batchCost" style="font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:#fff;">—</div></div>
-    </div>
-  </div>
-</div>
+<div class="tab-content" id="tab-ingredients"><div style="margin-top:8px;" id="rcBody"></div></div>
 
 <!-- ─── INVENTORY ─── -->
 <div class="tab-content" id="tab-training"><div style="margin-top:8px;" id="trainBody"></div></div>
@@ -1583,7 +1554,8 @@ function switchTab(id,el){
   document.getElementById('tab-'+id).classList.add('active');
   if(el)el.classList.add('active');
   if(id==='history')loadHistory();
-  if(id==='log'){loadRevLogEntries();loadExpensesFromDB();}
+  if(id==='log'){loadRevLogEntries();loadExpensesFromDB();gvLoad();}
+  if(id==='ingredients')rcOpen();
   if(id==='dashboard'){
     refreshDashboard();
     if(dashInterval)clearInterval(dashInterval);
@@ -1844,6 +1816,89 @@ async function addRevEntry(){
   }catch(e){showSave('revSaveIndicator','error',e.message);toast('Failed: '+e.message,true);}
 }
 
+// ── Given away or traded: samples, gifts, donations, and trades with other vendors ──
+// Never a sale (no pay, no sales tax). What it cost to make is already in Ingredients and Packaging,
+// so it isn't booked as an expense a second time; the log is the record of where it went.
+const GV={year:[],missing:false,kind:'gift'};
+const GV_T='ohb_giveaways';
+function gvProducts(){
+  const it=(INV.items||[]).filter(i=>i.active!==false&&+i.price>0).map(i=>({name:i.name,price:+i.price,id:i.id}));
+  if(it.length)return it;
+  return [];
+}
+async function gvLoad(){
+  const el=document.getElementById('gvBody');if(!el)return;
+  if(!INV.loaded){try{await loadInventory();}catch(e){}}
+  try{GV.year=await sb(GV_T+'?give_date=gte.'+new Date().getFullYear()+'-01-01&order=give_date.desc,created_at.desc&limit=2000');GV.missing=false;}
+  catch(e){if(tableMissing(e))GV.missing=true;else{el.innerHTML='<div class="bk-empty">Couldn’t load: '+esc(e.message)+'</div>';return;}}
+  gvDraw();
+}
+function gvSetKind(k){GV.kind=k;gvDraw(true);}
+function gvPick(){
+  const w=document.getElementById('gvWhat'),e=document.getElementById('gvEach');if(!w||!e||e.dataset.touched)return;
+  const m=gvProducts().find(x=>x.name.toLowerCase()===w.value.trim().toLowerCase());if(m)e.value=m.price;
+}
+function gvDraw(keep){
+  const el=document.getElementById('gvBody');if(!el)return;
+  if(GV.missing){el.innerHTML='<div class="bk-empty">One-time setup: run <b>giveaways.sql</b> in Supabase, then refresh.</div>';return;}
+  const old=keep?{what:(document.getElementById('gvWhat')||{}).value,qty:(document.getElementById('gvQty')||{}).value,each:(document.getElementById('gvEach')||{}).value,to:(document.getElementById('gvTo')||{}).value,date:(document.getElementById('gvDate')||{}).value}:{};
+  const tr=GV.kind==='trade';
+  const lbl='font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:5px;';
+  let h='<div class="add-entry-form">'
+    +'<div class="seg" style="margin-bottom:10px;"><button class="'+(tr?'':'active')+'" onclick="gvSetKind(\'gift\')">🎁 Gave it away</button><button class="'+(tr?'active':'')+'" onclick="gvSetKind(\'trade\')">🔄 Traded it</button></div>'
+    +'<datalist id="gvProd">'+gvProducts().map(x=>'<option value="'+esc(x.name)+'">').join('')+'</datalist>'
+    +'<div style="display:grid;grid-template-columns:2fr 80px 100px 130px;gap:10px;align-items:end;" class="gv-grid">'
+    +'<div><label style="'+lbl+'">What</label><input id="gvWhat" class="period-input" list="gvProd" placeholder="What you gave" oninput="gvPick()" value="'+esc(old.what||'')+'"></div>'
+    +'<div><label style="'+lbl+'">How many</label><input id="gvQty" class="period-input" type="number" min="1" step="1" value="'+esc(old.qty||'1')+'"></div>'
+    +'<div><label style="'+lbl+'">Sells for</label><input id="gvEach" class="period-input" type="number" min="0" step="0.01" placeholder="0.00" value="'+esc(old.each||'')+'" oninput="this.dataset.touched=1"></div>'
+    +'<div><label style="'+lbl+'">Date</label><input id="gvDate" class="period-input" type="date" value="'+esc(old.date||todayISO())+'"></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:'+(tr?'1fr 1fr 110px':'1fr')+';gap:10px;align-items:end;margin-top:10px;" class="gv-grid">'
+    +'<div><label style="'+lbl+'">'+(tr?'Traded with':'Given to')+'</label><input id="gvTo" class="period-input" placeholder="'+(tr?'e.g. Mill St Bakery':'e.g. samples at the Lansing market, church food pantry')+'" value="'+esc(old.to||'')+'"></div>'
+    +(tr?'<div><label style="'+lbl+'">Got back</label><input id="gvGot" class="period-input" placeholder="e.g. 2 loaves of sourdough"></div><div><label style="'+lbl+'">Worth about</label><input id="gvGotVal" class="period-input" type="number" min="0" step="0.01" placeholder="0.00"></div>':'')
+    +'</div>'
+    +'<div style="margin-top:10px;"><button class="btn-green" id="gvSave" onclick="gvSave()">+ Log it</button></div></div>';
+  // the year at a glance
+  const y=GV.year;const sum=(a,k)=>a.reduce((t,r)=>t+(+r[k]||0),0);
+  const gifts=y.filter(r=>r.kind==='gift'),trades=y.filter(r=>r.kind==='trade'),hl=y.filter(r=>r.rep_id);
+  if(y.length){
+    h+='<div class="bk-summary" style="grid-template-columns:repeat(3,1fr);margin:12px 0 6px;">'
+      +'<div class="bk-stat"><div class="bk-stat-l">Given away this year</div><div class="bk-stat-v">'+gvQty(sum(gifts,'qty'))+'</div><div class="bk-sub">'+fmt(sum(gifts,'value'))+' at retail</div></div>'
+      +'<div class="bk-stat"><div class="bk-stat-l">Traded this year</div><div class="bk-stat-v">'+gvQty(sum(trades,'qty'))+'</div><div class="bk-sub">'+fmt(sum(trades,'value'))+' at retail</div></div>'
+      +'<div class="bk-stat"><div class="bk-stat-l">Got back in trades</div><div class="bk-stat-v">'+fmt(sum(trades,'got_value'))+'</div><div class="bk-sub">'+(hl.length?gvQty(sum(hl,'qty'))+' by Highlanders':'about what it was worth')+'</div></div></div>';
+    h+='<div id="gvList" style="max-height:260px;overflow-y:auto;">'+y.slice(0,40).map(r=>'<div class="rev-log-item" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);">'
+      +'<div style="font-size:12px;color:var(--mid);min-width:70px;">'+esc(prettyDate(r.give_date).replace(/, \d{4}$/,''))+'</div>'
+      +'<div style="flex:1;min-width:0;"><b>'+(r.kind==='trade'?'🔄 ':'🎁 ')+gvNum(r.qty)+' × '+esc(r.product)+'</b>'
+      +'<div class="bk-sub">'+(r.kind==='trade'?'Traded with ':r.rep_id?'At ':'To ')+esc(r.given_to||'someone')+(r.got?' · got '+esc(r.got)+(+r.got_value?' ('+fmt(r.got_value)+')':''):'')+(r.note?' · '+esc(r.note):'')+'</div></div>'
+      +'<div style="font-weight:600;">'+fmt(r.value)+'</div>'
+      +'<button class="receipt-btn" title="Remove" onclick="gvDelete(\''+r.id+'\')">×</button></div>').join('')+'</div>';
+  }else h+='<div class="bk-sub" style="padding:10px 0;">Nothing logged yet this year.</div>';
+  h+='<div class="bk-sub" style="margin-top:8px;">For taxes: what it cost to make is already in your Ingredients and Packaging, so it isn’t added as an expense again. Trades are different: the IRS counts what you got in a trade as income, so give your accountant the “got back” total.</div>';
+  el.innerHTML=h;
+}
+function gvNum(n){n=+n||0;return n%1?n.toFixed(2):String(n);}
+function gvQty(n){return gvNum(n)+' '+(+n===1?'item':'items');}
+async function gvSave(){
+  const what=(document.getElementById('gvWhat').value||'').trim(),qty=+document.getElementById('gvQty').value||0,each=+document.getElementById('gvEach').value||0;
+  const to=(document.getElementById('gvTo').value||'').trim(),date=document.getElementById('gvDate').value||todayISO();
+  const tr=GV.kind==='trade';const got=tr?(document.getElementById('gvGot').value||'').trim():'',gotVal=tr?+document.getElementById('gvGotVal').value||0:0;
+  if(!what){toast('What did you give?',true);return;}if(qty<=0){toast('How many?',true);return;}
+  const btn=document.getElementById('gvSave');btn.disabled=true;btn.textContent='Saving…';
+  const item=(INV.items||[]).find(i=>String(i.name).toLowerCase()===what.toLowerCase());
+  try{
+    await sb(GV_T,{method:'POST',body:JSON.stringify({give_date:date,kind:GV.kind,product:what,item_id:item?item.id:null,qty,unit_value:each,value:r2(qty*each),given_to:to||null,got:got||null,got_value:tr&&gotVal?gotVal:null,by_name:currentProfile&&currentProfile.name||null})});
+    if(item)try{await invMove(item,-qty,tr?'traded':'given',(tr?'Traded with ':'Given to ')+(to||'someone'));}catch(e){console.warn('inventory',e);}
+    toast(tr?'Trade logged':'Logged');GV.kind=tr?'trade':'gift';await gvLoad();
+  }catch(e){toast(e.message,true);btn.disabled=false;btn.textContent='+ Log it';}
+}
+async function gvDelete(id){
+  const r=GV.year.find(x=>x.id===id);if(!r||!confirm('Remove '+gvNum(r.qty)+' × '+r.product+'?'))return;
+  try{
+    await sb(GV_T+'?id=eq.'+id,{method:'DELETE'});
+    const item=r.item_id&&(INV.items||[]).find(i=>i.id===r.item_id);if(item)try{await invMove(item,+r.qty,'adjust','Giveaway removed');}catch(e){}
+    await gvLoad();
+  }catch(e){toast(e.message,true);}
+}
 async function loadRevLogEntries(){
   const el=document.getElementById('revLogEntries');if(!el)return;
   const periodLabel=getLogPeriodLabel();
@@ -2102,58 +2157,6 @@ async function saveHistoryHours(periodId,label){
   }
 }
 
-
-async function loadRecipeList(){
-  try{
-    const recipes=await sb('ohb_recipes?select=*&order=name.asc');
-    const sel=document.getElementById('recipeSelect');if(!sel)return;
-    sel.innerHTML='<option value="">— Load a saved recipe —</option>';
-    recipes.forEach(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.name;sel.appendChild(o);});
-  }catch(e){console.warn('Recipes:',e.message);}
-}
-async function loadRecipe(){
-  const id=document.getElementById('recipeSelect').value;if(!id)return;
-  try{
-    const[r]=await sb('ohb_recipes?id=eq.'+id+'&select=*');
-    const ings=await sb('ohb_recipe_ingredients?recipe_id=eq.'+id+'&order=sort_order.asc');
-    document.getElementById('recipeName').value=r.name;
-    document.getElementById('batchSize').value=r.batch_size||20;
-    document.getElementById('markupPct').value=r.markup_pct||40;
-    document.getElementById('laborRate').value=r.labor_rate||0;
-    document.getElementById('batchHours').value=r.batch_hours||0;
-    bulkIngs=ings.filter(i=>i.ingredient_type==='bulk').map((i,idx)=>({id:idx+1,name:i.name||'',cost:i.cost||'',yield:i.yield_pastas||''}));
-    specIngs=ings.filter(i=>i.ingredient_type==='specialty').map((i,idx)=>({id:idx+100,name:i.name||'',cost:i.cost||'',purchaseSize:i.purchase_size||'',usedPer:i.used_per||'',unit:i.unit||'g'}));
-    if(!bulkIngs.length)bulkIngs=[{id:1,name:'',cost:'',yield:''}];
-    if(!specIngs.length)specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
-    renderBulkIngs();renderSpecIngs();calcIngredients();toast('Recipe loaded: '+r.name);
-  }catch(e){toast('Could not load recipe',true);}
-}
-async function saveRecipe(){
-  const name=document.getElementById('recipeName').value.trim();if(!name){toast('Enter a name first',true);return;}
-  const status=document.getElementById('recipeStatus');if(status)status.textContent='Saving...';
-  try{
-    const data={name,batch_size:parseFloat(document.getElementById('batchSize').value)||20,markup_pct:parseFloat(document.getElementById('markupPct').value)||40,labor_rate:parseFloat(document.getElementById('laborRate').value)||0,batch_hours:parseFloat(document.getElementById('batchHours').value)||0,updated_at:new Date().toISOString()};
-    const existing=await sb('ohb_recipes?name=eq.'+encodeURIComponent(name)+'&select=id');
-    let rid;
-    if(existing.length){rid=existing[0].id;await sb('ohb_recipes?id=eq.'+rid,{method:'PATCH',body:JSON.stringify(data)});await sb('ohb_recipe_ingredients?recipe_id=eq.'+rid,{method:'DELETE',headers:{'Prefer':''}});}
-    else{const[c]=await sb('ohb_recipes',{method:'POST',body:JSON.stringify(data)});rid=c.id;}
-    const rows=[...bulkIngs.filter(i=>i.name||i.cost).map((i,idx)=>({recipe_id:rid,ingredient_type:'bulk',name:i.name,cost:parseFloat(i.cost)||0,yield_pastas:parseFloat(i.yield)||0,sort_order:idx})),...specIngs.filter(i=>i.name||i.cost).map((i,idx)=>({recipe_id:rid,ingredient_type:'specialty',name:i.name,cost:parseFloat(i.cost)||0,purchase_size:parseFloat(i.purchaseSize)||0,used_per:parseFloat(i.usedPer)||0,unit:i.unit||'g',sort_order:idx+100}))];
-    if(rows.length)await sb('ohb_recipe_ingredients',{method:'POST',body:JSON.stringify(rows)});
-    if(status){status.textContent='✓ Saved';setTimeout(()=>{status.textContent='';},2000);}
-    toast('Recipe saved: '+name);loadRecipeList();
-  }catch(e){if(status)status.textContent='Failed';toast('Save failed: '+e.message,true);}
-}
-async function deleteRecipe(){
-  const id=document.getElementById('recipeSelect').value;if(!id){toast('Select a recipe first',true);return;}
-  const name=document.getElementById('recipeName').value.trim();
-  if(!confirm('Delete "'+name+'"?'))return;
-  try{
-    await sb('ohb_recipes?id=eq.'+id,{method:'DELETE',headers:{'Prefer':''}});
-    document.getElementById('recipeSelect').value='';document.getElementById('recipeName').value='';
-    bulkIngs=[{id:1,name:'',cost:'',yield:''}];specIngs=[{id:100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'}];
-    renderBulkIngs();renderSpecIngs();calcIngredients();toast('Recipe deleted');loadRecipeList();
-  }catch(e){toast('Delete failed: '+e.message,true);}
-}
 
 // ─── ADMIN ───
 async function adminCall(action,extra={}){
@@ -5972,47 +5975,205 @@ async function loadCurrentPeriodHours(){
 // ═══════════════════════════════════════════════════════
 // INGREDIENT COST CALCULATOR (these were missing — startup was stopping on them)
 // ═══════════════════════════════════════════════════════
-const ING_UNITS=['g','ml','oz','lb','each'];
-function renderBulkIngs(){
-  const el=document.getElementById('bulkIngList');if(!el)return;
-  el.innerHTML='<div class="ing-head"><span>Ingredient</span><span>Cost of purchase</span><span>Makes # '+esc(HUB.units)+'</span><span>Per '+esc(HUB.unit)+'</span><span></span></div>'
-    +bulkIngs.map(i=>'<div class="ing-row">'
-      +'<input class="inp" placeholder="e.g. Semolina 50 lb" value="'+esc(i.name)+'" oninput="updIng(\'bulk\','+i.id+',\'name\',this.value)">'
-      +'<input class="inp" type="number" inputmode="decimal" step="0.01" placeholder="Cost $" value="'+esc(i.cost)+'" oninput="updIng(\'bulk\','+i.id+',\'cost\',this.value)">'
-      +'<input class="inp" type="number" inputmode="decimal" placeholder="Makes # '+esc(HUB.units)+'" value="'+esc(i.yield)+'" oninput="updIng(\'bulk\','+i.id+',\'yield\',this.value)">'
-      +'<span class="ing-per" id="ingPer-bulk-'+i.id+'">—</span>'
-      +'<button class="remove-btn" onclick="rmIng(\'bulk\','+i.id+')">×</button></div>').join('');
-  calcIngredients();
+// ═══════════════════════════════════════════════════════
+// RECIPE COST: price things the way you buy them, list a batch the way you make it
+//   1. What you buy: "Semolina, $25.99 for 50 lb" (entered once, shared by every recipe)
+//   2. One batch: "Semolina 1,250 g, AP flour 8,750 g, eggs 24, garlic powder 60 g"
+//   3. How many it makes: the Hub works out cost per  and profit at your price
+// ═══════════════════════════════════════════════════════
+const RC_SET='ohb_settings',RC_OLD='ohb';
+const RC_U1='',RC_U2='';
+const RC_UNITS={g:['m',1],kg:['m',1000],oz:['m',28.3495],lb:['m',453.592],
+  ml:['v',1],l:['v',1000],tsp:['v',4.92892],tbsp:['v',14.7868],cup:['v',236.588],'fl oz':['v',29.5735],qt:['v',946.353],gal:['v',3785.41],
+  each:['e',1],dozen:['e',12]};
+const RC_UNIT_LIST=['g','kg','oz','lb','ml','l','tsp','tbsp','cup','fl oz','qt','gal','each','dozen'];
+const RC={pantry:[],book:[],old:[],cur:null,loaded:false,saveT:null};
+function rcU1(){return RC_U1||HUB.unit||'item';}
+function rcU2(){return RC_U2||HUB.units||'items';}
+function rcNew(){return{id:'r'+Date.now().toString(36),name:'',lines:[{name:'',amt:'',unit:'g'}],yield:'',pack:'',price:'',markup:40,labor:'',hours:''};}
+function rcNum(v){const n=parseFloat(String(v==null?'':v).replace(/[$,]/g,''));return isFinite(n)?n:0;}
+function rcKey(s){return String(s||'').trim().toLowerCase();}
+function rcFind(name){const k=rcKey(name);return k?RC.pantry.find(p=>rcKey(p.name)===k):null;}
+// what one unit of the recipe costs: the price paid ÷ the package, converted to the recipe's unit
+function rcLineCost(l){
+  const amt=rcNum(l.amt);if(!amt||!l.name)return{cost:0,why:''};
+  if(l.unit==='$ per '+rcU1())return{cost:amt*Math.max(rcNum(RC.cur.yield),0),why:''};
+  const p=rcFind(l.name);if(!p||String(p.price==null?'':p.price).trim()===''||!rcNum(p.size))return{cost:0,why:'price'};   // $0 is fine (water)
+  const a=RC_UNITS[p.unit||'g'],b=RC_UNITS[l.unit||'g'];if(!a||!b)return{cost:0,why:''};
+  if(a[0]!==b[0])return{cost:0,why:'units',buy:p.unit};
+  return{cost:rcNum(p.price)/(rcNum(p.size)*a[1])*(amt*b[1]),why:''};
 }
-function renderSpecIngs(){
-  const el=document.getElementById('specIngList');if(!el)return;
-  el.innerHTML='<div class="ing-head spec"><span>Ingredient</span><span>Cost</span><span>Size</span><span>Unit</span><span>Used per '+esc(HUB.unit)+'</span><span>Per '+esc(HUB.unit)+'</span><span></span></div>'
-    +specIngs.map(i=>'<div class="ing-row spec">'
-      +'<input class="inp" placeholder="e.g. Squid ink" value="'+esc(i.name)+'" oninput="updIng(\'spec\','+i.id+',\'name\',this.value)">'
-      +'<input class="inp" type="number" inputmode="decimal" step="0.01" placeholder="Cost $" value="'+esc(i.cost)+'" oninput="updIng(\'spec\','+i.id+',\'cost\',this.value)">'
-      +'<input class="inp" type="number" inputmode="decimal" placeholder="Package size" value="'+esc(i.purchaseSize)+'" oninput="updIng(\'spec\','+i.id+',\'purchaseSize\',this.value)">'
-      +'<select class="inp" onchange="updIng(\'spec\','+i.id+',\'unit\',this.value)">'+ING_UNITS.concat(i.unit&&!ING_UNITS.includes(i.unit)?[i.unit]:[]).map(u=>'<option'+(u===(i.unit||'g')?' selected':'')+'>'+esc(u)+'</option>').join('')+'</select>'
-      +'<input class="inp" type="number" inputmode="decimal" placeholder="Used per '+esc(HUB.unit)+'" value="'+esc(i.usedPer)+'" oninput="updIng(\'spec\','+i.id+',\'usedPer\',this.value)">'
-      +'<span class="ing-per" id="ingPer-spec-'+i.id+'">—</span>'
-      +'<button class="remove-btn" onclick="rmIng(\'spec\','+i.id+')">×</button></div>').join('');
-  calcIngredients();
+function rcPer(p){
+  const u=RC_UNITS[p.unit||'g'];if(!u||String(p.price==null?'':p.price).trim()===''||!rcNum(p.size))return'';
+  const base=rcNum(p.price)/(rcNum(p.size)*u[1]);
+  if(u[0]==='m')return fmt(base*453.592)+' / lb · '+(base*100<0.1?'$'+(base*100).toFixed(3):fmt(base*100))+' / 100 g';
+  if(u[0]==='v')return fmt(base*236.588)+' / cup · '+(base*1000<0.1?'$'+(base*1000).toFixed(3):fmt(base*1000))+' / liter';
+  return(base<0.1?'$'+base.toFixed(3):fmt(base))+' each';
 }
-function updIng(kind,id,f,v){const list=kind==='bulk'?bulkIngs:specIngs;const i=list.find(x=>x.id===id);if(i)i[f]=v;calcIngredients();}
-function rmIng(kind,id){if(kind==='bulk'){bulkIngs=bulkIngs.filter(x=>x.id!==id);renderBulkIngs();}else{specIngs=specIngs.filter(x=>x.id!==id);renderSpecIngs();}}
-function addBulkIng(){bulkIngs.push({id:++bulkCounter,name:'',cost:'',yield:''});renderBulkIngs();}
-function addSpecIng(){specIngs.push({id:++specCounter+100,name:'',cost:'',purchaseSize:'',usedPer:'',unit:'g'});renderSpecIngs();}
-function calcIngredients(){
-  const num=v=>parseFloat(v)||0;
-  let per=0;
-  bulkIngs.forEach(i=>{const p=num(i.yield)>0?num(i.cost)/num(i.yield):0;per+=p;const el=document.getElementById('ingPer-bulk-'+i.id);if(el)el.textContent=p?'$'+p.toFixed(3):'—';});
-  specIngs.forEach(i=>{const p=num(i.purchaseSize)>0?num(i.cost)/num(i.purchaseSize)*num(i.usedPer):0;per+=p;const el=document.getElementById('ingPer-spec-'+i.id);if(el)el.textContent=p?'$'+p.toFixed(3):'—';});
-  const batch=num(document.getElementById('batchSize')?.value)||1;
-  const labor=num(document.getElementById('laborRate')?.value)*num(document.getElementById('batchHours')?.value);
-  const cost=per+labor/batch;
-  const price=cost*(1+num(document.getElementById('markupPct')?.value)/100);
-  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('costPerPasta',cost?fmt(cost):'—');set('suggestedPrice',cost?fmt(price):'—');set('batchCost',cost?fmt(cost*batch):'—');
+async function rcOpen(force){
+  const el=document.getElementById('rcBody');if(!el)return;
+  if(RC.loaded&&!force){rcDraw();return;}
+  el.innerHTML='<div class="card"><div class="bk-empty">Loading recipes…</div></div>';
+  try{const r=await sb(RC_SET+'?key=eq.ing_pantry&select=value');RC.pantry=((r[0]&&r[0].value&&r[0].value.items)||[]);}catch(e){RC.pantry=[];}
+  try{const r=await sb(RC_SET+'?key=eq.recipe_book&select=value');RC.book=((r[0]&&r[0].value&&r[0].value.recipes)||[]);}catch(e){RC.book=[];}
+  // recipes saved the old way still show up; they move over the first time they're saved
+  try{RC.old=await sb(RC_OLD+'_recipes?select=*&order=name.asc');}catch(e){RC.old=[];}
+  RC.old=RC.old.filter(o=>!RC.book.some(b=>rcKey(b.name)===rcKey(o.name)));
+  if(!RC.pantry.length)RC.pantry=[{name:'',price:'',size:'',unit:'lb'}];
+  if(!RC.cur)RC.cur=RC.book[0]?JSON.parse(JSON.stringify(RC.book[0])):rcNew();
+  RC.loaded=true;rcDraw();
 }
+function rcDraw(){
+  const el=document.getElementById('rcBody');if(!el)return;const c=RC.cur;
+  const lbl='font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);font-weight:700;';
+  const unitSel=(v,on,extra)=>'<select class="inp" onchange="'+on+'">'+RC_UNIT_LIST.concat(extra||[]).map(u=>'<option'+(u===v?' selected':'')+'>'+esc(u)+'</option>').join('')+'</select>';
+  let h='';
+  // ── recipes ──
+  h+='<div class="card" style="margin-top:4px;"><div class="card-title"><div class="card-title-dot"></div>Recipes</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+    +'<select class="period-select" style="flex:1;min-width:180px;" onchange="rcPick(this.value)"><option value="">'+(RC.book.length||RC.old.length?'Open a recipe…':'No recipes saved yet')+'</option>'
+    +RC.book.map(r=>'<option value="b:'+esc(r.id)+'"'+(r.id===c.id?' selected':'')+'>'+esc(r.name||'Untitled')+'</option>').join('')
+    +(RC.old.length?'<optgroup label="Saved the old way">'+RC.old.map(r=>'<option value="o:'+esc(r.id)+'">'+esc(r.name)+'</option>').join('')+'</optgroup>':'')
+    +'</select><button class="btn-secondary" style="padding:8px 14px;font-size:13px;" onclick="rcPick(\'new\')">+ New</button></div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">'
+    +'<input class="period-input" style="flex:1;min-width:180px;" placeholder="Recipe name, e.g. Garlic Herb fettuccine" value="'+esc(c.name)+'" oninput="RC.cur.name=this.value">'
+    +'<button class="btn-green" style="padding:8px 16px;font-size:13px;" onclick="rcSave()">💾 Save</button>'
+    +'<button class="btn-secondary" style="padding:8px 14px;font-size:13px;" onclick="rcCopy()" title="Start a new flavor from this one">⧉ Copy</button>'
+    +(RC.book.some(r=>r.id===c.id)?'<button class="btn-secondary" style="padding:8px 14px;font-size:13px;" onclick="rcDelete()">🗑</button>':'')
+    +'</div><div class="bk-sub" style="margin-top:8px;">Same base dough, different flavor? Open the base, hit <b>Copy</b>, change the seasoning, and save it under the new name.</div></div>';
+  // ── 1. what you buy ──
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>1. What you buy</div>'
+    +'<div class="card-sub">Each ingredient once, the way it comes: <i>Semolina · $25.99 · 50 lb</i>. Every recipe uses these prices, so when flour goes up, change it here and every recipe updates.</div>'
+    +'<div class="rc-grid rc-p rc-h" style="'+lbl+'"><span>Ingredient</span><span>You pay</span><span>For</span><span></span><span>Works out to</span><span></span></div>'
+    +RC.pantry.map((p,i)=>'<div class="rc-grid rc-p">'
+      +'<input class="inp" placeholder="e.g. Semolina" value="'+esc(p.name)+'" oninput="rcPan('+i+',\'name\',this.value)">'
+      +'<input class="inp" type="number" inputmode="decimal" step="0.01" placeholder="$" value="'+esc(p.price)+'" oninput="rcPan('+i+',\'price\',this.value)">'
+      +'<input class="inp" type="number" inputmode="decimal" placeholder="50" value="'+esc(p.size)+'" oninput="rcPan('+i+',\'size\',this.value)">'
+      +unitSel(p.unit||'lb','rcPan('+i+',\'unit\',this.value)')
+      +'<span class="rc-per" id="rcPer'+i+'">'+esc(rcPer(p))+'</span>'
+      +'<button class="remove-btn" onclick="rcPanDel('+i+')">×</button></div>').join('')
+    +'<button class="add-btn" onclick="rcPanAdd()">+ Add an ingredient</button> <span class="bk-sub" id="rcPanSaved"></span></div>';
+  // ── 2. one batch ──
+  h+='<datalist id="rcPanList">'+RC.pantry.filter(p=>p.name).map(p=>'<option value="'+esc(p.name)+'">').join('')+'</datalist>';
+  h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>2. One batch</div>'
+    +'<div class="card-sub">What goes in one batch, in the amounts you actually weigh or measure out: <i>Semolina 1,250 g · AP flour 8,750 g · Eggs 24 each</i>.</div>'
+    +'<div class="rc-grid rc-l rc-h" style="'+lbl+'"><span>Ingredient</span><span>Amount</span><span></span><span>Cost</span><span></span></div>'
+    +c.lines.map((l,i)=>{const r=rcLineCost(l);
+      const msg=r.why==='price'?'<button class="rc-fix" onclick="rcAddPrice('+i+')">add its price ↑</button>':r.why==='units'?'<span class="rc-fix" title="You buy it by '+esc(r.buy)+'">pick a '+(RC_UNITS[r.buy][0]==='m'?'weight':RC_UNITS[r.buy][0]==='v'?'volume':'count')+' unit</span>':(r.cost?fmt(r.cost):'—');
+      return'<div class="rc-grid rc-l"><input class="inp" list="rcPanList" placeholder="e.g. Semolina" value="'+esc(l.name)+'" oninput="rcLine('+i+',\'name\',this.value)" onchange="rcDraw()">'
+      +'<input class="inp" type="number" inputmode="decimal" placeholder="0" value="'+esc(l.amt)+'" oninput="rcLine('+i+',\'amt\',this.value)">'
+      +unitSel(l.unit||'g','rcLine('+i+',\'unit\',this.value);rcDraw()',['$ per '+rcU1()])
+      +'<span class="rc-per" id="rcLine'+i+'">'+msg+'</span><button class="remove-btn" onclick="rcLineDel('+i+')">×</button></div>';}).join('')
+    +'<button class="add-btn" onclick="rcLineAdd()">+ Add to the batch</button>'
+    +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px;" class="rc-two">'
+    +'<div><label style="'+lbl+'display:block;margin-bottom:4px;">This batch makes</label><div style="display:flex;gap:8px;align-items:center;"><input class="period-input" type="number" inputmode="decimal" placeholder="e.g. 60" value="'+esc(c.yield)+'" oninput="RC.cur.yield=this.value;rcCalc()"><span>'+esc(rcU2())+'</span></div></div>'
+    +'<div><label style="'+lbl+'display:block;margin-bottom:4px;">Packaging per '+esc(rcU1())+'</label><input class="period-input" type="number" inputmode="decimal" step="0.01" placeholder="bag + label, e.g. 0.35" value="'+esc(c.pack)+'" oninput="RC.cur.pack=this.value;rcCalc()"></div>'
+    +'<div><label style="'+lbl+'display:block;margin-bottom:4px;">Hours to make it (optional)</label><input class="period-input" type="number" inputmode="decimal" placeholder="0" value="'+esc(c.hours)+'" oninput="RC.cur.hours=this.value;rcCalc()"></div>'
+    +'<div><label style="'+lbl+'display:block;margin-bottom:4px;">Labor $ per hour (optional)</label><input class="period-input" type="number" inputmode="decimal" placeholder="0" value="'+esc(c.labor)+'" oninput="RC.cur.labor=this.value;rcCalc()"></div>'
+    +'</div><div class="bk-sub" id="rcWeight" style="margin-top:8px;"></div></div>';
+  // ── 3. what it costs ──
+  h+='<div class="card" style="background:var(--green-dark);color:#fff;">'
+    +'<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;text-align:center;" class="rc-res">'
+    +'<div><div class="rc-rl">Batch cost</div><div class="rc-rv" id="rcBatch">—</div></div>'
+    +'<div><div class="rc-rl">Cost per '+esc(rcU1())+'</div><div class="rc-rv" id="rcEach">—</div></div>'
+    +'<div><div class="rc-rl">You sell it for</div><input id="rcPrice" class="period-input" style="max-width:120px;margin:4px auto 0;text-align:center;font-weight:700;" type="number" inputmode="decimal" step="0.01" placeholder="$" value="'+esc(c.price)+'" oninput="RC.cur.price=this.value;rcCalc()"></div>'
+    +'</div><div id="rcProfit" style="text-align:center;margin-top:14px;font-size:14px;color:rgba(255,255,255,.85);"></div></div>';
+  el.innerHTML=h;rcCalc();
+}
+function rcCalc(){
+  const c=RC.cur;if(!c)return;let batch=0,grams=0,missing=0;
+  c.lines.forEach((l,i)=>{const r=rcLineCost(l);batch+=r.cost;if(r.why)missing++;
+    const u=RC_UNITS[l.unit];if(u&&u[0]==='m')grams+=rcNum(l.amt)*u[1];
+    const s=document.getElementById('rcLine'+i);if(s&&!r.why)s.textContent=r.cost?fmt(r.cost):'—';});
+  const y=rcNum(c.yield),pack=rcNum(c.pack),lab=rcNum(c.labor)*rcNum(c.hours);
+  const total=batch+(y?pack*y:0)+lab,each=y?total/y:0,price=rcNum(c.price);
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('rcBatch',total?fmt(total):'—');set('rcEach',each?fmt(each):(total?'how many does it make?':'—'));
+  const w=document.getElementById('rcWeight');
+  if(w)w.textContent=grams?'This batch weighs about '+(grams>=1000?(grams/1000).toFixed(2)+' kg':Math.round(grams)+' g')+(y?', so about '+Math.round(grams/y)+' g ('+(grams/y/28.3495).toFixed(1)+' oz) of weighed ingredients per '+rcU1()+'.':'.'):'';
+  const pr=document.getElementById('rcProfit');
+  if(pr){
+    let t='';
+    if(missing)t='⚠ '+missing+' ingredient'+(missing>1?'s':'')+' still need'+(missing>1?'':'s')+' a price above (put $0 for things like water), so this is short. ';
+    if(each&&price)t+='Profit '+fmt(price-each)+' per '+rcU1()+' · '+Math.round((price-each)/price*100)+'% margin'+(y?' · '+fmt((price-each)*y)+' per batch':'');
+    else if(each)t+='At 3× cost you’d charge about '+fmt(each*3)+'. Most food makers aim for ingredients to be a third or less of the price.';
+    pr.textContent=t;
+  }
+}
+function rcPan(i,f,v){RC.pantry[i][f]=v;const s=document.getElementById('rcPer'+i);if(s)s.textContent=rcPer(RC.pantry[i]);rcCalc();rcPanSave();
+  if(f==='name'){const dl=document.getElementById('rcPanList');if(dl)dl.innerHTML=RC.pantry.filter(p=>p.name).map(p=>'<option value="'+esc(p.name)+'">').join('');}}
+function rcPanAdd(){RC.pantry.push({name:'',price:'',size:'',unit:'lb'});rcDraw();}
+function rcPanDel(i){if(RC.pantry[i].name&&!confirm('Remove '+RC.pantry[i].name+' from what you buy?'))return;RC.pantry.splice(i,1);if(!RC.pantry.length)RC.pantry.push({name:'',price:'',size:'',unit:'lb'});rcPanSave();rcDraw();}
+function rcPanSave(){
+  clearTimeout(RC.saveT);const s=document.getElementById('rcPanSaved');if(s)s.textContent='';
+  RC.saveT=setTimeout(async()=>{
+    try{await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'ing_pantry',value:{items:RC.pantry.filter(p=>p.name||p.price)},updated_at:new Date().toISOString()})});
+      const s2=document.getElementById('rcPanSaved');if(s2){s2.textContent='✓ saved';setTimeout(()=>{if(s2)s2.textContent='';},1500);}}
+    catch(e){toast('Prices didn’t save: '+e.message,true);}
+  },900);
+}
+function rcAddPrice(i){
+  const n=RC.cur.lines[i].name;if(!rcFind(n)){const blank=RC.pantry.findIndex(p=>!p.name&&!p.price);if(blank>=0)RC.pantry[blank].name=n;else RC.pantry.push({name:n,price:'',size:'',unit:RC_UNITS[RC.cur.lines[i].unit]&&RC_UNITS[RC.cur.lines[i].unit][0]==='e'?'each':'lb'});}
+  rcDraw();const k=RC.pantry.findIndex(p=>rcKey(p.name)===rcKey(n));const row=document.querySelectorAll('.rc-p:not(.rc-h)')[k];if(row){const inp=row.querySelectorAll('input')[1];if(inp){inp.focus();row.scrollIntoView({block:'center',behavior:'smooth'});}}
+}
+function rcLine(i,f,v){RC.cur.lines[i][f]=v;rcCalc();}
+function rcLineAdd(){RC.cur.lines.push({name:'',amt:'',unit:'g'});rcDraw();}
+function rcLineDel(i){RC.cur.lines.splice(i,1);if(!RC.cur.lines.length)RC.cur.lines.push({name:'',amt:'',unit:'g'});rcDraw();}
+async function rcPick(v){
+  if(!v)return;
+  if(v==='new'){RC.cur=rcNew();rcDraw();return;}
+  if(v.startsWith('b:')){const r=RC.book.find(x=>x.id===v.slice(2));if(r)RC.cur=JSON.parse(JSON.stringify(r));rcDraw();return;}
+  // an old-style recipe: bring its prices into "What you buy" and its amounts into the batch
+  const o=RC.old.find(x=>String(x.id)===v.slice(2));if(!o)return;
+  let ings=[];try{ings=await sb(RC_OLD+'_recipe_ingredients?recipe_id=eq.'+o.id+'&order=sort_order.asc');}catch(e){}
+  const n=rcNum(o.batch_size)||1;const cur=rcNew();cur.name=o.name;cur.yield=String(n);cur.markup=o.markup_pct||40;cur.labor=o.labor_rate||'';cur.hours=o.batch_hours||'';cur.lines=[];cur.oldId=o.id;
+  ings.forEach(i=>{
+    if(i.ingredient_type==='specialty'){
+      if(i.name&&!rcFind(i.name)&&rcNum(i.cost))RC.pantry.push({name:i.name,price:String(i.cost),size:String(i.purchase_size||''),unit:RC_UNITS[i.unit]?i.unit:'g'});
+      cur.lines.push({name:i.name||'',amt:String(+(rcNum(i.used_per)*n).toFixed(2)||''),unit:RC_UNITS[i.unit]?i.unit:'g'});
+    }else if(i.name){
+      const per=rcNum(i.yield_pastas)?rcNum(i.cost)/rcNum(i.yield_pastas):0;
+      cur.lines.push({name:i.name,amt:per?per.toFixed(3):'',unit:'$ per '+rcU1()});
+    }
+  });
+  if(!cur.lines.length)cur.lines=[{name:'',amt:'',unit:'g'}];
+  RC.pantry=RC.pantry.filter(p=>p.name||p.price);if(!RC.pantry.length)RC.pantry=[{name:'',price:'',size:'',unit:'lb'}];
+  RC.cur=cur;rcPanSave();rcDraw();toast('Opened '+o.name+'. Check the amounts, then Save to keep it in the new layout.');
+}
+async function rcSaveBook(){
+  // re-read first so two people saving at once don't erase each other's recipes
+  let book=RC.book;try{const r=await sb(RC_SET+'?key=eq.recipe_book&select=value');book=((r[0]&&r[0].value&&r[0].value.recipes)||[]);}catch(e){}
+  return book;
+}
+async function rcSave(){
+  const c=RC.cur;c.name=String(c.name||'').trim();if(!c.name){toast('Give the recipe a name first',true);return;}
+  let book=await rcSaveBook();
+  const clash=book.find(r=>rcKey(r.name)===rcKey(c.name)&&r.id!==c.id);
+  if(clash&&!confirm('There’s already a recipe called '+c.name+'. Replace it?'))return;
+  book=book.filter(r=>r.id!==c.id&&!(clash&&r.id===clash.id));
+  const keep=Object.assign({},c,{lines:c.lines.filter(l=>l.name||l.amt),updated:new Date().toISOString()});delete keep.oldId;
+  book.push(keep);book.sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  try{
+    await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'recipe_book',value:{recipes:book},updated_at:new Date().toISOString()})});
+    RC.book=book;
+    if(c.oldId){try{await sb(RC_OLD+'_recipes?id=eq.'+c.oldId,{method:'DELETE',headers:{'Prefer':''}});}catch(e){}RC.old=RC.old.filter(o=>o.id!==c.oldId);delete c.oldId;}
+    toast('Saved '+c.name);rcDraw();
+  }catch(e){toast('Didn’t save: '+e.message,true);}
+}
+function rcCopy(){const c=JSON.parse(JSON.stringify(RC.cur));c.id=rcNew().id;c.name=(c.name?c.name+' (copy)':'');delete c.oldId;RC.cur=c;rcDraw();toast('Copied. Rename it, change what’s different, and Save.');}
+async function rcDelete(){
+  const c=RC.cur;if(!confirm('Delete the recipe '+(c.name||'Untitled')+'? Your ingredient prices stay.'))return;
+  let book=(await rcSaveBook()).filter(r=>r.id!==c.id);
+  try{await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'recipe_book',value:{recipes:book},updated_at:new Date().toISOString()})});
+    RC.book=book;RC.cur=book[0]?JSON.parse(JSON.stringify(book[0])):rcNew();toast('Deleted');rcDraw();}
+  catch(e){toast(e.message,true);}
+}
+// the old calculator's names, kept so nothing else in the Hub breaks
+function renderBulkIngs(){}
+function renderSpecIngs(){}
+function calcIngredients(){rcCalc();}
+async function loadRecipeList(){}
+
 
 // startup: keep going even if one piece fails, so one bad step can't stall the whole Hub
 async function autoInit(){
@@ -8411,7 +8572,7 @@ const MI_COUNTIES=['Alcona','Alger','Allegan','Alpena','Antrim','Arenac','Baraga
 
 // ─── the database layer: every request for a business's records is tagged with that business ───
 const TENANT_TABLES=new Set(['ohb_team_members','ohb_pay_periods','ohb_expenses','ohb_revenue_entries','ohb_time_entries','ohb_recipes',
-  'ohb_recipe_ingredients','ohb_budgets','ohb_transactions','ohb_settings','ohb_bank_lines','ohb_mileage','ohb_onboarding','ohb_shifts','ohb_inv_items','ohb_inv_moves','ohb_invoices','ohb_time_off','ohb_shift_swaps','ohb_bills']);
+  'ohb_recipe_ingredients','ohb_budgets','ohb_transactions','ohb_settings','ohb_bank_lines','ohb_mileage','ohb_onboarding','ohb_shifts','ohb_inv_items','ohb_inv_moves','ohb_invoices','ohb_time_off','ohb_shift_swaps','ohb_bills','ohb_giveaways']);
 function fetchT(url,opts){
   opts=opts||{};
   const m=String(url).match(/\/rest\/v1\/([a-z_]+)(\?|$)/);
@@ -9381,7 +9542,7 @@ function renderHelpButton(){
   document.body.appendChild(b);
 }
 
-const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"],"import_key":["text",null]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"],"import_key":["text",null],"sales_tax":["num",null]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]},"ohb_shifts":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"shift_date":["text",null],"start_time":["text",null],"end_time":["text",null],"job":["text",null],"note":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_inv_items":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"category":["text",null],"unit":["text","each"],"sku":["text",null],"supplier":["text",null],"location":["text",null],"notes":["text",null],"on_hand":["num",0],"par":["num",0],"order_qty":["num",null],"cost":["num",0],"price":["num",null],"active":["bool",true],"updated_at":["text","@now"],"created_at":["text","@now"],"recipe":["json",null],"batch_yield":["num",null]},"ohb_inv_moves":{"id":["text","@uuid"],"business_id":["text",null],"item_id":["text",null],"change":["num",null],"reason":["text","adjust"],"note":["text",null],"by_name":["text",null],"move_date":["text","@today"],"created_at":["text","@now"]},"ohb_invoices":{"id":["text","@uuid"],"business_id":["text",null],"kind":["text","invoice"],"number":["text",null],"customer_name":["text",null],"customer_email":["text",null],"customer_phone":["text",null],"customer_address":["text",null],"issue_date":["text","@today"],"due_date":["text",null],"status":["text","draft"],"items":["json","[]"],"tax_rate":["num",0],"subtotal":["num",0],"tax":["num",0],"total":["num",0],"paid_amount":["num",0],"paid_date":["text",null],"income_category":["text",null],"notes":["text",null],"terms":["text",null],"revenue_id":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_time_off":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"start_date":["text",null],"end_date":["text",null],"reason":["text",null],"status":["text","pending"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"],"kind":["text","off"],"sick_hours":["num",null]},"ohb_shift_swaps":{"id":["text","@uuid"],"business_id":["text",null],"shift_id":["text",null],"from_name":["text",null],"to_name":["text",null],"note":["text",null],"status":["text","open"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_bills":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"amount":["num",null],"category":["text",null],"next_due":["text",null],"repeat":["text","monthly"],"autopay":["bool",false],"notes":["text",null],"last_paid":["text",null],"active":["bool",true],"created_at":["text","@now"]},"ohb_billing":{"business_id":["text",null],"status":["text","trialing"],"stripe_customer":["text",null],"stripe_subscription":["text",null],"current_period_end":["text",null],"note":["text",null],"updated_at":["text","@now"]}};
+const DEMO_SCHEMA={"ohb_businesses":{"id":["text","@uuid"],"name":["text",null],"business_type":["text","other"],"county":["text",null],"state":["text","MI"],"settings":["json",{}],"created_by":["text",null],"created_at":["text","@now"]},"ohb_members":{"id":["text","@uuid"],"business_id":["text",null],"user_id":["text",null],"name":["text",null],"email":["text",null],"role":["text","member"],"created_at":["text","@now"]},"ohb_invites":{"id":["text","@uuid"],"business_id":["text",null],"code":["text","@hex"],"name":["text",null],"role":["text","member"],"created_by":["text","@uid"],"used_by":["text",null],"used_at":["text",null],"expires_at":["text","@now+14d"],"created_at":["text","@now"]},"ohb_team_members":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"role":["text","Contributor"],"active":["bool",true],"sort_order":["num",0],"user_id":["text",null],"created_at":["text","@now"]},"ohb_pay_periods":{"id":["text","@uuid"],"business_id":["text",null],"period_type":["text","Weekly"],"period_label":["text",null],"gross_revenue":["num",0],"total_expenses":["num",0],"common_table":["num",0],"distributable_pool":["num",0],"total_hours":["num",0],"created_at":["text","@now"]},"ohb_expenses":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"name":["text",null],"amount":["num",0],"receipt_url":["text",null],"category":["text",null],"vendor":["text",null],"txn_date":["text",null],"payment_method":["text",null],"notes":["text",null],"created_at":["text","@now"],"import_key":["text",null]},"ohb_revenue_entries":{"id":["text","@uuid"],"business_id":["text",null],"amount":["num",0],"source":["text",null],"reported_by":["text",null],"notes":["text",null],"period_label":["text",null],"txn_date":["text",null],"payment_method":["text",null],"payee":["text",null],"receipt_url":["text",null],"worked_by":["text",null],"created_at":["text","@now"],"import_key":["text",null],"sales_tax":["num",null]},"ohb_time_entries":{"id":["text","@uuid"],"business_id":["text",null],"period_id":["text",null],"member_name":["text",null],"entry_type":["text",null],"clock_in":["text",null],"clock_out":["text",null],"hours":["num",null],"entry_date":["text",null],"notes":["text",null],"job":["text",null],"created_at":["text","@now"]},"ohb_recipes":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"batch_size":["num",null],"markup_pct":["num",null],"labor_rate":["num",null],"batch_hours":["num",null],"updated_at":["text","@now"],"created_at":["text","@now"]},"ohb_recipe_ingredients":{"id":["text","@uuid"],"business_id":["text",null],"recipe_id":["text",null],"ingredient_type":["text",null],"name":["text",null],"cost":["num",null],"yield_pastas":["num",null],"purchase_size":["num",null],"used_per":["num",null],"unit":["text",null],"sort_order":["num",null]},"ohb_budgets":{"id":["text","@uuid"],"business_id":["text",null],"category":["text",null],"monthly_amount":["num",0],"kind":["text","expense"],"updated_at":["text","@now"]},"ohb_transactions":{"id":["text","@uuid"],"business_id":["text",null],"txn_date":["text","@today"],"direction":["text",null],"amount":["num",0],"payee":["text",null],"category":["text",null],"payment_method":["text",null],"notes":["text",null],"receipt_url":["text",null],"created_by":["text",null],"fund":["text",null],"created_at":["text","@now"]},"ohb_settings":{"business_id":["text",null],"key":["text",null],"value":["json",null],"updated_at":["text","@now"]},"ohb_bank_lines":{"id":["text","@uuid"],"business_id":["text",null],"fingerprint":["text",null],"account":["text","Business checking"],"txn_date":["text",null],"description":["text",null],"amount":["num",null],"balance":["num",null],"status":["text","open"],"match_key":["text",null],"created_at":["text","@now"]},"ohb_mileage":{"id":["text","@uuid"],"business_id":["text",null],"trip_date":["text","@today"],"miles":["num",0],"purpose":["text",null],"driver":["text",null],"created_at":["text","@now"]},"ohb_onboarding":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"item":["text",null],"version":["text",null],"status":["text","signed"],"signed_name":["text",null],"signed_at":["text","@now"],"data":["json",null],"user_id":["text","@uid"],"created_at":["text","@now"]},"ohb_shifts":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"shift_date":["text",null],"start_time":["text",null],"end_time":["text",null],"job":["text",null],"note":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_inv_items":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"category":["text",null],"unit":["text","each"],"sku":["text",null],"supplier":["text",null],"location":["text",null],"notes":["text",null],"on_hand":["num",0],"par":["num",0],"order_qty":["num",null],"cost":["num",0],"price":["num",null],"active":["bool",true],"updated_at":["text","@now"],"created_at":["text","@now"],"recipe":["json",null],"batch_yield":["num",null]},"ohb_inv_moves":{"id":["text","@uuid"],"business_id":["text",null],"item_id":["text",null],"change":["num",null],"reason":["text","adjust"],"note":["text",null],"by_name":["text",null],"move_date":["text","@today"],"created_at":["text","@now"]},"ohb_invoices":{"id":["text","@uuid"],"business_id":["text",null],"kind":["text","invoice"],"number":["text",null],"customer_name":["text",null],"customer_email":["text",null],"customer_phone":["text",null],"customer_address":["text",null],"issue_date":["text","@today"],"due_date":["text",null],"status":["text","draft"],"items":["json","[]"],"tax_rate":["num",0],"subtotal":["num",0],"tax":["num",0],"total":["num",0],"paid_amount":["num",0],"paid_date":["text",null],"income_category":["text",null],"notes":["text",null],"terms":["text",null],"revenue_id":["text",null],"created_by":["text",null],"created_at":["text","@now"]},"ohb_time_off":{"id":["text","@uuid"],"business_id":["text",null],"member_name":["text",null],"start_date":["text",null],"end_date":["text",null],"reason":["text",null],"status":["text","pending"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"],"kind":["text","off"],"sick_hours":["num",null]},"ohb_shift_swaps":{"id":["text","@uuid"],"business_id":["text",null],"shift_id":["text",null],"from_name":["text",null],"to_name":["text",null],"note":["text",null],"status":["text","open"],"decided_by":["text",null],"decided_at":["text",null],"created_at":["text","@now"]},"ohb_bills":{"id":["text","@uuid"],"business_id":["text",null],"name":["text",null],"amount":["num",null],"category":["text",null],"next_due":["text",null],"repeat":["text","monthly"],"autopay":["bool",false],"notes":["text",null],"last_paid":["text",null],"active":["bool",true],"created_at":["text","@now"]},"ohb_giveaways":{"id":["text","@uuid"],"business_id":["text",null],"give_date":["text","@today"],"kind":["text","gift"],"product":["text",null],"item_id":["text",null],"qty":["num",1],"unit_value":["num",0],"value":["num",0],"given_to":["text",null],"got":["text",null],"got_value":["num",null],"note":["text",null],"by_name":["text",null],"created_at":["text","@now"]},"ohb_billing":{"business_id":["text",null],"status":["text","trialing"],"stripe_customer":["text",null],"stripe_subscription":["text",null],"current_period_end":["text",null],"note":["text",null],"updated_at":["text","@now"]}};
 
 // ═══════════════════════════════════════════════════════
 // GETTING PAID · SWITCHING OVER · CASH AHEAD · FOUNDING PRICE & REFERRALS
