@@ -12643,7 +12643,7 @@ function ServiceSample({id}) {
     return h('div',{style:box}, tag, kinds,
       mailTop('This week: ' + s.items.length + ' bids and grants for ' + s.trade, 'Bid & grant finder'),
       s.items.map((it, i)=>item(i, it.head, [h('div',{key:1}, it.line), it.fits && h('div',{key:2}, why('Fits because:', it.fits)), it.next && h('div',{key:3}, why('Next step:', it.next))])),
-      h('div',{style:{fontSize:12.5,color:'#666'}},'Every Monday, only what fits your line of work, each with a plain answer to "can I actually get this?" Each week we check Grants.gov, Michigan\'s state grant programs, USDA and national small-business grants, local bid pages and the news.'));
+      h('div',{style:{fontSize:12.5,color:'#666'}},'Every Monday, only what fits your line of work, each with a plain answer to "can I actually get this?" Each week we check Grants.gov, news of new Michigan (MDARD, MEDC, EGLE, Michigan Good Food Fund) and USDA grant rounds, national small-business grants like Amber, NASE and Hello Alice, a local grant search for your county, and every open bid Michigan cities, townships, counties and schools post on MITN, the state\'s bid network.'));
   }
   if(id === 'explainer') return h('div',{style:box}, tag,
     h('div',{style:{fontSize:12,color:'#888',marginBottom:4}},'The rule you sent us:'),
@@ -12675,12 +12675,12 @@ const PRICE_COMPARE = [
   {what:'Getting paid on invoices', ours:'Every invoice gets a Pay now page with your own Square, Stripe, PayPal, Venmo, Cash App, Zelle or check details, and friendly reminders when it\'s late. We add no fee: a card payment costs only what your own payment company charges, and Zelle or a check costs nothing.',
    theirs:['QuickBooks Payments: 2.99% of each invoice paid by card, 1% for bank transfers ($1 minimum)', 'Wave Starter: 2.9% + 60¢ per card payment, 1% for bank payments ($1 minimum)'],
    free:'Texting your payment handle and keeping track of who paid yourself.'},
-  {what:'Public bids', ours:'Bid & grant finder: $5 a month, grants included',
+  {what:'Public bids', ours:'Bid & grant finder: $5 a month, grants included. We read every open bid posted on MITN (about 340 Michigan cities, townships, counties and schools) and send the ones that fit your line of work. Opening a bid\'s documents takes MITN\'s free vendor registration',
    theirs:['BidNet Direct alerts for Michigan (MITN): $108 a year for 200+ agencies, $396 a year statewide'],
    free:'Free MITN registration, if you log in and check every day.'},
-  {what:'Grants', ours:'Included in the same $5 Bid & grant finder, with Michigan state programs alongside federal and national ones, and public bids from Michigan cities and counties',
+  {what:'Grants', ours:'Included in the same $5 Bid & grant finder: Michigan state grant rounds alongside federal and national programs, plus a local grant search for your county',
    theirs:['GrantWatch: $249 a year, or $49 month to month', 'Instrumentl: from about $299 a month'],
-   free:'Hello Alice is free and matches businesses with national grant programs and funding offers. Ours adds Michigan programs and the bids your own city and county post. You can also search Grants.gov and each state agency\'s page yourself.'},
+   free:'Hello Alice is free and matches businesses with national grant programs and funding offers. Ours adds Michigan grant rounds, a local search for your county, and Michigan\'s public bids. You can also search Grants.gov and each state agency\'s page yourself.'},
   {what:'Watching local meetings', ours:'Watch alerts: $5 a month',
    theirs:['Government-monitoring firms are built for big companies and quote prices privately'],
    free:'Some cities email every agenda they post, unsorted, one city at a time.'},
@@ -12712,7 +12712,7 @@ const HUB_MICHIGAN = [
   ['💵','Pay done right','Michigan minimum wage, overtime and a legal tip pool, every week.'],
   ['📝','New hires','The W-4, MI-W4, I-9 and Michigan new-hire report on each person\'s checklist, so nothing gets missed.'],
   ['🏛️','Your local government','A heads-up when your city, township or county takes up something that affects you.'],
-  ['📋','Michigan bids & grants','Every Monday: work your city, county and the state are putting out to bid, and grants that fit.']
+  ['📋','Michigan grants & bids','Every Monday: open bids from Michigan cities, townships, counties and schools, plus Michigan and national grants, picked for your line of work.']
 ];
 function HubMichigan({compact}) {
   return h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'14px 16px',marginBottom:14,fontFamily:LB}},
@@ -13499,16 +13499,23 @@ function BidSourcesAdmin({onToast}) {
   const [grants, setGrants] = useState(null);       // the weekly grant search's own status
   const [showGrants, setShowGrants] = useState(false);
   const isGrantFeed = r=>/\/functions\/v1\/grants-feed/.test(r.url || '');
+  const isBidFeed = r=>/\/functions\/v1\/bids-feed/.test(r.url || '');
+  const [bidStatus, setBidStatus] = useState(null);  // the statewide bid gathering's own status
+  const [showBids, setShowBids] = useState(false);
+  const fnHeaders = {apikey:SUPA_KEY, Authorization:'Bearer ' + SUPA_KEY};
   const load = async()=>{
     const {data, error} = await sb.from('bid_sources').select('*').order('county',{ascending:true});
     setRows(error ? [] : (data || []));
   };
   const loadGrants = async()=>{
-    try { const r = await fetch(SUPA_URL + '/functions/v1/grants-feed?status=1'); setGrants(r.ok ? await r.json() : {error:'The grants-feed function isn\'t deployed yet.'}); }
+    try { const r = await fetch(SUPA_URL + '/functions/v1/grants-feed?status=1', {headers:fnHeaders}); setGrants(r.ok ? await r.json() : {error:'The grants-feed function isn\'t deployed yet.'}); }
     catch(e) { setGrants({error:'Couldn\'t reach the grants-feed function.'}); }
+    try { const r = await fetch(SUPA_URL + '/functions/v1/bids-feed?status=1', {headers:fnHeaders}); setBidStatus(r.ok ? await r.json() : {error:'The bids-feed function isn\'t deployed yet.'}); }
+    catch(e) { setBidStatus({error:'Couldn\'t reach the bids-feed function.'}); }
   };
   useEffect(()=>{ if(open && rows === null) { load(); loadGrants(); } },[open]);
-  const grantRows = (rows || []).filter(isGrantFeed), bidRows = (rows || []).filter(r=>!isGrantFeed(r));
+  const grantRows = (rows || []).filter(isGrantFeed), mitnRows = (rows || []).filter(isBidFeed), bidRows = (rows || []).filter(r=>!isGrantFeed(r) && !isBidFeed(r));
+  const bidState = bidStatus && (bidStatus.state || []).find(x=>x.key === 'statewide');
   const add = async()=>{
     if(!f.name.trim() || !/^https?:\/\//i.test(f.url.trim())) { onToast && onToast('Give it a name and a web address starting with https://'); return; }
     const {error} = await sb.from('bid_sources').insert({county:f.county, name:f.name.trim().slice(0,80), url:f.url.trim().slice(0,400)});
@@ -13525,7 +13532,7 @@ function BidSourcesAdmin({onToast}) {
       h('button',{onClick:()=>setOpen(!open),style:{background:open?'#fff':'#1a1a2e',color:open?'#1a1a2e':'#f0c040',border:'1px solid #1a1a2e',borderRadius:6,padding:'6px 12px',fontSize:12.5,cursor:'pointer'}},
         open ? 'Close' : 'Manage')),
     !open && h('div',{style:{fontSize:12.5,color:'#777',marginTop:6,lineHeight:1.5}},
-      'Every week the Bid & grant finder checks state, federal and national grant sites, searches the news, and reads these city and county bid pages. Adding a city or county\'s own bid postings feed makes it much better there.'),
+      'Every week the Bid & grant finder gathers every open bid on MITN (Michigan\'s bid network), checks state, federal and national grant sources, and searches the news. Open this to see how each one is doing, or to add a city\'s own bid page.'),
     open && h('div',{style:{marginTop:10}},
       rows !== null && grantRows.length > 0 && h('div',{style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5}},
         h('strong',null,'Grant sites, checked weekly'), ' · in every county\'s feed (' + grantRows.length + ' counties)',
@@ -13537,6 +13544,17 @@ function BidSourcesAdmin({onToast}) {
         showGrants && grants && grants.sources && grants.sources.map(g=>h('div',{key:g.id,style:{fontSize:12,color:g.last_error?'#c0392b':'#555',padding:'3px 0 3px 10px',borderLeft:'2px solid #efe6cf',marginTop:3}},
           h('a',{href:g.url,target:'_blank',rel:'noopener',style:{color:'inherit'}}, g.name), g.county ? ' (' + ((COUNTIES[g.county] && COUNTIES[g.county].name) || g.county) + ' only)' : '',
           ' · ' + (g.last_checked_at ? 'checked ' + shortDate(g.last_checked_at) + ': ' + (g.last_error || (g.open + ' open')) : 'not checked yet')))),
+      rows !== null && (mitnRows.length > 0 || bidStatus) && h('div',{style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5}},
+        h('strong',null,'Michigan public bids (MITN), gathered daily'), ' · in every county\'s feed (' + mitnRows.length + ' counties)',
+        bidStatus && bidStatus.error && h('div',{style:{color:'#c0392b',fontSize:12}}, bidStatus.error),
+        bidStatus && !bidStatus.error && h('div',{style:{color:'#666',fontSize:12}},
+          (bidStatus.open_bids || 0) + ' open bids right now · ' + (bidStatus.with_county || 0) + ' tied to their agency and county · ' + (bidStatus.agencies || 0) + ' agencies' +
+          (bidState && bidState.value && bidState.value.at ? ' · last full read ' + shortDate(bidState.value.at) : ''),
+          ' ', h('button',{onClick:()=>setShowBids(!showBids),style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12}}, showBids ? 'Hide' : 'Show the newest')),
+        bidState && bidState.value && bidState.value.error && h('div',{style:{color:'#c0392b',fontSize:12}}, bidState.value.error),
+        bidStatus && (bidStatus.problems || []).length > 0 && h('div',{style:{color:'#c0392b',fontSize:12}}, bidStatus.problems.length + ' agencies couldn\'t be read last time: ' + bidStatus.problems.slice(0,5).map(x=>x.name || x.slug).join(', ')),
+        showBids && bidStatus && (bidStatus.latest || []).map((b,i)=>h('div',{key:i,style:{fontSize:12,color:'#555',padding:'3px 0 3px 10px',borderLeft:'2px solid #efe6cf',marginTop:3}},
+          h('a',{href:b.url,target:'_blank',rel:'noopener',style:{color:'inherit'}}, b.title), ' · ' + (b.agency || 'agency not matched yet') + (b.closes_text ? ' · closes ' + b.closes_text : '')))),
       rows === null ? h(Spinner)
       : bidRows.map(r=>h('div',{key:r.id,style:{borderTop:'1px solid #efe6cf',padding:'8px 0',fontSize:13,lineHeight:1.5,opacity:r.active?1:.55}},
           h('strong',null, r.name), ' · ' + ((COUNTIES[r.county] && COUNTIES[r.county].name) || r.county),
