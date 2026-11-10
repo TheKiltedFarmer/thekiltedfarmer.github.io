@@ -19,9 +19,15 @@
 <meta name="twitter:description" content="See what's being decided near you, weigh in, and find out whether officials listened."/>
 <meta name="twitter:image" content="https://thepeoplesvoices.org/og-image.png"/>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231a1a2e'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' fill='%23f0c040'%3EPV%3C/text%3E%3C/svg%3E"/>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+<link rel="manifest" href="/manifest.json"/>
+<meta name="apple-mobile-web-app-title" content="People's Voices"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin/>
+<link rel="preconnect" href="https://zhnilrohxoixsgmdyqiw.supabase.co" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- The map library (Leaflet) loads only when someone opens the Map, so every other page shows up sooner. -->
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#f4f1ea;font-family:'Lora',serif;-webkit-text-size-adjust:100%}
@@ -32,6 +38,10 @@ button{cursor:pointer;font-family:inherit}
 .tpv-link::after{content:"";position:absolute;left:-4px;right:-4px;top:-10px;bottom:-10px}
 a{color:inherit}
 input,textarea,select{font-family:'Lora',serif}
+/* Boxes you type in shrink to fit their row instead of pushing the page sideways */
+input,textarea,select{min-width:0;max-width:100%}
+/* iPhones zoom the whole page when you tap a box with small text. 16px stops that. */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select{font-size:16px!important}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{width:24px;height:24px;border:3px solid #ddd;border-top-color:#1a1a2e;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
 ::-webkit-scrollbar{width:5px}
@@ -40,10 +50,17 @@ input,textarea,select{font-family:'Lora',serif}
 /* Swipeable tab rows: no scrollbar strip under them (Android, desktop) */
 .tpv-tabrow{scrollbar-width:none}
 .tpv-tabrow::-webkit-scrollbar{display:none}
+/* Keyboard users can always see where they are */
+:focus-visible{outline:2px solid #1a5c8a;outline-offset:2px;box-shadow:0 0 0 4px rgba(240,192,64,.65)}
+/* "Skip to content" appears only when reached with the Tab key */
+.tpv-skip{position:absolute;left:8px;top:-60px;z-index:10000;background:#1a1a2e;color:#f0c040;padding:10px 16px;border-radius:6px;font-family:'Playfair Display',serif;font-weight:700;font-size:14px;text-decoration:none}
+.tpv-skip:focus{top:8px}
+/* People who've asked their device for less motion get less motion */
+@media (prefers-reduced-motion:reduce){*:not(.spin),*:not(.spin)::before,*:not(.spin)::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-<noscript><div style="padding:24px;font-family:Georgia,serif;background:#1a1a2e;color:#fff">The People's Voices needs JavaScript turned on. It's a free, nonpartisan site where residents of Jackson, Calhoun and Washtenaw counties, Michigan, see what local officials are deciding, weigh in, and see whether officials listened.</div></noscript>
+<noscript><div style="padding:24px;font-family:Georgia,serif;background:#1a1a2e;color:#fff">The People's Voices needs JavaScript turned on. It's a free, nonpartisan site where residents of all 83 Michigan counties see what local officials are deciding, weigh in, and see whether officials listened.</div></noscript>
 <div id="root">
   <div style="min-height:100vh;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
     <div class="spin" style="border-color:#444;border-top-color:#f0c040;width:32px;height:32px;border-width:4px"></div>
@@ -55,7 +72,63 @@ input,textarea,select{font-family:'Lora',serif}
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
 <script>
-const {useState,useEffect,useRef,createElement:h,Fragment,Component} = React;
+const {useState,useEffect,useRef,createElement:__ce,Fragment,Component} = React;
+
+// Every element on the site is made with h(). Links get two safety checks here,
+// so no page has to remember them: a link can never run script (some links come
+// from things members type in), and a link that opens a new tab never hands
+// that tab control of this one.
+const __BAD_HREF = /^[\s\u0000-\u001f]*(javascript:|vbscript:|data:text\/html)/i;
+function h(type, props) {
+  // Every little "×" close button gets a name for screen readers and a bigger tap area
+  if(type === 'button' && props && arguments.length === 3 && (arguments[2] === '×' || arguments[2] === '✕') && (!props['aria-label'] || !props.className)) {
+    return __ce('button', Object.assign({}, props, {'aria-label':props['aria-label'] || props.title || 'Close', className:props.className || 'tpv-link'}), arguments[2]);
+  }
+  if(type !== 'a' || !props || props.href == null) return __ce.apply(null, arguments);
+  const bad = typeof props.href !== 'string' || __BAD_HREF.test(props.href);
+  const needsRel = props.target === '_blank' && !props.rel;
+  if(!bad && !needsRel) return __ce.apply(null, arguments);
+  const args = Array.prototype.slice.call(arguments);
+  args[1] = Object.assign({}, props, bad ? {href:'#'} : null, needsRel ? {rel:'noopener noreferrer'} : null);
+  return __ce.apply(null, args);
+}
+// The Escape key closes whatever pop-up is on top (keyboard users expect it).
+// If you're in the middle of typing something, the first Escape only leaves the box.
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape' || e.defaultPrevented) return;
+  try {
+    const a = document.activeElement;
+    if(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value) { a.blur(); return; }
+    const overlays = Array.prototype.filter.call(document.querySelectorAll('#root div'), d=>{
+      if(d.style.position !== 'fixed') return false;
+      const r = d.getBoundingClientRect();
+      return r.width >= window.innerWidth * .9 && r.height >= window.innerHeight * .9;
+    });
+    const top = overlays[overlays.length - 1];
+    if(!top || top.getAttribute('role') === 'dialog') return;   // the join box handles Escape itself
+    const btns = Array.prototype.slice.call(top.querySelectorAll('button'));
+    const x = btns.find(b=>b.getAttribute('aria-label') === 'Close') || btns.find(b=>/^(close|cancel|skip tour|not now|maybe later)$/i.test((b.textContent || '').trim()));
+    if(x) x.click();
+  } catch(err) {}
+});
+// Text that members wrote, made safe to drop into the map's pop-up bubbles
+function mapEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"'`]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'})[c]);
+}
+// The map library, fetched the first time someone opens the Map
+let __leafletLoading = null;
+function loadLeaflet() {
+  if(window.L) return Promise.resolve(window.L);
+  if(!__leafletLoading) __leafletLoading = new Promise((resolve, reject)=>{
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script'); js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload = ()=>window.L ? resolve(window.L) : reject(new Error('map library missing'));
+    js.onerror = ()=>{ __leafletLoading = null; reject(new Error('map library did not load')); };
+    document.head.appendChild(js);
+  });
+  return __leafletLoading;
+}
 
 // ── Global error boundary ─────────────────────────────────────────────────────
 class ErrorBoundary extends Component {
@@ -202,6 +275,12 @@ const HUBS = [
     { id:'business',  label:'For Businesses' }
   ]},
 ];
+// Once the Nov 3, 2026 election is over the Voters Guide is a record of what was
+// on the ballot, so it moves to the end of the row and Civic opens on Bills.
+if(Date.now() > new Date('2026-11-04T05:00:00Z').getTime()) {
+  const civic = HUBS.find(x=>x.id==='civic');
+  civic.subs = civic.subs.filter(x=>x.id!=='guide').concat(civic.subs.filter(x=>x.id==='guide'));
+}
 // Build subTab → hub lookup for resolveRoute
 const SUBTAB_TO_HUB = {};
 HUBS.forEach(h=>{ h.subs.forEach(s=>{ SUBTAB_TO_HUB[s.id] = h.id; }); });
@@ -1238,7 +1317,7 @@ function PrivacyModal({onClose}) {
         h('button',{onClick:onClose,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:20,cursor:'pointer'}},'×')
       ),
       h('div',{style:{padding:24,fontFamily:"'Lora',serif",fontSize:13,color:'#444',lineHeight:1.8}},
-        h('div',{style:{fontSize:11,color:'#aaa',marginBottom:20}},'Last updated: March 2026 · The People\'s Voices, Concord, MI'),
+        h('div',{style:{fontSize:11,color:'#aaa',marginBottom:20}},'Last updated: November 2026 · The People\'s Voices, Concord, MI'),
 
         [
           ['What we collect',
@@ -1253,6 +1332,8 @@ function PrivacyModal({onClose}) {
            'Your profile appears in the Neighbor Directory by default. You can opt out at any time in your profile settings — your account remains active but your name will not appear in the directory.'],
           ['Data storage',
            'Your data is stored securely on Supabase (supabase.com), a US-based database provider. We do not store payment information. Your password is hashed and never stored in plain text.'],
+          ['Our Facebook Page',
+           'A small app we run posts to our Facebook Page: weekly roundups, reminders about upcoming decisions, and spotlights, all from public information already on this site. It only posts to our own Page. It does not collect or store anything about the people who follow, like, comment on or share our posts.'],
           ['Your rights',
            'You have the right to access, correct, or delete your data at any time. To request account deletion, email chef.justinfairchild@gmail.com with the subject "Account Deletion Request." We will delete your account and all associated data within 7 days.'],
           ['Contact',
@@ -1262,6 +1343,7 @@ function PrivacyModal({onClose}) {
           h('div',{style:{color:'#555',lineHeight:1.7}},body)
         )),
 
+        h('a',{href:'/privacy-policy.html',target:'_blank',rel:'noopener',style:{display:'block',textAlign:'center',color:'#1a5c8a',fontSize:13,marginBottom:4}},'Open the full privacy policy page'),
         h('button',{onClick:onClose,style:{width:'100%',background:'#1a1a2e',color:'#f0c040',border:'none',
           padding:'12px',borderRadius:7,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14,
           cursor:'pointer',marginTop:8}},'Close')
@@ -2365,15 +2447,17 @@ const __DEEP_LINK = (function(){
     }
     if(!billId && !q) {
       const t = p.get('tab');
-      return t && /^(events|news|guide|ask|bills|connect|map|resources|jackets|constitution|organize|funding|business)$/.test(t) ? {tab:t} : null;
+      return t && t !== 'feed' && SUBTAB_TO_HUB[t] ? {tab:t} : null;
     }
     return {billId: billId || null, act: p.get('act') || null, questionId: q ? Number(q) : null};
   } catch(e) { return null; }
 })();
 let __deepLinkUsed = false;
+let __navReplaceOnce = false;   // the tab a link opens to replaces the address instead of adding a Back step
 function takeDeepLink() {
   if(__deepLinkUsed || !__DEEP_LINK) return null;
   __deepLinkUsed = true;
+  __navReplaceOnce = true;
   try {
     const p = new URLSearchParams(window.location.search);
     ['bill','act','q','u','o','j','tab'].forEach(k=>p.delete(k));
@@ -3657,7 +3741,7 @@ function BillCard({bill,user,userVotes,onVoteCast,onRepGain,highlighted,onHighli
         )
       ),
 
-      h('button',{onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:0,cursor:'pointer'}},
+      h('button',{className:'tpv-link','aria-expanded':open?'true':'false',onClick:()=>setOpen(!open),style:{marginTop:12,background:'transparent',border:'none',color:'#1a5c8a',fontFamily:"'Playfair Display',serif",fontSize:13,padding:'4px 0',cursor:'pointer'}},
         open?"▲ Close":(aiEnabled()?"▼ AI analysis, reasons, discussion & questions":"▼ Reasons, discussion & questions"))
     ),
 
@@ -4544,7 +4628,7 @@ function DecisionOfWeek({bill, user, userVotes, onVoteCast, onRepGain, onNavigat
 // ── Home: four things you can actually do right now ──────────────────────────
 function HomeActionCards({ballotCount, nextMeeting, questionCount, recentChat, onNavigate, user}) {
   const cards = [];
-  if(ballotCount > 0) cards.push({key:'ballot', icon:'🗳', label:'Your Nov 3 ballot',
+  if(ballotCount > 0 && daysUntilDate(ELECTION_2026.date) >= 0) cards.push({key:'ballot', icon:'🗳', label:'Your Nov 3 ballot',
     line: ballotCount + ' ballot question' + (ballotCount===1?'':'s') + ' and every race, side by side', cta:'Open the voters guide', go:()=>onNavigate('guide')});
   if(nextMeeting) cards.push({key:'meet', icon:'🏛', label:'Next public meeting',
     line: nextMeeting.title, sub: fmtShortDate(nextMeeting.event_date) + (nextMeeting.event_time ? ' · ' + fmtTime12(nextMeeting.event_time) : ''),
@@ -5889,7 +5973,7 @@ function CommunityFeed({user, profile, bills, guestMode, onNavigate, userVotes, 
         meetingsThisWeek > 0 && {k:'m', t:meetingsThisWeek + ' public meeting' + (meetingsThisWeek===1?'':'s') + ' this week', go:'events'},
         openCount > 0 && {k:'o', t:openCount + ' open decision' + (openCount===1?'':'s') + ' to weigh in on', go:'bills'},
         zipWeek >= 3 && {k:'z', t:zipWeek + ' neighbors in ' + (communityForZip(userZip) || userZip) + ' weighed in this week', go:'bills'},
-        members > 0 && {k:'p', t:members + ' neighbors on here', go:'connect'},
+        members > 0 && {k:'p', t:members + (members===1 ? ' neighbor' : ' neighbors') + ' on here', go:'connect'},
       ].filter(Boolean);
       const first = (profile?.display_name || '').split(' ')[0];
       return h('div',{style:{background:'linear-gradient(135deg, '+NAVY+' 0%, #2a2a4e 100%)',color:'#fff',borderRadius:10,padding:'18px 20px',marginBottom:16,borderLeft:'4px solid '+GOLD}},
@@ -13628,15 +13712,22 @@ function VotersGuideTab({user, profile, bills, onToast, onNavigate}) {
     h('div',{style:{background:'linear-gradient(135deg,#1a1a2e,#2a2a4e)',borderRadius:10,padding:'18px 20px',marginBottom:16,borderLeft:'4px solid #f0c040'}},
       h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:21,color:'#f0c040'}},'🗳 2026 Voters Guide'),
       h('div',{style:{fontFamily:LB,fontSize:14,color:'#fff',marginTop:4}},
-        'General election · Tuesday, November 3' + (days > 0 ? ' · ' + days + ' day' + (days===1?'':'s') + ' away' : days === 0 ? ' · today' : '')),
+        days < 0 ? 'General election · held Tuesday, November 3' : 'General election · Tuesday, November 3' + (days > 0 ? ' · ' + days + ' day' + (days===1?'':'s') + ' away' : ' · today')),
       h('div',{style:{fontFamily:LB,fontSize:12.5,color:'#c8d0dc',lineHeight:1.6,marginTop:8}},
-        'Everything on the ballot in ' + getCurrentCounty().name + ', from the official county candidate lists. ',
+        (days < 0 ? 'The election is over. This is the record of everything that was on the ballot in ' : 'Everything on the ballot in ') + getCurrentCounty().name + ', from the official county candidate lists. ',
         'Every candidate is listed in ballot order and in the same format. We don\'t endorse anyone. ',
         'Anything a candidate says here, they wrote themselves. Money numbers come from official finance reports.')),
 
-    h(HowToVoteCard),
+    days >= 0 ? h(HowToVoteCard) : h('div',{style:{background:'#fff',border:'1px solid #e5dece',borderRadius:10,padding:'14px 16px',marginBottom:14}},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:4}},'📊 Looking for results?'),
+      h('div',{style:{fontFamily:LB,fontSize:13.5,color:'#444',lineHeight:1.6,marginBottom:10}},
+        'Official results come from your county clerk and the Michigan Secretary of State. They stay unofficial until the canvass certifies them, usually within two weeks of Election Day.'),
+      h('a',{href:'https://www.michigan.gov/sos/elections/election-results-and-data',target:'_blank',rel:'noopener',style:{display:'inline-block',background:'#1a5c8a',color:'#fff',borderRadius:6,
+        padding:'8px 14px',fontFamily:PD,fontWeight:700,fontSize:13,textDecoration:'none'}},'See official Michigan results ↗'),
+      h('div',{style:{fontFamily:LB,fontSize:12.5,color:'#777',lineHeight:1.6,marginTop:10}},
+        'Next up: the people who won take office and start voting. Follow what they decide under Bills, and see whether they listened.')),
 
-    isStarterCounty() && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 14px',marginBottom:14,fontFamily:LB,fontSize:13,color:'#2f4a36',lineHeight:1.6}},
+    days >= 0 && isStarterCounty() && h('div',{style:{background:'#eef7f1',border:'1px solid #a8e6c0',borderRadius:10,padding:'12px 14px',marginBottom:14,fontFamily:LB,fontSize:13,color:'#2f4a36',lineHeight:1.6}},
       h('strong',null,'🌱 ' + getCurrentCounty().name + ' is new here. '),
       'This guide has everything on every Michigan ballot: the statewide proposals, Governor, Secretary of State, Attorney General, U.S. Senate, the education boards and the Supreme Court. ',
       'Your U.S. House, State House and Senate, and local races depend on your address. ',
@@ -15597,6 +15688,12 @@ const MAP_LAYERS = [
 function MapTab({user, profile}) {
   const mapRef     = useRef(null);
   const leafletRef = useRef(null);
+  const [mapLib, setMapLib] = useState(window.L ? 'ready' : 'loading');   // loading | ready | failed
+  useEffect(()=>{
+    let on = true;
+    loadLeaflet().then(()=>{ if(on) setMapLib('ready'); }).catch(()=>{ if(on) setMapLib('failed'); });
+    return ()=>{ on = false; };
+  },[]);
   const markersRef = useRef([]);
   const focusCircleRef = useRef(null);
   const userZip = profile?.zip || '';
@@ -15662,7 +15759,7 @@ function MapTab({user, profile}) {
     }).addTo(map);
     leafletRef.current = map;
     return ()=>{ map.remove(); leafletRef.current=null; };
-  },[]);
+  },[mapLib]);
 
   // React to ZIP focus changes — pan/zoom smoothly + draw focus circle
   useEffect(()=>{
@@ -15689,7 +15786,7 @@ function MapTab({user, profile}) {
     } else {
       map.flyTo(countyMapCenter(countyTag()), 10, {duration:0.8});
     }
-  },[zipFocus]);
+  },[zipFocus, mapLib]);
 
   // Draw markers whenever data or layers change
   useEffect(()=>{
@@ -15771,10 +15868,10 @@ function MapTab({user, profile}) {
         const inFocusZip = !!(zipFocus && (e.zip === zipFocus || (e.location||'').includes(zipFocus)));
         addMarker(coords[0], coords[1],
           makeIcon('📅','#5b3a8c', inFocusZip),
-          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:4px;">${e.title}</div>
+          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:4px;">${mapEsc(e.title)}</div>
            <div style="font-size:11px;color:#888;">${dateStr}${e.event_time?' · '+fmtTime12(e.event_time):''}</div>
-           <div style="font-size:11px;color:#555;margin-top:2px;">📍 ${e.location}</div>
-           <div style="margin-top:6px;"><span style="background:#5b3a8c;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;">${e.category}</span></div>`
+           <div style="font-size:11px;color:#555;margin-top:2px;">📍 ${mapEsc(e.location)}</div>
+           <div style="margin-top:6px;"><span style="background:#5b3a8c;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;">${mapEsc(e.category)}</span></div>`
         );
       }
     }
@@ -15789,8 +15886,8 @@ function MapTab({user, profile}) {
         addMarker(coords[0]+((Math.random()-.5)*.02), coords[1]+((Math.random()-.5)*.03),
           makeIcon(item.listing_type==='offer'?'🤲':'🙏',color, inFocusZip),
           `<div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;margin-bottom:3px;">${item.listing_type==='offer'?'Offering':'Requesting'}</div>
-           <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${item.title}</div>
-           <div style="font-size:11px;color:#888;">${item.category}${zip?' · ZIP '+zip:''}</div>`
+           <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${mapEsc(item.title)}</div>
+           <div style="font-size:11px;color:#888;">${mapEsc(item.category)}${zip?' · ZIP '+zip:''}</div>`
         );
       });
     }
@@ -15802,8 +15899,8 @@ function MapTab({user, profile}) {
         const r = 0.05+Math.random()*0.08;
         addMarker(42.25+Math.cos(angle)*r, -84.40+Math.sin(angle)*r,
           makeIcon('🌱','#8a4000'),
-          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${p.title}</div>
-           <div style="font-size:11px;color:#888;">By ${p.proposer_name} · ${p.supporter_count||1} supporter${(p.supporter_count||1)!==1?'s':''}</div>`
+          `<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:3px;">${mapEsc(p.title)}</div>
+           <div style="font-size:11px;color:#888;">By ${mapEsc(p.proposer_name)} · ${p.supporter_count||1} supporter${(p.supporter_count||1)!==1?'s':''}</div>`
         );
       });
     }
@@ -15855,13 +15952,13 @@ function MapTab({user, profile}) {
         addMarker(parseFloat(r.lat), parseFloat(r.lng),
           makeIcon(ri.emoji, ri.color, inFocusZip),
           `<div style="min-width:180px;">
-            <div style="font-size:10px;font-weight:700;color:${ri.color};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${ri.label}</div>
-            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:4px;">${r.name}</div>
-            ${r.address?`<div style="font-size:11px;color:#555;margin-bottom:3px;">📍 ${r.address}</div>`:''}
-            ${r.hours?`<div style="font-size:11px;color:#555;margin-bottom:3px;">🕐 ${r.hours}</div>`:''}
-            ${r.phone?`<div style="font-size:11px;color:#1a5c8a;margin-bottom:3px;"><a href="tel:${r.phone.replace(/\D/g,'')}" style="color:#1a5c8a;">${r.phone}</a></div>`:''}
-            ${r.description?`<div style="font-size:11px;color:#888;margin-top:4px;line-height:1.5;">${r.description.slice(0,100)}${r.description.length>100?'...':''}</div>`:''}
-            ${r.website?`<div style="margin-top:6px;"><a href="https://${r.website.replace(/^https?:\/\//,'')}" target="_blank" style="font-size:11px;color:#1a5c8a;">Visit Website →</a></div>`:''}
+            <div style="font-size:10px;font-weight:700;color:${ri.color};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${mapEsc(ri.label)}</div>
+            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:4px;">${mapEsc(r.name)}</div>
+            ${r.address?`<div style="font-size:11px;color:#555;margin-bottom:3px;">📍 ${mapEsc(r.address)}</div>`:''}
+            ${r.hours?`<div style="font-size:11px;color:#555;margin-bottom:3px;">🕐 ${mapEsc(r.hours)}</div>`:''}
+            ${r.phone?`<div style="font-size:11px;color:#1a5c8a;margin-bottom:3px;"><a href="tel:${r.phone.replace(/\D/g,'')}" style="color:#1a5c8a;">${mapEsc(r.phone)}</a></div>`:''}
+            ${r.description?`<div style="font-size:11px;color:#888;margin-top:4px;line-height:1.5;">${mapEsc(r.description.slice(0,100))}${r.description.length>100?'...':''}</div>`:''}
+            ${r.website?`<div style="margin-top:6px;"><a href="https://${mapEsc(r.website.replace(/^https?:\/\//,''))}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#1a5c8a;">Visit Website →</a></div>`:''}
           </div>`
         );
       });
@@ -15877,7 +15974,7 @@ function MapTab({user, profile}) {
           radius,color:'#1a5c8a',fillColor:'#1a5c8a',
           fillOpacity:Math.min(0.1+count*0.04,0.45),weight:1,opacity:0.4,
         }).addTo(map)
-         .bindPopup(`<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;">${ZIP_COMMUNITY[zip]||zip}</div>
+         .bindPopup(`<div style="font-family:'Playfair Display',serif;font-weight:700;font-size:13px;color:#1a1a2e;">${mapEsc(ZIP_COMMUNITY[zip]||zip)}</div>
             <div style="font-size:12px;color:#1a5c8a;font-weight:600;">👥 ${count} member${count!==1?'s':''}</div>`);
         markersRef.current.push(circle);
       });
@@ -15885,7 +15982,7 @@ function MapTab({user, profile}) {
 
     })(); // end async IIFE
     return ()=>{ cancelled = true; };
-  },[mapData,activeLayers,loading,zipFocus]);
+  },[mapData,activeLayers,loading,zipFocus,mapLib]);
 
   const toggleLayer = id => setActiveLayers(prev=>{
     const n = new Set(prev);
@@ -15953,7 +16050,10 @@ function MapTab({user, profile}) {
     // Map container
     h('div',{style:{borderRadius:12,overflow:'hidden',border:'2px solid #e5dece',
       boxShadow:'0 4px 20px rgba(0,0,0,.08)',marginBottom:14,position:'relative'}},
-      h('div',{ref:mapRef,style:{height:480,width:'100%'}}),
+      mapLib === 'failed' && h('div',{style:{padding:'14px 16px',background:'#fff8e7',borderBottom:'1px solid #ecd9a8',fontFamily:"'Lora',serif",fontSize:13.5,color:'#8a6000'}},
+        'The map didn\'t load. Check your connection, then ',
+        h('button',{className:'tpv-link',onClick:()=>{ setMapLib('loading'); loadLeaflet().then(()=>setMapLib('ready')).catch(()=>setMapLib('failed')); },style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:13.5,fontFamily:'inherit'}},'try again'), '.'),
+      h('div',{ref:mapRef,role:'application','aria-label':'Community map',style:{height:480,width:'100%'}}),
       loading&&h('div',{style:{position:'absolute',top:0,left:0,right:0,bottom:0,
         background:'rgba(244,241,234,.85)',display:'flex',alignItems:'center',
         justifyContent:'center',zIndex:1000}},
@@ -17115,8 +17215,8 @@ function TheQuestionTab({user, profile, onToast, onNavigate}) {
           h('div',{style:{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}},
             archived.length > 0 && h('button',{onClick:()=>setView('archive'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
               'See how the last one turned out'),
-            onNavigate && h('button',{onClick:()=>onNavigate('guide'),style:{background:'transparent',color:'#1a1a2e',border:'1px solid #1a1a2e',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
-              'Weigh in on your Nov 3 ballot'),
+            onNavigate && h('button',{onClick:()=>onNavigate(daysUntilDate(ELECTION_2026.date) >= 0 ? 'guide' : 'bills'),style:{background:'transparent',color:'#1a1a2e',border:'1px solid #1a1a2e',borderRadius:6,padding:'8px 14px',fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,cursor:'pointer'}},
+              daysUntilDate(ELECTION_2026.date) >= 0 ? 'Weigh in on your Nov 3 ballot' : 'Weigh in on what\'s being decided'),
             onNavigate && h('button',{onClick:()=>onNavigate('ask'),style:{background:'transparent',color:'#1a5c8a',border:'1px solid #c8d8f0',borderRadius:6,padding:'8px 14px',fontSize:13,cursor:'pointer'}},
               'Ask an official something')))
       );
@@ -18667,6 +18767,222 @@ function FeedbackInbox({onToast}) {
   );
 }
 
+// ── Facebook Page (Master admin) ─────────────────────────────────────────────
+// The facebook-post server function posts to the Page by itself: the week
+// ahead on Monday mornings, tomorrow's decisions the evening before, and a
+// sponsor jacket or constitution section on Thursdays. This card connects it,
+// switches it on and off, shows exactly what each post would say, and lists
+// what went out. The Page key lives only in Supabase secrets, never here.
+const FB_KINDS = [
+  {id:'weekly', icon:'📅', name:'The week ahead', when:'Mondays at 9 AM',
+    what:'The busiest counties this week: meetings, decisions coming up and The Question, with links.'},
+  {id:'reminder', icon:'🗳️', name:'Decided tomorrow', when:'Around 5 PM the evening before',
+    what:'Votes and ballot questions happening tomorrow, so people can weigh in first. Skipped on days with none.'},
+  {id:'spotlight', icon:'👔', name:'Thursday spotlight', when:'Thursdays at noon',
+    what:'Taking turns: a sponsor jacket one week, a section of the Michigan or U.S. Constitution the next.'},
+];
+const FB_POST_STATUS = {posted:['Posted','#1a6b3c','#eef7f1'], skipped:['Nothing to post','#666','#f2f2f2'], failed:['Didn\'t post','#a33','#fdf0ef']};
+const FB_SETUP_STEPS = [
+  'Go to developers.facebook.com and sign in with the Facebook account that runs the Page. Tap My Apps → Create App. If it asks what the app is for, pick Other, then Business. Name it something like "TPV Poster".',
+  'In the app, open Tools → Graph API Explorer. On the right, pick your app. Under Permissions add pages_show_list, pages_read_engagement and pages_manage_posts. Tap Generate Access Token, and when Facebook asks, choose The People\'s Voices Page.',
+  'Tap the blue ⓘ next to the token, then Open in Access Token Tool. At the bottom tap Extend Access Token and copy the longer token it gives you.',
+  'Back in the Graph API Explorer, paste that longer token into the Access Token box, type me/accounts where the request goes, and tap Submit. Find The People\'s Voices in the answer and copy two things: its "id" and its "access_token". That access_token is the Page key, and it doesn\'t expire.',
+  'In the app, open App settings → Basic. Privacy Policy URL: https://thepeoplesvoices.org/privacy-policy.html. User data deletion URL: https://thepeoplesvoices.org/privacy-policy.html#delete. Choose a category and save. Then switch the app to Live (the App Mode switch at the top, or Publish in the menu on newer apps). Until it\'s Live, only you can see what it posts.',
+  'In Supabase → Edge Functions → Secrets, add FB_PAGE_ID (the id) and FB_PAGE_TOKEN (the access_token).',
+  'Come back here and tap Check again. When it says Connected, look at each preview, then switch Automatic posting on.',
+];
+async function fbFn(body) {
+  try {
+    const {data, error} = await sb.functions.invoke('facebook-post', {body});
+    if(error) {
+      const st = error.context && error.context.status;
+      const notDeployed = st === 404 || /FunctionsFetchError|FunctionsRelayError/.test(error.name||'');
+      let msg = error.message || 'Something went wrong.';
+      try { const j = error.context && error.context.json ? await error.context.json() : null; if(j && j.error) msg = j.error; } catch(e) {}
+      if(notDeployed) msg = 'The facebook-post server function isn\'t deployed yet. Deploy it in Supabase → Edge Functions, then tap Check again.';
+      return {error:msg, notDeployed};
+    }
+    if(data && data.error) return {error:data.error};
+    return data || {};
+  } catch(e) { return {error:'Couldn\'t reach the facebook-post server function (' + (e.message || 'no answer') + '). If it isn\'t deployed yet, deploy it in Supabase → Edge Functions.', notDeployed:true}; }
+}
+function FbSwitch({on, onChange, disabled, label}) {
+  return h('button',{type:'button', role:'switch', 'aria-checked':on?'true':'false', 'aria-label':label, disabled:!!disabled,
+      onClick:e=>{ e.stopPropagation(); if(!disabled) onChange(!on); },
+      style:{position:'relative',width:46,height:26,borderRadius:13,border:'none',padding:0,background:on?'#1a6b3c':'#c9c4b8',
+        cursor:disabled?'default':'pointer',flexShrink:0,opacity:disabled?.5:1,transition:'background .15s'}},
+    h('span',{style:{position:'absolute',top:3,left:on?23:3,width:20,height:20,borderRadius:'50%',background:'#fff',
+      boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}));
+}
+function FacebookPagePanel({onToast}) {
+  const [open, setOpen] = useState(false);
+  useAdminOpen('facebook', setOpen);
+  const [quick, setQuick] = useState(null);     // straight from the tables, for the header badge
+  const [status, setStatus] = useState(null);   // from the server function, once opened
+  const [loading, setLoading] = useState(false);
+  const [problem, setProblem] = useState(null);
+  const [preview, setPreview] = useState(null); // {kind, message, link, note} or {kind, empty, message}
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [showSteps, setShowSteps] = useState(false);
+
+  const lastAutoFailed = list=>{ const a = (list||[]).find(r=>!r.manual); return !!(a && a.status === 'failed'); };
+
+  useEffect(()=>{
+    Promise.all([
+      sb.from('fb_settings').select('*').eq('id',1).maybeSingle(),
+      sb.from('fb_posts').select('status,manual,created_at').order('created_at',{ascending:false}).limit(10),
+    ]).then(([s,p])=>{
+      if(s.error) { setQuick({missing:true}); return; }
+      setQuick({settings:s.data||null, lastFailed:lastAutoFailed(p.data)});
+    }).catch(()=>setQuick({missing:true}));
+  },[]);
+
+  const load = async()=>{
+    setLoading(true); setProblem(null);
+    const r = await fbFn({action:'status'});
+    setLoading(false);
+    if(r.error) { setProblem(r); if(r.notDeployed) setShowSteps(true); return; }
+    setStatus(r);
+    if(r.page && !r.page.connected) setShowSteps(true);
+    setQuick({settings:r.settings, lastFailed:lastAutoFailed(r.recent)});
+  };
+  useEffect(()=>{ if(open && !status && !loading) load(); },[open]);
+
+  const settings = (status && status.settings) || (quick && quick.settings) || null;
+  const page = status && status.page;
+  const on = !!(settings && settings.enabled);
+
+  const change = async(key, val)=>{
+    setBusy('set-'+key);
+    const r = await fbFn({action:'settings', [key]:val});
+    setBusy(null);
+    if(r.error) { onToast('❌ ' + r.error); return; }
+    setStatus(s=>s ? {...s, settings:{...s.settings, [key]:val}} : s);
+    setQuick(q=>({...(q||{}), missing:false, settings:{...((q && q.settings)||{}), [key]:val}}));
+    if(key === 'enabled') onToast(val ? 'Automatic Facebook posts are on.' : 'Automatic Facebook posts are off.');
+  };
+  const showPreview = async(kind)=>{
+    setBusy('preview-'+kind); setConfirming(false);
+    const r = await fbFn({action:'preview', kind});
+    setBusy(null);
+    if(r.error) { onToast('❌ ' + r.error); return; }
+    setPreview(r.empty ? {kind, empty:true, message:r.message} : {kind, ...(r.preview||{})});
+  };
+  const postNow = async(kind)=>{
+    setBusy('post-'+kind);
+    const r = await fbFn({action:'post', kind});
+    setBusy(null); setConfirming(false);
+    if(r.error) { onToast('❌ ' + r.error); load(); return; }
+    if(r.empty) { onToast(r.message || 'Nothing to post right now.'); return; }
+    onToast('✅ Posted to the Facebook Page.');
+    setPreview(null);
+    load();
+  };
+
+  const badge = !quick ? null
+    : quick.missing ? ['Not set up','#8a6000','#fff8e7']
+    : (on && page && !page.connected) ? ['⚠️ Page not connected','#a33','#fdf0ef']
+    : quick.lastFailed ? ['⚠️ Last post didn\'t go out','#a33','#fdf0ef']
+    : on ? ['On','#1a6b3c','#eef7f1'] : ['Off','#666','#f2f2f2'];
+  const pill = ([t,c,bg])=>h('span',{style:{background:bg,color:c,border:'1px solid '+c+'33',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:700,fontFamily:LB,whiteSpace:'nowrap'}}, t);
+  const btn = (primary, off)=>({background:primary?'#1a5c8a':'#fff',color:primary?'#fff':'#1a5c8a',border:'1px solid #1a5c8a',padding:'6px 13px',borderRadius:6,fontSize:12.5,cursor:off?'default':'pointer',opacity:off?.45:1,fontFamily:PD,fontWeight:700});
+  const box = (bg, bd)=>({background:bg,border:'1px solid '+bd,borderRadius:8,padding:'11px 14px',marginBottom:12,fontSize:13.5,fontFamily:LB,lineHeight:1.6,color:'#333'});
+  const when = d=>new Date(d).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const kindName = id=>{ const k = FB_KINDS.find(x=>x.id===id); return k ? k.icon + ' ' + k.name : id; };
+
+  const connection = page && (page.connected
+    ? h('div',{style:box('#eef7f1','#bfe0cb')},
+        h('div',null, '✅ Connected to ',
+          page.url ? h('a',{href:page.url,target:'_blank',rel:'noopener',style:{color:'#1a6b3c',fontWeight:700}}, page.name||'the Page') : h('b',null,page.name||'the Page'),
+          page.followers != null ? ' · ' + Number(page.followers).toLocaleString() + ' followers' : ''),
+        h('div',{style:{fontSize:12.5,color:'#4a6b55',marginTop:2}},
+          page.expires_at === 0 ? 'The Page key never expires.' : page.expires_at ? 'The Page key expires ' + new Date(page.expires_at*1000).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '. Make a non-expiring one with steps 3 and 4 below.' : ''),
+        page.can_post === false && h('div',{style:{color:'#a33',marginTop:6}}, 'This key can see the Page but isn\'t allowed to post. Make a new one with pages_manage_posts ticked (steps 2 to 4).'))
+    : page.reason === 'not_set_up'
+      ? h('div',{style:box('#fff8e7','#ecd9a8')}, h('b',null,'Not connected yet. '), 'Follow the steps below, then tap Check again. Nothing posts until it\'s connected and you switch it on.')
+      : h('div',{style:box('#fdf0ef','#efc7c2')}, h('b',null,'Facebook didn\'t accept the Page key. '), (page.message ? '(' + page.message + ') ' : ''), 'Make a new one with the steps below and replace FB_PAGE_TOKEN in Supabase.'));
+
+  const previewCard = k=>preview && preview.kind === k.id && h('div',{style:{marginTop:10,borderTop:'1px dashed #c8d8f0',paddingTop:10}},
+    preview.empty
+      ? h('div',{style:{fontSize:13,fontFamily:LB,color:'#666',fontStyle:'italic'}}, preview.message)
+      : h('div',null,
+          h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:6}}, 'What the Page would post'),
+          preview.note && h('div',{style:{fontSize:12.5,color:'#8a6000',fontFamily:LB,marginBottom:6}}, preview.note),
+          h('div',{style:{background:'#fff',border:'1px solid #dddfe2',borderRadius:8,padding:'12px 14px',boxShadow:'0 1px 2px rgba(0,0,0,.06)'}},
+            h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:8}},
+              h('div',{style:{width:32,height:32,borderRadius:'50%',background:'#1a5c8a',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:PD,fontWeight:700,fontSize:13}}, 'PV'),
+              h('div',null, h('div',{style:{fontWeight:700,fontSize:13.5,color:'#050505',fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif'}}, (page && page.name) || 'The People\'s Voices'),
+                h('div',{style:{fontSize:11.5,color:'#65676b',fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif'}}, 'Just now · 🌎'))),
+            h('div',{style:{whiteSpace:'pre-wrap',wordBreak:'break-word',fontSize:14,lineHeight:1.45,color:'#050505',fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif'}}, preview.message),
+            preview.link && h('a',{href:preview.link,target:'_blank',rel:'noopener',style:{display:'block',marginTop:10,background:'#f0f2f5',borderRadius:6,padding:'8px 10px',fontSize:12,color:'#65676b',textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif'}}, '🔗 ' + preview.link.replace(/^https?:\/\//,''))),
+          !confirming
+            ? h('div',{style:{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}},
+                h('button',{style:btn(true, !(page && page.connected)), onClick:()=>setConfirming(true), disabled:!(page && page.connected)}, 'Post this now'),
+                h('button',{style:btn(false), onClick:()=>{ setPreview(null); setConfirming(false); }}, 'Close'),
+                !(page && page.connected) && h('span',{style:{fontSize:12,color:'#888',alignSelf:'center',fontFamily:LB}}, 'Connect the Page first.'))
+            : h('div',{style:{...box('#fff8e7','#ecd9a8'),marginTop:10,marginBottom:0}},
+                h('div',{style:{marginBottom:8}}, 'This goes out to everyone who follows the Page. Post it now?'),
+                h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                  h('button',{style:btn(true, busy==='post-'+k.id), onClick:()=>postNow(k.id), disabled:busy==='post-'+k.id}, busy==='post-'+k.id ? 'Posting…' : 'Yes, post it'),
+                  h('button',{style:btn(false), onClick:()=>setConfirming(false)}, 'Cancel')))));
+
+  return h('div',{style:{background:'#eef3fb',border:'1px solid #c8d8f0',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:open?14:0,cursor:'pointer',gap:8},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
+        '📣 Facebook Page', badge && pill(badge)),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')),
+    open && h('div',null,
+      h('div',{style:{fontSize:13,fontFamily:LB,color:'#555',lineHeight:1.6,marginBottom:12}},
+        'Posts to the Page by themselves on a schedule, all from what\'s already on the site. Every post is nonpartisan and links back here.'),
+      loading && h('div',{style:{textAlign:'center',padding:16,color:'#aaa',fontFamily:LB}}, 'Checking the Page…'),
+      problem && h('div',{style:box('#fdf0ef','#efc7c2')}, problem.error),
+      connection,
+
+      settings && h('div',{style:{...box('#fff','#c8d8f0'),display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}},
+        h('div',null,
+          h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e'}}, 'Automatic posting ' + (on ? 'is on' : 'is off')),
+          h('div',{style:{fontSize:12.5,color:'#666'}}, on ? 'Posts go out on the schedule below.' : (page && !page.connected) ? 'Connect the Page first, then switch this on.' : 'Nothing posts by itself until you switch this on.')),
+        h(FbSwitch,{on, label:'Automatic posting', disabled:busy==='set-enabled' || (!on && !(page && page.connected)), onChange:v=>change('enabled', v)})),
+
+      settings && FB_KINDS.map(k=>h('div',{key:k.id,style:{background:'#fff',border:'1px solid #dde6f3',borderRadius:8,padding:'12px 14px',marginBottom:8,opacity:on?1:.85}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},
+          h('div',{style:{minWidth:0}},
+            h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e'}}, k.icon + ' ' + k.name),
+            h('div',{style:{fontSize:12,color:'#1a5c8a',fontWeight:700,marginTop:2}}, k.when),
+            h('div',{style:{fontSize:12.5,color:'#555',fontFamily:LB,lineHeight:1.5,marginTop:2}}, k.what)),
+          h(FbSwitch,{on:settings[k.id] !== false, label:k.name, disabled:busy==='set-'+k.id, onChange:v=>change(k.id, v)})),
+        h('div',{style:{marginTop:8}},
+          h('button',{style:btn(false), onClick:()=>preview && preview.kind===k.id ? (setPreview(null), setConfirming(false)) : showPreview(k.id), disabled:busy==='preview-'+k.id},
+            busy==='preview-'+k.id ? 'Writing it…' : preview && preview.kind===k.id ? 'Hide preview' : 'Preview')),
+        previewCard(k))),
+
+      status && h('div',{style:{marginTop:14}},
+        h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:8}}, 'Recent posts'),
+        (!status.recent || !status.recent.length) && h('div',{style:{fontSize:13,color:'#999',fontStyle:'italic',fontFamily:LB,marginBottom:8}}, 'Nothing has gone out yet.'),
+        (status.recent||[]).map(r=>h('div',{key:r.id,style:{background:'#fff',border:'1px solid #e5e9f0',borderRadius:8,padding:'9px 12px',marginBottom:6}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}},
+            h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+              h('span',{style:{fontWeight:700,fontSize:13,color:'#1a1a2e'}}, kindName(r.kind)),
+              pill(FB_POST_STATUS[r.status] || [r.status,'#666','#f2f2f2']),
+              r.manual && h('span',{style:{fontSize:11,color:'#888'}}, 'posted by hand')),
+            h('span',{style:{fontSize:11.5,color:'#999'}}, when(r.created_at))),
+          r.message && h('div',{style:{fontSize:12.5,color:'#555',fontFamily:LB,marginTop:4,lineHeight:1.5}}, r.message.split('\n')[0].slice(0,140)),
+          r.status === 'skipped' && h('div',{style:{fontSize:12.5,color:'#888',fontFamily:LB,marginTop:4}}, 'Nothing on the site to share for this one, so it was skipped.'),
+          r.error && h('div',{style:{fontSize:12.5,color:'#a33',fontFamily:LB,marginTop:4}}, r.error),
+          r.fb_post_id && h('a',{href:'https://www.facebook.com/' + r.fb_post_id,target:'_blank',rel:'noopener',style:{fontSize:12,color:'#1a5c8a',display:'inline-block',marginTop:4}}, 'See it on Facebook →')))),
+
+      h('div',{style:{marginTop:12}},
+        h('button',{style:{background:'none',border:'none',padding:0,color:'#1a5c8a',fontSize:13,cursor:'pointer',fontFamily:LB,textDecoration:'underline'}, onClick:()=>setShowSteps(!showSteps)},
+          showSteps ? 'Hide the connect steps' : 'How to connect the Page (or replace its key)'),
+        showSteps && h('ol',{style:{margin:'10px 0 0',paddingLeft:22,fontSize:13,fontFamily:LB,lineHeight:1.65,color:'#333'}},
+          FB_SETUP_STEPS.map((s,i)=>h('li',{key:i,style:{marginBottom:6}}, s)))),
+      h('div',{style:{marginTop:12}},
+        h('button',{style:btn(false), onClick:load, disabled:loading}, loading ? 'Checking…' : 'Check again'))
+    )
+  );
+}
+
 // ── Official Manager (Admin) ──────────────────────────────────────────────────
 function OfficialManager({onToast}) {
   const [officials, setOfficials] = useState([]);
@@ -20164,6 +20480,7 @@ const MASTER_ADMIN_GUIDE = [
       'Permanently delete an account (User Manager).',
       'Business services: the services menu, business sign-ups, rule explainer requests and bid pages, at the bottom of Resources → For Businesses. The "💼 Business services admin" button in the Master admin section takes you there.',
       'Funding numbers: Resources → Who Funds Us, or the "💵 Funding numbers" button in the Master admin section.',
+      'Facebook Page: automatic posts (the week ahead on Mondays, tomorrow\'s decisions the evening before, a Thursday spotlight). Switch them on or off, preview each one and see what went out in 📣 Facebook Page, in the Master admin section.',
     ]},
   ]},
   {id:'m-accounts', title:'Accounts you must keep access to', body:[
@@ -20171,12 +20488,13 @@ const MASTER_ADMIN_GUIDE = [
     {list:[
       'GitHub: the TheKiltedFarmer/TheKiltedFarmer.github.io repository. It holds the whole site (index.html) and the CNAME file that points thepeoplesvoices.org at it.',
       'Your domain registrar (wherever thepeoplesvoices.org was bought). Renew it every year; if it lapses the site disappears.',
-      'Supabase project zhnilrohxoixsgmdyqiw: the database, every login, and the server functions (admin-manage-user, ai-answers, business-services, events-import, finance-refresh, news-daily, the weekly digest and the Ko-fi webhook).',
+      'Supabase project zhnilrohxoixsgmdyqiw: the database, every login, and the server functions (admin-manage-user, ai-answers, business-services, events-import, facebook-post, finance-refresh, news-daily, the weekly digest and the Ko-fi webhook).',
       'Cloudflare: the peoples-voice-ai worker. It holds the AI key; if it stops, AI answers and summaries stop.',
       'Anthropic console: pays for the AI. Keep credits topped up.',
       'Resend: sends the weekly email digest.',
       'Ko-fi: donations and business service payments.',
       'The hello@thepeoplesvoices.org inbox, and the Facebook page.',
+      'Meta for Developers (developers.facebook.com): the small app that posts to the Facebook page. Its Page key is the FB_PAGE_TOKEN secret in Supabase.',
     ]},
   ]},
   {id:'m-deploy', title:'Putting a new version of the site live', body:[
@@ -20219,6 +20537,7 @@ const MASTER_ADMIN_GUIDE = [
       'A server function "isn\'t set up" or returns 404: that function isn\'t deployed in Supabase.',
       'AI answers stop: check the Cloudflare worker and your Anthropic credits.',
       'Weekly email didn\'t go out: check Resend, then the digest function\'s logs in Supabase.',
+      'Facebook posts stopped: open 📣 Facebook Page in the Master admin section. It says why; usually the Page key needs replacing (the connect steps are right there).',
       'Someone can\'t sign in: User Manager → their profile → Sign-in help, or confirm them in Supabase → Authentication → Users.',
       'The whole site is blank: put the previous index.html back on GitHub (see "Putting a new version of the site live").',
     ]},
@@ -20500,6 +20819,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
     isFullAdmin(profile) && h('div',{id:'adm-officialBadges'}, h(OfficialBadgeInbox,{onToast})),
     isFullAdmin(profile) && h('div',{id:'adm-pressBadges'}, h(PressBadgeInbox,{onToast})),
     isFullAdmin(profile) && h('div',{id:'adm-feedback'}, h(FeedbackInbox,{onToast})),
+    isFullAdmin(profile) && h('div',{id:'adm-facebook'}, h(FacebookPagePanel,{onToast})),
     isFullAdmin(profile) && onNavigate && h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}},
       h('button',{onClick:()=>onNavigate('business'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'💼 Business services admin →'),
       h('button',{onClick:()=>onNavigate('funding'),style:{background:'#1a1a2e',color:'#f0c040',border:'none',borderRadius:6,padding:'8px 14px',fontSize:12.5,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'💵 Funding numbers →')),
@@ -21009,8 +21329,54 @@ function App() {
     else if(dl.jacketId) { setFeedNavCtx({tab:'jackets',jacketId:dl.jacketId}); setMainTab('jackets'); }
     else if(dl.questionId) { setFeedNavCtx({tab:'ask',questionId:dl.questionId}); setMainTab('ask'); }
     else if(dl.billId) { setFeedNavCtx({billId:String(dl.billId),act:dl.act}); setMainTab('bills'); }
-    else if(dl.tab) { setMainTab(dl.tab); }
+    else if(dl.tab) { setMainTab(dl.tab === 'admin' && !isAdminHere(profile) ? 'feed' : dl.tab); }
   },[loading, user?.id, guestMode, bills.length]);
+
+  // ── The Back button and the address bar follow you around the site ─────────
+  // Each tab has its own address (/jackson?tab=bills). Back and Forward move
+  // between the tabs you visited instead of leaving the site, a refresh keeps
+  // your place, and any tab can be bookmarked or shared.
+  const navSynced = useRef(false);
+  const profileRef = useRef(null); profileRef.current = profile;
+  useEffect(()=>{
+    if(loading || !currentCountyId) return;
+    try {
+      const u = new URL(window.location.href);
+      const inUrl = u.searchParams.get('tab') || 'feed';
+      if(inUrl !== subTab && !(__DEEP_LINK && !__deepLinkUsed)) {
+        if(subTab === 'feed') u.searchParams.delete('tab'); else u.searchParams.set('tab', subTab);
+        const url = u.pathname + u.search + u.hash;
+        if(!navSynced.current || __navReplaceOnce) window.history.replaceState(window.history.state, '', url);
+        else window.history.pushState({tpvTab:subTab}, '', url);
+        __navReplaceOnce = false;
+      }
+      navSynced.current = true;
+    } catch(e) {}
+    try {
+      let label = subTab === 'admin' ? 'Admin' : '';
+      HUBS.forEach(x=>x.subs.forEach(y=>{ if(y.id === subTab && subTab !== 'feed') label = y.label; }));
+      document.title = (label ? label + ' · ' : '') + (currentCounty ? currentCounty.name + ' · ' : '') + "The People's Voices";
+    } catch(e) {}
+    // Bring the tab you're on into view in the swipeable tab rows
+    try {
+      document.querySelectorAll('[data-tpv-current]').forEach(el=>{
+        const row = el.closest('.tpv-tabrow');
+        if(row) row.scrollLeft = el.offsetLeft - (row.clientWidth - el.offsetWidth)/2;
+      });
+    } catch(e) {}
+  },[loading, subTab, hub, currentCountyId]);
+  useEffect(()=>{
+    const onPop = ()=>{
+      try {
+        const t = new URLSearchParams(window.location.search).get('tab') || 'feed';
+        const ok = t === 'feed' || (SUBTAB_TO_HUB[t] && (t !== 'admin' || isAdminHere(profileRef.current)));
+        const r = resolveRoute(ok ? t : 'feed');
+        setHub(r.hub); setSubTab(r.subTab);
+      } catch(e) {}
+    };
+    window.addEventListener('popstate', onPop);
+    return ()=>window.removeEventListener('popstate', onPop);
+  },[]);
 
   useEffect(()=>{
     const handler = ()=>setShowPrivacy(true);
@@ -21414,20 +21780,21 @@ function App() {
     !user&&h('div',{style:{background:'#f0c040',padding:'8px 16px',textAlign:'center'}},
       h('span',{style:{fontFamily:"'Lora',serif",fontSize:13,color:'#1a1a2e'}},
         '👋 You\'re looking around as a guest. ',
-        h('button',{onClick:()=>askToJoin(null,'signup'),style:{background:'none',border:'none',padding:0,color:'#1a1a2e',
+        h('button',{className:'tpv-link',onClick:()=>askToJoin(null,'signup'),style:{background:'none',border:'none',padding:0,color:'#1a1a2e',
           fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13,textDecoration:'underline',cursor:'pointer'}},'Join free'),
         ' when you want to vote, comment or follow an issue.')
     ),
 
     // Header
-    h('div',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
+    h('a',{href:'#tpv-main',className:'tpv-skip',onClick:e=>{ e.preventDefault(); const m = document.getElementById('tpv-main'); if(m) { m.focus(); m.scrollIntoView(); } }},'Skip to content'),
+    h('header',{style:{background:'#1a1a2e',borderBottom:'4px solid #f0c040'}},
       h('div',{style:{maxWidth:900,margin:'0 auto',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}},
         h('div',null,
           h('div',{style:{fontSize:9,color:'#8899aa',letterSpacing:2,textTransform:'uppercase',marginBottom:1,display:'flex',alignItems:'center',gap:6,position:'relative'}},
             'Civic Engagement Platform',
-            currentCounty && h('button',{
+            currentCounty && h('button',{className:'tpv-link',
               onClick:()=>setShowCountyMenu(v=>!v),
-              title:'Switch county',
+              title:'Switch county', 'aria-label':'Switch county. Now showing ' + currentCounty.name, 'aria-expanded':showCountyMenu?'true':'false',
               style:{background:'transparent',border:'none',color:'#f0c040',fontWeight:700,
                 fontSize:9,letterSpacing:2,textTransform:'uppercase',cursor:'pointer',
                 padding:0,display:'flex',alignItems:'center',gap:3,fontFamily:'inherit'}},
@@ -21439,32 +21806,33 @@ function App() {
             // County switcher dropdown
             showCountyMenu && h(CountySwitcherMenu,{currentCountyId, onClose:()=>setShowCountyMenu(false)})
           ),
-          h('div',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5}},"The People's Voices")
+          h('h1',{style:{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:'#f0c040',letterSpacing:-.5,margin:0}},"The People's Voices")
         ),
-        h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:1,minWidth:0}},
           !user ? h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
-            h('button',{onClick:()=>askToJoin(null,'login'),style:{background:'transparent',border:'none',color:'#c8d0dc',fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif"}},'Sign in'),
+            h('button',{className:'tpv-link',onClick:()=>askToJoin(null,'login'),style:{background:'transparent',border:'none',color:'#c8d0dc',fontSize:13,padding:'6px 4px',cursor:'pointer',fontFamily:"'Lora',serif"}},'Sign in'),
             h('button',{onClick:()=>askToJoin(null,'signup'),style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:6,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:"'Playfair Display',serif",fontWeight:700}},'Join free')
           ) :
           h('div',{style:{textAlign:'right'}},
             h('div',{style:{color:'#fff',fontSize:12,fontFamily:"'Playfair Display',serif",fontWeight:700}},displayName),
             h('div',{style:{color:'#f0c040',fontSize:10,marginBottom:2}},rep+' pts · '+repInfo.label),
-            h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',alignItems:'center'}},
+            h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap'}},
               // Notification bell
               h('div',{style:{position:'relative'}},
                 (()=>{
                   const chatTotal = Object.values(chatRoomActivity).reduce((a,b)=>a+(b||0),0);
                   const totalUnread = unreadNotifCount + chatTotal;
-                  return h('button',{onClick:()=>{ setShowNotifications(!showNotifications); if(!showNotifications&&unreadNotifCount>0) markNotifsRead(user.id); },
+                  return h('button',{className:'tpv-link',onClick:()=>{ setShowNotifications(!showNotifications); if(!showNotifications&&unreadNotifCount>0) markNotifsRead(user.id); },
+                    'aria-label':'Notifications' + (totalUnread>0 ? ', ' + totalUnread + ' new' : ''),
                     style:{background:'transparent',border:'none',color:'#8899aa',fontSize:16,cursor:'pointer',padding:'2px 4px',position:'relative',lineHeight:1}
                   },'🔔',
                     totalUnread>0&&h('span',{style:{position:'absolute',top:-4,right:-4,background:'#c0392b',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}},totalUnread>9?'9+':totalUnread)
                   );
                 })()
               ),
-              h('button',{onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDEAA Sign out"),
-              h('button',{onClick:()=>setShowProfile(true),style:{background:'transparent',border:'none',color:'#f0c040',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDC64 Profile"),
-              h('button',{onClick:()=>setShowOnboarding(true),style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\u2753 Help")
+              h('button',{className:'tpv-link',onClick:handleSignOut,style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDEAA Sign out"),
+              h('button',{className:'tpv-link',onClick:()=>setShowProfile(true),style:{background:'transparent',border:'none',color:'#f0c040',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\uD83D\uDC64 Profile"),
+              h('button',{className:'tpv-link',onClick:()=>setShowOnboarding(true),style:{background:'transparent',border:'none',color:'#8899aa',fontSize:11,cursor:'pointer',fontFamily:"'Lora',serif",padding:0}},"\u2753 Help")
             )
           )
         )
@@ -21472,10 +21840,10 @@ function App() {
       // Stats bar — horizontally scrollable on mobile
       h('div',{className:'tpv-tabrow',style:{background:'rgba(255,255,255,.04)',borderTop:'1px solid rgba(255,255,255,.06)',overflowX:'auto',WebkitOverflowScrolling:'touch'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'6px 14px',display:'flex',gap:16,flexWrap:'nowrap',minWidth:'max-content'}},
-          [[bills.filter(b=>!b.outcome).length,"Open decisions"],
+          [[bills.filter(b=>!b.outcome).length,bills.filter(b=>!b.outcome).length===1?"Open decision":"Open decisions"],
            [daysUntilDate(ELECTION_2026.date)>=0&&daysUntilDate(ELECTION_2026.date)<=60?daysUntilDate(ELECTION_2026.date):0,"Days to Nov 3"],
            [meetingsWeek,"Meetings this week"],
-           [memberCount||0,"Neighbors"],
+           [memberCount||0,memberCount===1?"Neighbor":"Neighbors"],
            ...(user?[[rep+" pts","Your Rep"]]:[])].filter(([v])=>v && v!=='0').map(([v,l])=>
             h('div',{key:l,style:{flexShrink:0}},
               h('div',{style:{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:900,color:'#f0c040'}},v),
@@ -21485,10 +21853,11 @@ function App() {
         )
       ),
       // Main hub nav (5 hubs + admin) — primary, in the dark header
-      h('div',{className:'tpv-tabrow',style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
+      h('nav',{'aria-label':'Main sections',className:'tpv-tabrow',style:{overflowX:'auto',WebkitOverflowScrolling:'touch',borderTop:'1px solid rgba(255,255,255,.06)'}},
         h('div',{style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',flexWrap:'nowrap',minWidth:'max-content'}},
           [...HUBS, ...(isAdmin?[{id:'admin',icon:'\u2699\uFE0F',label:'Admin',subs:[{id:'admin',label:'Admin'}]}]:[])].map(hubDef=>
             h('button',{key:hubDef.id, onClick:()=>{setHub(hubDef.id); setSubTab(hubDef.subs[0].id);},
+              'aria-current':hub===hubDef.id?'page':undefined, 'data-tpv-current':hub===hubDef.id?'1':undefined,
               style:{background:'transparent',border:'none',
                 borderBottom: hub===hubDef.id ? '3px solid #f0c040' : '3px solid transparent',
                 padding:'12px 18px', fontFamily:"'Playfair Display',serif",
@@ -21533,11 +21902,12 @@ function App() {
     (()=>{
       const hubDef = HUBS.find(h=>h.id===hub) || (hub==='admin'?{subs:[{id:'admin',label:'Admin'}]}:null);
       if(!hubDef || hubDef.subs.length<=1) return null;
-      return h('div',{style:{background:'#ebe6d7', borderBottom:'1px solid #d8cfb6'}},
+      return h('nav',{'aria-label':'Pages in this section',style:{background:'#ebe6d7', borderBottom:'1px solid #d8cfb6'}},
         h('div',{className:'tpv-tabrow',style:{maxWidth:900,margin:'0 auto',padding:'0 14px',display:'flex',gap:4,
           overflowX:'auto',WebkitOverflowScrolling:'touch'}},
           hubDef.subs.map(s=>
             h('button',{key:s.id, onClick:()=>setSubTab(s.id),
+              'aria-current':subTab===s.id?'page':undefined, 'data-tpv-current':subTab===s.id?'1':undefined,
               style:{background:'transparent', border:'none',
                 padding:'9px 14px',
                 fontFamily:"'Playfair Display',serif",
@@ -21555,7 +21925,7 @@ function App() {
     })(),
 
     // Body
-    h('div',{style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px'}},
+    h('main',{id:'tpv-main',tabIndex:-1,style:{maxWidth:900,margin:'0 auto',padding:'14px 14px 60px',outline:'none',boxShadow:'none'}},
 
       // Welcome-back banner: what changed since your last visit, each item one tap away
       welcomeBack && mainTab !== 'admin' && (()=>{
@@ -21817,17 +22187,17 @@ function App() {
       h('div',{style:{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 14px',maxWidth:560,margin:'0 auto 8px',fontSize:11,color:'#8899aa',lineHeight:1.7}},
         "⚖️ ",h('strong',{style:{color:'#aab'}},"Nonpartisan Statement:")," Not affiliated with any political party, government body, or elected official. All analysis is factual and balanced. Community votes carry no official weight.",
         h('span',{style:{marginLeft:8}},
-          h('button',{onClick:()=>setShowPrivacy(true),
-            style:{background:'none',border:'none',color:'#5b9a6c',fontSize:10,cursor:'pointer',
+          h('button',{className:'tpv-link',onClick:()=>setShowPrivacy(true),
+            style:{background:'none',border:'none',color:'#8fd0a3',fontSize:11,cursor:'pointer',
               textDecoration:'underline',padding:0,fontFamily:"'Lora',serif"}
           },'Privacy Policy')
         )
       ),
       "Votes & proposals are unofficial civic engagement",h('br'),
-      h('span',{style:{color:'#5b3a8c'}},
+      h('span',{style:{color:'#b9a3e0'}},
         (currentCountyId && currentCountyId !== 'jackson' && COUNTIES[currentCountyId]
-          ? COUNTIES[currentCountyId].primaryCity + ' -> ' + COUNTIES[currentCountyId].short
-          : 'Concord -> Jackson') + ' -> Michigan -> Nation')
+          ? COUNTIES[currentCountyId].primaryCity + ' → ' + COUNTIES[currentCountyId].short
+          : 'Concord → Jackson') + ' → Michigan → Nation')
     )
   );
 }
