@@ -411,11 +411,79 @@ function monthSummary(k){
   const paid=r2(ev.reduce((a,e)=>a+(e.money_in!=null?+e.money_in:0),0));
   return{ev,sales,commission,owed,paid,left:r2(Math.max(0,owed-paid))};
 }
-function lineSold(l){return Math.max(0,(+l.qty_out||0)-(l.qty_back!=null?+l.qty_back:(l.qty_back_reported!=null?+l.qty_back_reported:0)));}
+function lineSold(l){
+  const back=l.qty_back!=null?+l.qty_back:(l.qty_back_reported!=null?+l.qty_back_reported:0);
+  const given=l.qty_given!=null?+l.qty_given:(+l.qty_given_reported||0);   // given away or traded: not a sale
+  return Math.max(0,(+l.qty_out||0)-back-given);
+}
 function eventBags(e,field){return (e.lines||[]).reduce((a,l)=>a+(+l[field]||0),0);}
 function eventValue(e,field){return r2((e.lines||[]).reduce((a,l)=>a+(+l[field]||0)*(+l.unit_price||0),0));}
 function preordersFor(eid){return S.preorders.filter(o=>o.event_id===eid&&o.status!=='cancelled');}
 function orderLink(){return location.origin+location.pathname+'?r='+encodeURIComponent(S.rep.code||'');}
+
+// ─── what sells: each pasta's track record at this Highlander's own events ───
+const SELLS={span:'all'};
+function sellEvents(){
+  const cut=SELLS.span==='90'?isoLocal(new Date(Date.now()-90*864e5)):SELLS.span==='year'?today().slice(0,4)+'-01-01':'';
+  // counted events only: settled ones, and ones where you've sent your count
+  return (S.events||[]).filter(e=>(e.status==='settled'||e.status==='returning')&&(!cut||String(e.event_date)>=cut)&&(e.lines||[]).some(l=>+l.qty_out>0));
+}
+function sellStats(evs){
+  const by={};
+  evs.forEach(e=>(e.lines||[]).forEach(l=>{
+    const out=+l.qty_out||0;if(!out)return;
+    const sold=lineSold(l),k=String(l.product_name||'').trim();
+    const x=by[k]=by[k]||{name:k,line:l.line,out:0,sold:0,money:0,events:0,soldOut:0};
+    x.out+=out;x.sold+=sold;x.money+=sold*(+l.unit_price||0);x.events++;if(sold>=out)x.soldOut++;
+  }));
+  return Object.values(by).map(x=>Object.assign(x,{rate:x.out?x.sold/x.out:0})).sort((a,b)=>b.sold-a.sold||b.rate-a.rate);
+}
+function sellTag(x){
+  if(x.events>=2&&x.soldOut>=Math.ceil(x.events/2))return '<span class="chip green">Sells out · ask for more</span>';
+  if(x.out>=8&&x.rate>=.85)return '<span class="chip green">Strong seller</span>';
+  if(x.out>=8&&x.rate<.5)return '<span class="chip tan">Slow for you</span>';
+  return '';
+}
+function sellRow(x,max){
+  return '<div style="padding:10px 0;border-bottom:1px solid var(--cream-dark);"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;"><b>'+esc(x.name)+'</b>'+sellTag(x)+'</div>'
+    +'<div class="meter" style="margin-top:6px;height:9px;"><i style="width:'+Math.round(x.sold/Math.max(1,max)*100)+'%"></i></div>'
+    +'<div class="meter-cap"><span>Sold '+x.sold+' of '+x.out+' ('+Math.round(x.rate*100)+'%)</span><span>'+fmt0(x.money)+(x.events>1?' · '+x.events+' events':'')+'</span></div></div>';
+}
+function setSellSpan(v){SELLS.span=v;renderSells();}
+function renderSells(){
+  const evs=sellEvents(),st=sellStats(evs);
+  const span=[['all','All time'],['year','This year'],['90','Last 90 days']];
+  let h='<div class="btns" style="margin-top:0;">'+span.map(([k,l])=>'<button class="btn '+(SELLS.span===k?'primary':'soft')+'" onclick="setSellSpan(\''+k+'\')">'+l+'</button>').join('')+'</div>';
+  if(!st.length){
+    h+='<div class="card empty">Nothing counted '+(SELLS.span==='all'?'yet':'in this stretch')+'. After an event, send in your count and this page fills in by itself: which pasta sold, which came back, and which sold out.</div>';
+    $('app').innerHTML=h;return;
+  }
+  const out=st.reduce((a,x)=>a+x.out,0),sold=st.reduce((a,x)=>a+x.sold,0),max=st[0].sold;
+  h+='<div class="card"><h2>What you sell</h2><div class="stats"><div class="stat"><div class="l">Bags sold</div><div class="v">'+sold+'</div><div class="s">of '+out+' taken ('+Math.round(sold/Math.max(1,out)*100)+'%)</div></div>'
+    +'<div class="stat"><div class="l">Events counted</div><div class="v">'+evs.length+'</div><div class="s">'+plural(st.length,'kind')+' of pasta</div></div></div>'
+    +st.map(x=>sellRow(x,max)).join('')
+    +'<p class="muted small" style="margin-top:10px;">The bar is bags sold. Bags you gave away or traded don’t count as sold. The kitchen sees these numbers when it packs your bags, so your best sellers get packed first when they’re in stock.</p></div>';
+  // what to tell the kitchen
+  const more=st.filter(x=>x.events>=2&&x.soldOut>=Math.ceil(x.events/2)),slow=st.filter(x=>x.out>=8&&x.rate<.5);
+  if(more.length||slow.length)h+='<div class="card"><h2>Worth knowing</h2>'
+    +(more.length?'<p style="margin-top:6px;"><b>You keep running out of:</b> '+more.map(x=>esc(x.name)).join(', ')+'. You probably left sales on the table. Ask for more bags next time (there’s a note box when you book).</p>':'')
+    +(slow.length?'<p style="margin-top:8px;"><b>Slow at your events:</b> '+slow.map(x=>esc(x.name)+' ('+Math.round(x.rate*100)+'%)').join(', ')+'. Try putting it up front with a sample or a recipe idea, or ask the kitchen to send less of it.</p>':'')+'</div>';
+  // by kind of event
+  const kinds={};evs.forEach(e=>{const k=e.event_type||'other';(kinds[k]=kinds[k]||[]).push(e);});
+  const kk=Object.entries(kinds).filter(([,v])=>v.length);
+  if(kk.length>1)h+='<div class="card"><h2>By kind of event</h2>'+kk.sort((a,b)=>b[1].length-a[1].length).map(([k,v])=>{
+    const t=sellStats(v),o=t.reduce((a,x)=>a+x.out,0),sd=t.reduce((a,x)=>a+x.sold,0),m=t.reduce((a,x)=>a+x.money,0);
+    return '<div style="padding:9px 0;border-bottom:1px solid var(--cream-dark);"><b>'+esc(typeName(k)||'Other')+'</b> <span class="muted small">· '+plural(v.length,'event')+'</span>'
+      +'<div class="muted small">About '+fmt0(m/v.length)+' an event · sold '+Math.round(sd/Math.max(1,o)*100)+'% of what you took'+(t[0]&&t[0].sold?' · best seller: <b>'+esc(t[0].name)+'</b>':'')+'</div></div>';}).join('')+'</div>';
+  // best events
+  const top=evs.map(e=>{const t=sellStats([e]);return{e,sold:t.reduce((a,x)=>a+x.sold,0),out:t.reduce((a,x)=>a+x.out,0),money:t.reduce((a,x)=>a+x.money,0),best:t[0]};}).sort((a,b)=>b.money-a.money).slice(0,5);
+  if(top.length>1)h+='<div class="card"><h2>Your best events</h2>'+top.map(x=>'<div style="padding:9px 0;border-bottom:1px solid var(--cream-dark);display:flex;justify-content:space-between;gap:10px;"><div><b>'+esc(x.e.name)+'</b><div class="muted small">'+esc(parseISO(x.e.event_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}))+' · sold '+x.sold+' of '+x.out+(+x.e.attendance>0&&x.sold?' · 1 bag per '+Math.round(+x.e.attendance/x.sold)+' people':'')+(x.best&&x.best.sold?' · top: '+esc(x.best.name):'')+'</div></div><b>'+fmt0(x.money)+'</b></div>').join('')+'</div>';
+  $('app').innerHTML=h;
+}
+function sellHomeCard(){
+  const st=sellStats(sellEvents.call(null)).filter(x=>x.sold>0).slice(0,3);if(!st.length)return'';
+  return '<div class="card"><h2>Your best sellers</h2><p class="muted">'+st.map((x,i)=>(i+1)+'. <b>'+esc(x.name)+'</b> ('+x.sold+' sold, '+Math.round(x.rate*100)+'%)').join(' &nbsp; ')+'</p><div class="btns"><button class="btn soft" onclick="go(\'sells\')">See what sells</button></div></div>';
+}
 
 // ─── app shell ───
 const NAV=[
@@ -433,10 +501,10 @@ function drawNav(){
 }
 function go(v){
   S.view=v;hcStop();HC.room=null;HC.from=null;S.draft=v==='book'?S.draft:null;if(v!=='count')S.count=null;if(v!=='listing')S.ldraft=null;
-  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back',find:'Find events',chat:'Messages',listing:S.ldraft&&S.ldraft.id?'Fix an event':'Add an event'}[v]||'Pasta Highlanders';
+  $('hTitle').textContent={home:'Hi, '+(S.rep.name||'').split(' ')[0],events:'Your events',orders:'Pre-orders',pay:'Your pay',me:'Your account',book:S.draft&&S.draft.id?'Change booking':'Book an event',count:'Count what came back',find:'Find events',chat:'Messages',sells:'What sells',listing:S.ldraft&&S.ldraft.id?'Fix an event':'Add an event'}[v]||'Pasta Highlanders';
   $('hSub').textContent=v==='home'?'Kilted Farmers Pasta Highlander':'The Kilted Farmers';
   drawNav();
-  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount,find:renderFind,chat:renderChat,listing:renderListingForm}[v]||renderHome)();
+  ({home:renderHome,events:renderEvents,orders:renderOrders,pay:renderPay,me:renderMe,book:renderBook,count:renderCount,find:renderFind,chat:renderChat,sells:renderSells,listing:renderListingForm}[v]||renderHome)();
   window.scrollTo(0,0);
 }
 async function reload(v){try{await loadAll();}catch(e){toast(e.message,true);}go(v||S.view);}
@@ -555,6 +623,7 @@ function renderHome(){
     +'<p class="muted" style="margin-top:8px;">At each event you keep <b>'+c.base_rate+'%</b> of the first '+fmt0(r.th)+' in sales and <b>'+c.top_rate+'%</b> of everything past it. Orders paid ahead always earn <b>'+c.top_rate+'%</b>.</p>'
     +(m.left>0?'<div class="msg info">You owe the kitchen <b>'+fmt(m.left)+'</b> from settled events (sales minus your commission).</div>':'')+'</div>';
   h+=calcHTML('rep');
+  {const keep=SELLS.span;SELLS.span='all';h+=sellHomeCard();SELLS.span=keep;}
 
   const fresh=(S.listings||[]).filter(l=>isNewThisWeek(l.found_on,today())&&listingUpcoming(l));
   if(fresh.length)h+='<div class="card" style="border-color:var(--green);"><h2>'+plural(fresh.length,'new event')+' this week</h2><p class="muted">'+fresh.slice(0,3).map(l=>esc(l.name)+(l.next_date?' ('+esc((parseISO(l.next_date)).toLocaleDateString('en-US',{month:'short',day:'numeric'}))+')':'')).join(', ')+(fresh.length>3?' and more':'')+'. Grab one before the booths fill up.</p><div class="btns"><button class="btn primary" onclick="FIND.kind=\'all\';go(\'find\')">See them</button></div></div>';
@@ -752,6 +821,7 @@ function renderEvents(){
   const now=S.events.filter(e=>['requested','out','returning'].includes(e.status)).sort((a,b)=>a.event_date.localeCompare(b.event_date));
   const past=S.events.filter(e=>e.status==='settled'||e.status==='cancelled');
   let h='<div class="btns" style="margin-top:0;"><button class="btn primary full" onclick="newBooking()">+ Book an event</button></div>';
+  if(past.some(e=>e.status==='settled'))h+='<div class="btns"><button class="btn soft full" onclick="go(\'sells\')">📊 What sells at your events</button></div>';
   h+='<div class="section-t">Coming up and in progress</div>'+(now.length?now.map(eventCard).join(''):'<div class="card empty">Nothing booked. Book your next event and we’ll have the pasta ready.</div>');
   if(past.length)h+='<div class="section-t">Past events</div>'+past.slice(0,30).map(eventCard).join('');
   $('app').innerHTML=h;
@@ -864,30 +934,49 @@ async function saveBooking(){
 // ─── count what came back ───
 function startCount(id){
   const e=S.events.find(x=>x.id===id);if(!e)return;
-  S.count={id,back:{}};(e.lines||[]).forEach(l=>{S.count.back[l.id]=l.qty_back_reported!=null?+l.qty_back_reported:0;});
+  S.count={id,back:{},given:{},note:e.given_note||''};(e.lines||[]).forEach(l=>{S.count.back[l.id]=l.qty_back_reported!=null?+l.qty_back_reported:0;S.count.given[l.id]=+l.qty_given_reported||0;});
   go('count');
 }
 function renderCount(){
   const c=S.count,e=c&&S.events.find(x=>x.id===c.id);if(!e){go('events');return;}
-  let h='<div class="card"><h2>'+esc(e.name)+'</h2><p class="muted">'+esc(dayLabel(e.event_date))+'. Count the bags you’re bringing back for each kind. We’ll work out what sold.</p>';
+  let h='<div class="card"><h2>'+esc(e.name)+'</h2><p class="muted">'+esc(dayLabel(e.event_date))+'. Count the bags you’re bringing back for each kind, and any you gave away or traded. We’ll work out what sold.</p>';
   (e.lines||[]).forEach(l=>{
-    h+='<div class="prod"><div class="prod-main"><div class="prod-name">'+esc(l.product_name)+'</div><div class="prod-sub">Took '+l.qty_out+' · '+fmt0(l.unit_price)+' each</div></div>'
-      +'<div style="text-align:center;"><div class="small muted" style="margin-bottom:3px;">coming back</div>'+stepper('b_'+l.id,c.back[l.id]||0,'setBack(\''+l.id+'\',VAL)')+'</div></div>';
+    h+='<div class="prod" style="flex-wrap:wrap;"><div class="prod-main"><div class="prod-name">'+esc(l.product_name)+'</div><div class="prod-sub">Took '+l.qty_out+' · '+fmt0(l.unit_price)+' each</div></div>'
+      +'<div style="display:flex;gap:10px;">'
+      +'<div style="text-align:center;"><div class="small muted" style="margin-bottom:3px;">coming back</div>'+stepper('b_'+l.id,c.back[l.id]||0,'setBack(\''+l.id+'\',VAL)')+'</div>'
+      +'<div style="text-align:center;"><div class="small muted" style="margin-bottom:3px;">given or traded</div>'+stepper('g_'+l.id,c.given[l.id]||0,'setGiven(\''+l.id+'\',VAL)')+'</div>'
+      +'</div></div>';
   });
+  h+='<label class="small muted" for="cNote" style="display:block;margin-top:12px;">Gave some away or traded with another vendor? Who with, and what for? (optional)</label>'
+    +'<textarea id="cNote" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;" placeholder="Traded 2 for a loaf of bread at Mill St Bakery" oninput="S.count.note=this.value">'+esc(c.note||'')+'</textarea>'
+    +'<p class="muted small" style="margin-top:4px;">Trading with other vendors is encouraged. Bags you give away or trade aren’t sales, so you don’t owe the kitchen for them.</p>';
   h+='<div id="countTotal"></div><div class="msg err" id="cMsg"></div><div class="btns"><button class="btn primary full" id="cBtn" onclick="sendCount()">Send my count</button><button class="btn soft full" onclick="go(\'events\')">Back</button></div></div>';
   $('app').innerHTML=h;drawCountTotal();
 }
-function setBack(lid,v){const e=S.events.find(x=>x.id===S.count.id),l=e&&(e.lines||[]).find(x=>x.id===lid);if(!l)return;const max=+l.qty_out||0;if(v>max){v=max;const i=$('b_'+lid);if(i)i.value=v;}S.count.back[lid]=v;drawCountTotal();}
+function setBack(lid,v){const e=S.events.find(x=>x.id===S.count.id),l=e&&(e.lines||[]).find(x=>x.id===lid);if(!l)return;const max=+l.qty_out||0;if(v>max){v=max;const i=$('b_'+lid);if(i)i.value=v;}S.count.back[lid]=v;
+  const g=S.count.given[lid]||0;if(g>max-v){S.count.given[lid]=max-v;const gi=$('g_'+lid);if(gi)gi.value=max-v;}drawCountTotal();}
+function setGiven(lid,v){const e=S.events.find(x=>x.id===S.count.id),l=e&&(e.lines||[]).find(x=>x.id===lid);if(!l)return;const max=Math.max(0,(+l.qty_out||0)-(S.count.back[lid]||0));if(v>max){v=max;const i=$('g_'+lid);if(i)i.value=v;}S.count.given[lid]=v;drawCountTotal();}
 function drawCountTotal(){
-  const e=S.events.find(x=>x.id===S.count.id);let sold=0,val=0;
-  (e.lines||[]).forEach(l=>{const s=Math.max(0,(+l.qty_out||0)-(S.count.back[l.id]||0));sold+=s;val+=s*(+l.unit_price||0);});
+  const e=S.events.find(x=>x.id===S.count.id);let sold=0,val=0,given=0;
+  (e.lines||[]).forEach(l=>{const g=S.count.given[l.id]||0;given+=g;const s=Math.max(0,(+l.qty_out||0)-(S.count.back[l.id]||0)-g);sold+=s;val+=s*(+l.unit_price||0);});
   const earn=eventCommission(val,prepaidFor(e.id));
   $('countTotal').innerHTML='<div class="total-bar"><div><div class="s">'+plural(sold,'bag')+' sold</div><div class="big">'+fmt0(val)+'</div></div><div style="text-align:right;"><div class="s">you keep about</div><div class="big">'+fmt0(earn)+'</div></div></div>'
-    +'<p class="muted small" style="margin-top:8px;">Bring the kitchen '+fmt(r2(val-earn))+' (sales minus your commission) along with the unsold bags. The kitchen confirms the count when you drop off.</p>';
+    +'<p class="muted small" style="margin-top:8px;">Bring the kitchen '+fmt(r2(val-earn))+' (sales minus your commission) along with the unsold bags.'+(given?' The '+plural(given,'bag')+' you gave away or traded don’t count.':'')+' The kitchen confirms the count when you drop off.</p>';
 }
 async function sendCount(){
   const btn=$('cBtn');btn.disabled=true;btn.textContent='Sending…';
-  try{await rpc('kf_rep_report_back',{p_id:S.count.id,p_lines:Object.entries(S.count.back).map(([line_id,back])=>({line_id,back}))});toast('Count sent. Thanks!');S.count=null;await reload('events');}
+  const lines=Object.entries(S.count.back).map(([line_id,back])=>({line_id,back,given:S.count.given[line_id]||0}));
+  const given=lines.reduce((a,l)=>a+l.given,0),note=String(S.count.note||'').trim();
+  try{
+    try{await rpc('kf_rep_report_back',{p_id:S.count.id,p_lines:{lines,note}});}
+    catch(err){
+      // the kitchen hasn't finished its update yet: send the plain count (without the given/traded part)
+      if(!/extract elements|object|scalar/i.test(err.message))throw err;
+      if(given&&!confirm('The kitchen’s system can’t take given or traded bags yet. Send just the count, and tell the kitchen about the '+plural(given,'bag')+' when you drop off?'))throw new Error('Not sent yet');
+      await rpc('kf_rep_report_back',{p_id:S.count.id,p_lines:lines.map(({line_id,back})=>({line_id,back}))});
+    }
+    toast('Count sent. Thanks!');S.count=null;await reload('events');
+  }
   catch(e){$('cMsg').textContent=e.message;btn.disabled=false;btn.textContent='Send my count';}
 }
 

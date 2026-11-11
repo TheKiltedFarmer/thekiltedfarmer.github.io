@@ -8752,6 +8752,23 @@ async function openRepEvent(id){
   if(e.status==='requested'){repHandCalc();if(!REPS.inv.length)loadRepInv().then(()=>{if(REPS.open===e&&REPS.inv.length)openRepEvent(e.id);});}
 }
 // Every pasta the kitchen could send: lines already on the event, then the rest of the active list
+// how each pasta has sold at counted events: for one Highlander, or everyone when they have no history yet
+function repSellStats(repId){
+  const by={};
+  REPS.events.filter(e=>e.status==='settled'&&(!repId||e.rep_id===repId)).forEach(e=>e.lines.forEach(l=>{
+    const out=+l.qty_out||0;if(!out)return;const k=l.product_id||l.product_name;
+    const x=by[k]=by[k]||{out:0,sold:0,events:0,soldOut:0};const sold=Math.max(0,out-(+l.qty_back||0)-(+l.qty_given||0));
+    x.out+=out;x.sold+=sold;x.events++;if(sold>=out)x.soldOut++;
+  }));
+  return by;
+}
+function repSellFor(e,r){
+  const key=r.p?r.p.id:(r.l&&(r.l.product_id||r.l.product_name));
+  const mine=(REPS.sellMine||{})[key],all=(REPS.sellAll||{})[key];
+  if(mine&&mine.out>=6)return Object.assign({who:repById(e.rep_id).name.split(' ')[0]},mine);
+  if(all&&all.out>=10)return Object.assign({who:'Highlanders'},all);
+  return null;
+}
 function repHandRows(e){
   const rows=e.lines.map(l=>({key:'l'+l.id,l,p:REPS.products.find(x=>x.id===l.product_id)||null,name:l.product_name,line:l.line,q:+l.qty_out||0,asked:+l.qty_requested||0}));
   REPS.products.filter(p=>p.active&&!e.lines.some(l=>l.product_id===p.id)).forEach(p=>rows.push({key:'p'+p.id,l:null,p,name:p.name,line:p.line,q:0,asked:0}));
@@ -8766,10 +8783,12 @@ function repHandoverHTML(e){
   h+='<div class="rp-h">What goes out</div>'
     +(ask?'<div class="rp-ask">'+esc(rr.name.split(' ')[0])+' asked for <b>'+ask+' bags</b>'+(+e.attendance>0?' for about '+(+e.attendance).toLocaleString('en-US')+' people (that crowd usually needs about '+repEstimateBags(e.attendance)+')':'')+'.'+(askedFlavors?' They picked flavors before the mix change, so those are filled in.':' Pack whatever mix you have this week.')+'</div>':'')
     +'<div class="rp-zone"><label>Price zone</label><select id="rpZone" class="period-select" onchange="repHandCalc()"><option value="local"'+(e.zone==='local'?' selected':'')+'>Local · regular prices</option><option value="far"'+(e.zone==='far'?' selected':'')+'>Farther out · +'+fmt(REPS.cfg.far_add)+' a bag</option></select></div>'
-    +'<div class="bk-actions" style="margin:6px 0;"><button class="btn-secondary" onclick="repFillFromStock()">Fill '+(ask||'')+' from what’s on hand</button><button class="btn-secondary" onclick="repHandClear()">Clear</button></div>';
+    +'<div class="bk-actions" style="margin:6px 0;"><button class="btn-secondary" onclick="repFillFromStock()" title="Pre-orders first, then spread across what Inventory has, leaning toward this Highlander’s best sellers">Fill '+(ask||'')+' from what’s on hand</button><button class="btn-secondary" onclick="repHandClear()">Clear</button></div>';
   const rows=repHandRows(e);REPS.handRows=rows;
-  h+='<div class="rp-lines">'+rows.map(r=>{const inv=r.p&&r.p.inv_item_id?REPS.inv.find(i=>i.id===r.p.inv_item_id):null;
-    return '<div class="rp-line'+(r.q?'':' zero')+'"><div><b>'+esc(r.name)+'</b><div class="bk-sub">'+(r.asked?'asked for '+r.asked+' · ':'')+'<span class="rp-up" data-line="'+esc(r.line)+'">'+fmt(r.l?r.l.unit_price:repPrice(r.line,e.zone))+'</span>'+(inv?' · '+(+inv.on_hand||0)+' on hand':'')+'</div></div>'
+  REPS.sellMine=repSellStats(e.rep_id);REPS.sellAll=repSellStats(null);
+  h+='<div class="rp-lines">'+rows.map(r=>{const inv=r.p&&r.p.inv_item_id?REPS.inv.find(i=>i.id===r.p.inv_item_id):null;const sl=repSellFor(e,r);
+    return '<div class="rp-line'+(r.q?'':' zero')+'"><div><b>'+esc(r.name)+'</b><div class="bk-sub">'+(r.asked?'asked for '+r.asked+' · ':'')+'<span class="rp-up" data-line="'+esc(r.line)+'">'+fmt(r.l?r.l.unit_price:repPrice(r.line,e.zone))+'</span>'+(inv?' · '+(+inv.on_hand||0)+' on hand':'')
+      +(sl?' · <span style="color:'+(sl.sold/sl.out>=.8?'var(--green)':sl.sold/sl.out<.5?'var(--tan)':'inherit')+';">'+esc(sl.who)+' sell'+(sl.who==='Highlanders'?'':'s')+' '+Math.round(sl.sold/sl.out*100)+'%'+(sl.events>=2&&sl.soldOut>=Math.ceil(sl.events/2)?', usually sells out':'')+'</span>':'')+'</div></div>'
     +'<input class="period-input rp-num" type="number" inputmode="numeric" min="0" data-key="'+r.key+'" value="'+r.q+'" oninput="repHandCalc()"></div>';}).join('')+'</div>';
   if(!rows.length)h+='<div class="bk-empty">Add the pasta Highlanders can take in <b>Pasta &amp; pay</b> first.</div>';
   h+='<div class="rp-total" id="rpHandTotal"></div>'
@@ -8792,7 +8811,8 @@ function repHandValues(){
   return{z,rows:(REPS.handRows||[]).map(r=>{const i=repHandInput(r);return{r,q:Math.max(0,parseInt(i&&i.value)||0),price:repPrice(r.line,z)};})};
 }
 function repHandClear(){(REPS.handRows||[]).forEach(r=>{const i=repHandInput(r);if(i)i.value=0;});repHandCalc();}
-// Spread the ask across what's on hand: pre-orders first, then in proportion to stock
+// Spread the ask across what's on hand: pre-orders first, then in proportion to stock,
+// leaning toward what this Highlander sells best (a 95% seller gets about twice the share of a 40% one)
 async function repFillFromStock(){
   const e=REPS.open;if(!e)return;
   if(!REPS.inv.length)await loadRepInv();
@@ -8809,11 +8829,13 @@ async function repFillFromStock(){
   const pool=known.length&&known.some(r=>stock(r)>0)?known.filter(r=>stock(r)-q[r.key]>0):rows.filter(r=>!r.p||r.p.active!==false);
   if(left>0&&pool.length){
     const room=r=>stock(r)==null?Infinity:Math.max(0,stock(r)-q[r.key]);
-    const totalRoom=pool.reduce((a,r)=>a+(room(r)===Infinity?1:room(r)),0);
-    pool.forEach(r=>{const share=Math.floor(left*(room(r)===Infinity?1:room(r))/totalRoom);const add=Math.min(share,room(r));q[r.key]+=add;});
+    const lean=r=>{const sl=repSellFor(e,r);return sl?0.35+sl.sold/sl.out:0.9;};      // no track record yet: treated as a decent seller
+    const wt=r=>(room(r)===Infinity?1:room(r))*lean(r);
+    const totalRoom=pool.reduce((a,r)=>a+wt(r),0)||1;
+    pool.forEach(r=>{const share=Math.floor(left*wt(r)/totalRoom);const add=Math.min(share,room(r));q[r.key]+=add;});
     left=target-Object.values(q).reduce((a,b)=>a+b,0);
     // hand out what's left one at a time, most stock first
-    const order=pool.slice().sort((a,b)=>room(b)-room(a));
+    const order=pool.slice().sort((a,b)=>wt(b)-wt(a));
     for(let k=0;left>0&&k<10000;k++){const r=order.find(x=>room(x)>0);if(!r)break;q[r.key]++;left--;order.push(order.splice(order.indexOf(r),1)[0]);}
   }
   rows.forEach(r=>{const i=repHandInput(r);if(i)i.value=q[r.key];});
