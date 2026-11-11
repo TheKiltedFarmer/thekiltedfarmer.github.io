@@ -2313,6 +2313,49 @@ const OUTCOME_META = {
   tabled:    {label:'Tabled',              icon:'⏸', color:'#8a6000', bg:'#fff8e7', verb:'tabled it',                 won:null},
   withdrawn: {label:'Withdrawn',           icon:'↩', color:'#555',    bg:'#f5f5f5', verb:'withdrew it',               won:null},
 };
+// Ballot questions (millages, charter amendments, statewide proposals) are
+// decided by voters, not officials, so their results read differently and
+// they don't count toward whether officials listened.
+function isBallotBill(b) {
+  return !!b && (String(b.id).startsWith('BALLOT-') || /^voters$/i.test(String(b.outcome_body || '').trim()));
+}
+const BALLOT_MONTHS = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+function ballotElectionDay(b) {
+  const m = String(b.status || '').match(/on the ballot\s*[—–-]\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/i);
+  if(m && BALLOT_MONTHS[m[1].toLowerCase()] != null) return new Date(+m[3], BALLOT_MONTHS[m[1].toLowerCase()], +m[2], 12);
+  if(b.next_meeting_at && /^voters/i.test(b.next_meeting_body || '')) { const d = new Date(b.next_meeting_at); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); }
+  const y = String(b.id).match(/^BALLOT-(\d{4})-/);
+  if(!y) return null;
+  const d = new Date(+y[1], 10, 1, 12);              // Michigan general election: Tuesday after the first Monday in November
+  while(d.getDay() !== 1) d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+const ballotDayYmd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+// " 12,431 to 9,870 (56% yes)" for ballots, " 5–2" for councils
+function outcomeTally(b) {
+  if(b.outcome_yes == null || b.outcome_no == null) return '';
+  const y = +b.outcome_yes, n = +b.outcome_no;
+  if(isBallotBill(b)) return ', ' + y.toLocaleString('en-US') + ' to ' + n.toLocaleString('en-US') + (y + n > 0 ? ' (' + Math.round(100*y/(y+n)) + '% yes)' : '');
+  return ' ' + y + '–' + n;
+}
+function outcomeShortTally(b) {
+  if(b.outcome_yes == null || b.outcome_no == null) return '';
+  const y = +b.outcome_yes, n = +b.outcome_no;
+  return isBallotBill(b) ? (y + n > 0 ? ' ' + Math.round(100*y/(y+n)) + '% yes' : '') : ' ' + y + '–' + n;
+}
+// "Voters approved it, 12,431 to 9,870 (56% yes)" / "Village Council passed it 5–2"
+function outcomeSentence(b) {
+  const m = OUTCOME_META[b.outcome];
+  if(!m) return '';
+  if(isBallotBill(b)) return 'Voters ' + (b.outcome === 'failed' ? 'turned it down' : 'approved it') + outcomeTally(b);
+  return (b.outcome_body || 'Officials') + ' ' + m.verb + outcomeTally(b);
+}
+function outcomeLabel(b) {
+  const m = OUTCOME_META[b.outcome];
+  if(!m) return '';
+  return isBallotBill(b) ? (b.outcome === 'failed' ? 'Turned down by voters' : 'Approved by voters') : m.label;
+}
 const OFFICIAL_VOTE_META = {
   yes:     {label:'Yes',       color:'#1a6b3c', bg:'#eef7f1'},
   no:      {label:'No',        color:'#c0392b', bg:'#fdf0ef'},
@@ -2527,7 +2570,7 @@ function NextDecisionStrip({bill}) {
 function OutcomePanel({bill, userZip, myVote}) {
   const m = OUTCOME_META[bill.outcome];
   if(!m) return null;
-  const tally = (bill.outcome_yes != null && bill.outcome_no != null) ? ' ' + bill.outcome_yes + '–' + bill.outcome_no : '';
+  const ballot = isBallotBill(bill);
   const support = memberSupport(bill);
   const myReps = new Set(ZIP_REPS[(userZip||'').trim()] || []);
   const votes = Array.isArray(bill.outcome_rep_votes) ? bill.outcome_rep_votes.filter(v=>v && v.name && v.vote) : [];
@@ -2537,12 +2580,13 @@ function OutcomePanel({bill, userZip, myVote}) {
 
   return h('div',{style:{background:m.bg,borderLeft:'4px solid '+m.color,borderRadius:8,padding:'12px 14px',marginBottom:14}},
     h('div',{style:{fontSize:11,color:m.color,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',fontFamily:PD,marginBottom:4}},
-      m.icon + ' Decided' + (bill.outcome_date ? ' ' + fmtShortDate(bill.outcome_date) : '')),
+      m.icon + (ballot ? ' Voters decided' : ' Decided') + (bill.outcome_date ? ' ' + fmtShortDate(bill.outcome_date) : '')),
     h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',lineHeight:1.35}},
-      (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + '.'),
+      outcomeSentence(bill) + '.'),
     h('div',{style:{fontSize:13,color:'#444',fontFamily:LB,marginTop:6,lineHeight:1.6}},
       support != null && h('span',null, h('strong',null, support + '%'), ' of People\'s Voices members were for it',
-        membersWon === true ? ' — officials went the same way.' : membersWon === false ? ' — officials went the other way.' : '.'),
+        membersWon === true ? (ballot ? ' — voters went the same way.' : ' — officials went the same way.')
+        : membersWon === false ? (ballot ? ' — voters went the other way.' : ' — officials went the other way.') : '.'),
       mine != null && h('div',null, 'You voted ', h('strong',null, myVote.choice === 'yes' ? 'Support' : 'Oppose'),
         mine ? ' — that\'s how it turned out.' : ' — it went the other way this time.')
     ),
@@ -2564,13 +2608,13 @@ function OutcomePanel({bill, userZip, myVote}) {
     bill.outcome_note && h('div',{style:{fontSize:12.5,color:'#555',fontFamily:LB,marginTop:10,lineHeight:1.6,fontStyle:'italic'}}, bill.outcome_note),
     h(AnsweredOfficialsLine,{billId:bill.id}),
     h('div',{style:{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginTop:8}},
-      listenVerdict(bill) && h('button',{onClick:()=>shareOutcomePicture(bill, (bill.outcome_body||'Officials')+' '+m.verb+tally+': "'+bill.title+'". '+billLink(bill)),
+      listenVerdict(bill) && h('button',{onClick:()=>shareOutcomePicture(bill, outcomeSentence(bill)+': "'+bill.title+'". '+billLink(bill)),
         style:{background:m.color,border:'1px solid '+m.color,color:'#fff',borderRadius:5,padding:'3px 10px',fontSize:12,cursor:'pointer',fontFamily:LB}},'🖼 Share as a picture'),
       bill.outcome_source && h('a',{href:bill.outcome_source,target:'_blank',rel:'noopener',
-        style:{fontSize:12,color:'#1a5c8a',fontFamily:LB}},'📎 Meeting minutes / source ↗'),
+        style:{fontSize:12,color:'#1a5c8a',fontFamily:LB}}, ballot ? '📎 Official results ↗' : '📎 Meeting minutes / source ↗'),
       h('button',{onClick:()=>{
           const url = billLink(bill);
-          const text = (bill.outcome_body||'Officials')+' '+m.verb+tally+': "'+bill.title+'".'+(support!=null?' '+support+'% of residents on The People\'s Voices were for it.':'');
+          const text = outcomeSentence(bill)+': "'+bill.title+'".'+(support!=null?' '+support+'% of residents on The People\'s Voices were for it.':'');
           if(navigator.share) navigator.share({title:bill.title,text,url}).catch(()=>{});
           else { navigator.clipboard && navigator.clipboard.writeText(text+' '+url); }
         },
@@ -3014,7 +3058,7 @@ function ThisWeekNearYou({bills, profile, userVotes, onNavigate}) {
         return h('div',{key:b.id,role:'button',tabIndex:0,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
             style:{display:'flex',gap:8,alignItems:'baseline',padding:'8px 0',cursor:'pointer',fontFamily:LB,fontSize:13}},
           h('span',{style:{background:m.bg,color:m.color,fontWeight:700,fontSize:11,padding:'1px 8px',borderRadius:10,whiteSpace:'nowrap'}},
-            m.icon+' '+m.label+(b.outcome_yes!=null&&b.outcome_no!=null?' '+b.outcome_yes+'–'+b.outcome_no:'')),
+            m.icon+' '+outcomeLabel(b)+outcomeShortTally(b)),
           h('span',{style:{color:'#1a1a2e',flex:1,minWidth:0}}, b.title),
           s != null && h('span',{style:{color:'#999',fontSize:11,whiteSpace:'nowrap'}}, 'members '+s+'% for'),
           h('span',{'aria-hidden':'true',style:{color:'#1a5c8a',fontSize:18,lineHeight:1}},'›')
@@ -3037,7 +3081,7 @@ function outcomeDay(b) {
 // Only decisions with a clear resident majority (and a few votes behind it) count
 function listenVerdict(b) {
   const m = OUTCOME_META[b.outcome];
-  if(!m || !m.won) return null;
+  if(!m || !m.won || isBallotBill(b)) return null;   // voters decided these, not officials
   const n = (b.votes_yes||0) + (b.votes_no||0);
   const s = memberSupport(b);
   if(n < 3 || s === null || s === 50) return null;
@@ -3170,7 +3214,7 @@ function DidTheyListenCard({bill, bills, userVotes, onNavigate, onToast}) {
   const rec = listeningRecord(bills);
   const d = outcomeDay(bill);
   const residentsSide = v.support > 50 ? v.support + '% for it' : (100 - v.support) + '% against it';
-  const shareText = (bill.outcome_body || 'Officials') + ' ' + m.verb + tally + ': "' + bill.title + '". Residents on The People\'s Voices were ' + residentsSide + '. ' +
+  const shareText = outcomeSentence(bill) + ': "' + bill.title + '". Residents on The People\'s Voices were ' + residentsSide + '. ' +
     (v.matched ? 'They listened.' : 'They went the other way.');
   const share = ()=>{
     const url = billLink(bill);
@@ -3326,7 +3370,7 @@ function FollowingCard({bills, followedIds, onNavigate}) {
       h('span',{style:{fontSize:11,color:'#aaa',fontFamily:LB}}, mine.length + ' followed')),
     list.map(b=>{
       const m = OUTCOME_META[b.outcome];
-      const pill = m ? {t:m.icon+' '+m.label, c:m.color, bg:m.bg}
+      const pill = m ? {t:m.icon+' '+outcomeLabel(b), c:m.color, bg:m.bg}
         : hasUpcomingDecision(b) ? {t:'🗓 Decision '+whenLabel(b.next_meeting_at), c:'#8a6000', bg:'#fff8e7'}
         : {t:b.status || 'Open', c:'#555', bg:'#f5f5f5'};
       return h('div',{role:'button',tabIndex:0,key:b.id,onClick:()=>onNavigate('bills',{billId:String(b.id)}),
@@ -3374,7 +3418,7 @@ function BillTrackerModal({bill, onClose, onSaved, onToast}) {
   const [outcome, setOutcome] = useState(bill.outcome || '');
   const [oYes, setOYes] = useState(bill.outcome_yes ?? '');
   const [oNo, setONo] = useState(bill.outcome_no ?? '');
-  const [oDate, setODate] = useState(bill.outcome_date || new Date().toISOString().slice(0,10));
+  const [oDate, setODate] = useState(bill.outcome_date || (isBallotBill(bill) && ballotElectionDay(bill) ? ballotDayYmd(ballotElectionDay(bill)) : new Date().toISOString().slice(0,10)));
   const [oBody, setOBody] = useState(bill.outcome_body || bill.next_meeting_body || defaultBodyFor(bill));
   const [oSource, setOSource] = useState(bill.outcome_source || '');
   const [oNote, setONote] = useState(bill.outcome_note || '');
@@ -3411,9 +3455,25 @@ function BillTrackerModal({bill, onClose, onSaved, onToast}) {
     if(y+n > 0) { setOYes(y); setONo(n); }
   };
 
+  const ballot = isBallotBill(bill);
   const saveOutcome = async(clear)=>{
     if(!clear && !outcome) { onToast('Pick what happened.'); return; }
     if(clear && !window.confirm('Clear the recorded outcome? Nobody gets notified.')) return;
+    if(!clear && ballot) {
+      if(outcome !== 'passed' && outcome !== 'failed') { onToast('A ballot question either passed or failed.'); return; }
+      setSavingOutcome(true);
+      const yes = oYes === '' ? null : parseInt(String(oYes).replace(/[^0-9]/g,''),10), no = oNo === '' ? null : parseInt(String(oNo).replace(/[^0-9]/g,''),10);
+      const {data, error} = await sb.rpc('tpv_record_ballot_result',{p_bill_id:String(bill.id), p_outcome:outcome, p_yes:yes, p_no:no,
+        p_date:oDate || null, p_source:oSource || null, p_note:oNote || null, p_notify:notify, p_everywhere:false});
+      setSavingOutcome(false);
+      if(error) { onToast('❌ ' + (/tpv_record_ballot_result/.test(error.message) ? 'Run tpv_ballot_results.sql in Supabase first.' : error.message)); return; }
+      onSaved({outcome, outcome_yes:yes, outcome_no:no, outcome_date:oDate, outcome_body:'Voters', outcome_source:oSource||null, outcome_note:oNote||null,
+        outcome_rep_votes:null, outcome_recorded_at:new Date().toISOString(), status:outcome==='passed'?'Approved by voters':'Turned down by voters', next_meeting_at:null});
+      const n = data && typeof data.notified === 'number' ? data.notified : 0;
+      onToast('✓ Result recorded.' + (n ? ' ' + n + ' resident' + (n===1?'':'s') + ' notified.' : ''));
+      onClose();
+      return;
+    }
     setSavingOutcome(true);
     const repVotes = officials.filter(o=>o.name && o.name.trim() && o.vote).map(o=>({rep_id:o.rep_id||null, name:o.name.trim(), title:(o.title||'').trim()||null, vote:o.vote}));
     const {data, error} = await sb.rpc('tpv_record_outcome',{
@@ -3466,12 +3526,14 @@ function BillTrackerModal({bill, onClose, onSaved, onToast}) {
           bill.next_meeting_at && h(Btn,{onClick:()=>saveMeeting(true),bg:'transparent',color:'#888',border:'1px solid #ddd'},'Clear meeting'))
       ),
 
-      section('🗳 What happened','Record the result once officials vote. Everyone who voted on or follows this bill gets told, with how members voted next to it.',
+      section('🗳 What happened', ballot
+          ? 'Record how voters decided, from the county clerk\'s official results. Everyone who voted on or follows it gets told. Admin → Results to record can look the numbers up for you.'
+          : 'Record the result once officials vote. Everyone who voted on or follows this bill gets told, with how members voted next to it.',
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}},
-          Object.entries(OUTCOME_META).map(([k,m])=>h('button',{key:k,onClick:()=>setOutcome(k),
+          Object.entries(OUTCOME_META).filter(([k])=>!ballot || k==='passed' || k==='failed').map(([k,m])=>h('button',{key:k,onClick:()=>setOutcome(k),
             style:{background:outcome===k?m.color:'#fff',color:outcome===k?'#fff':m.color,border:'1px solid '+m.color,borderRadius:20,
               padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:PD,fontWeight:700}}, m.icon+' '+m.label))),
-        officials.length>0 && h(Fragment,null, label('How each official voted'),
+        !ballot && officials.length>0 && h(Fragment,null, label('How each official voted'),
           officials.map((o,i)=>h('div',{key:i,style:{display:'flex',gap:6,alignItems:'center',marginBottom:6,flexWrap:'wrap'}},
             o.rep_id
               ? h('div',{style:{flex:'1 1 100%',fontSize:13,fontFamily:LB,color:'#1a1a2e'}}, o.name, h('span',{style:{color:'#999',fontSize:11}},' · '+(o.title||'')))
@@ -3482,14 +3544,14 @@ function BillTrackerModal({bill, onClose, onSaved, onToast}) {
             !o.rep_id && h('button',{onClick:()=>setOfficials(prev=>prev.filter((x,j)=>j!==i)),style:{background:'none',border:'none',color:'#c0392b',cursor:'pointer'}},'✕')
           )),
           h('button',{onClick:tallyFromOfficials,style:{background:'none',border:'none',color:'#1a5c8a',fontSize:12,cursor:'pointer',padding:0,textDecoration:'underline'}},'Count the tally from these')),
-        h('button',{onClick:()=>setOfficials(prev=>[...prev,{rep_id:null,name:'',title:'',vote:''}]),
+        !ballot && h('button',{onClick:()=>setOfficials(prev=>[...prev,{rep_id:null,name:'',title:'',vote:''}]),
           style:{marginTop:6,background:'transparent',border:'1px dashed #ccc',color:'#777',borderRadius:5,padding:'4px 10px',fontSize:12,cursor:'pointer'}},'+ Add an official'),
         h('div',{style:{display:'flex',gap:8}},
-          h('div',{style:{flex:1}}, label('Votes for'), h('input',{type:'number',min:0,value:oYes,onChange:e=>setOYes(e.target.value),style:inp})),
-          h('div',{style:{flex:1}}, label('Votes against'), h('input',{type:'number',min:0,value:oNo,onChange:e=>setONo(e.target.value),style:inp})),
+          h('div',{style:{flex:1}}, label(ballot ? 'Yes votes' : 'Votes for'), h('input',{type:ballot?'text':'number',inputMode:'numeric',min:0,value:oYes,onChange:e=>setOYes(e.target.value),style:inp})),
+          h('div',{style:{flex:1}}, label(ballot ? 'No votes' : 'Votes against'), h('input',{type:ballot?'text':'number',inputMode:'numeric',min:0,value:oNo,onChange:e=>setONo(e.target.value),style:inp})),
           h('div',{style:{flex:1.3}}, label('Date'), h('input',{type:'date',value:oDate,onChange:e=>setODate(e.target.value),style:inp}))),
-        label('Who decided'), h('input',{value:oBody,onChange:e=>setOBody(e.target.value),style:inp}),
-        label('Source (minutes, video, news story)'), h('input',{value:oSource,onChange:e=>setOSource(e.target.value),placeholder:'https://',style:inp}),
+        !ballot && label('Who decided'), !ballot && h('input',{value:oBody,onChange:e=>setOBody(e.target.value),style:inp}),
+        label(ballot ? 'Source (the clerk\'s official results page)' : 'Source (minutes, video, news story)'), h('input',{value:oSource,onChange:e=>setOSource(e.target.value),placeholder:'https://',style:inp}),
         label('Anything residents should know (optional)'),
         h('textarea',{value:oNote,onChange:e=>setONote(e.target.value),rows:2,placeholder:'e.g. Council asked staff to bring back a cheaper version in March.',style:{...inp,resize:'vertical'}}),
         h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#333',marginTop:10,fontFamily:LB,cursor:'pointer'}},
@@ -20180,13 +20242,13 @@ const ADMIN_QUEUE_LABELS = {
   events:'Pending events', news:'News submissions', resources:'Resource suggestions', drafts:'Meeting drafts',
   corrections:'Suggested corrections', candidates:'Candidates to verify', stuck:'Stuck sign-ups',
   volunteers:'Volunteers to approve', officialBadges:'Official badge requests', pressBadges:'Press badge requests',
-  feedback:'Unread feedback', nominations:'Bill nominations',
+  feedback:'Unread feedback', nominations:'Bill nominations', results:'Results to record',
 };
 const ADMIN_QUEUE_ONE = {
   reports:'Report', neighbors:'New neighbor to welcome', submissions:'Community bill submission', events:'Pending event',
   news:'News submission', resources:'Resource suggestion', drafts:'Meeting draft', corrections:'Suggested correction',
   candidates:'Candidate to verify', stuck:'Stuck sign-up', volunteers:'Volunteer to approve', officialBadges:'Official badge request',
-  pressBadges:'Press badge request', feedback:'Unread feedback', nominations:'Bill nomination',
+  pressBadges:'Press badge request', feedback:'Unread feedback', nominations:'Bill nomination', results:'Result to record',
 };
 const adminQueueLabel = (k, n)=> n === 1 ? ADMIN_QUEUE_ONE[k] : ADMIN_QUEUE_LABELS[k];
 const ADMIN_PER_COUNTY = [
@@ -20221,6 +20283,15 @@ function AdminWaitingBoard({profile}) {
     jobs.push((async()=>{ out.corrections = await count('content_corrections', q=>q.eq('status','pending')); })());
     jobs.push((async()=>{ out.candidates = await count('guide_claims', q=>q.eq('status','pending')); })());
     jobs.push((async()=>{ out.nominations = await count('bill_nominations', q=>q); })());
+    // Ballot questions after an election, and meetings that happened, with no result yet
+    jobs.push((async()=>{
+      try {
+        const {data, error} = await sb.from('bills').select('id,county,level,status,outcome,next_meeting_at,next_meeting_body')
+          .eq('county', cur).is('outcome', null)
+          .or('id.like.BALLOT-*,next_meeting_at.lt.' + new Date(Date.now() - 3*3600000).toISOString()).limit(500);
+        out.results = error ? null : (data||[]).filter(needsResult).length;
+      } catch(e) { out.results = null; }
+    })());
     // New neighbors still waiting for a hello (same rule as the New neighbors tool)
     jobs.push((async()=>{
       try {
@@ -20277,7 +20348,7 @@ function AdminWaitingBoard({profile}) {
     setLoading(false);
   };
   useEffect(()=>{ load(); },[]);
-  const order = ['reports','neighbors','submissions','events','news','resources','drafts','corrections','candidates','stuck','volunteers','officialBadges','pressBadges','feedback','nominations'];
+  const order = ['reports','results','neighbors','submissions','events','news','resources','drafts','corrections','candidates','stuck','volunteers','officialBadges','pressBadges','feedback','nominations'];
   const items = here ? order.filter(k=>here[k] > 0) : [];
   const urgent = new Set(['reports','neighbors','volunteers']);
   return h('div',{style:{background:'#1a1a2e',borderRadius:12,padding:'14px 16px',marginBottom:20,color:'#fff'}},
@@ -20307,6 +20378,216 @@ function AdminWaitingBoard({profile}) {
         h('button',{onClick:()=>openCountyAdmin(o.county),style:{background:'#f0c040',color:'#1a1a2e',border:'none',borderRadius:5,padding:'4px 10px',fontSize:12,fontWeight:700,cursor:'pointer'}},'Open →'))),
       others.length > 25 && h('div',{style:{fontSize:12,color:'#9aa8b8'}},'…and ' + (others.length-25) + ' more counties.'))
   );
+}
+
+// ── Admin: results to record ─────────────────────────────────────────────────
+// After an election, every ballot question needs its result, and every
+// meeting that happened needs what was decided. The ballot-results server
+// function looks the numbers up on the county clerk's official results page
+// by itself every hour; here an admin checks what it found and taps once.
+function needsResult(b) {
+  if(!b || b.outcome || b.deleted_at) return false;
+  if(isBallotBill(b)) { const d = ballotElectionDay(b); return !!d && Date.now() > d.getTime() + 14*3600000; }   // polls close 8 PM
+  return !!b.next_meeting_at && new Date(b.next_meeting_at).getTime() < Date.now() - 3*3600000;
+}
+function canRecordFor(profile, county) { return isFullAdmin(profile) || adminCounties(profile).includes(county); }
+async function ballotFn(body) {
+  try {
+    const {data, error} = await sb.functions.invoke('ballot-results', {body});
+    if(error) {
+      const st = error.context && error.context.status;
+      let msg = error.message || 'Something went wrong.';
+      try { const j = error.context && error.context.json ? await error.context.json() : null; if(j && j.error) msg = j.error; } catch(e) {}
+      if(st === 404 || /FunctionsFetchError|FunctionsRelayError/.test(error.name||'')) msg = 'The ballot-results server function isn\'t deployed yet, so you\'ll need to enter these by hand for now.';
+      return {error:msg};
+    }
+    if(data && data.error) return {error:data.error};
+    return data || {};
+  } catch(e) { return {error:'Couldn\'t reach the ballot-results server function.'}; }
+}
+const numIn = v => { const t = String(v == null ? '' : v).replace(/[^0-9]/g,''); return t === '' ? null : parseInt(t,10); };
+const ago = iso => { const m = Math.round((Date.now() - new Date(iso).getTime())/60000); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' hr ago' : Math.round(m/1440) + ' days ago'; };
+
+function ResultsToRecord({bills, setBills, profile, onToast, onTrack}) {
+  const [open, setOpen] = useState(true);
+  useAdminOpen('results', setOpen);
+  const [sugg, setSugg] = useState({});        // bill_id → what the search found
+  const [drafts, setDrafts] = useState({});    // bill_id → {outcome, yes, no, source, editing}
+  const [finding, setFinding] = useState({});  // bill_id → true while looking
+  const [saving, setSaving] = useState(null);
+  const [notify, setNotify] = useState(true);
+  const [everywhere, setEverywhere] = useState(true);
+  const srcKey = 'tpv_results_source_' + countyTag();
+  const [source, setSource] = useState(()=>{ try { return localStorage.getItem(srcKey) || ''; } catch(e) { return ''; } });
+  const full = isFullAdmin(profile);
+
+  const items = (bills||[]).filter(b=>needsResult(b) && canRecordFor(profile, b.county));
+  // Ones with an answer ready first, so an admin can tap straight down the list
+  const ready = b=>sugg[b.id] && sugg[b.id].status === 'found' ? 0 : 1;
+  const ballots = items.filter(isBallotBill).sort((a,b)=>ready(a) - ready(b) || (a.level==='state'||a.level==='federal') - (b.level==='state'||b.level==='federal') || String(a.title).localeCompare(String(b.title)));
+  const meetings = items.filter(b=>!isBallotBill(b)).sort((a,b)=>new Date(a.next_meeting_at) - new Date(b.next_meeting_at));
+  const idsKey = ballots.map(b=>b.id).sort().join(',');
+
+  const loadSugg = async()=>{
+    if(!ballots.length) return;
+    try {
+      const {data} = await sb.from('ballot_result_suggestions').select('*').in('bill_id', ballots.map(b=>String(b.id)));
+      const m = {}; (data||[]).forEach(r=>{ m[r.bill_id] = r; }); setSugg(m);
+    } catch(e) {}
+  };
+  useEffect(()=>{ loadSugg(); },[idsKey]);
+
+  const draft = id => drafts[id] || {};
+  const setDraft = (id, patch)=>setDrafts(d=>({...d, [id]:{...(d[id]||{}), ...patch}}));
+  const rememberSource = v=>{ setSource(v); try { localStorage.setItem(srcKey, v); } catch(e) {} };
+
+  const find = async(list)=>{
+    const ids = list.map(b=>String(b.id));
+    setFinding(f=>{ const n = {...f}; ids.forEach(i=>{ n[i] = true; }); return n; });
+    let found = 0, err = null;
+    for(let i = 0; i < ids.length; i += 3) {
+      const r = await ballotFn({action:'suggest', bill_ids:ids.slice(i, i+3)});
+      if(r.error) { err = r.error; break; }
+      (r.results||[]).forEach(x=>{ if(x.status === 'found') found++; });
+      await loadSugg();
+    }
+    setFinding(f=>{ const n = {...f}; ids.forEach(i=>{ delete n[i]; }); return n; });
+    if(err) onToast('❌ ' + err);
+    else onToast(found ? '🔎 Found ' + found + ' of ' + ids.length + '. Check each one, then tap Looks right.' : 'No official numbers found yet. It keeps looking every hour on its own.');
+  };
+
+  const record = async(b, v)=>{
+    if(v.outcome !== 'passed' && v.outcome !== 'failed') { onToast('Pick Passed or Failed.'); return; }
+    if(v.yes != null && v.no != null && v.yes !== v.no && (v.yes > v.no) !== (v.outcome === 'passed')) {
+      onToast('Those numbers say it ' + (v.yes > v.no ? 'passed' : 'failed') + '. Check them once more.'); return;
+    }
+    const statewide = b.level === 'state' || b.level === 'federal';
+    setSaving(b.id);
+    const day = ballotElectionDay(b);
+    const {data, error} = await sb.rpc('tpv_record_ballot_result',{
+      p_bill_id:String(b.id), p_outcome:v.outcome, p_yes:v.yes, p_no:v.no, p_date: day ? ballotDayYmd(day) : null,
+      p_source:v.source || null,
+      p_note: v.unofficial ? 'Unofficial results. They become final when the county canvass certifies them, usually within two weeks.' : null,
+      p_notify:notify, p_everywhere: statewide && full && everywhere});
+    setSaving(null);
+    if(error) { onToast('❌ ' + (/tpv_record_ballot_result/.test(error.message) ? 'Run tpv_ballot_results.sql in Supabase first.' : error.message)); return; }
+    if(v.source && !sugg[b.id]?.source_url) rememberSource(v.source);
+    setBills(prev=>prev.map(x=>x.id===b.id ? {...x, outcome:v.outcome, outcome_yes:v.yes, outcome_no:v.no, outcome_date:day ? ballotDayYmd(day) : null,
+      outcome_body:'Voters', outcome_source:v.source||null, outcome_recorded_at:new Date().toISOString(),
+      status:v.outcome==='passed'?'Approved by voters':'Turned down by voters', next_meeting_at:null} : x));
+    const n = data && data.notified || 0, c = data && data.recorded || 1;
+    onToast('✓ ' + (v.outcome==='passed'?'Approved':'Turned down') + ' recorded' + (c > 1 ? ' in ' + c + ' counties' : '') + (n ? '. ' + n + ' resident' + (n===1?'':'s') + ' told.' : '.'));
+  };
+  const notQuite = async(b)=>{
+    const s = sugg[b.id];
+    setDraft(b.id, {editing:true, outcome:s.outcome, yes:s.yes_votes, no:s.no_votes, source:s.source_url || source});
+    try { await sb.from('ballot_result_suggestions').update({status:'dismissed'}).eq('bill_id', String(b.id)); } catch(e) {}
+    setSugg(m=>({...m, [b.id]:{...s, status:'dismissed'}}));
+  };
+
+  const total = ballots.length + meetings.length;
+  const pillBtn = (on, color, txt, onClick)=>h('button',{onClick,style:{background:on?color:'#fff',color:on?'#fff':color,border:'1px solid '+color,borderRadius:20,
+    padding:'6px 14px',fontSize:13,cursor:'pointer',fontFamily:PD,fontWeight:700}}, txt);
+  const inp = {border:'1px solid #ddd',borderRadius:6,padding:'8px 10px',fontSize:13,fontFamily:LB,boxSizing:'border-box',width:'100%'};
+  const btn = (bg, color, border)=>({background:bg,color,border:border||'none',borderRadius:6,padding:'8px 14px',fontSize:12.5,cursor:'pointer',fontFamily:PD,fontWeight:700});
+
+  const ballotRow = b=>{
+    const s = sugg[b.id], d = draft(b.id), busy = finding[b.id], statewide = b.level === 'state' || b.level === 'federal';
+    const showFound = s && s.status === 'found' && !d.editing;
+    const pct = s && s.yes_votes != null && s.no_votes != null && s.yes_votes + s.no_votes > 0 ? Math.round(100*s.yes_votes/(s.yes_votes+s.no_votes)) : null;
+    const curOutcome = d.outcome, curYes = d.yes != null ? d.yes : null, curNo = d.no != null ? d.no : null;
+    return h('div',{key:b.id,style:{background:'#fff',border:'1px solid '+(showFound?'#a8e6c0':'#e5dece'),borderRadius:10,padding:'12px 14px',marginBottom:10}},
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:4}},
+        h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,textTransform:'uppercase'}}, statewide ? 'Statewide' : (b.level || 'Local')),
+        b.jurisdiction && h('span',{style:{fontSize:11.5,color:'#777',fontFamily:LB}}, b.jurisdiction)),
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',lineHeight:1.3}}, b.title),
+
+      showFound && h('div',{style:{background:'#eef7f1',borderRadius:8,padding:'10px 12px',marginTop:10}},
+        h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:4}},
+          h('span',{style:{fontSize:11,fontWeight:700,color:'#1a6b3c',textTransform:'uppercase',letterSpacing:1}},'🔎 Found it'),
+          h('span',{style:{fontSize:11,background:s.results_status==='certified'?'#1a6b3c':'#fff8e7',color:s.results_status==='certified'?'#fff':'#8a6000',borderRadius:10,padding:'1px 8px',fontWeight:700}},
+            s.results_status==='certified' ? 'Certified' : s.results_status==='unofficial' ? 'Unofficial' : 'Status not stated'),
+          h('span',{style:{fontSize:11,color:'#888'}}, 'checked ' + ago(s.checked_at))),
+        h('div',{style:{fontFamily:PD,fontWeight:900,fontSize:17,color:s.outcome==='passed'?'#1a6b3c':'#c0392b'}},
+          (s.outcome==='passed' ? '✅ Approved' : '❌ Turned down'),
+          h('span',{style:{fontFamily:LB,fontWeight:400,fontSize:14,color:'#333'}},
+            ' · ' + Number(s.yes_votes).toLocaleString('en-US') + ' yes to ' + Number(s.no_votes).toLocaleString('en-US') + ' no' + (pct != null ? ' (' + pct + '% yes)' : ''))),
+        s.evidence && h('div',{style:{fontSize:12.5,color:'#444',fontFamily:LB,fontStyle:'italic',marginTop:4,lineHeight:1.5}}, '“' + s.evidence + '”'),
+        s.note && h('div',{style:{fontSize:12.5,color:'#8a6000',fontFamily:LB,marginTop:4,lineHeight:1.5}}, s.note),
+        s.source_url && h('a',{href:s.source_url,target:'_blank',rel:'noopener',style:{display:'inline-block',fontSize:12.5,color:'#1a5c8a',fontFamily:LB,marginTop:6,wordBreak:'break-all'}},
+          'Check it: ' + (s.source_name || s.source_url.replace(/^https?:\/\//,'').split('/')[0]) + ' ↗'),
+        statewide && full && h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'#333',fontFamily:LB,marginTop:8,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:everywhere,onChange:e=>setEverywhere(e.target.checked)}), 'Fill this in for every county, not just this one'),
+        h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}},
+          h('button',{style:btn('#1a6b3c','#fff'),disabled:saving===b.id,onClick:()=>record(b,{outcome:s.outcome,yes:s.yes_votes,no:s.no_votes,source:s.source_url,unofficial:s.results_status!=='certified'})},
+            saving===b.id ? 'Recording…' : '✓ Looks right, record it'),
+          h('button',{style:btn('#fff','#555','1px solid #ccc'),onClick:()=>notQuite(b)},'Not quite, I\'ll fix it'))),
+
+      !showFound && h('div',{style:{marginTop:10}},
+        s && s.status !== 'found' && s.status !== 'used' && !d.editing && h('div',{style:{fontSize:12.5,color:'#777',fontFamily:LB,marginBottom:8,lineHeight:1.5}},
+          (s.status === 'dismissed' ? 'You marked what it found as not quite right. ' : '🔎 ' + (s.note || 'Not found yet.') + ' '),
+          h('span',{style:{color:'#aaa'}}, 'Checked ' + ago(s.checked_at) + '. It keeps looking on its own.')),
+        s && s.status === 'unclear' && !d.editing && (s.source_url || (s.yes_votes != null && s.no_votes != null)) &&
+          h('div',{style:{background:'#fff8e7',border:'1px solid #ecd9a8',borderRadius:8,padding:'8px 12px',marginBottom:8,fontSize:12.5,fontFamily:LB,color:'#5c4a00',lineHeight:1.55}},
+            'What it saw: ',
+            s.outcome && h('strong',null, s.outcome === 'passed' ? 'approved' : 'turned down'),
+            s.yes_votes != null && s.no_votes != null ? (s.outcome ? ', ' : '') + Number(s.yes_votes).toLocaleString('en-US') + ' yes to ' + Number(s.no_votes).toLocaleString('en-US') + ' no' : '',
+            s.source_url && h(Fragment,null,' · ', h('a',{href:s.source_url,target:'_blank',rel:'noopener',style:{color:'#1a5c8a',wordBreak:'break-all'}}, 'open the page ↗')),
+            ' ',
+            h('button',{className:'tpv-link',onClick:()=>setDraft(b.id,{outcome:s.outcome || undefined, yes:s.yes_votes, no:s.no_votes, source:s.source_url || source}),
+              style:{background:'none',border:'none',padding:0,color:'#1a5c8a',textDecoration:'underline',cursor:'pointer',fontSize:12.5,fontFamily:LB}}, 'Fill these in so I can check them')),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}},
+          pillBtn(curOutcome==='passed','#1a6b3c','✅ Approved',()=>setDraft(b.id,{outcome:'passed'})),
+          pillBtn(curOutcome==='failed','#c0392b','❌ Turned down',()=>setDraft(b.id,{outcome:'failed'})),
+          h('button',{style:{...btn('transparent','#1a5c8a','1px solid #1a5c8a'),marginLeft:'auto'},disabled:!!busy,onClick:()=>find([b])}, busy ? 'Looking…' : '🔎 Find it for me')),
+        h('div',{style:{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}},
+          h('div',{style:{flex:'1 1 110px'}}, h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:3}},'Yes votes'),
+            h('input',{inputMode:'numeric','aria-label':'Yes votes',value:curYes==null?'':curYes.toLocaleString('en-US'),onChange:e=>setDraft(b.id,{yes:numIn(e.target.value)}),placeholder:'e.g. 12,431',style:inp})),
+          h('div',{style:{flex:'1 1 110px'}}, h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:3}},'No votes'),
+            h('input',{inputMode:'numeric','aria-label':'No votes',value:curNo==null?'':curNo.toLocaleString('en-US'),onChange:e=>setDraft(b.id,{no:numIn(e.target.value)}),placeholder:'e.g. 9,870',style:inp})),
+          h('div',{style:{flex:'2 1 220px'}}, h('div',{style:{fontSize:11,color:'#888',textTransform:'uppercase',letterSpacing:1,marginBottom:3}},'Official results page'),
+            h('input',{'aria-label':'Official results page',value:d.source != null ? d.source : source,onChange:e=>setDraft(b.id,{source:e.target.value}),placeholder:'https://… the clerk\'s results page',style:inp}))),
+        curYes != null && curNo != null && curOutcome && curYes !== curNo && (curYes > curNo) !== (curOutcome === 'passed') &&
+          h('div',{style:{fontSize:12.5,color:'#c0392b',fontFamily:LB,marginTop:6}},'Those numbers say it ' + (curYes > curNo ? 'passed' : 'failed') + '. Check them once more.'),
+        statewide && full && h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'#333',fontFamily:LB,marginTop:8,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:everywhere,onChange:e=>setEverywhere(e.target.checked)}), 'Fill this in for every county, not just this one'),
+        h('div',{style:{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}},
+          h('button',{style:{...btn('#1a1a2e','#f0c040'),opacity:curOutcome?1:.5},disabled:!curOutcome||saving===b.id,
+            onClick:()=>{ const day = ballotElectionDay(b);
+              // Counties certify within about two weeks; until then, results typed in are unofficial
+              record(b,{outcome:curOutcome,yes:curYes,no:curNo,source:(d.source != null ? d.source : source).trim(),unofficial:!day || Date.now() < day.getTime() + 15*86400000}); }},
+            saving===b.id ? 'Recording…' : 'Record result'),
+          d.editing && h('button',{style:btn('#fff','#555','1px solid #ccc'),onClick:()=>setDraft(b.id,{editing:false})},'Back to what it found'))));
+  };
+
+  const waitingSearch = ballots.filter(b=>!(sugg[b.id] && sugg[b.id].status === 'found') && !finding[b.id]);
+  return h('div',{style:{background:'#f3f8f4',border:'1px solid #bfe0cb',borderRadius:10,padding:16,marginBottom:20}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',gap:8},onClick:()=>setOpen(!open)},
+      h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:15,color:'#1a1a2e',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
+        '🗳 Results to record',
+        total > 0
+          ? h('span',{style:{background:'#1a6b3c',color:'#fff',borderRadius:20,padding:'1px 9px',fontSize:12}}, total)
+          : h('span',{style:{fontSize:12,color:'#1a6b3c',fontFamily:LB,fontWeight:400}},'All caught up ✓')),
+      h('span',{style:{color:'#888',fontSize:14}}, open?'▲':'▼')),
+    open && total > 0 && h('div',{style:{marginTop:12}},
+      ballots.length > 0 && h(Fragment,null,
+        h('div',{style:{fontSize:13,fontFamily:LB,color:'#444',lineHeight:1.6,marginBottom:10}},
+          'Ballot questions from the election. The site looks up the official numbers every hour by itself. When it finds them, check the source and tap ',
+          h('strong',null,'Looks right'), '. Or type them in from the county clerk\'s results page.'),
+        h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:12}},
+          waitingSearch.length > 0 && h('button',{style:btn('#1a5c8a','#fff'),onClick:()=>find(waitingSearch)},
+            '🔎 Look up ' + (waitingSearch.length === 1 ? 'it' : 'all ' + waitingSearch.length) + ' now'),
+          h('label',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'#333',fontFamily:LB,cursor:'pointer'}},
+            h('input',{type:'checkbox',checked:notify,onChange:e=>setNotify(e.target.checked)}), 'Tell everyone who voted on or follows them')),
+        ballots.map(ballotRow)),
+      meetings.length > 0 && h(Fragment,null,
+        h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e',margin:(ballots.length?'16px':'0')+' 0 6px'}},'Meetings that already happened'),
+        h('div',{style:{fontSize:12.5,fontFamily:LB,color:'#666',lineHeight:1.5,marginBottom:8}},'A decision was due at these. Record what happened, or set the next meeting if they put it off.'),
+        meetings.map(b=>h('div',{key:b.id,style:{background:'#fff',border:'1px solid #e5dece',borderRadius:8,padding:'10px 12px',marginBottom:8,display:'flex',gap:10,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}},
+          h('div',{style:{minWidth:0,flex:'1 1 220px'}},
+            h('div',{style:{fontFamily:PD,fontWeight:700,fontSize:14,color:'#1a1a2e'}}, b.title),
+            h('div',{style:{fontSize:12,color:'#777',fontFamily:LB}}, (b.next_meeting_body || 'Officials') + ' · ' + new Date(b.next_meeting_at).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))),
+          h('button',{style:btn('#8a6000','#fff'),onClick:()=>onTrack(b)},'Record what happened'))))));
 }
 
 // ── Admin: section headings ──────────────────────────────────────────────────
@@ -20410,6 +20691,7 @@ const COUNTY_ADMIN_GUIDE = [
       'Always put the official source link in Full Text / Source.',
       '🗓 Track: set when it will be decided. Followers are told it\'s coming.',
       '🗳 Outcome: record what happened after the vote, with the count, how each official voted if you know, and a source link.',
+      '🗳 Results to record (top of Needs a decision): after an election, the site looks up each ballot question\'s official numbers every hour by itself. Check the source it found and tap Looks right. If it can\'t find them yet, type them in from the county clerk\'s results page. Meetings that already happened show up there too.',
       '✏️ Edit: fix mistakes. Changes go live right away.',
       '🗑 Delete: removes the bill and every vote and comment on it. This can\'t be undone, so use it only for duplicates or mistakes.',
     ]},
@@ -20790,6 +21072,7 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
 
     h(AdminSection,{title:'Needs a decision',note:'Work through these every day. Reports come first.',guide:'daily'}),
     h('div',{id:'adm-reports'}, h(ReportsQueue,{user,profile,onToast,autoOpen:navCtx?.openReports,onAutoOpenConsumed:onNavCtxConsumed})),
+    h('div',{id:'adm-results'}, h(ResultsToRecord,{bills,setBills,profile,onToast,onTrack:setTracking})),
     h('div',{id:'adm-neighbors'}, h(NewUsersInbox,{onToast,profile,focusMemberId:navCtx?.memberId,onFocusConsumed:onNavCtxConsumed})),
     h('div',{id:'adm-submissions'}, h(PendingReviewQueue,{onToast,setBills})),
     h('div',{id:'adm-events'}, h(EventsApprovalQueue,{onToast})),
@@ -20836,9 +21119,12 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}},
           h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,textTransform:'uppercase'}},bill.level),
           h('span',{style:{background:'#f5f5f5',color:'#555',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.jurisdiction),
-          h('span',{style:{background:'#fffbea',color:'#8a6000',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.status||'No status'),
+          needsResult(bill)
+            ? h('span',{style:{background:'#fdf0ef',color:'#a33',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},
+                isBallotBill(bill) ? '⏳ Voted ' + fmtShortDate(ballotDayYmd(ballotElectionDay(bill))) + ' · needs its result' : '⏳ Meeting happened · needs what was decided')
+            : h('span',{style:{background:'#fffbea',color:'#8a6000',fontSize:10,padding:'2px 8px',borderRadius:20}},bill.status||'No status'),
           bill.outcome&&OUTCOME_META[bill.outcome]&&h('span',{style:{background:OUTCOME_META[bill.outcome].bg,color:OUTCOME_META[bill.outcome].color,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},
-            OUTCOME_META[bill.outcome].icon+' '+OUTCOME_META[bill.outcome].label),
+            OUTCOME_META[bill.outcome].icon+' '+outcomeLabel(bill)+outcomeShortTally(bill)),
           hasUpcomingDecision(bill)&&h('span',{style:{background:'#fff8e7',color:'#8a6000',fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20}},
             '🗓 '+fmtDecisionTime(bill.next_meeting_at))
         ),
@@ -20848,9 +21134,12 @@ function AdminPanel({bills,setBills,onToast,user,profile,navCtx,onNavCtxConsumed
         )
       ),
       h('div',{style:{display:'flex',gap:8,flexShrink:0,flexWrap:'wrap'}},
-        h('button',{onClick:()=>setTracking(bill),style:{background:'#8a6000',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
-          bill.outcome?"🗳 Outcome":"🗓 Track"
-        ),
+        needsResult(bill) && isBallotBill(bill)
+          ? h('button',{onClick:()=>adminJump('results'),style:{background:'#1a6b3c',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              '🗳 Record result')
+          : h('button',{onClick:()=>setTracking(bill),style:{background:'#8a6000',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12,cursor:'pointer'}},
+              bill.outcome?"🗳 Outcome":needsResult(bill)?"🗳 Record what happened":"🗓 Track"
+            ),
         h('button',{onClick:()=>openEdit(bill),style:{background:'#1a5c8a',color:'#fff',border:'none',padding:'7px 14px',borderRadius:5,fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:12}},
           "✏️ Edit"
         ),
