@@ -5995,13 +5995,29 @@ function rcNum(v){const n=parseFloat(String(v==null?'':v).replace(/[$,]/g,''));r
 function rcKey(s){return String(s||'').trim().toLowerCase();}
 function rcFind(name){const k=rcKey(name);return k?RC.pantry.find(p=>rcKey(p.name)===k):null;}
 // what one unit of the recipe costs: the price paid ÷ the package, converted to the recipe's unit
-function rcLineCost(l){
+// another saved recipe used as an ingredient (a base dough inside a flavor)
+function rcSub(name,self){const k=rcKey(name);if(!k)return null;return RC.book.find(r=>rcKey(r.name)===k&&(!self||r.id!==self.id))||null;}
+// what one batch of a recipe's ingredients costs and weighs (packaging and labor not included)
+function rcTotals(rec,depth){
+  let cost=0,grams=0,missing=0;
+  (rec.lines||[]).forEach(l=>{const r=rcLineCost(l,rec,(depth||0)+1);cost+=r.cost;if(r.why)missing++;grams+=r.grams||0;});
+  return{cost,grams,missing};
+}
+function rcLineCost(l,rec,depth){
+  rec=rec||RC.cur;depth=depth||0;
   const amt=rcNum(l.amt);if(!amt||!l.name)return{cost:0,why:''};
-  if(l.unit==='$ per '+rcU1())return{cost:amt*Math.max(rcNum(RC.cur.yield),0),why:''};
+  if(l.unit==='$ per '+rcU1())return{cost:amt*Math.max(rcNum(rec.yield),0),why:''};
+  const sub=depth<4?rcSub(l.name,rec):null;
+  if(sub){
+    const t=rcTotals(sub,depth),u=RC_UNITS[l.unit];
+    if(l.unit==='batch')return{cost:t.cost*amt,grams:t.grams*amt,why:t.missing?'sub':'',sub:sub.name};
+    if(u&&u[0]==='m'&&t.grams>0){const g=amt*u[1];return{cost:t.cost/t.grams*g,grams:g,why:t.missing?'sub':'',sub:sub.name};}
+    return{cost:0,why:'subunit',sub:sub.name};
+  }
   const p=rcFind(l.name);if(!p||String(p.price==null?'':p.price).trim()===''||!rcNum(p.size))return{cost:0,why:'price'};   // $0 is fine (water)
   const a=RC_UNITS[p.unit||'g'],b=RC_UNITS[l.unit||'g'];if(!a||!b)return{cost:0,why:''};
   if(a[0]!==b[0])return{cost:0,why:'units',buy:p.unit};
-  return{cost:rcNum(p.price)/(rcNum(p.size)*a[1])*(amt*b[1]),why:''};
+  return{cost:rcNum(p.price)/(rcNum(p.size)*a[1])*(amt*b[1]),grams:b[0]==='m'?amt*b[1]:0,why:''};
 }
 function rcPer(p){
   const u=RC_UNITS[p.unit||'g'];if(!u||String(p.price==null?'':p.price).trim()===''||!rcNum(p.size))return'';
@@ -6040,7 +6056,11 @@ function rcDraw(){
     +'<button class="btn-green" style="padding:8px 16px;font-size:13px;" onclick="rcSave()">💾 Save</button>'
     +'<button class="btn-secondary" style="padding:8px 14px;font-size:13px;" onclick="rcCopy()" title="Start a new flavor from this one">⧉ Copy</button>'
     +(RC.book.some(r=>r.id===c.id)?'<button class="btn-secondary" style="padding:8px 14px;font-size:13px;" onclick="rcDelete()">🗑</button>':'')
-    +'</div><div class="bk-sub" style="margin-top:8px;">Same base dough, different flavor? Open the base, hit <b>Copy</b>, change the seasoning, and save it under the new name.</div></div>';
+    +'</div>'
+    +(!RC.book.some(r=>r.id===c.id)&&RC.book.length?'<div style="margin-top:10px;padding:10px 12px;background:var(--cream);border-radius:10px;"><b>New recipe.</b> Start blank, or build it on one you have: '
+      +'<select class="period-select" style="margin-top:6px;width:100%;" onchange="rcBuildOn(this.value)"><option value="">Build on a recipe…</option>'+RC.book.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name||'Untitled')+'</option>').join('')+'</select>'
+      +'<div class="bk-sub" style="margin-top:6px;">That puts the base in as one ingredient (“1 batch”), and you add the seasoning on top. Change the base later and every recipe built on it updates.</div></div>':'')
+    +'<div class="bk-sub" style="margin-top:8px;">Each recipe is saved under its own name. Change the name and hit Save to keep both. <b>Copy</b> makes a separate copy you can change freely.</div></div>';
   // ── 1. what you buy ──
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>1. What you buy</div>'
     +'<div class="card-sub">Each ingredient once, the way it comes: <i>Semolina · $25.99 · 50 lb</i>. Every recipe uses these prices, so when flour goes up, change it here and every recipe updates.</div>'
@@ -6054,15 +6074,16 @@ function rcDraw(){
       +'<button class="remove-btn" onclick="rcPanDel('+i+')">×</button></div>').join('')
     +'<button class="add-btn" onclick="rcPanAdd()">+ Add an ingredient</button> <span class="bk-sub" id="rcPanSaved"></span></div>';
   // ── 2. one batch ──
-  h+='<datalist id="rcPanList">'+RC.pantry.filter(p=>p.name).map(p=>'<option value="'+esc(p.name)+'">').join('')+'</datalist>';
+  h+='<datalist id="rcPanList">'+RC.pantry.filter(p=>p.name).map(p=>'<option value="'+esc(p.name)+'">').join('')+RC.book.filter(r=>r.id!==c.id&&r.name).map(r=>'<option value="'+esc(r.name)+'">recipe</option>').join('')+'</datalist>';
   h+='<div class="card"><div class="card-title"><div class="card-title-dot"></div>2. One batch</div>'
     +'<div class="card-sub">What goes in one batch, in the amounts you actually weigh or measure out: <i>Semolina 1,250 g · AP flour 8,750 g · Eggs 24 each</i>.</div>'
     +'<div class="rc-grid rc-l rc-h" style="'+lbl+'"><span>Ingredient</span><span>Amount</span><span></span><span>Cost</span><span></span></div>'
     +c.lines.map((l,i)=>{const r=rcLineCost(l);
-      const msg=r.why==='price'?'<button class="rc-fix" onclick="rcAddPrice('+i+')">add its price ↑</button>':r.why==='units'?'<span class="rc-fix" title="You buy it by '+esc(r.buy)+'">pick a '+(RC_UNITS[r.buy][0]==='m'?'weight':RC_UNITS[r.buy][0]==='v'?'volume':'count')+' unit</span>':(r.cost?fmt(r.cost):'—');
-      return'<div class="rc-grid rc-l"><input class="inp" list="rcPanList" placeholder="e.g. Semolina" value="'+esc(l.name)+'" oninput="rcLine('+i+',\'name\',this.value)" onchange="rcDraw()">'
+      const isSub=!!rcSub(l.name,c);
+      const msg=r.why==='subunit'?'<span class="rc-fix">pick “batch” or a weight</span>':r.why==='sub'?(r.cost?fmt(r.cost)+' ':'')+'<span class="rc-fix" title="Open that recipe and fill in its missing prices">'+esc(r.sub)+' is missing a price</span>':r.why==='price'?'<button class="rc-fix" onclick="rcAddPrice('+i+')">add its price ↑</button>':r.why==='units'?'<span class="rc-fix" title="You buy it by '+esc(r.buy)+'">pick a '+(RC_UNITS[r.buy][0]==='m'?'weight':RC_UNITS[r.buy][0]==='v'?'volume':'count')+' unit</span>':(r.cost?fmt(r.cost):'—');
+      return'<div class="rc-grid rc-l"><input class="inp" list="rcPanList" placeholder="e.g. Semolina" value="'+esc(l.name)+'" oninput="rcLine('+i+',\'name\',this.value)" onchange="rcLineNamed('+i+')">'
       +'<input class="inp" type="number" inputmode="decimal" placeholder="0" value="'+esc(l.amt)+'" oninput="rcLine('+i+',\'amt\',this.value)">'
-      +unitSel(l.unit||'g','rcLine('+i+',\'unit\',this.value);rcDraw()',['$ per '+rcU1()])
+      +unitSel(l.unit||'g','rcLine('+i+',\'unit\',this.value);rcDraw()',(isSub?['batch']:[]).concat(['$ per '+rcU1()]))
       +'<span class="rc-per" id="rcLine'+i+'">'+msg+'</span><button class="remove-btn" onclick="rcLineDel('+i+')">×</button></div>';}).join('')
     +'<button class="add-btn" onclick="rcLineAdd()">+ Add to the batch</button>'
     +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px;" class="rc-two">'
@@ -6083,7 +6104,7 @@ function rcDraw(){
 function rcCalc(){
   const c=RC.cur;if(!c)return;let batch=0,grams=0,missing=0;
   c.lines.forEach((l,i)=>{const r=rcLineCost(l);batch+=r.cost;if(r.why)missing++;
-    const u=RC_UNITS[l.unit];if(u&&u[0]==='m')grams+=rcNum(l.amt)*u[1];
+    const u=RC_UNITS[l.unit];grams+=r.grams||(u&&u[0]==='m'?rcNum(l.amt)*u[1]:0);
     const s=document.getElementById('rcLine'+i);if(s&&!r.why)s.textContent=r.cost?fmt(r.cost):'—';});
   const y=rcNum(c.yield),pack=rcNum(c.pack),lab=rcNum(c.labor)*rcNum(c.hours);
   const total=batch+(y?pack*y:0)+lab,each=y?total/y:0,price=rcNum(c.price);
@@ -6117,6 +6138,14 @@ function rcAddPrice(i){
   rcDraw();const k=RC.pantry.findIndex(p=>rcKey(p.name)===rcKey(n));const row=document.querySelectorAll('.rc-p:not(.rc-h)')[k];if(row){const inp=row.querySelectorAll('input')[1];if(inp){inp.focus();row.scrollIntoView({block:'center',behavior:'smooth'});}}
 }
 function rcLine(i,f,v){RC.cur.lines[i][f]=v;rcCalc();}
+// picking another recipe as an ingredient: default to one whole batch of it
+function rcLineNamed(i){const l=RC.cur.lines[i];if(rcSub(l.name,RC.cur)){if(!RC_UNITS[l.unit]||RC_UNITS[l.unit][0]!=='m'){l.unit='batch';if(!l.amt)l.amt='1';}}else if(l.unit==='batch')l.unit='g';rcDraw();}
+// "+ New": start blank, or build on a recipe you already have
+function rcBuildOn(id){
+  const base=RC.book.find(r=>r.id===id);if(!base)return;
+  const c=rcNew();c.lines=[{name:base.name,amt:'1',unit:'batch'},{name:'',amt:'',unit:'g'}];c.yield=base.yield||'';c.pack=base.pack||'';c.price=base.price||'';
+  RC.cur=c;rcDraw();toast('Started from '+base.name+'. Add what’s different, name it, and Save.');
+}
 function rcLineAdd(){RC.cur.lines.push({name:'',amt:'',unit:'g'});rcDraw();}
 function rcLineDel(i){RC.cur.lines.splice(i,1);if(!RC.cur.lines.length)RC.cur.lines.push({name:'',amt:'',unit:'g'});rcDraw();}
 async function rcPick(v){
@@ -6148,6 +6177,8 @@ async function rcSaveBook(){
 async function rcSave(){
   const c=RC.cur;c.name=String(c.name||'').trim();if(!c.name){toast('Give the recipe a name first',true);return;}
   let book=await rcSaveBook();
+  const was=book.find(r=>r.id===c.id);let keptOld='';
+  if(was&&rcKey(was.name)!==rcKey(c.name)){keptOld=was.name;c.id=rcNew().id+'n';}      // a new name is a new recipe; the old one stays
   const clash=book.find(r=>rcKey(r.name)===rcKey(c.name)&&r.id!==c.id);
   if(clash&&!confirm('There’s already a recipe called '+c.name+'. Replace it?'))return;
   book=book.filter(r=>r.id!==c.id&&!(clash&&r.id===clash.id));
@@ -6157,12 +6188,13 @@ async function rcSave(){
     await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'recipe_book',value:{recipes:book},updated_at:new Date().toISOString()})});
     RC.book=book;
     if(c.oldId){try{await sb(RC_OLD+'_recipes?id=eq.'+c.oldId,{method:'DELETE',headers:{'Prefer':''}});}catch(e){}RC.old=RC.old.filter(o=>o.id!==c.oldId);delete c.oldId;}
-    toast('Saved '+c.name);rcDraw();
+    toast(keptOld?'Saved '+c.name+' as a new recipe. '+keptOld+' is still there.':'Saved '+c.name);rcDraw();
   }catch(e){toast('Didn’t save: '+e.message,true);}
 }
 function rcCopy(){const c=JSON.parse(JSON.stringify(RC.cur));c.id=rcNew().id;c.name=(c.name?c.name+' (copy)':'');delete c.oldId;RC.cur=c;rcDraw();toast('Copied. Rename it, change what’s different, and Save.');}
 async function rcDelete(){
-  const c=RC.cur;if(!confirm('Delete the recipe '+(c.name||'Untitled')+'? Your ingredient prices stay.'))return;
+  const c=RC.cur;const users=RC.book.filter(r=>r.id!==c.id&&(r.lines||[]).some(l=>rcKey(l.name)===rcKey(c.name))).map(r=>r.name);
+  if(!confirm('Delete the recipe '+(c.name||'Untitled')+'? Your ingredient prices stay.'+(users.length?' These recipes are built on it and will lose that ingredient’s cost: '+users.join(', ')+'.':'')))return;
   let book=(await rcSaveBook()).filter(r=>r.id!==c.id);
   try{await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'recipe_book',value:{recipes:book},updated_at:new Date().toISOString()})});
     RC.book=book;RC.cur=book[0]?JSON.parse(JSON.stringify(book[0])):rcNew();toast('Deleted');rcDraw();}
@@ -6763,7 +6795,7 @@ async function loadInventory(){
 async function renderInventory(){
   const el=document.getElementById('invBody');if(!el)return;
   if(!INV.loaded)el.innerHTML='<div class="card"><div class="bk-empty">Loading inventory…</div></div>';
-  await loadInventory();drawInventory();
+  await Promise.all([loadInventory(),mtLoad()]);drawInventory();
 }
 function invFiltered(){
   const q=INV.q.trim().toLowerCase();
@@ -6817,7 +6849,7 @@ function invRows(){
   list.forEach(i=>{
     if((i.category||'')!==last){last=i.category||'';h+='<div class="bk-date">'+esc(last||'No category')+'</div>';}
     h+='<div class="bk-row inv-row'+(invLow(i)?' low':'')+'"><div class="bk-main" onclick="openInvItem(\''+i.id+'\')" style="cursor:pointer;"><div class="bk-payee">'+esc(i.name)+(invLow(i)?' <span class="inv-badge">Low</span>':'')+'</div>'
-      +'<div class="bk-sub">'+[i.sku&&('SKU '+i.sku),i.supplier,i.location,(+i.par>0?'reorder at '+qty(i.par):''),(+i.cost?fmt(i.cost)+' each':''),(recipeOf(i).length?'made in batches':'')].filter(Boolean).map(esc).join(' · ')+'</div></div>'
+      +'<div class="bk-sub">'+[i.sku&&('SKU '+i.sku),i.supplier,i.location,(+i.par>0?'reorder at '+qty(i.par):''),(+i.cost?fmt(i.cost)+' each':''),(recipeOf(i).length?'made in batches':''),(mtOf(i.id)?mtHrs(mtHoursEach(i.id))+' to make':'')].filter(Boolean).map(esc).join(' · ')+'</div></div>'
       +'<div class="inv-qty"><button aria-label="One less" onclick="invStep(\''+i.id+'\',-1)">−</button><button class="inv-n" onclick="invAdjust(\''+i.id+'\')" title="Change the count">'+qty(i.on_hand)+'<small>'+esc(i.unit||'')+'</small></button><button aria-label="One more" onclick="invStep(\''+i.id+'\',1)">+</button></div></div>';
   });
   return h;
@@ -6839,6 +6871,73 @@ async function invAdjust(id){
 }
 
 // ─── one item: details, a stock change, and its history ───
+// ── Time to make: hours invested per item, folded into pricing ──
+const MT={loaded:false,rate:null,profit:20,holiday:15,items:{},saveT:null};
+async function mtLoad(){
+  if(MT.loaded)return;
+  try{const r=await sb(RC_SET+'?key=eq.make_time&select=value');const v=(r[0]&&r[0].value)||{};
+    MT.rate=v.rate!=null?+v.rate:null;MT.profit=v.profit!=null?+v.profit:20;MT.holiday=v.holiday!=null?+v.holiday:15;MT.items=v.items||{};MT.loaded=true;}catch(e){console.warn('make time',e);}
+}
+function mtOf(id){const t=MT.items[id];return t&&+t.h>0?t:null;}
+function mtHoursEach(id){const t=mtOf(id);return t?(+t.h)/Math.max(+t.n||1,0.0001):0;}
+function mtHrs(h){h=+h||0;const m=Math.round(h*60);if(m<60)return m+' min';const hh=Math.floor(m/60),mm=m%60;return hh+(hh===1?' hr':' hrs')+(mm?' '+mm+' min':'');}
+function mtSaveSoon(){
+  clearTimeout(MT.saveT);MT.saveT=setTimeout(async()=>{
+    try{await sb(RC_SET+'?on_conflict=key',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify({key:'make_time',value:{rate:MT.rate,profit:MT.profit,holiday:MT.holiday,items:MT.items},updated_at:new Date().toISOString()})});
+      const s=document.getElementById('mtSaved');if(s){s.textContent='Saved';setTimeout(()=>{if(s)s.textContent='';},1500);}}
+    catch(e){toast('Time didn’t save: '+e.message,true);}
+  },600);
+}
+function mtBoxHTML(it){
+  const t=MT.items[it.id]||{};const h=+t.h||0;const hh=Math.floor(h+1e-9),mm=Math.round((h-hh)*60);
+  const i=(id,v,ph,w)=>'<input id="'+id+'" class="period-input" type="number" inputmode="decimal" step="any" min="0" placeholder="'+ph+'" value="'+(v||v===0?v:'')+'" oninput="mtChanged()" style="width:'+(w||78)+'px;">';
+  return '<div class="bk-stat-l" style="margin-top:14px;">Time to make it <span id="mtSaved" style="font-weight:400;opacity:.7;margin-left:6px;"></span></div>'
+    +'<div class="bk-sub" style="margin-bottom:8px;">For anything you make by hand. Put in how long it takes and what your time is worth, and it’s counted in the real cost and the price.</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">'+i('mt_h',h?hh:'','0',64)+'<span>hrs</span>'+i('mt_m',h&&mm?mm:'','0',64)+'<span>min makes</span>'+i('mt_n',t.n||1,'1',64)+'<span>'+esc(it.unit||'each')+'</span></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;"><span>My time is worth $</span>'+i('mt_rate',MT.rate,'e.g. 20',84)+'<span>an hour <small style="opacity:.7;">(same for every item)</small></span></div>'
+    +'<div id="mtOut" style="margin-top:10px;"></div>';
+}
+function mtChanged(){
+  const it=INV.editing;if(!it)return;const v=id=>{const e=document.getElementById(id);const n=e?parseFloat(e.value):NaN;return isNaN(n)||n<0?null:n;};
+  const h=(v('mt_h')||0)+(v('mt_m')||0)/60;const n=v('mt_n')||1;
+  if(h>0)MT.items[it.id]={h:Math.round(h*1000)/1000,n};else delete MT.items[it.id];
+  MT.rate=v('mt_rate');
+  if(document.getElementById('mt_profit')){const p=v('mt_profit');if(p!==null)MT.profit=p;const hb=v('mt_holiday');if(hb!==null)MT.holiday=hb;}
+  mtSaveSoon();mtDraw(true);
+}
+function mtDraw(keepPct){
+  const it=INV.editing,box=document.getElementById('mtOut');if(!it||!box)return;
+  const he=mtHoursEach(it.id);
+  if(!he){box.innerHTML='';return;}
+  const gv=id=>{const e=document.getElementById(id);const n=e?parseFloat(e.value):NaN;return isNaN(n)?0:n;};
+  const mat=gv('inv_cost'),price=gv('inv_price'),unit=esc(it.unit||'each');
+  const row=(l,r,b)=>'<div class="inv-hist-row"><span>'+l+'</span><b'+(b?' class="'+b+'"':'')+'>'+r+'</b></div>';
+  let o=row('Time for each one',mtHrs(he));
+  if(!(MT.rate>0)){box.innerHTML=o+'<div class="bk-sub">Add what your time is worth an hour to see the real cost and a price.</div>'
+    +(price>0?row('What this price pays you for your time',fmt((price-mat)/he)+' an hour',(price-mat)<0?'out':'in'):'');return;}
+  const labor=he*MT.rate,real=mat+labor;
+  o+=row('Materials',fmt(mat))+row('Your time ('+mtHrs(he)+' at '+fmt(MT.rate)+')',fmt(labor))+row('<b>Real cost of each</b>','<b>'+fmt(real)+'</b>');
+  if(price>0){const left=price-real;
+    o+=row('At your price of '+fmt(price),(left>=0?fmt(left)+' left over':fmt(-left)+' short'),left>=0?'in':'out')
+      +row('What that price really pays you',fmt((price-mat)/he)+' an hour',(price-mat)/he>=MT.rate?'in':'out');}
+  const sug=Math.ceil(real*(1+MT.profit/100)*4)/4,hol=Math.ceil(sug*(1+MT.holiday/100)*4)/4;
+  if(!keepPct||!document.getElementById('mt_profit')){
+    const p=(id,v)=>'<input id="'+id+'" class="period-input" type="number" inputmode="decimal" step="any" min="0" value="'+v+'" oninput="mtChanged()" style="width:64px;">';
+    o+='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 6px;"><span>Profit on top</span>'+p('mt_profit',MT.profit)+'<span>%</span><span style="margin-left:8px;">Holiday bump</span>'+p('mt_holiday',MT.holiday)+'<span>%</span></div><div id="mtSug"></div>';
+    box.innerHTML='<div id="mtRows">'+o+'</div>';
+    const rows=document.getElementById('mtRows');const ctl=rows.lastElementChild.previousElementSibling;const sg=rows.lastElementChild;box.innerHTML='';
+    const top=document.createElement('div');top.id='mtTop';box.appendChild(top);while(rows.firstChild&&rows.firstChild!==ctl)top.appendChild(rows.firstChild);
+    box.appendChild(ctl);box.appendChild(sg);
+  }else{document.getElementById('mtTop').innerHTML=o;}
+  const btn=(l,v)=>'<div class="inv-hist-row"><span>'+l+'</span><span><b>'+fmt(v)+'</b> <button class="btn-secondary" style="padding:3px 10px;margin-left:6px;" onclick="mtUse('+v+')">Use this price</button></span></div>';
+  document.getElementById('mtSug').innerHTML=btn('Suggested price',sug)+btn('Holiday price',hol)+'<div class="bk-sub">Rounded up to the nearest quarter. “Use this price” fills it in above; hit <b>Save details</b> to keep it.</div>';
+}
+function mtUse(v){const e=document.getElementById('inv_price');if(!e)return;e.value=v;mtDraw(true);toast('Price set to '+fmt(v)+'. Hit Save details to keep it.');}
+async function mtMount(it){
+  await mtLoad();const box=document.getElementById('mtBox');if(!box||!INV.editing||INV.editing.id!==it.id)return;
+  box.innerHTML=mtBoxHTML(it);mtDraw();
+  ['inv_cost','inv_price'].forEach(id=>{const e=document.getElementById(id);if(e)e.addEventListener('input',()=>mtDraw(true));});
+}
 function invModal(){
   let m=document.getElementById('invModal');if(m)return m;
   m=document.createElement('div');m.className='modal-overlay';m.id='invModal';
@@ -6857,17 +6956,19 @@ async function openInvItem(id,focusStock){
     +'<button class="btn-green" onclick="invSaveMove()">Update stock</button></div></div>'
     +'<div class="bk-sub">For <b>Counted</b>, enter what’s on the shelf now. For the others, enter how many came in or went out.</div></div>';
   h+='<div class="txn-grid">'+f('name','Name','','e.g. Semolina flour')
-    +'<div><label>Category</label><input id="inv_category" class="period-input" list="invCatList" value="'+esc(it&&it.category||'')+'"><datalist id="invCatList">'+[...new Set(invCats().concat(typeof COGS_CATS!=='undefined'?COGS_CATS:[]))].map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'
+    +'<div><label>Category</label><input id="inv_category" class="period-input" list="invCatList" value="'+esc(it&&it.category||'')+'"><datalist id="invCatList">'+[...new Set(invCats().concat(typeof COGS_CATS!=='undefined'?COGS_CATS:[]).concat(['Handcrafted goods']))].map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'
     +f('unit','Unit','','each, lb, bag, case')+(it?'':f('on_hand','On hand now','number','0'))
     +f('par','Reorder when down to','number','e.g. 5')+f('order_qty','Usually order','number','optional')
     +f('cost','Cost per unit ($)','number','0.00')+f('price','Your price per unit ($)','number','optional')
     +'<div><label>Supplier</label><input id="inv_supplier" class="period-input" list="invSupList" value="'+esc(it&&it.supplier||'')+'"><datalist id="invSupList">'+invSuppliers().map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'
     +f('sku','SKU or code','','optional')+f('location','Where it’s kept','','e.g. Walk-in, Shelf B')+f('notes','Notes','','')+'</div>'
     +'<div class="txn-actions">'+(it?'<button class="btn-secondary danger" onclick="invDelete()">Delete</button>':'')+'<button class="btn-secondary" onclick="closeInvItem()">Cancel</button><button class="btn-green" id="invSave" onclick="invSaveItem()">'+(it?'Save details':'Add item')+'</button></div>';
+  if(it)h+='<div id="mtBox"></div>';
   if(it)h+=recipeHTML(it);
   if(it)h+='<div id="invHist" class="inv-hist"><div class="bk-sub">Loading history…</div></div>';
   document.getElementById('invMBody').innerHTML=h;m.classList.add('open');
   if(focusStock){const a=document.getElementById('invAmt');if(a)setTimeout(()=>a.focus(),50);}
+  if(it)mtMount(it);
   if(it){
     let moves=[];try{moves=await sb('ohb_inv_moves?item_id=eq.'+it.id+'&order=created_at.desc&limit=30');}catch(e){}
     const box=document.getElementById('invHist');if(!box)return;
@@ -6885,12 +6986,12 @@ function invFormBody(){
 }
 async function invSaveItem(){
   const b=invFormBody();if(!b.name){toast('Give it a name',true);return;}
-  const btn=document.getElementById('invSave');btn.disabled=true;
+  const btn=document.getElementById('invSave');btn.disabled=true;let r0=null;
   try{
     if(INV.editing)await sb('ohb_inv_items?id=eq.'+INV.editing.id,{method:'PATCH',body:JSON.stringify(b)});
-    else{const r=await sb('ohb_inv_items',{method:'POST',body:JSON.stringify(b)});
+    else{const r=await sb('ohb_inv_items',{method:'POST',body:JSON.stringify(b)});r0=r&&r[0];
       if(r[0]&&b.on_hand)try{await sb('ohb_inv_moves',{method:'POST',body:JSON.stringify({item_id:r[0].id,change:b.on_hand,reason:'count',note:'Starting count',by_name:currentProfile&&currentProfile.name||null})});}catch(e){}}
-    closeInvItem();toast(INV.editing?'Saved':'Added');await renderInventory();
+    const wasNew=!INV.editing,newId=wasNew&&r0&&r0.id;closeInvItem();toast(wasNew?'Added. Add how long it takes to make, if you make it by hand.':'Saved');await renderInventory();if(newId)openInvItem(newId);
   }catch(e){toast('Didn’t save: '+e.message,true);btn.disabled=false;}
 }
 async function invSaveMove(){
