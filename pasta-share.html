@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Community Pasta Share · The Kilted Farmers</title>
+<meta name="description" content="Fresh, handmade pasta every week from The Kilted Farmers kitchen in Concord. Sign up for the community pasta share.">
+<meta property="og:title" content="Community Pasta Share · The Kilted Farmers">
+<meta property="og:description" content="Fresh, handmade pasta every week, made here and priced for here. It starts once enough neighbors sign up.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231B4332'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' fill='%23D4A96A'%3EKF%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#2D6A4F;--green-dark:#1B4332;--green-light:#52B788;--green-wash:#e8f3ec;
+  --tan:#A67C52;--tan-light:#D4A96A;--tan-wash:#f6ede2;
+  --cream:#FAF6EF;--cream-dark:#F0E9DC;
+  --ink:#1A1A1A;--mid:#5A5A5A;--rule:#D8CFC4;--red:#C0392B;--red-wash:#fbeceb;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{background:var(--cream);font-family:'Source Sans 3',system-ui,sans-serif;color:var(--ink);min-height:100vh;font-size:15px;line-height:1.45;}
+button,input,select,textarea{font-family:inherit;font-size:16px;color:inherit;}
+a{color:var(--green-dark);}
+
+.header{background:var(--green-dark);padding:22px 16px 18px;text-align:center;position:relative;overflow:hidden;}
+.header::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 18px,rgba(255,255,255,.035) 18px,rgba(255,255,255,.035) 36px),repeating-linear-gradient(-45deg,transparent,transparent 18px,rgba(212,169,106,.05) 18px,rgba(212,169,106,.05) 36px);}
+.header>*{position:relative;}
+.kicker{font-size:11px;letter-spacing:4px;color:var(--tan-light);text-transform:uppercase;font-weight:700;}
+.header h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;color:#fff;margin-top:4px;line-height:1.15;}
+.header .sub{font-size:13px;color:rgba(255,255,255,.62);margin-top:4px;}
+.header .rule{width:44px;height:2px;background:var(--tan-light);margin:10px auto 0;}
+.who{position:absolute;top:10px;right:10px;z-index:2;}
+.who button{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:20px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 60px;}
+.card{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.04);}
+.card h2{font-family:'Playfair Display',serif;font-size:19px;color:var(--green-dark);margin-bottom:4px;line-height:1.2;}
+.card p+p{margin-top:8px;}
+.muted{color:var(--mid);font-size:14px;}
+.small{font-size:12px;}
+.center{text-align:center;}
+
+label.f{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mid);font-weight:700;margin:14px 0 5px;}
+.inp{width:100%;padding:11px 12px;border:1.5px solid var(--rule);border-radius:9px;background:var(--cream);}
+.inp:focus{outline:none;border-color:var(--green);background:#fff;}
+textarea.inp{min-height:70px;resize:vertical;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 18px;border-radius:10px;border:none;font-weight:700;font-size:15px;cursor:pointer;text-decoration:none;}
+.btn.full{width:100%;}
+.btn.primary{background:var(--green-dark);color:#fff;}
+.btn.primary:active{background:var(--green);}
+.btn.ghost{background:transparent;color:var(--green-dark);border:2px solid var(--green-dark);}
+.btn.soft{background:var(--cream-dark);color:var(--green-dark);}
+.btn.danger{background:transparent;color:var(--red);border:2px solid var(--red);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn.sm{padding:8px 12px;font-size:13px;border-radius:8px;}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.link{background:none;border:none;color:var(--green-dark);text-decoration:underline;cursor:pointer;font-size:14px;padding:0;}
+
+.msg{border-radius:10px;padding:10px 12px;font-size:14px;margin-top:12px;}
+.msg.err{background:var(--red-wash);color:var(--red);}
+.msg.ok{background:var(--green-wash);color:var(--green-dark);}
+.msg.info{background:var(--tan-wash);color:#6d4d2c;}
+.msg:empty{display:none;}
+
+.meter{height:14px;background:var(--cream-dark);border-radius:8px;overflow:hidden;margin-top:12px;}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:8px;transition:width .5s;}
+.meter.done i{background:linear-gradient(90deg,var(--tan),var(--tan-light));}
+.meter-cap{display:flex;justify-content:space-between;font-size:13px;color:var(--mid);margin-top:6px;}
+.big{font-family:'Playfair Display',serif;font-size:34px;font-weight:900;color:var(--green-dark);line-height:1;}
+
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+.opt{border:2px solid var(--rule);border-radius:12px;padding:14px 12px;text-align:center;background:#fff;}
+.opt .w{font-size:13px;color:var(--mid);font-weight:700;letter-spacing:.5px;text-transform:uppercase;}
+.opt .p{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--green-dark);line-height:1.1;margin-top:2px;}
+.opt .s{font-size:12px;color:var(--mid);}
+
+.pick{display:block;border:2px solid var(--rule);border-radius:12px;padding:12px 14px;margin-top:8px;cursor:pointer;background:#fff;}
+.pick input{position:absolute;opacity:0;pointer-events:none;}
+.pick.on{border-color:var(--green);background:var(--green-wash);}
+.pick b{font-size:15px;}
+.pick .r{float:right;font-family:'Playfair Display',serif;font-weight:900;color:var(--green-dark);font-size:18px;}
+.check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px;cursor:pointer;}
+.check input{width:20px;height:20px;margin-top:1px;accent-color:var(--green);flex-shrink:0;}
+
+.total{background:var(--green-wash);border-radius:12px;padding:12px 14px;margin-top:14px;color:var(--green-dark);display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.total b{font-family:'Playfair Display',serif;font-size:24px;}
+
+.kv{margin-top:10px;font-size:15px;display:grid;gap:6px;}
+.kv div{display:flex;gap:10px;}
+.kv span{color:var(--mid);min-width:96px;flex-shrink:0;}
+.pill{display:inline-block;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:700;}
+.pill.in{background:var(--green-wash);color:var(--green-dark);}
+.pill.paused{background:var(--tan-wash);color:#7a5530;}
+.pill.out{background:var(--cream-dark);color:var(--mid);}
+
+.wk{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--cream-dark);padding:10px 0;}
+.wk:first-of-type{border-top:none;}
+.wk .d{font-weight:700;}
+.wk.skip .d{color:var(--mid);text-decoration:line-through;}
+
+ul.plain{list-style:none;margin-top:8px;}
+ul.plain li{padding:5px 0 5px 26px;position:relative;font-size:14px;}
+ul.plain li::before{content:'✓';position:absolute;left:4px;color:var(--green);font-weight:700;}
+.hero-ico{font-size:40px;text-align:center;margin-bottom:6px;}
+.loading{text-align:center;color:var(--mid);padding:40px 0;}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:var(--green-dark);color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;max-width:90vw;text-align:center;}
+.toast.err{background:var(--red);}
+.toast.show{opacity:1;}
+
+.ladder{margin-top:14px;border-top:1px solid var(--cream-dark);padding-top:12px;}
+.lad-h{font-weight:700;color:var(--green-dark);font-size:14px;margin-bottom:4px;}
+.lad{display:flex;gap:10px;align-items:flex-start;padding:6px 0;font-size:14px;color:var(--mid);}
+.lad-n{flex:0 0 46px;text-align:center;font-weight:700;font-size:12px;background:var(--cream-dark);border-radius:10px;padding:3px 0;color:var(--mid);}
+.lad.hit{color:var(--green-dark);}
+.lad.hit .lad-n{background:var(--green);color:#fff;}
+.lad.next{color:var(--ink);}
+.lad.next .lad-n{background:var(--tan);color:#fff;}
+.foot{text-align:center;font-size:12px;color:var(--mid);margin-top:18px;}
+@media(max-width:380px){.row2{grid-template-columns:1fr;}.header h1{font-size:22px;}.opt .p{font-size:26px;}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="who" id="who"></div>
+  <div class="kicker">The Kilted Farmers</div>
+  <h1>Community Pasta Share</h1>
+  <div class="sub">Made here. Priced for here.</div>
+  <div class="rule"></div>
+</div>
+<div class="wrap" id="app"><div class="loading">Loading…</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// THE KILTED FARMERS — COMMUNITY PASTA SHARE
+// Neighbors sign up here; the kitchen runs it from the Pasta Share tab in the hub.
+// Database: pasta_share.sql (pasta_share_settings / _members / _pickups)
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE';
+const AUTH_KEY='kf_share_auth';
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DEF={goal:500,price_1:4,price_2:7,byo_discount:0.5,pickup_days:['Tuesday','Friday'],pickup_place:'The Kilted Farmers kitchen in Concord',pickup_hours:'',status:'gathering',start_date:null,note:'',tier_every:100,tier_off:0.25,tier_max:1,signed_up:0,one_lb:0,two_lb:0};
+
+const S={auth:null,user:null,me:null,cfg:null,draft:null};
+
+// ─── helpers ───
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function r2(n){return Math.round((parseFloat(n)||0)*100)/100;}
+function money(n){const v=r2(n);return '$'+(v%1?v.toFixed(2):v.toLocaleString('en-US'));}
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function parseISO(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?new Date(+m[1],+m[2]-1,+m[3],12):null;}
+function niceDate(d){return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});}
+function monday(d){d=new Date(d);d.setHours(12,0,0,0);const k=d.getDay();d.setDate(d.getDate()+(k===0?-6:1-k));return d;}
+function toast(m,err){const t=$('toast');t.textContent=m;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.className='toast',3200);}
+function cfg(){return Object.assign({},DEF,S.cfg||{});}
+function days(){const d=(cfg().pickup_days||[]).filter(x=>DAYS.includes(x));return d.length?d:DEF.pickup_days;}
+function sizePrice(size){const c=cfg();return r2(+size===1?c.price_1:c.price_2);}
+// Milestone discount: every tier_every households past the goal, every share gets tier_off cheaper (up to tier_max)
+function tierOff(n){const c=cfg(),ev=+c.tier_every||0,off=+c.tier_off||0,mx=+c.tier_max||0,goal=+c.goal||500;if(ev<=0||off<=0)return 0;n=n==null?+c.signed_up||0:n;const v=Math.floor(Math.max(0,n-goal)/ev)*off;return r2(mx>0?Math.min(mx,v):v);}
+function tierSteps(){const c=cfg(),ev=+c.tier_every||0,off=+c.tier_off||0,mx=+c.tier_max||0;if(ev<=0||off<=0)return 0;return Math.min(8,mx>0?Math.round(mx/off):4);}
+function weekly(size,byo){return r2(Math.max(0,sizePrice(size)-(byo?+cfg().byo_discount||0:0)-tierOff()));}
+function off(v){v=r2(v);return v<1?Math.round(v*100)+'¢':money(v);}
+function priceNow(size){const t=tierOff(),b=sizePrice(size);return t>0?'<s style="font-size:16px;color:var(--mid);font-weight:700;">'+money(b)+'</s> '+money(Math.max(0,b-t)):money(b);}
+function lbs(n){return n+' pound'+(+n===1?'':'s');}
+
+// ─── auth & data ───
+function saveAuth(a){S.auth=a;try{if(a)localStorage.setItem(AUTH_KEY,JSON.stringify({refresh_token:a.refresh_token}));else localStorage.removeItem(AUTH_KEY);}catch(e){}}
+async function authFetch(path,body,method){
+  const res=await fetch(SUPABASE_URL+'/auth/v1/'+path,{method:method||'POST',headers:Object.assign({'apikey':SUPABASE_KEY,'Content-Type':'application/json'},S.auth&&method?{'Authorization':'Bearer '+S.auth.access_token}:{}),body:body?JSON.stringify(body):undefined});
+  let data={};try{data=await res.json();}catch(e){}
+  if(!res.ok)throw new Error(friendlyAuth(data.error_description||data.msg||data.message||data.error||'Something went wrong'));
+  return data;
+}
+function friendlyAuth(m){
+  if(/invalid login/i.test(m))return 'That email and password don’t match. Try again, or reset your password.';
+  if(/not confirmed/i.test(m))return 'Your email isn’t confirmed yet. Click the link in the email we sent, then sign in.';
+  if(/already registered|already exists/i.test(m))return 'There’s already an account with that email. Sign in instead.';
+  if(/rate limit|too many/i.test(m))return 'Too many tries. Wait a few minutes and try again.';
+  return m;
+}
+let _refreshing=null;
+async function refresh(){
+  if(_refreshing)return _refreshing;
+  _refreshing=(async()=>{
+    let rt=S.auth&&S.auth.refresh_token;
+    if(!rt){try{rt=(JSON.parse(localStorage.getItem(AUTH_KEY)||'{}')).refresh_token;}catch(e){}}
+    if(!rt)return false;
+    try{const d=await authFetch('token?grant_type=refresh_token',{refresh_token:rt});saveAuth(d);S.user=d.user||S.user;return true;}
+    catch(e){saveAuth(null);return false;}
+  })();
+  const r=await _refreshing;_refreshing=null;return r;
+}
+async function api(path,opts={},retried){
+  const headers=Object.assign({'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'},opts.headers||{});
+  if(S.auth)headers['Authorization']='Bearer '+S.auth.access_token;
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,Object.assign({},opts,{headers}));
+  if(res.status===401&&S.auth&&!retried&&await refresh())return api(path,opts,true);
+  if(res.status===204)return null;
+  let data=null;try{data=await res.json();}catch(e){}
+  if(!res.ok)throw new Error((data&&(data.message||data.hint||data.error))||res.statusText||'Something went wrong');
+  return data;
+}
+async function loadCfg(){
+  try{const c=await api('rpc/pasta_share_public',{method:'POST',body:'{}'});S.cfg=Array.isArray(c)?c[0]:c;S.noDb=false;}
+  catch(e){S.cfg=null;S.noDb=/Could not find the function|PGRST202|does not exist/i.test(e.message);}
+}
+
+// ─── start ───
+async function init(){
+  const h=new URLSearchParams(location.hash.replace(/^#/,''));
+  if(h.get('access_token')){
+    saveAuth({access_token:h.get('access_token'),refresh_token:h.get('refresh_token')});
+    const type=h.get('type');
+    history.replaceState(null,'',location.pathname+location.search);
+    await loadCfg();
+    if(type==='recovery'){renderAuth('reset');return;}
+  }else if(h.get('error_description')){
+    history.replaceState(null,'',location.pathname+location.search);
+    await loadCfg();
+    renderAuth('signin',decodeURIComponent(h.get('error_description').replace(/\+/g,' ')));return;
+  }
+  const [,signedIn]=await Promise.all([S.cfg?null:loadCfg(),S.auth?true:refresh()]);
+  if(signedIn){await boot();return;}
+  renderLanding();
+}
+async function boot(){
+  $('app').innerHTML='<div class="loading">Loading your pasta share…</div>';
+  try{S.user=await authFetch('user',null,'GET');}
+  catch(e){if(!(await refresh())){saveAuth(null);renderLanding();return;}try{S.user=await authFetch('user',null,'GET');}catch(x){saveAuth(null);renderLanding();return;}}
+  try{
+    await loadCfg();
+    const rows=await api('pasta_share_members?user_id=eq.'+S.user.id+'&select=*');
+    S.me=(rows&&rows[0])||null;
+  }catch(e){$('app').innerHTML='<div class="card"><h2>Couldn’t load</h2><p class="muted">'+esc(e.message)+'</p><div class="btns"><button class="btn primary" onclick="boot()">Try again</button></div></div>';return;}
+  setWho();
+  if(!S.me)renderJoin();else renderMine();
+}
+function setWho(){$('who').innerHTML=S.user?'<button onclick="signOut()" aria-label="Sign out">Sign out</button>':'';}
+function signOut(){saveAuth(null);S.user=null;S.me=null;setWho();renderLanding();}
+
+// ─── the pitch, progress, and options ───
+function progressHTML(){
+  const c=cfg(),n=+c.signed_up||0,goal=Math.max(1,+c.goal||500),pct=Math.min(100,Math.round(n/goal*100)),done=n>=goal;
+  if(c.status==='running')return '<div class="card"><h2>The share is running</h2><p class="muted">'+n+' household'+(n===1?'':'s')+' getting fresh pasta every week'+(c.start_date?', since '+esc(niceDate(parseISO(c.start_date))):'')+'. New neighbors are always welcome, and every one brings the price down for all of us.</p>'+ladderHTML()+'</div>';
+  if(c.status==='paused')return '<div class="card"><h2>The share is on a short break</h2><p class="muted">'+(c.note?esc(c.note):'We’ll be back soon. Your spot is saved.')+'</p></div>';
+  return '<div class="card"><h2>'+(done?'We made it!':'Help us get to '+goal.toLocaleString('en-US'))+'</h2>'
+    +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;"><span class="big">'+n.toLocaleString('en-US')+'</span><span class="muted">of '+goal.toLocaleString('en-US')+' households signed up</span></div>'
+    +'<div class="meter'+(done?' done':'')+'"><i style="width:'+pct+'%"></i></div>'
+    +'<div class="meter-cap"><span>'+pct+'%</span><span>'+(done?'Start date coming soon':(goal-n).toLocaleString('en-US')+' to go')+'</span></div>'
+    +'<p class="muted" style="margin-top:10px;">'+(done?'Thank you, neighbors. We’ll post the first pickup date here and let everyone know.':'The share starts once '+goal.toLocaleString('en-US')+' households sign up. Signing up now doesn’t cost anything. You only pay for pasta once it starts.')+'</p>'+ladderHTML()+'</div>';
+}
+function ladderHTML(){
+  const c=cfg(),n=+c.signed_up||0,goal=+c.goal||500,ev=+c.tier_every||0,steps=tierSteps();
+  if(!steps)return '';
+  const rows=[{at:goal,txt:'The share starts'}];
+  for(let i=1;i<=steps;i++)rows.push({at:goal+i*ev,txt:off(tierOff(goal+i*ev))+' off every share, for everyone'});
+  const next=rows.find(r=>r.at>n);
+  return '<div class="ladder"><div class="lad-h">The more neighbors, the lower the price</div>'
+    +rows.map(r=>{const hit=n>=r.at,isNext=next===r;return '<div class="lad'+(hit?' hit':'')+(isNext?' next':'')+'"><span class="lad-n">'+(hit?'✓':r.at.toLocaleString('en-US'))+'</span><span>'+(hit?'<b>'+r.at.toLocaleString('en-US')+'</b> · ':'')+esc(r.txt)+(isNext?'<br><span class="muted small">'+(r.at-n).toLocaleString('en-US')+' more to go</span>':'')+'</span></div>';}).join('')
+    +'<div class="muted small" style="margin-top:6px;">A bigger steady order means less waste and cheaper ingredients by the bag, so we pass it on. Savings follow how many households are signed up.</div></div>';
+}
+function optionsHTML(){
+  const c=cfg(),dd=days();
+  return '<div class="card"><h2>Pick the size that fits your household</h2>'
+    +'<div class="opts"><div class="opt"><div class="w">1 pound a week</div><div class="p">'+priceNow(1)+'</div><div class="s">for smaller households</div></div>'
+    +'<div class="opt"><div class="w">2 pounds a week</div><div class="p">'+priceNow(2)+'</div><div class="s">for families</div></div></div>'
+    +'<ul class="plain" style="margin-top:12px;">'
+    +(+c.byo_discount>0?'<li><b>Bring your own container</b> and take '+off(c.byo_discount)+' off.</li>':'')
+    +'<li>Pick up '+(dd.length>1?'on <b>'+dd.slice(0,-1).join('</b>, <b>')+'</b> or <b>'+dd[dd.length-1]+'</b>':'on <b>'+dd[0]+'</b>')+' at '+esc(c.pickup_place)+(c.pickup_hours?' ('+esc(c.pickup_hours)+')':'')+'.</li>'
+    +'<li>Pay when you pick up. Skip a week or pause any time.</li></ul></div>';
+}
+function pitchHTML(){
+  return '<div class="card"><h2>Fresh pasta for our neighbors</h2>'
+    +'<p class="muted">We started The Kilted Farmers to feed the people right here with good, healthy, flavorful pasta. Making the pasta isn’t the hard part. Not knowing how much will sell each week is. That risk keeps our prices up and sends us to markets farther away.</p>'
+    +'<p class="muted">With a steady weekly order from our own community, we can make more, waste nothing, and charge a lot less. Every week you get fresh, handmade traditional pasta made with flour, eggs and seasoning.</p></div>';
+}
+function renderLanding(){
+  if(S.noDb){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>Almost ready</h2><p class="muted">The pasta share sign-up opens soon. Check back in a day or two.</p></div>';return;}
+  $('app').innerHTML=progressHTML()+pitchHTML()+optionsHTML()
+    +'<div class="card"><h2>Count me in</h2><p class="muted">Make a free account so you can choose your size and pickup day, and change them any time.</p>'
+    +'<div class="btns"><button class="btn primary full" onclick="renderAuth(\'signup\')">Sign up for the pasta share</button></div>'
+    +'<div class="btns" style="justify-content:center;"><button class="link" onclick="renderAuth(\'signin\')">Already signed up? Sign in</button></div></div>'
+    +'<div class="foot">The Kilted Farmers · Concord, Michigan</div>';
+}
+
+// ─── sign in / create account ───
+function renderAuth(mode,note){
+  setWho();
+  const titles={signin:'Sign in',signup:'Sign up for the pasta share',forgot:'Reset your password',reset:'Choose a new password'};
+  let h='<div class="card"><h2>'+titles[mode]+'</h2>';
+  if(mode==='signup')h+='<p class="muted">First make an account. Next you’ll pick your size and pickup day.</p>';
+  if(mode==='forgot')h+='<p class="muted">We’ll email you a link to set a new one.</p>';
+  if(mode!=='reset')h+='<label class="f" for="aEmail">Email</label><input id="aEmail" class="inp" type="email" autocomplete="email" inputmode="email">';
+  if(mode!=='forgot')h+='<label class="f" for="aPw">'+(mode==='reset'?'New password':'Password')+'</label><input id="aPw" class="inp" type="password" autocomplete="'+(mode==='signin'?'current-password':'new-password')+'">';
+  if(mode==='signup'||mode==='reset')h+='<label class="f" for="aPw2">Password again</label><input id="aPw2" class="inp" type="password" autocomplete="new-password">';
+  h+='<div class="msg '+(note&&/sent|check|confirm/i.test(note)?'ok':'err')+'" id="aMsg">'+esc(note||'')+'</div>';
+  h+='<div class="btns"><button class="btn primary full" id="aBtn" onclick="doAuth(\''+mode+'\')">'+({signin:'Sign in',signup:'Create my account',forgot:'Email me a link',reset:'Save password'})[mode]+'</button></div>';
+  h+='<div class="btns" style="justify-content:space-between;">';
+  if(mode==='signin')h+='<button class="link" onclick="renderAuth(\'signup\')">New here? Sign up</button><button class="link" onclick="renderAuth(\'forgot\')">Forgot password?</button>';
+  else if(mode!=='reset')h+='<button class="link" onclick="renderAuth(\'signin\')">Already have an account? Sign in</button>';
+  h+='</div>'+(mode!=='reset'?'<div class="btns" style="justify-content:center;"><button class="link" onclick="renderLanding()">← Back</button></div>':'')+'</div>';
+  $('app').innerHTML=h;
+  const f=$('aEmail')||$('aPw');if(f)f.focus();
+  $('app').querySelectorAll('.inp').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')doAuth(mode);}));
+  window.scrollTo(0,0);
+}
+async function doAuth(mode){
+  const em=(($('aEmail')||{}).value||'').trim(),pw=($('aPw')||{}).value,pw2=($('aPw2')||{}).value;
+  const msg=$('aMsg'),btn=$('aBtn');msg.className='msg err';msg.textContent='';
+  if(mode!=='reset'&&!/^\S+@\S+\.\S+$/.test(em)){msg.textContent='Enter your email address.';return;}
+  if((mode==='signup'||mode==='reset')&&(pw||'').length<8){msg.textContent='Use at least 8 characters for your password.';return;}
+  if((mode==='signup'||mode==='reset')&&pw!==pw2){msg.textContent='Those passwords don’t match.';return;}
+  if(mode==='signin'&&!pw){msg.textContent='Enter your password.';return;}
+  const label=btn.textContent;btn.disabled=true;btn.textContent='One moment…';
+  const back=location.origin+location.pathname;
+  try{
+    if(mode==='signin'){const d=await authFetch('token?grant_type=password',{email:em,password:pw});saveAuth(d);S.user=d.user;await boot();return;}
+    if(mode==='signup'){
+      const d=await authFetch('signup?redirect_to='+encodeURIComponent(back),{email:em,password:pw});
+      if(d.access_token){saveAuth(d);S.user=d.user;await boot();return;}
+      if(d.identities&&!d.identities.length){msg.textContent='There’s already an account with that email. Sign in instead.';return;}
+      renderAuth('signin','Almost there. We sent a confirmation link to '+em+'. Click it, and you’ll come right back here to pick your size and pickup day.');return;
+    }
+    if(mode==='forgot'){await authFetch('recover?redirect_to='+encodeURIComponent(back),{email:em});msg.className='msg ok';msg.textContent='If there’s an account for that email, a reset link is on its way. Check your inbox.';return;}
+    if(mode==='reset'){await authFetch('user',{password:pw},'PUT');toast('Password saved');await boot();return;}
+  }catch(e){msg.className='msg err';msg.textContent=e.message;}
+  finally{if(btn.isConnected){btn.disabled=false;btn.textContent=label;}}
+}
+
+// ─── choose size, pickup day, container ───
+function renderJoin(editing){
+  const m=S.me||{},c=cfg(),dd=days();
+  S.draft={size:m.size||2,day:dd.includes(m.pickup_day)?m.pickup_day:dd[0],byo:!!m.byo};
+  let h=editing?'':progressHTML();
+  h+='<div class="card"><h2>'+(editing?'Change your share':'Your pasta share')+'</h2>'
+    +(editing?'':'<p class="muted">Tell us what your household needs. You can change any of this later.</p>')
+    +'<label class="f">How much each week?</label>'
+    +[1,2].map(n=>'<label class="pick" id="pkS'+n+'" onclick="pickSize('+n+')"><input type="radio" name="sz"><span class="r">'+money(Math.max(0,sizePrice(n)-tierOff()))+'</span><b>'+lbs(n)+' a week</b><div class="muted small">'+(n===1?'Good for one or two people':'Good for a family')+'</div></label>').join('')
+    +'<label class="f">Pickup day</label>'
+    +dd.map(d=>'<label class="pick" id="pkD'+d+'" onclick="pickDay(\''+d+'\')"><input type="radio" name="dy"><b>'+d+'s</b><div class="muted small">'+esc(c.pickup_place)+(c.pickup_hours?' · '+esc(c.pickup_hours):'')+'</div></label>').join('')
+    +(+c.byo_discount>0?'<label class="check"><input type="checkbox" id="jByo" onchange="S.draft.byo=this.checked;joinDraw()"'+(S.draft.byo?' checked':'')+'><span><b>I’ll bring my own container</b><br><span class="muted">Take '+off(c.byo_discount)+' off each week. Less packaging, lower price.</span></span></label>':'')
+    +'<div class="total" id="jTotal"></div>'
+    +'<div class="row2"><div><label class="f" for="jName">Your name</label><input id="jName" class="inp" autocomplete="name" value="'+esc(m.name||'')+'"></div>'
+    +'<div><label class="f" for="jPhone">Phone (optional)</label><input id="jPhone" class="inp" type="tel" autocomplete="tel" value="'+esc(m.phone||'')+'"></div></div>'
+    +'<label class="f" for="jTown">Town</label><input id="jTown" class="inp" autocomplete="address-level2" value="'+esc(m.town||'')+'" placeholder="Concord, Parma, Homer…">'
+    +'<label class="f" for="jNote">Anything we should know? (optional)</label><textarea id="jNote" class="inp" placeholder="Dietary notes, questions, a friend who’s joining too…">'+esc(m.member_note||'')+'</textarea>'
+    +'<div class="msg err" id="jMsg"></div>'
+    +'<div class="btns"><button class="btn primary full" id="jBtn" onclick="saveJoin('+(editing?1:0)+')">'+(editing?'Save changes':(c.status==='running'?'Start my share':'Count me in'))+'</button></div>'
+    +(editing?'<div class="btns" style="justify-content:center;"><button class="link" onclick="renderMine()">Cancel</button></div>':'')
+    +'</div>';
+  if(!editing)h+=pitchHTML();
+  $('app').innerHTML=h;joinDraw();window.scrollTo(0,0);
+}
+function pickSize(n){S.draft.size=n;joinDraw();}
+function pickDay(d){S.draft.day=d;joinDraw();}
+function joinDraw(){
+  const d=S.draft;
+  [1,2].forEach(n=>{const e=$('pkS'+n);if(e)e.classList.toggle('on',d.size===n);});
+  days().forEach(x=>{const e=$('pkD'+x);if(e)e.classList.toggle('on',d.day===x);});
+  const t=$('jTotal');if(t)t.innerHTML='<span>'+lbs(d.size)+' every '+esc(d.day)+(d.byo?', your container':'')+'</span><b>'+money(weekly(d.size,d.byo))+'/week</b>';
+}
+async function saveJoin(editing){
+  const d=S.draft,name=$('jName').value.trim(),btn=$('jBtn'),msg=$('jMsg');msg.textContent='';
+  if(!name){msg.textContent='Enter your name so we know whose pasta it is.';$('jName').focus();return;}
+  const row={name,phone:$('jPhone').value.trim()||null,town:$('jTown').value.trim()||null,member_note:$('jNote').value.trim()||null,size:d.size,pickup_day:d.day,byo:d.byo,email:S.user.email||null};
+  const label=btn.textContent;btn.disabled=true;btn.textContent='Saving…';
+  try{
+    let r;
+    if(S.me)r=await api('pasta_share_members?id=eq.'+S.me.id,{method:'PATCH',body:JSON.stringify(row)});
+    else r=await api('pasta_share_members',{method:'POST',body:JSON.stringify(Object.assign({status:'in'},row))});
+    S.me=Array.isArray(r)?r[0]:r;
+    await loadCfg();
+    toast(editing?'Saved':'You’re in. Thank you!');
+    renderMine(!editing);
+  }catch(e){msg.textContent=/duplicate|unique/i.test(e.message)?'You’re already signed up. Reload the page to see your share.':e.message;btn.disabled=false;btn.textContent=label;}
+}
+
+// ─── your share ───
+function upcoming(m,count){
+  const c=cfg(),start=c.start_date?parseISO(c.start_date):null,now=new Date();now.setHours(0,0,0,0);
+  const out=[];let wk=monday(now);
+  for(let i=0;out.length<count&&i<count+3;i++){
+    const day=new Date(wk);day.setDate(wk.getDate()+DAYS.indexOf(m.pickup_day));
+    if(day>=now&&(!start||day>=start))out.push({date:day,week:iso(wk)});
+    wk.setDate(wk.getDate()+7);
+  }
+  return out;
+}
+function renderMine(fresh){
+  const m=S.me,c=cfg();if(!m){renderJoin();return;}
+  const first=(m.name||'').split(' ')[0];
+  let h='';
+  if(fresh&&c.status!=='running')h+='<div class="card center"><div class="hero-ico">🍝</div><h2>Thank you, '+esc(first)+'!</h2><p class="muted">You’re one of '+(+c.signed_up||1)+' households. Once we reach '+(+c.goal||500)+', we’ll email you the first pickup date. Help us get there faster: send this page to a neighbor.</p>'
+    +'<div class="btns" style="justify-content:center;"><button class="btn primary" onclick="share()">Share with a neighbor</button></div></div>';
+  if(m.status!=='in'||c.status!=='running'||!fresh)h+=progressHTML();
+  const st={in:['Signed up','in'],paused:['Paused','paused'],out:['Not signed up','out']}[m.status]||['','out'];
+  h+='<div class="card"><h2>Your share</h2><div><span class="pill '+st[1]+'">'+st[0]+'</span></div>'
+    +'<div class="kv"><div><span>Each week</span><b>'+lbs(m.size)+' of fresh pasta</b></div>'
+    +'<div><span>Pickup</span><b>'+esc(m.pickup_day)+'s</b></div>'
+    +'<div><span>Where</span><b>'+esc(c.pickup_place)+(c.pickup_hours?' · '+esc(c.pickup_hours):'')+'</b></div>'
+    +'<div><span>Container</span><b>'+(m.byo?'I bring my own':'Bagged by the kitchen')+'</b></div>'
+    +'<div><span>Price</span><b>'+money(weekly(m.size,m.byo))+' a week, paid at pickup</b></div></div>';
+  if(!days().includes(m.pickup_day))h+='<div class="msg info">We changed our pickup days. Tap <b>Change my share</b> to pick a new one.</div>';
+  h+='<div class="btns">'+(m.status==='out'?'<button class="btn primary" onclick="setStatus(\'in\')">Sign me back up</button>':'<button class="btn primary" onclick="renderJoin(true)">Change my share</button>')
+    +(m.status==='in'?'<button class="btn soft" onclick="setStatus(\'paused\')">Pause</button>':'')
+    +(m.status==='paused'?'<button class="btn primary" onclick="setStatus(\'in\')">Start again</button>':'')
+    +'</div>';
+  if(m.status!=='out')h+='<div class="btns"><button class="link" onclick="leave()">Leave the pasta share</button></div>';
+  h+='</div>';
+  if(c.status==='running'&&m.status==='in'){
+    const wk=upcoming(m,4),skips=m.skip_weeks||[];
+    h+='<div class="card"><h2>Coming up</h2><p class="muted">Away one week? Skip it at least two days ahead. We won’t make your pasta that week, and you won’t owe anything.</p>'
+      +wk.map(w=>{const sk=skips.includes(w.week),late=(w.date-new Date())/864e5<2;return '<div class="wk'+(sk?' skip':'')+'"><div><div class="d">'+esc(niceDate(w.date))+'</div><div class="muted small">'+(sk?'Skipped':lbs(m.size)+' · '+money(weekly(m.size,m.byo)))+'</div></div>'
+        +(late?'<span class="muted small">'+(sk?'':'Already in the works')+'</span>':'<button class="btn sm '+(sk?'primary':'soft')+'" onclick="toggleSkip(\''+w.week+'\')">'+(sk?'Undo skip':'Skip')+'</button>')+'</div>';}).join('')
+      +'</div>';
+  }
+  if(m.status!=='out'&&!fresh)h+='<div class="card"><h2>Help us grow</h2><p class="muted">The more neighbors who join, the more we can make here at home. Send this page to someone who’d like it.</p><div class="btns"><button class="btn ghost" onclick="share()">Share the pasta share</button></div></div>';
+  h+='<div class="foot">Signed in as '+esc(S.user&&S.user.email||'')+' · <button class="link small" onclick="signOut()">Sign out</button></div>';
+  $('app').innerHTML=h;window.scrollTo(0,0);
+}
+async function patchMe(row,ok){
+  try{const r=await api('pasta_share_members?id=eq.'+S.me.id,{method:'PATCH',body:JSON.stringify(row)});S.me=Array.isArray(r)?r[0]:r;await loadCfg();if(ok)toast(ok);renderMine();}
+  catch(e){toast(e.message,true);}
+}
+function setStatus(s){patchMe({status:s},{in:'Welcome back!',paused:'Paused. Start again any time.',out:'You’ve left the share.'}[s]);}
+function leave(){if(confirm('Leave the pasta share? You can sign back up any time.'))setStatus('out');}
+function toggleSkip(week){
+  const cur=(S.me.skip_weeks||[]).filter(w=>w>=iso(monday(new Date())));
+  const next=cur.includes(week)?cur.filter(w=>w!==week):cur.concat([week]);
+  patchMe({skip_weeks:next},cur.includes(week)?'You’re back on for that week':'Skipped. Enjoy your week!');
+}
+function share(){
+  const url=location.origin+location.pathname,text='Fresh, handmade pasta every week from The Kilted Farmers in Concord. It starts once enough neighbors sign up:';
+  if(navigator.share){navigator.share({title:'Community Pasta Share',text,url}).catch(()=>{});return;}
+  const done=()=>toast('Link copied. Paste it anywhere.');
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(done,()=>prompt('Copy this link:',url));else prompt('Copy this link:',url);
+}
+
+init();
+</script>
+</body>
+</html>
