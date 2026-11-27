@@ -8438,7 +8438,7 @@ const PS_SQL=`-- ═════════════════════
 -- Paste into the Supabase SQL Editor and hit Run. Safe to run more than once.
 --
 -- Adds three tables:
---   pasta_share_settings  goal, prices, pickup days (Kilted Farmers team only)
+--   pasta_share_settings  goal (pounds a week), prices, pickup days (team only)
 --   pasta_share_members   one row per household; each member sees only their own
 --   pasta_share_pickups   the weekly pickup checklist (team only)
 -- and pasta_share_public(), which gives the sign-up page the prices, pickup
@@ -8473,11 +8473,16 @@ create table if not exists pasta_share_settings (
 );
 insert into pasta_share_settings (id) values (1) on conflict (id) do nothing;
 
--- Milestone discount: every tier_every sign-ups past the goal, every share
+-- The start goal is POUNDS A WEEK (goal_lbs), not households: the family's
+-- minimum is the same whether it takes 300 households or 900 to reach it.
+-- Milestone discount: every tier_lbs pounds a week past the goal, every share
 -- gets tier_off cheaper, up to tier_max. Set tier_off to 0 to turn it off.
+-- (goal and tier_every are from the first version and no longer used.)
 alter table pasta_share_settings add column if not exists tier_every int not null default 100;
 alter table pasta_share_settings add column if not exists tier_off numeric not null default 0.25;
 alter table pasta_share_settings add column if not exists tier_max numeric not null default 1.00;
+alter table pasta_share_settings add column if not exists goal_lbs numeric not null default 800;
+alter table pasta_share_settings add column if not exists tier_lbs numeric not null default 100;
 
 -- ─── members: one per household ────────────────────────────────────
 create table if not exists pasta_share_members (
@@ -8499,11 +8504,61 @@ create table if not exists pasta_share_members (
 );
 create index if not exists pasta_share_members_day_idx on pasta_share_members (pickup_day, status);
 
+-- How often each household picks up: every week, every 2 weeks, or every 4
+-- weeks (about once a month). anchor_week is the Monday of their first pickup
+-- week; the kitchen picks it so every-2 and every-4 households spread evenly.
+alter table pasta_share_members add column if not exists frequency text not null default 'weekly';
+alter table pasta_share_members drop constraint if exists pasta_share_members_frequency_check;
+alter table pasta_share_members add constraint pasta_share_members_frequency_check
+  check (frequency in ('weekly', 'biweekly', 'every4'));
+alter table pasta_share_members add column if not exists anchor_week date;
+
+create or replace function pasta_share_every(f text) returns int
+language sql immutable as $$
+  select case f when 'biweekly' then 2 when 'every4' then 4 else 1 end;
+$$;
+-- Is this household due in the week starting wk (a Monday)?
+create or replace function pasta_share_due(f text, anchor date, wk date) returns boolean
+language sql immutable as $$
+  select case when pasta_share_every(f) = 1 or anchor is null then true
+              else wk >= anchor and ((wk - anchor) / 7) % pasta_share_every(f) = 0 end;
+$$;
+-- Pick the lightest upcoming week for a new every-2 / every-4 household
+create or replace function pasta_share_pick_anchor(mid uuid, f text, d text) returns date
+language plpgsql stable security definer set search_path = public as $$
+declare
+  k int := pasta_share_every(f);
+  base date := date_trunc('week', current_date)::date + 7;
+  best date; best_load numeric; wk date; load numeric;
+begin
+  if k = 1 then return null; end if;
+  select greatest(base, coalesce(date_trunc('week', s.start_date)::date, base)) into base
+    from pasta_share_settings s where s.id = 1;
+  for c in 0 .. k - 1 loop
+    wk := base + 7 * c;
+    select coalesce(sum(m.size), 0) into load from pasta_share_members m
+      where m.status = 'in' and m.pickup_day = d and m.id is distinct from mid
+        and pasta_share_due(m.frequency, m.anchor_week, wk);
+    if best_load is null or load < best_load then best_load := load; best := wk; end if;
+  end loop;
+  return best;
+end $$;
+
 -- Members can't write the kitchen's note or attach a row to someone else
 create or replace function pasta_share_member_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   new.updated_at := now();
+  -- spread every-2 / every-4 households across weeks; keep it unless how often or the day changes
+  if new.frequency = 'weekly' then
+    new.anchor_week := null;
+  elsif tg_op = 'INSERT' or new.anchor_week is null then
+    new.anchor_week := pasta_share_pick_anchor(new.id, new.frequency, new.pickup_day);
+  elsif new.frequency is distinct from old.frequency or new.pickup_day is distinct from old.pickup_day then
+    new.anchor_week := pasta_share_pick_anchor(new.id, new.frequency, new.pickup_day);
+  elsif not kf_is_team() then
+    new.anchor_week := old.anchor_week;
+  end if;
   if kf_is_team() then return new; end if;
   if tg_op = 'INSERT' then
     new.user_id := auth.uid();
@@ -8570,6 +8625,9 @@ language sql stable security definer set search_path = public as $$
     'pickup_place', s.pickup_place, 'pickup_hours', s.pickup_hours,
     'status', s.status, 'start_date', s.start_date, 'note', s.note,
     'tier_every', s.tier_every, 'tier_off', s.tier_off, 'tier_max', s.tier_max,
+    'goal_lbs', s.goal_lbs, 'tier_lbs', s.tier_lbs,
+    'weekly_lbs', (select coalesce(round(sum(m.size::numeric / pasta_share_every(m.frequency)), 1), 0)
+                     from pasta_share_members m where m.status = 'in'),
     'signed_up', (select count(*) from pasta_share_members m where m.status = 'in'),
     'one_lb',   (select count(*) from pasta_share_members m where m.status = 'in' and m.size = 1),
     'two_lb',   (select count(*) from pasta_share_members m where m.status = 'in' and m.size = 2)
@@ -8577,31 +8635,45 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function pasta_share_public() to anon, authenticated;
 
--- Check: should show the settings row and 0 sign-ups
+-- Check: should show the settings, with goal_lbs and weekly_lbs
 select pasta_share_public();
 `;
 // ─── Community Pasta Share: neighbors sign up on pasta-share.html; the kitchen runs it here ───
-const PS={loaded:false,missing:false,cfg:null,members:[],pickups:[],mode:'overview',week:null,day:null,open:null,q:'',showOut:false};
+const PS={loaded:false,missing:false,update:false,cfg:null,members:[],pickups:[],mode:'overview',week:null,day:null,open:null,q:'',showOut:false};
 const PS_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+// How often a household picks up. Everything is counted in pounds a week, so every 2 weeks counts half and every 4 weeks a quarter.
+const PS_FREQ={weekly:{k:1,l:'Every week'},biweekly:{k:2,l:'Every 2 weeks'},every4:{k:4,l:'Every 4 weeks'}};
+function psK(m){return (PS_FREQ[m&&m.frequency]||PS_FREQ.weekly).k;}
+function psFreqLabel(m){return (PS_FREQ[m&&m.frequency]||PS_FREQ.weekly).l;}
+function psIsDue(m,week){const k=psK(m);if(k===1||!m.anchor_week)return true;const d=Math.round((parseISO(week)-parseISO(m.anchor_week))/864e5/7);return d>=0&&d%k===0;}
 function psLink(){return location.href.split('#')[0].split('?')[0].replace(/[^/]*$/,'')+'pasta-share.html';}
 function psMonday(d){d=new Date(d||new Date());d.setHours(12,0,0,0);const k=d.getDay();d.setDate(d.getDate()+(k===0?-6:1-k));return d;}
 function psDays(){const d=((PS.cfg||{}).pickup_days||[]).filter(x=>PS_DAYS.includes(x));return d.length?d:['Tuesday','Friday'];}
-// Milestone discount: every tier_every households past the goal, every share gets tier_off cheaper (up to tier_max)
-function psTier(){const c=PS.cfg||{},d=(k,v)=>c[k]==null?v:+c[k];return{ev:d('tier_every',100),off:d('tier_off',0.25),mx:d('tier_max',1)};}
-function psTierOff(n){const c=PS.cfg||{},{ev,off,mx}=psTier(),goal=+c.goal||500;if(ev<=0||off<=0)return 0;if(n==null)n=psIn().length;const v=Math.floor(Math.max(0,n-goal)/ev)*off;return r2(mx>0?Math.min(mx,v):v);}
-function psPrice(m,n){const c=PS.cfg||{};return r2(Math.max(0,(+m.size===1?+c.price_1:+c.price_2)-(m.byo?(+c.byo_discount||0):0)-psTierOff(n)));}
-function psLbs(n){return n+' lb'+(+n===1?'':'s');}
+function psGoal(){return Math.max(1,+(PS.cfg||{}).goal_lbs||800);}
+function psWeeklyLbs(list){return list.reduce((a,m)=>a+(+m.size||0)/psK(m),0);}
+// Milestone discount: every tier_lbs pounds a week past the goal, every share gets tier_off cheaper (up to tier_max)
+function psTier(){const c=PS.cfg||{},d=(k,v)=>c[k]==null?v:+c[k];return{ev:d('tier_lbs',100),off:d('tier_off',0.25),mx:d('tier_max',1)};}
+function psTierOff(lbs){const {ev,off,mx}=psTier();if(ev<=0||off<=0)return 0;if(lbs==null)lbs=psWeeklyLbs(psIn());const v=Math.floor(Math.max(0,lbs-psGoal())/ev)*off;return r2(mx>0?Math.min(mx,v):v);}
+// price of one pickup
+function psPrice(m,lbsAt){const c=PS.cfg||{};return r2(Math.max(0,(+m.size===1?+c.price_1:+c.price_2)-(m.byo?(+c.byo_discount||0):0)-psTierOff(lbsAt)));}
+function psLbs(n){n=Math.round(n*10)/10;return n.toLocaleString('en-US')+' lb'+(n===1?'':'s');}
 function psIn(){return PS.members.filter(m=>m.status==='in');}
 function psDayDate(week,day){const d=parseISO(week);d.setDate(d.getDate()+PS_DAYS.indexOf(day));return d;}
-function psTotals(list){
-  const lbs=list.reduce((a,m)=>a+(+m.size||0),0),money=r2(list.reduce((a,m)=>a+psPrice(m),0));
-  return{n:list.length,lbs,money,one:list.filter(m=>+m.size===1).length,two:list.filter(m=>+m.size===2).length,byo:list.filter(m=>m.byo).length};
+// lbs and money are an AVERAGE WEEK: an every-2-weeks household counts half
+function psTotals(list,lbsAt){
+  const lbs=psWeeklyLbs(list),money=r2(list.reduce((a,m)=>a+psPrice(m,lbsAt)/psK(m),0));
+  const by=k=>list.filter(m=>(m.frequency||'weekly')===k).length;
+  return{n:list.length,lbs,money,one:list.filter(m=>+m.size===1).length,two:list.filter(m=>+m.size===2).length,byo:list.filter(m=>m.byo).length,weekly:by('weekly'),biweekly:by('biweekly'),every4:by('every4')};
 }
+// money left per pound after ingredients, at today's mix (or a 50/50 guess before anyone signs up)
+function psMarginPerLb(t){const c=PS.cfg||{},cost=+c.cost_per_lb||0;if(t&&t.lbs>0)return (t.money-t.lbs*cost)/t.lbs;return ((+c.price_1||0)+(+c.price_2||0))/3-cost;}
 
 async function psLoad(){
   try{
     const [c,m]=await Promise.all([sb('pasta_share_settings?id=eq.1&select=*'),sbAll('pasta_share_members?order=created_at.desc')]);
     PS.cfg=c[0]||{};PS.members=m;PS.loaded=true;PS.missing=false;
+    // the how-often / pounds-goal update adds these columns
+    PS.update=PS.cfg.goal_lbs===undefined||(m.length>0&&!('frequency' in m[0]));
   }catch(e){if(tableMissing(e))PS.missing=true;else toast('Pasta share didn’t load: '+e.message,true);}
   psBadge();
 }
@@ -8628,13 +8700,13 @@ async function renderPS(){
 function psMode(m){PS.mode=m;PS.open=null;if(m==='pickups'){psLoadPickups().then(psDraw);}psDraw();}
 function psDraw(){
   const el=document.getElementById('psBody');if(!el)return;
-  if(PS.missing){el.innerHTML=psSetupHTML();return;}
+  if(PS.missing||PS.update){el.innerHTML=psSetupHTML();return;}
   if(!PS.loaded)return;
-  const c=PS.cfg,t=psTotals(psIn()),goal=Math.max(1,+c.goal||500),pct=Math.min(100,Math.round(t.n/goal*100));
+  const c=PS.cfg,t=psTotals(psIn()),goal=psGoal(),pct=Math.min(100,Math.round(t.lbs/goal*100));
   let h='<div class="bk-summary">'
-    +'<div class="bk-stat"><div class="bk-stat-l">Signed up</div><div class="bk-stat-v">'+t.n+' <span style="font-size:14px;color:var(--mid);">/ '+goal+'</span></div><div class="ps-meter'+(t.n>=goal?' done':'')+'"><i style="width:'+pct+'%"></i></div></div>'
-    +'<div class="bk-stat"><div class="bk-stat-l">Pasta a week</div><div class="bk-stat-v">'+t.lbs.toLocaleString('en-US')+' lbs</div><div class="bk-stat-s">'+t.two+' at 2 lbs · '+t.one+' at 1 lb</div></div>'
-    +'<div class="bk-stat"><div class="bk-stat-l">Money a week</div><div class="bk-stat-v">'+fmt(t.money)+'</div><div class="bk-stat-s">if everyone picks up</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Pasta a week</div><div class="bk-stat-v">'+Math.round(t.lbs).toLocaleString('en-US')+' <span style="font-size:14px;color:var(--mid);">/ '+Math.round(goal).toLocaleString('en-US')+' lbs</span></div><div class="ps-meter'+(t.lbs>=goal?' done':'')+'"><i style="width:'+pct+'%"></i></div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Households</div><div class="bk-stat-v">'+t.n+'</div><div class="bk-stat-s">'+t.weekly+' weekly · '+t.biweekly+' every 2 wks · '+t.every4+' every 4 wks</div></div>'
+    +'<div class="bk-stat"><div class="bk-stat-l">Money a week</div><div class="bk-stat-v">'+fmt(t.money)+'</div><div class="bk-stat-s">average week, if everyone picks up</div></div>'
     +'<div class="bk-stat"><div class="bk-stat-l">Status</div><div class="bk-stat-v" style="font-size:18px;">'+({gathering:'Gathering sign-ups',running:'Running',paused:'Paused'}[c.status]||c.status)+'</div>'+(c.start_date?'<div class="bk-stat-s">Started '+esc(c.start_date)+'</div>':'')+'</div></div>';
   h+='<div class="card"><div class="seg ps-seg">'+[['overview','Overview'],['members','Sign-ups ('+t.n+')'],['pickups','Pickup list'],['settings','Prices & days']].map(([k,l])=>'<button class="'+(PS.mode===k?'active':'')+'" onclick="psMode(\''+k+'\')">'+l+'</button>').join('')+'</div>';
   h+=({overview:psOverviewHTML,members:psMembersHTML,pickups:psPickupsHTML,settings:psSettingsHTML}[PS.mode]||psOverviewHTML)();
@@ -8642,49 +8714,67 @@ function psDraw(){
   el.innerHTML=h;
 }
 
-// ─── overview: are we there yet, and does it pay ───
+// ─── overview: does it cover the family, in pounds and dollars ───
 function psOverviewHTML(){
-  const c=PS.cfg,list=psIn(),t=psTotals(list),cost=r2(t.lbs*(+c.cost_per_lb||0)),left=r2(t.money-cost),need=+c.need_per_week||0,gap=r2(left-need);
-  const goal=+c.goal||500;
-  let h='<div class="card-title"><div class="card-title-dot"></div>Does it work yet?</div>'
+  const c=PS.cfg,list=psIn(),t=psTotals(list),costLb=+c.cost_per_lb||0,cost=r2(t.lbs*costLb),left=r2(t.money-cost),need=+c.need_per_week||0,gap=r2(left-need);
+  const goal=psGoal(),margin=psMarginPerLb(t),needLbs=margin>0?Math.ceil(need/margin):null;
+  let h='<div class="card-title"><div class="card-title-dot"></div>Does it cover the family yet?</div>'
+    +'<div class="bk-sub" style="font-size:12.5px;">An average week. Someone who picks up every 2 weeks counts as half, every 4 weeks as a quarter.</div>'
     +'<div class="ps-rows">'
-    +'<div><span>Money in each week</span><b>'+fmt(t.money)+'</b></div>'
-    +'<div><span>Ingredients & packaging ('+psLbs(t.lbs)+' × '+fmt(c.cost_per_lb)+')</span><b>− '+fmt(cost)+'</b></div>'
+    +'<div><span>Money in, average week</span><b>'+fmt(t.money)+'</b></div>'
+    +'<div><span>Ingredients & packaging ('+psLbs(t.lbs)+' × '+fmt(costLb)+')</span><b>− '+fmt(cost)+'</b></div>'
     +'<div><span>Left for the family</span><b>'+fmt(left)+'</b></div>'
     +'<div><span>What the family needs to get by</span><b>'+fmt(need)+'</b></div>'
     +'<div class="ps-total" style="color:'+(gap>=0?'var(--green-dark)':'var(--red)')+';"><span>'+(gap>=0?'Covers it, with this much extra':'Short by')+'</span><b>'+fmt(Math.abs(gap))+'</b></div></div>';
-  // how many more sign-ups, at today's mix
-  if(gap<0&&t.n){const per=(t.money-cost)/t.n;if(per>0)h+='<div class="bk-sub" style="margin-top:8px;font-size:12.5px;">At today’s mix, about <b>'+Math.ceil(-gap/per)+' more households</b> would close the gap.</div>';}
-  if(t.n>=goal&&c.status==='gathering')h+='<div class="ps-note ok">You hit '+goal+' sign-ups. When you’re ready, set a start date and switch the status to <b>Running</b> under <b>Prices & days</b>. Members will see their pickup weeks.</div>';
+  // the family's minimum, in pounds a week
+  h+='<div class="card-title" style="margin-top:18px;"><div class="card-title-dot"></div>Your family’s minimum, in pounds</div>';
+  if(!needLbs){
+    h+='<div class="ps-note" style="background:var(--red-wash,#fbeceb);color:var(--red);">At these prices, each pound brings in less than its ingredients cost, so no amount of sign-ups covers the family. Raise the prices or lower the discounts under <b>Prices & days</b>.</div>';
+  }else{
+    const perHH=t.n?t.lbs/t.n:null;
+    h+='<div class="ps-rows">'
+      +'<div><span>Left per pound after ingredients'+(t.n?', at today’s mix':', guessing a 50/50 mix')+'</span><b>'+fmt(margin)+'</b></div>'
+      +'<div><span>Pounds a week that cover '+fmt(need)+'</span><b>'+needLbs.toLocaleString('en-US')+' lbs</b></div>'
+      +'<div><span>Start goal on the sign-up page</span><b>'+Math.round(goal).toLocaleString('en-US')+' lbs</b></div>';
+    if(t.lbs<needLbs)h+='<div class="ps-total" style="color:var(--red);"><span>Still to go'+(perHH?' (about '+Math.ceil((needLbs-t.lbs)/perHH)+' more households like today’s)':'')+'</span><b>'+Math.ceil(needLbs-t.lbs).toLocaleString('en-US')+' lbs</b></div>';
+    h+='</div>';
+    if(goal<needLbs||(goal-needLbs)/needLbs>0.15)h+='<div class="ps-note">'+(goal<needLbs?'Your start goal is <b>lower</b> than what covers the family. If the share starts at the goal, you’d be short.':'Your start goal is higher than you need. That’s a cushion, but it makes neighbors wait longer.')
+      +' <button class="btn-green" style="margin-left:6px;padding:5px 12px;font-size:12.5px;" onclick="psSetGoal('+needLbs+')">Make the goal '+needLbs.toLocaleString('en-US')+' lbs</button></div>';
+  }
+  if(t.lbs>=goal&&c.status==='gathering')h+='<div class="ps-note ok">You hit '+Math.round(goal).toLocaleString('en-US')+' lbs a week. When you’re ready, set a start date and switch the status to <b>Running</b> under <b>Prices & days</b>. Members will see their pickup dates.</div>';
   // milestone tracker: what the next discount would do to the math
   const {ev,off:toff,mx:tmax}=psTier();
   if(ev>0&&toff>0){
-    const curOff=psTierOff(t.n),nextAt=t.n<goal?goal:goal+(Math.floor((t.n-goal)/ev)+1)*ev,nextOff=psTierOff(nextAt);
-    h+='<div class="card-title" style="margin-top:18px;"><div class="card-title-dot"></div>Sign-up milestones</div>'
-      +'<div class="bk-sub" style="font-size:12.5px;">Every '+ev+' sign-ups past '+goal+', every share gets '+fmt(toff)+' cheaper'+(tmax>0?', up to '+fmt(tmax)+' off':'')+'. Members see this ladder on the sign-up page.</div>'
+    const curOff=psTierOff(t.lbs),nextAt=t.lbs<goal?goal:goal+(Math.floor((t.lbs-goal)/ev)+1)*ev,nextOff=psTierOff(nextAt);
+    h+='<div class="card-title" style="margin-top:18px;"><div class="card-title-dot"></div>Price-drop milestones</div>'
+      +'<div class="bk-sub" style="font-size:12.5px;">Every '+ev+' lbs a week past the goal, every share gets '+fmt(toff)+' cheaper'+(tmax>0?', up to '+fmt(tmax)+' off':'')+'. Members see this ladder on the sign-up page.</div>'
       +'<div class="ps-rows"><div><span>Discount right now</span><b>'+(curOff>0?fmt(curOff)+' off each share':'None yet')+'</b></div>';
-    if(nextOff>curOff&&t.n){
+    if(nextOff>curOff&&t.lbs>0){
       // same mix, scaled up to the next milestone
-      const scale=nextAt/t.n,nMoney=r2(list.reduce((a,m)=>a+psPrice(m,nextAt),0)*scale),nLbs=Math.round(t.lbs*scale),nLeft=r2(nMoney-nLbs*(+c.cost_per_lb||0)),nGap=r2(nLeft-need),days=Math.ceil(nLbs/250*10)/10;
-      h+='<div><span>Next: '+nextAt+' households, '+fmt(nextOff)+' off</span><b>'+(nextAt-t.n)+' to go</b></div>'
-        +'<div><span>At that point: money in / pasta</span><b>'+fmt(nMoney)+' · '+nLbs.toLocaleString('en-US')+' lbs</b></div>'
+      const scale=nextAt/t.lbs,nt=psTotals(list,nextAt),nMoney=r2(nt.money*scale),nPounds=Math.round(nextAt),nLeft=r2(nMoney-nPounds*costLb),nGap=r2(nLeft-need),days=Math.ceil(nPounds/250*10)/10;
+      h+='<div><span>Next: '+nPounds.toLocaleString('en-US')+' lbs a week (about '+Math.round(t.n*scale)+' households), '+fmt(nextOff)+' off</span><b>'+Math.ceil(nextAt-t.lbs)+' lbs to go</b></div>'
+        +'<div><span>At that point, money in</span><b>'+fmt(nMoney)+'</b></div>'
         +'<div class="ps-total" style="color:'+(nGap>=0?'var(--green-dark)':'var(--red)')+';"><span>'+(nGap>=0?'Still covers the family, with extra':'Would leave you short by')+'</span><b>'+fmt(Math.abs(nGap))+'</b></div></div>'
-        +'<div class="bk-sub" style="margin-top:6px;font-size:12.5px;">'+nLbs.toLocaleString('en-US')+' lbs is about '+days+' days of making at 250 lbs a day.'+(nGap<0?' Lower the discount or raise the step under <b>Prices & days</b> before you get there.':'')+'</div>';
+        +'<div class="bk-sub" style="margin-top:6px;font-size:12.5px;">'+nPounds.toLocaleString('en-US')+' lbs is about '+days+' days of making at 250 lbs a day.'+(nGap<0?' Lower the discount or raise the step under <b>Prices & days</b> before you get there.':'')+'</div>';
     }else h+=(curOff>0?'<div><span>Top discount reached</span><b>'+fmt(curOff)+'</b></div>':'')+'</div>';
   }
-  // the mix by day
+  // the mix by day (average week)
   h+='<div class="card-title" style="margin-top:18px;"><div class="card-title-dot"></div>By pickup day</div><div class="ps-rows">'
-    +psDays().map(d=>{const x=psTotals(list.filter(m=>m.pickup_day===d));return '<div><span>'+d+' · '+x.n+' households'+(x.byo?' · '+x.byo+' bring containers':'')+'</span><b>'+x.lbs+' lbs</b></div>';}).join('');
+    +psDays().map(d=>{const x=psTotals(list.filter(m=>m.pickup_day===d));return '<div><span>'+d+' · '+x.n+' households'+(x.byo?' · '+x.byo+' bring containers':'')+'</span><b>~'+psLbs(x.lbs)+' a week</b></div>';}).join('');
   const odd=list.filter(m=>!psDays().includes(m.pickup_day));
   if(odd.length)h+='<div><span style="color:var(--red);">On a day you no longer offer</span><b>'+odd.length+'</b></div>';
-  h+='</div>';
+  h+='</div><div class="bk-sub" style="font-size:12.5px;margin-top:6px;">Every-2 and every-4-week households are spread across weeks automatically, so each week stays about even. The <b>Pickup list</b> shows the exact pounds for any day.</div>';
   // sharing
   h+='<div class="card-title" style="margin-top:18px;"><div class="card-title-dot"></div>The sign-up page</div>'
-    +'<div class="bk-sub" style="font-size:12.5px;">Post this link in the community group. Neighbors make an account, pick a size and day, and can pause or skip weeks themselves.</div>'
+    +'<div class="bk-sub" style="font-size:12.5px;">Post this link in the community group. Neighbors make an account, pick a size, how often and a day, and can pause or skip pickups themselves.</div>'
     +'<div class="ps-link"><code>'+esc(psLink())+'</code></div>'
     +'<div class="bk-actions"><button class="btn-green" onclick="copyText(psLink(),\'Link copied\')">Copy link</button><a class="btn-secondary" style="text-decoration:none;" href="'+esc(psLink())+'" target="_blank" rel="noopener">Open the page</a>'
     +'<button class="btn-secondary" onclick="psExport()">Download sign-ups (CSV)</button></div>';
   return h;
+}
+async function psSetGoal(lbs){
+  try{const r=await sb('pasta_share_settings?id=eq.1',{method:'PATCH',body:JSON.stringify({goal_lbs:lbs,updated_at:new Date().toISOString()})});PS.cfg=r[0]||Object.assign(PS.cfg,{goal_lbs:lbs});toast('Goal set to '+lbs+' lbs a week');psDraw();}
+  catch(e){toast('Didn’t save: '+e.message,true);}
 }
 
 // ─── sign-ups ───
@@ -8708,17 +8798,19 @@ function psListHTML(list){
   return list.map(m=>{
     const s=st[m.status]||st.out,open=PS.open===m.id;
     let r='<div class="ps-row'+(open?' open':'')+'"><div class="ps-row-top" onclick="psToggle(\''+m.id+'\')"><div style="min-width:0;"><b>'+esc(m.name)+'</b> <span class="'+s[1]+'">'+s[0]+'</span>'
-      +'<div class="bk-sub">'+psLbs(m.size)+' · '+esc(m.pickup_day)+(m.byo?' · own container':'')+(m.town?' · '+esc(m.town):'')+'</div></div><div class="ps-amt">'+fmt(psPrice(m))+'</div></div>';
+      +'<div class="bk-sub">'+psLbs(m.size)+' · '+psFreqLabel(m).toLowerCase()+' · '+esc(m.pickup_day)+(m.byo?' · own container':'')+(m.town?' · '+esc(m.town):'')+'</div></div><div class="ps-amt">'+fmt(psPrice(m))+'</div></div>';
     if(open){
       r+='<div class="ps-detail">'
         +(m.email?'<div><span>Email</span><a href="mailto:'+esc(m.email)+'">'+esc(m.email)+'</a></div>':'')
         +(m.phone?'<div><span>Phone</span><a href="tel:'+esc(String(m.phone).replace(/[^\d+]/g,''))+'">'+esc(m.phone)+'</a></div>':'')
         +'<div><span>Joined</span>'+esc(String(m.created_at||'').slice(0,10))+'</div>'
+        +(psK(m)>1&&m.anchor_week?'<div><span>Pickup weeks</span>'+psFreqLabel(m).toLowerCase()+', counting from the week of '+esc(m.anchor_week)+'</div>':'')
         +(m.member_note?'<div><span>Their note</span>'+esc(m.member_note)+'</div>':'')
         +((m.skip_weeks||[]).length?'<div><span>Skipping</span>'+(m.skip_weeks||[]).map(w=>'week of '+esc(w)).join(', ')+'</div>':'')
         +'</div><div class="ps-edit">'
         +'<label>Status<select id="psE_status">'+[['in','In'],['paused','Paused'],['out','Left']].map(([v,l])=>'<option value="'+v+'"'+(m.status===v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>'
         +'<label>Size<select id="psE_size"><option value="1"'+(+m.size===1?' selected':'')+'>1 lb</option><option value="2"'+(+m.size===2?' selected':'')+'>2 lbs</option></select></label>'
+        +'<label>How often<select id="psE_freq">'+Object.keys(PS_FREQ).map(k=>'<option value="'+k+'"'+((m.frequency||'weekly')===k?' selected':'')+'>'+PS_FREQ[k].l+'</option>').join('')+'</select></label>'
         +'<label>Pickup day<select id="psE_day">'+Array.from(new Set(psDays().concat([m.pickup_day]))).map(d=>'<option'+(m.pickup_day===d?' selected':'')+'>'+esc(d)+'</option>').join('')+'</select></label>'
         +'<label class="ps-chk" style="align-self:end;"><input type="checkbox" id="psE_byo"'+(m.byo?' checked':'')+'> Own container</label>'
         +'<label style="grid-column:1/-1;">Kitchen note (only the team sees this)<input id="psE_note" value="'+esc(m.team_note||'')+'"></label></div>'
@@ -8730,7 +8822,7 @@ function psListHTML(list){
 function psToggle(id){PS.open=PS.open===id?null:id;psMembersRedraw();}
 async function psSaveMember(id){
   const v=k=>document.getElementById('psE_'+k);
-  const row={status:v('status').value,size:+v('size').value,pickup_day:v('day').value,byo:v('byo').checked,team_note:v('note').value.trim()||null};
+  const row={status:v('status').value,size:+v('size').value,frequency:v('freq').value,pickup_day:v('day').value,byo:v('byo').checked,team_note:v('note').value.trim()||null};
   try{const r=await sb('pasta_share_members?id=eq.'+id,{method:'PATCH',body:JSON.stringify(row)});const i=PS.members.findIndex(m=>m.id===id);if(i>=0&&r[0])PS.members[i]=r[0];PS.open=null;toast('Saved');psDraw();psBadge();}
   catch(e){toast('Didn’t save: '+e.message,true);}
 }
@@ -8741,8 +8833,8 @@ async function psDeleteMember(id){
   catch(e){toast('Didn’t delete: '+e.message,true);}
 }
 function psExport(){
-  const rows=[['Name','Email','Phone','Town','Size (lbs)','Pickup day','Own container','Weekly price','Status','Joined','Their note','Kitchen note']]
-    .concat(PS.members.map(m=>[m.name,m.email,m.phone,m.town,m.size,m.pickup_day,m.byo?'Yes':'No',psPrice(m).toFixed(2),m.status,String(m.created_at||'').slice(0,10),m.member_note,m.team_note]));
+  const rows=[['Name','Email','Phone','Town','Size (lbs)','How often','Pickup day','Own container','Weekly price','Status','Joined','Their note','Kitchen note']]
+    .concat(PS.members.map(m=>[m.name,m.email,m.phone,m.town,m.size,psFreqLabel(m),m.pickup_day,m.byo?'Yes':'No',psPrice(m).toFixed(2),m.status,String(m.created_at||'').slice(0,10),m.member_note,m.team_note]));
   const csv=rows.map(r=>r.map(x=>{x=String(x==null?'':x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='pasta-share-signups-'+todayISO()+'.csv';document.body.appendChild(a);a.click();a.remove();
 }
@@ -8755,7 +8847,7 @@ function psWeekOptions(){
   return out;
 }
 function psDue(week,day){
-  return PS.members.filter(m=>m.pickup_day===day&&(m.status==='in'||PS.pickups.some(p=>p.member_id===m.id&&p.picked_up))&&!(m.skip_weeks||[]).includes(week))
+  return PS.members.filter(m=>m.pickup_day===day&&(PS.pickups.some(p=>p.member_id===m.id&&p.picked_up)||(m.status==='in'&&psIsDue(m,week)&&!(m.skip_weeks||[]).includes(week))))
     .sort((a,b)=>String(a.name).localeCompare(b.name));
 }
 function psPickupsHTML(){
@@ -8764,10 +8856,11 @@ function psPickupsHTML(){
   let h='<div class="ps-tools"><select class="ps-inp" style="flex:0 1 260px;" onchange="PS.week=this.value;psLoadPickups().then(psDraw)">'+psWeekOptions().map(([v,l])=>'<option value="'+v+'"'+(PS.week===v?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'
     +'<div class="seg" style="margin:0;flex:1 1 auto;">'+dd.map(d=>'<button class="'+(PS.day===d?'active':'')+'" onclick="PS.day=\''+d+'\';psDraw()">'+d+'</button>').join('')+'</div></div>';
   if((PS.cfg||{}).status!=='running')h+='<div class="ps-note">The share isn’t running yet, so members don’t have pickups. This list shows who <i>would</i> come, so you can plan.</div>';
-  const due=psDue(PS.week,PS.day),t=psTotals(due),date=psDayDate(PS.week,PS.day);
-  const skipped=PS.members.filter(m=>m.status==='in'&&m.pickup_day===PS.day&&(m.skip_weeks||[]).includes(PS.week)).length;
+  const due=psDue(PS.week,PS.day),t=Object.assign(psTotals(due),{lbs:due.reduce((a,m)=>a+(+m.size||0),0)}),date=psDayDate(PS.week,PS.day);
+  const skipped=PS.members.filter(m=>m.status==='in'&&m.pickup_day===PS.day&&psIsDue(m,PS.week)&&(m.skip_weeks||[]).includes(PS.week)).length;
+  const offWeek=PS.members.filter(m=>m.status==='in'&&m.pickup_day===PS.day&&!psIsDue(m,PS.week)).length;
   h+='<div class="ps-make"><div><div class="bk-stat-l">Make for '+esc(date.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}))+'</div><div class="bk-stat-v">'+t.lbs+' lbs</div></div>'
-    +'<div class="bk-sub" style="font-size:12.5px;">'+t.two+' two-pound and '+t.one+' one-pound shares · bag '+(t.n-t.byo)+', '+t.byo+' bring containers'+(skipped?' · '+skipped+' skipping this week':'')+'</div></div>';
+    +'<div class="bk-sub" style="font-size:12.5px;">'+t.two+' two-pound and '+t.one+' one-pound shares · bag '+(t.n-t.byo)+', '+t.byo+' bring containers'+(skipped?' · '+skipped+' skipping this week':'')+(offWeek?' · '+offWeek+' not due this week':'')+'</div></div>';
   if(!due.length)return h+'<div class="bk-empty">No one picks up that day.</div>';
   const got=due.filter(m=>psPick(m.id).picked_up),paid=r2(PS.pickups.filter(p=>due.some(m=>m.id===p.member_id)).reduce((a,p)=>a+(+p.paid||0),0));
   h+='<div class="bk-sub" style="margin:6px 0;font-size:12.5px;">'+got.length+' of '+due.length+' picked up · '+fmt(paid)+' paid</div>';
@@ -8817,7 +8910,7 @@ function psSettingsHTML(){
   const c=PS.cfg||{},on=psDays();
   const f=(id,label,val,type,extra)=>'<label>'+label+'<input id="psS_'+id+'" type="'+(type||'text')+'" value="'+esc(val==null?'':val)+'"'+(extra||'')+'></label>';
   return '<div class="ps-edit ps-settings">'
-    +f('goal','Sign-ups needed to start',c.goal,'number',' min="1" step="1"')
+    +f('goal_lbs','Pounds a week needed to start',c.goal_lbs!=null?c.goal_lbs:800,'number',' min="1" step="1"')
     +f('price_1','1 lb a week',(+c.price_1).toFixed(2),'number',' min="0" step="0.25"')
     +f('price_2','2 lbs a week',(+c.price_2).toFixed(2),'number',' min="0" step="0.25"')
     +f('byo_discount','Off for own container',(+c.byo_discount).toFixed(2),'number',' min="0" step="0.05"')
@@ -8828,7 +8921,7 @@ function psSettingsHTML(){
     +f('start_date','Start date',c.start_date||'','date')
     +'<label style="grid-column:1/-1;">Note on the sign-up page when paused<input id="psS_note" value="'+esc(c.note||'')+'" placeholder="Back the week of…"></label>'
     +'<div style="grid-column:1/-1;" class="ps-lbl">Milestone discount (set the amount to 0 to turn it off)</div>'
-    +f('tier_every','Every this many sign-ups past the goal',c.tier_every!=null?c.tier_every:100,'number',' min="1" step="1"')
+    +f('tier_lbs','Every this many lbs a week past the goal',c.tier_lbs!=null?c.tier_lbs:100,'number',' min="1" step="1"')
     +f('tier_off','Take this much off every share',(+(c.tier_off!=null?c.tier_off:0.25)).toFixed(2),'number',' min="0" step="0.05"')
     +f('tier_max','Never more than this off',(+(c.tier_max!=null?c.tier_max:1)).toFixed(2),'number',' min="0" step="0.05"')
     +'<div style="grid-column:1/-1;" class="ps-lbl">Only the team sees these two (they drive the Overview math)</div>'
@@ -8840,9 +8933,9 @@ async function psSaveSettings(){
   const v=k=>document.getElementById('psS_'+k).value;
   const days=Array.from(document.querySelectorAll('.psS_day:checked')).map(x=>x.value);
   if(!days.length){toast('Pick at least one pickup day.',true);return;}
-  const row={goal:Math.max(1,parseInt(v('goal'))||500),price_1:r2(v('price_1')),price_2:r2(v('price_2')),byo_discount:r2(v('byo_discount')),pickup_days:days,
+  const row={goal_lbs:Math.max(1,parseInt(v('goal_lbs'))||800),price_1:r2(v('price_1')),price_2:r2(v('price_2')),byo_discount:r2(v('byo_discount')),pickup_days:days,
     pickup_place:v('pickup_place').trim()||'The Kilted Farmers kitchen in Concord',pickup_hours:v('pickup_hours').trim(),status:v('status'),start_date:v('start_date')||null,
-    note:v('note').trim(),tier_every:Math.max(1,parseInt(v('tier_every'))||100),tier_off:r2(v('tier_off')),tier_max:r2(v('tier_max')),cost_per_lb:r2(v('cost_per_lb')),need_per_week:r2(v('need_per_week')),updated_at:new Date().toISOString()};
+    note:v('note').trim(),tier_lbs:Math.max(1,parseInt(v('tier_lbs'))||100),tier_off:r2(v('tier_off')),tier_max:r2(v('tier_max')),cost_per_lb:r2(v('cost_per_lb')),need_per_week:r2(v('need_per_week')),updated_at:new Date().toISOString()};
   if(row.status==='running'&&!row.start_date)row.start_date=todayISO();
   const stranded=psIn().filter(m=>!days.includes(m.pickup_day)).length;
   if(stranded&&!confirm(stranded+' member'+(stranded===1?' picks':'s pick')+' up on a day you’re turning off. They’ll be asked to choose a new day when they open the page. Save anyway?'))return;
@@ -8852,11 +8945,13 @@ async function psSaveSettings(){
 
 // ─── one-time setup ───
 function psSetupHTML(){
-  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>One-time setup for the Community Pasta Share</div>'
-    +'<div class="card-sub">The pasta share needs a few additions to the database. Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once. Members can only ever see their own sign-up; the sign-up list, pickups and the money math stay with the Kilted Farmers team.</div>'
+  const up=PS.update&&!PS.missing;
+  return '<div class="card setup-card"><div class="card-title"><div class="card-title-dot"></div>'+(up?'One quick update for the Pasta Share':'One-time setup for the Community Pasta Share')+'</div>'
+    +'<div class="card-sub">'+(up?'This update adds <b>how often</b> (every week, every 2 weeks, every 4 weeks) and makes the start goal <b>pounds a week</b> instead of households. Anyone already signed up stays signed up, set to every week. ':'The pasta share needs a few additions to the database. ')
+    +'Copy this, paste it into the Supabase SQL Editor, hit <b>Run</b>, then tap <b>Recheck</b>. It’s safe to run more than once. Members can only ever see their own sign-up; the sign-up list, pickups and the money math stay with the Kilted Farmers team.</div>'
     +'<pre>'+esc(PS_SQL)+'</pre><div class="bk-actions"><button class="btn-green" onclick="copyText(PS_SQL,\'SQL copied — paste it into Supabase\')">Copy SQL</button>'
     +'<a class="btn-secondary" style="text-decoration:none;display:inline-block;" href="https://supabase.com/dashboard/project/zhnilrohxoixsgmdyqiw/sql/new" target="_blank" rel="noopener">Open SQL Editor</a>'
-    +'<button class="btn-secondary" onclick="PS.missing=false;renderPS();">Recheck</button></div></div>';
+    +'<button class="btn-secondary" onclick="PS.missing=false;PS.update=false;renderPS();">Recheck</button></div></div>';
 }
 
 // ─── Pasta Highlanders: people who sell our pasta at their own events on commission ───

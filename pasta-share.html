@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Community Pasta Share · The Kilted Farmers</title>
-<meta name="description" content="Fresh, handmade pasta every week from The Kilted Farmers kitchen in Concord. Sign up for the community pasta share.">
+<meta name="description" content="Fresh, handmade pasta from The Kilted Farmers kitchen in Concord, as often as your household wants it. Sign up for the community pasta share.">
 <meta property="og:title" content="Community Pasta Share · The Kilted Farmers">
-<meta property="og:description" content="Fresh, handmade pasta every week, made here and priced for here. It starts once enough neighbors sign up.">
+<meta property="og:description" content="Fresh, handmade pasta made here and priced for here: every week, every 2 weeks or once a month. It starts once enough neighbors sign up.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231B4332'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' fill='%23D4A96A'%3EKF%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -142,7 +142,7 @@ const SUPABASE_URL='https://zhnilrohxoixsgmdyqiw.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpobmlscm9oeG9peHNnbWR5cWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNzQ5MzIsImV4cCI6MjA4OTg1MDkzMn0._75UyJVi0CPIqDom253zhNQ7-Eqe6e1-FKTLt2NSFcE';
 const AUTH_KEY='kf_share_auth';
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const DEF={goal:500,price_1:4,price_2:7,byo_discount:0.5,pickup_days:['Tuesday','Friday'],pickup_place:'The Kilted Farmers kitchen in Concord',pickup_hours:'',status:'gathering',start_date:null,note:'',tier_every:100,tier_off:0.25,tier_max:1,signed_up:0,one_lb:0,two_lb:0};
+const DEF={goal_lbs:800,tier_lbs:100,weekly_lbs:0,goal:500,price_1:4,price_2:7,byo_discount:0.5,pickup_days:['Tuesday','Friday'],pickup_place:'The Kilted Farmers kitchen in Concord',pickup_hours:'',status:'gathering',start_date:null,note:'',tier_every:100,tier_off:0.25,tier_max:1,signed_up:0,one_lb:0,two_lb:0};
 
 const S={auth:null,user:null,me:null,cfg:null,draft:null};
 
@@ -159,13 +159,20 @@ function toast(m,err){const t=$('toast');t.textContent=m;t.className='toast show
 function cfg(){return Object.assign({},DEF,S.cfg||{});}
 function days(){const d=(cfg().pickup_days||[]).filter(x=>DAYS.includes(x));return d.length?d:DEF.pickup_days;}
 function sizePrice(size){const c=cfg();return r2(+size===1?c.price_1:c.price_2);}
-// Milestone discount: every tier_every households past the goal, every share gets tier_off cheaper (up to tier_max)
-function tierOff(n){const c=cfg(),ev=+c.tier_every||0,off=+c.tier_off||0,mx=+c.tier_max||0,goal=+c.goal||500;if(ev<=0||off<=0)return 0;n=n==null?+c.signed_up||0:n;const v=Math.floor(Math.max(0,n-goal)/ev)*off;return r2(mx>0?Math.min(mx,v):v);}
-function tierSteps(){const c=cfg(),ev=+c.tier_every||0,off=+c.tier_off||0,mx=+c.tier_max||0;if(ev<=0||off<=0)return 0;return Math.min(8,mx>0?Math.round(mx/off):4);}
+// How often a household picks up. The goal counts pounds a week, so every 2 weeks counts half, every 4 weeks a quarter.
+const FREQ={weekly:{k:1,label:'Every week',per:'a week',sub:'Most families'},biweekly:{k:2,label:'Every 2 weeks',per:'every 2 weeks',sub:'Pasta night now and then'},every4:{k:4,label:'Every 4 weeks',per:'every 4 weeks',sub:'About once a month'}};
+function fq(m){return FREQ[(m&&m.frequency)||'weekly']||FREQ.weekly;}
+function goalLbs(){return Math.max(1,+cfg().goal_lbs||800);}
+function lbsNow(){const c=S.cfg||{};return c.weekly_lbs!=null?+c.weekly_lbs:(+c.one_lb||0)+2*(+c.two_lb||0);}
+function isDue(m,week){const k=fq(m).k;if(k===1||!m.anchor_week)return true;const d=Math.round((parseISO(week)-parseISO(m.anchor_week))/864e5/7);return d>=0&&d%k===0;}
+// Milestone discount: every tier_lbs pounds a week past the goal, every share gets tier_off cheaper (up to tier_max)
+function tierOff(n){const c=cfg(),ev=+c.tier_lbs||0,off=+c.tier_off||0,mx=+c.tier_max||0;if(ev<=0||off<=0)return 0;n=n==null?lbsNow():n;const v=Math.floor(Math.max(0,n-goalLbs())/ev)*off;return r2(mx>0?Math.min(mx,v):v);}
+function tierSteps(){const c=cfg(),ev=+c.tier_lbs||0,off=+c.tier_off||0,mx=+c.tier_max||0;if(ev<=0||off<=0)return 0;return Math.min(8,mx>0?Math.round(mx/off):4);}
 function weekly(size,byo){return r2(Math.max(0,sizePrice(size)-(byo?+cfg().byo_discount||0:0)-tierOff()));}
 function off(v){v=r2(v);return v<1?Math.round(v*100)+'¢':money(v);}
 function priceNow(size){const t=tierOff(),b=sizePrice(size);return t>0?'<s style="font-size:16px;color:var(--mid);font-weight:700;">'+money(b)+'</s> '+money(Math.max(0,b-t)):money(b);}
 function lbs(n){return n+' pound'+(+n===1?'':'s');}
+function nLbs(n){return Math.round(n).toLocaleString('en-US');}
 
 // ─── auth & data ───
 function saveAuth(a){S.auth=a;try{if(a)localStorage.setItem(AUTH_KEY,JSON.stringify({refresh_token:a.refresh_token}));else localStorage.removeItem(AUTH_KEY);}catch(e){}}
@@ -244,44 +251,46 @@ function signOut(){saveAuth(null);S.user=null;S.me=null;setWho();renderLanding()
 
 // ─── the pitch, progress, and options ───
 function progressHTML(){
-  const c=cfg(),n=+c.signed_up||0,goal=Math.max(1,+c.goal||500),pct=Math.min(100,Math.round(n/goal*100)),done=n>=goal;
-  if(c.status==='running')return '<div class="card"><h2>The share is running</h2><p class="muted">'+n+' household'+(n===1?'':'s')+' getting fresh pasta every week'+(c.start_date?', since '+esc(niceDate(parseISO(c.start_date))):'')+'. New neighbors are always welcome, and every one brings the price down for all of us.</p>'+ladderHTML()+'</div>';
+  const c=cfg(),n=+c.signed_up||0,have=lbsNow(),goal=goalLbs(),pct=Math.min(100,Math.round(have/goal*100)),done=have>=goal;
+  const hh=n.toLocaleString('en-US')+' household'+(n===1?'':'s');
+  if(c.status==='running')return '<div class="card"><h2>The share is running</h2><p class="muted">'+hh+' sharing '+nLbs(have)+' pounds of fresh pasta a week'+(c.start_date?', since '+esc(niceDate(parseISO(c.start_date))):'')+'. New neighbors are always welcome, and every pound brings the price down for all of us.</p>'+ladderHTML()+'</div>';
   if(c.status==='paused')return '<div class="card"><h2>The share is on a short break</h2><p class="muted">'+(c.note?esc(c.note):'We’ll be back soon. Your spot is saved.')+'</p></div>';
-  return '<div class="card"><h2>'+(done?'We made it!':'Help us get to '+goal.toLocaleString('en-US'))+'</h2>'
-    +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;"><span class="big">'+n.toLocaleString('en-US')+'</span><span class="muted">of '+goal.toLocaleString('en-US')+' households signed up</span></div>'
+  return '<div class="card"><h2>'+(done?'We made it!':'Help us get to '+nLbs(goal)+' pounds a week')+'</h2>'
+    +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;flex-wrap:wrap;"><span class="big">'+nLbs(have)+'</span><span class="muted">of '+nLbs(goal)+' pounds a week, from '+hh+'</span></div>'
     +'<div class="meter'+(done?' done':'')+'"><i style="width:'+pct+'%"></i></div>'
-    +'<div class="meter-cap"><span>'+pct+'%</span><span>'+(done?'Start date coming soon':(goal-n).toLocaleString('en-US')+' to go')+'</span></div>'
-    +'<p class="muted" style="margin-top:10px;">'+(done?'Thank you, neighbors. We’ll post the first pickup date here and let everyone know.':'The share starts once '+goal.toLocaleString('en-US')+' households sign up. Signing up now doesn’t cost anything. You only pay for pasta once it starts.')+'</p>'+ladderHTML()+'</div>';
+    +'<div class="meter-cap"><span>'+pct+'%</span><span>'+(done?'Start date coming soon':nLbs(goal-have)+' pounds to go')+'</span></div>'
+    +'<p class="muted" style="margin-top:10px;">'+(done?'Thank you, neighbors. We’ll post the first pickup date here and let everyone know.':'The share starts once neighbors sign up for '+nLbs(goal)+' pounds a week between them. That’s what keeps the kitchen running. Every week, every two weeks or once a month, it all counts. Signing up now doesn’t cost anything. You only pay for pasta once it starts.')+'</p>'+ladderHTML()+'</div>';
 }
 function ladderHTML(){
-  const c=cfg(),n=+c.signed_up||0,goal=+c.goal||500,ev=+c.tier_every||0,steps=tierSteps();
+  const c=cfg(),have=lbsNow(),goal=goalLbs(),ev=+c.tier_lbs||0,steps=tierSteps();
   if(!steps)return '';
   const rows=[{at:goal,txt:'The share starts'}];
   for(let i=1;i<=steps;i++)rows.push({at:goal+i*ev,txt:off(tierOff(goal+i*ev))+' off every share, for everyone'});
-  const next=rows.find(r=>r.at>n);
-  return '<div class="ladder"><div class="lad-h">The more neighbors, the lower the price</div>'
-    +rows.map(r=>{const hit=n>=r.at,isNext=next===r;return '<div class="lad'+(hit?' hit':'')+(isNext?' next':'')+'"><span class="lad-n">'+(hit?'✓':r.at.toLocaleString('en-US'))+'</span><span>'+(hit?'<b>'+r.at.toLocaleString('en-US')+'</b> · ':'')+esc(r.txt)+(isNext?'<br><span class="muted small">'+(r.at-n).toLocaleString('en-US')+' more to go</span>':'')+'</span></div>';}).join('')
-    +'<div class="muted small" style="margin-top:6px;">A bigger steady order means less waste and cheaper ingredients by the bag, so we pass it on. Savings follow how many households are signed up.</div></div>';
+  const next=rows.find(r=>r.at>have);
+  return '<div class="ladder"><div class="lad-h">The more pasta we make together, the lower the price</div>'
+    +rows.map(r=>{const hit=have>=r.at,isNext=next===r;return '<div class="lad'+(hit?' hit':'')+(isNext?' next':'')+'"><span class="lad-n">'+(hit?'✓':nLbs(r.at))+'</span><span>'+(hit?'<b>'+nLbs(r.at)+' lbs</b> · ':'<b>'+nLbs(r.at)+' lbs a week</b> · ')+esc(r.txt)+(isNext?'<br><span class="muted small">'+nLbs(r.at-have)+' more pounds a week to go</span>':'')+'</span></div>';}).join('')
+    +'<div class="muted small" style="margin-top:6px;">A bigger steady order means less waste and cheaper ingredients by the bag, so we pass it on.</div></div>';
 }
 function optionsHTML(){
   const c=cfg(),dd=days();
-  return '<div class="card"><h2>Pick the size that fits your household</h2>'
-    +'<div class="opts"><div class="opt"><div class="w">1 pound a week</div><div class="p">'+priceNow(1)+'</div><div class="s">for smaller households</div></div>'
-    +'<div class="opt"><div class="w">2 pounds a week</div><div class="p">'+priceNow(2)+'</div><div class="s">for families</div></div></div>'
+  return '<div class="card"><h2>Pick what fits your household</h2>'
+    +'<div class="opts"><div class="opt"><div class="w">1 pound</div><div class="p">'+priceNow(1)+'</div><div class="s">per pickup</div></div>'
+    +'<div class="opt"><div class="w">2 pounds</div><div class="p">'+priceNow(2)+'</div><div class="s">per pickup</div></div></div>'
     +'<ul class="plain" style="margin-top:12px;">'
+    +'<li><b>Every week, every 2 weeks, or every 4 weeks.</b> Not everyone eats pasta every week, and that’s fine.</li>'
     +(+c.byo_discount>0?'<li><b>Bring your own container</b> and take '+off(c.byo_discount)+' off.</li>':'')
     +'<li>Pick up '+(dd.length>1?'on <b>'+dd.slice(0,-1).join('</b>, <b>')+'</b> or <b>'+dd[dd.length-1]+'</b>':'on <b>'+dd[0]+'</b>')+' at '+esc(c.pickup_place)+(c.pickup_hours?' ('+esc(c.pickup_hours)+')':'')+'.</li>'
-    +'<li>Pay when you pick up. Skip a week or pause any time.</li></ul></div>';
+    +'<li>Pay when you pick up. Skip a pickup or pause any time.</li></ul></div>';
 }
 function pitchHTML(){
   return '<div class="card"><h2>Fresh pasta for our neighbors</h2>'
     +'<p class="muted">We started The Kilted Farmers to feed the people right here with good, healthy, flavorful pasta. Making the pasta isn’t the hard part. Not knowing how much will sell each week is. That risk keeps our prices up and sends us to markets farther away.</p>'
-    +'<p class="muted">With a steady weekly order from our own community, we can make more, waste nothing, and charge a lot less. Every week you get fresh, handmade traditional pasta made with flour, eggs and seasoning.</p></div>';
+    +'<p class="muted">With a steady order from our own community, we can make more, waste nothing, and charge a lot less. You get fresh, handmade traditional pasta made with flour, eggs and seasoning, as often as your household wants it.</p></div>';
 }
 function renderLanding(){
   if(S.noDb){$('app').innerHTML='<div class="card center"><div class="hero-ico">🍝</div><h2>Almost ready</h2><p class="muted">The pasta share sign-up opens soon. Check back in a day or two.</p></div>';return;}
   $('app').innerHTML=progressHTML()+pitchHTML()+optionsHTML()
-    +'<div class="card"><h2>Count me in</h2><p class="muted">Make a free account so you can choose your size and pickup day, and change them any time.</p>'
+    +'<div class="card"><h2>Count me in</h2><p class="muted">Make a free account so you can choose your size, how often, and your pickup day, and change them any time.</p>'
     +'<div class="btns"><button class="btn primary full" onclick="renderAuth(\'signup\')">Sign up for the pasta share</button></div>'
     +'<div class="btns" style="justify-content:center;"><button class="link" onclick="renderAuth(\'signin\')">Already signed up? Sign in</button></div></div>'
     +'<div class="foot">The Kilted Farmers · Concord, Michigan</div>';
@@ -292,7 +301,7 @@ function renderAuth(mode,note){
   setWho();
   const titles={signin:'Sign in',signup:'Sign up for the pasta share',forgot:'Reset your password',reset:'Choose a new password'};
   let h='<div class="card"><h2>'+titles[mode]+'</h2>';
-  if(mode==='signup')h+='<p class="muted">First make an account. Next you’ll pick your size and pickup day.</p>';
+  if(mode==='signup')h+='<p class="muted">First make an account. Next you’ll pick your size, how often, and your pickup day.</p>';
   if(mode==='forgot')h+='<p class="muted">We’ll email you a link to set a new one.</p>';
   if(mode!=='reset')h+='<label class="f" for="aEmail">Email</label><input id="aEmail" class="inp" type="email" autocomplete="email" inputmode="email">';
   if(mode!=='forgot')h+='<label class="f" for="aPw">'+(mode==='reset'?'New password':'Password')+'</label><input id="aPw" class="inp" type="password" autocomplete="'+(mode==='signin'?'current-password':'new-password')+'">';
@@ -331,18 +340,20 @@ async function doAuth(mode){
   finally{if(btn.isConnected){btn.disabled=false;btn.textContent=label;}}
 }
 
-// ─── choose size, pickup day, container ───
+// ─── choose size, how often, pickup day, container ───
 function renderJoin(editing){
   const m=S.me||{},c=cfg(),dd=days();
-  S.draft={size:m.size||2,day:dd.includes(m.pickup_day)?m.pickup_day:dd[0],byo:!!m.byo};
+  S.draft={size:m.size||2,freq:FREQ[m.frequency]?m.frequency:'weekly',day:dd.includes(m.pickup_day)?m.pickup_day:dd[0],byo:!!m.byo};
   let h=editing?'':progressHTML();
   h+='<div class="card"><h2>'+(editing?'Change your share':'Your pasta share')+'</h2>'
     +(editing?'':'<p class="muted">Tell us what your household needs. You can change any of this later.</p>')
-    +'<label class="f">How much each week?</label>'
-    +[1,2].map(n=>'<label class="pick" id="pkS'+n+'" onclick="pickSize('+n+')"><input type="radio" name="sz"><span class="r">'+money(Math.max(0,sizePrice(n)-tierOff()))+'</span><b>'+lbs(n)+' a week</b><div class="muted small">'+(n===1?'Good for one or two people':'Good for a family')+'</div></label>').join('')
+    +'<label class="f">How much each pickup?</label>'
+    +[1,2].map(n=>'<label class="pick" id="pkS'+n+'" onclick="pickSize('+n+')"><input type="radio" name="sz"><span class="r">'+money(Math.max(0,sizePrice(n)-tierOff()))+'</span><b>'+lbs(n)+'</b><div class="muted small">'+(n===1?'Good for one or two people':'Good for a family')+'</div></label>').join('')
+    +'<label class="f">How often?</label>'
+    +Object.keys(FREQ).map(k=>'<label class="pick" id="pkF'+k+'" onclick="pickFreq(\''+k+'\')"><input type="radio" name="fq"><b>'+FREQ[k].label+'</b><div class="muted small">'+FREQ[k].sub+'</div></label>').join('')
     +'<label class="f">Pickup day</label>'
     +dd.map(d=>'<label class="pick" id="pkD'+d+'" onclick="pickDay(\''+d+'\')"><input type="radio" name="dy"><b>'+d+'s</b><div class="muted small">'+esc(c.pickup_place)+(c.pickup_hours?' · '+esc(c.pickup_hours):'')+'</div></label>').join('')
-    +(+c.byo_discount>0?'<label class="check"><input type="checkbox" id="jByo" onchange="S.draft.byo=this.checked;joinDraw()"'+(S.draft.byo?' checked':'')+'><span><b>I’ll bring my own container</b><br><span class="muted">Take '+off(c.byo_discount)+' off each week. Less packaging, lower price.</span></span></label>':'')
+    +(+c.byo_discount>0?'<label class="check"><input type="checkbox" id="jByo" onchange="S.draft.byo=this.checked;joinDraw()"'+(S.draft.byo?' checked':'')+'><span><b>I’ll bring my own container</b><br><span class="muted">Take '+off(c.byo_discount)+' off each pickup. Less packaging, lower price.</span></span></label>':'')
     +'<div class="total" id="jTotal"></div>'
     +'<div class="row2"><div><label class="f" for="jName">Your name</label><input id="jName" class="inp" autocomplete="name" value="'+esc(m.name||'')+'"></div>'
     +'<div><label class="f" for="jPhone">Phone (optional)</label><input id="jPhone" class="inp" type="tel" autocomplete="tel" value="'+esc(m.phone||'')+'"></div></div>'
@@ -356,17 +367,20 @@ function renderJoin(editing){
   $('app').innerHTML=h;joinDraw();window.scrollTo(0,0);
 }
 function pickSize(n){S.draft.size=n;joinDraw();}
+function pickFreq(k){S.draft.freq=k;joinDraw();}
 function pickDay(d){S.draft.day=d;joinDraw();}
 function joinDraw(){
   const d=S.draft;
   [1,2].forEach(n=>{const e=$('pkS'+n);if(e)e.classList.toggle('on',d.size===n);});
+  Object.keys(FREQ).forEach(k=>{const e=$('pkF'+k);if(e)e.classList.toggle('on',d.freq===k);});
   days().forEach(x=>{const e=$('pkD'+x);if(e)e.classList.toggle('on',d.day===x);});
-  const t=$('jTotal');if(t)t.innerHTML='<span>'+lbs(d.size)+' every '+esc(d.day)+(d.byo?', your container':'')+'</span><b>'+money(weekly(d.size,d.byo))+'/week</b>';
+  const f=FREQ[d.freq],t=$('jTotal');
+  if(t)t.innerHTML='<span>'+lbs(d.size)+' '+f.label.toLowerCase()+', on '+esc(d.day)+(d.byo?', your container':'')+'</span><b>'+money(weekly(d.size,d.byo))+(f.k===1?'/week':' '+f.per)+'</b>';
 }
 async function saveJoin(editing){
   const d=S.draft,name=$('jName').value.trim(),btn=$('jBtn'),msg=$('jMsg');msg.textContent='';
   if(!name){msg.textContent='Enter your name so we know whose pasta it is.';$('jName').focus();return;}
-  const row={name,phone:$('jPhone').value.trim()||null,town:$('jTown').value.trim()||null,member_note:$('jNote').value.trim()||null,size:d.size,pickup_day:d.day,byo:d.byo,email:S.user.email||null};
+  const row={name,phone:$('jPhone').value.trim()||null,town:$('jTown').value.trim()||null,member_note:$('jNote').value.trim()||null,size:d.size,frequency:d.freq,pickup_day:d.day,byo:d.byo,email:S.user.email||null};
   const label=btn.textContent;btn.disabled=true;btn.textContent='Saving…';
   try{
     let r;
@@ -376,34 +390,40 @@ async function saveJoin(editing){
     await loadCfg();
     toast(editing?'Saved':'You’re in. Thank you!');
     renderMine(!editing);
-  }catch(e){msg.textContent=/duplicate|unique/i.test(e.message)?'You’re already signed up. Reload the page to see your share.':e.message;btn.disabled=false;btn.textContent=label;}
+  }catch(e){
+    msg.textContent=/duplicate|unique/i.test(e.message)?'You’re already signed up. Reload the page to see your share.'
+      :/frequency|column/i.test(e.message)?'The kitchen is finishing an update to this page. Please try again in a little while.':e.message;
+    btn.disabled=false;btn.textContent=label;
+  }
 }
 
 // ─── your share ───
 function upcoming(m,count){
   const c=cfg(),start=c.start_date?parseISO(c.start_date):null,now=new Date();now.setHours(0,0,0,0);
   const out=[];let wk=monday(now);
-  for(let i=0;out.length<count&&i<count+3;i++){
+  for(let i=0;out.length<count&&i<count*fq(m).k+4;i++){
     const day=new Date(wk);day.setDate(wk.getDate()+DAYS.indexOf(m.pickup_day));
-    if(day>=now&&(!start||day>=start))out.push({date:day,week:iso(wk)});
+    if(day>=now&&(!start||day>=start)&&isDue(m,iso(wk)))out.push({date:day,week:iso(wk)});
     wk.setDate(wk.getDate()+7);
   }
   return out;
 }
 function renderMine(fresh){
   const m=S.me,c=cfg();if(!m){renderJoin();return;}
-  const first=(m.name||'').split(' ')[0];
+  const first=(m.name||'').split(' ')[0],f=fq(m);
   let h='';
-  if(fresh&&c.status!=='running')h+='<div class="card center"><div class="hero-ico">🍝</div><h2>Thank you, '+esc(first)+'!</h2><p class="muted">You’re one of '+(+c.signed_up||1)+' households. Once we reach '+(+c.goal||500)+', we’ll email you the first pickup date. Help us get there faster: send this page to a neighbor.</p>'
+  if(fresh&&c.status!=='running')h+='<div class="card center"><div class="hero-ico">🍝</div><h2>Thank you, '+esc(first)+'!</h2><p class="muted">You’re one of '+(+c.signed_up||1)+' households. Once we reach '+nLbs(goalLbs())+' pounds a week together, we’ll email you the first pickup date. Help us get there faster: send this page to a neighbor.</p>'
     +'<div class="btns" style="justify-content:center;"><button class="btn primary" onclick="share()">Share with a neighbor</button></div></div>';
   if(m.status!=='in'||c.status!=='running'||!fresh)h+=progressHTML();
   const st={in:['Signed up','in'],paused:['Paused','paused'],out:['Not signed up','out']}[m.status]||['','out'];
+  const next=c.status==='running'&&m.status==='in'?upcoming(m,1)[0]:null;
   h+='<div class="card"><h2>Your share</h2><div><span class="pill '+st[1]+'">'+st[0]+'</span></div>'
-    +'<div class="kv"><div><span>Each week</span><b>'+lbs(m.size)+' of fresh pasta</b></div>'
-    +'<div><span>Pickup</span><b>'+esc(m.pickup_day)+'s</b></div>'
+    +'<div class="kv"><div><span>Each pickup</span><b>'+lbs(m.size)+' of fresh pasta</b></div>'
+    +'<div><span>How often</span><b>'+f.label+(f.k===4?' (about monthly)':'')+'</b></div>'
+    +'<div><span>Pickup</span><b>'+esc(m.pickup_day)+'s'+(next?' · next is '+esc(niceDate(next.date)):'')+'</b></div>'
     +'<div><span>Where</span><b>'+esc(c.pickup_place)+(c.pickup_hours?' · '+esc(c.pickup_hours):'')+'</b></div>'
     +'<div><span>Container</span><b>'+(m.byo?'I bring my own':'Bagged by the kitchen')+'</b></div>'
-    +'<div><span>Price</span><b>'+money(weekly(m.size,m.byo))+' a week, paid at pickup</b></div></div>';
+    +'<div><span>Price</span><b>'+money(weekly(m.size,m.byo))+' each pickup, paid when you pick up</b></div></div>';
   if(!days().includes(m.pickup_day))h+='<div class="msg info">We changed our pickup days. Tap <b>Change my share</b> to pick a new one.</div>';
   h+='<div class="btns">'+(m.status==='out'?'<button class="btn primary" onclick="setStatus(\'in\')">Sign me back up</button>':'<button class="btn primary" onclick="renderJoin(true)">Change my share</button>')
     +(m.status==='in'?'<button class="btn soft" onclick="setStatus(\'paused\')">Pause</button>':'')
@@ -413,7 +433,7 @@ function renderMine(fresh){
   h+='</div>';
   if(c.status==='running'&&m.status==='in'){
     const wk=upcoming(m,4),skips=m.skip_weeks||[];
-    h+='<div class="card"><h2>Coming up</h2><p class="muted">Away one week? Skip it at least two days ahead. We won’t make your pasta that week, and you won’t owe anything.</p>'
+    h+='<div class="card"><h2>Your next pickups</h2><p class="muted">Can’t make one? Skip it at least two days ahead. We won’t make your pasta that time, and you won’t owe anything.</p>'
       +wk.map(w=>{const sk=skips.includes(w.week),late=(w.date-new Date())/864e5<2;return '<div class="wk'+(sk?' skip':'')+'"><div><div class="d">'+esc(niceDate(w.date))+'</div><div class="muted small">'+(sk?'Skipped':lbs(m.size)+' · '+money(weekly(m.size,m.byo)))+'</div></div>'
         +(late?'<span class="muted small">'+(sk?'':'Already in the works')+'</span>':'<button class="btn sm '+(sk?'primary':'soft')+'" onclick="toggleSkip(\''+w.week+'\')">'+(sk?'Undo skip':'Skip')+'</button>')+'</div>';}).join('')
       +'</div>';
@@ -431,10 +451,10 @@ function leave(){if(confirm('Leave the pasta share? You can sign back up any tim
 function toggleSkip(week){
   const cur=(S.me.skip_weeks||[]).filter(w=>w>=iso(monday(new Date())));
   const next=cur.includes(week)?cur.filter(w=>w!==week):cur.concat([week]);
-  patchMe({skip_weeks:next},cur.includes(week)?'You’re back on for that week':'Skipped. Enjoy your week!');
+  patchMe({skip_weeks:next},cur.includes(week)?'You’re back on for that pickup':'Skipped. Enjoy your week!');
 }
 function share(){
-  const url=location.origin+location.pathname,text='Fresh, handmade pasta every week from The Kilted Farmers in Concord. It starts once enough neighbors sign up:';
+  const url=location.origin+location.pathname,text='Fresh, handmade pasta from The Kilted Farmers in Concord, every week, every 2 weeks or once a month. It starts once enough neighbors sign up:';
   if(navigator.share){navigator.share({title:'Community Pasta Share',text,url}).catch(()=>{});return;}
   const done=()=>toast('Link copied. Paste it anywhere.');
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(done,()=>prompt('Copy this link:',url));else prompt('Copy this link:',url);
